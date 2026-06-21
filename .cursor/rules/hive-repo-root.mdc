@@ -1,0 +1,15 @@
+---
+description: Hive Code Planner local repository root
+alwaysApply: true
+---
+
+# Hive Code Planner — Local Repo Root
+
+**Canonical project directory:** `d:\DRIVE_DOWNLOADS\HIVE_CODE_PLANNER`
+
+## Rules
+
+1. Write all new project files under this directory unless the user explicitly asks otherwise.
+2. Reference paths from this repo root (e.g. `docs/ARCHITECTURE.md`, `plans/`, `src/`).
+3. This is a local Git repo on branch `main`. Use normal Git workflow for version history.
+4. Do not assume a GitHub remote exists unless one is configured.

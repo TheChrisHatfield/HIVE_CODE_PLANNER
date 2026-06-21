@@ -1,0 +1,35 @@
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Cursor local state (keep rules; ignore caches)
+.cursor/cache/
+.cursor/**/*.log
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+.env.*
+
+# Node
+node_modules/
+dist/
+build/
+*.log
+npm-debug.log*
+
+# Build / temp
+*.tmp
+*.temp
+.cache/
