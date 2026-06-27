@@ -144,6 +144,18 @@ def test_propose_rejects_duplicate_candidate(tmp_path: Path) -> None:
         propose_agents_memory(paths, candidates)
 
 
+def test_propose_behavioral_rejection_ignores_placeholder_active_feature(tmp_path: Path) -> None:
+    from hive_planner.agents_memory import _evaluate_candidates, parse_sections
+
+    text = _minimal_agents().replace("**feature-x**", "**none**")
+    sections = parse_sections(text)
+    _, rejected, _ = _evaluate_candidates(sections, ["API must return 404 when disabled."])
+    assert rejected
+    reason = rejected[0][1]
+    assert "docs/specs/<feature>/spec.md" in reason
+    assert "docs/specs/none/" not in reason
+
+
 def test_ingest_normalizes_transcript_export(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     source = paths.root / "export.txt"

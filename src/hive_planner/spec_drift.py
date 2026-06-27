@@ -86,6 +86,16 @@ class SpecDriftReport:
         }
 
 
+def parse_feature_from_active_body(active_body: str) -> str | None:
+    match = FEATURE_RE.search(active_body)
+    if not match:
+        return None
+    feature = match.group(1)
+    if feature.lower() in PLACEHOLDER_FEATURES:
+        return None
+    return feature
+
+
 def parse_active_feature(paths: RepoPaths) -> str | None:
     agents_path = paths.root / "AGENTS.md"
     if not agents_path.exists():
@@ -97,13 +107,7 @@ def parse_active_feature(paths: RepoPaths) -> str | None:
             if title.startswith("Active feature"):
                 active_body = body
                 break
-    match = FEATURE_RE.search(active_body)
-    if not match:
-        return None
-    feature = match.group(1)
-    if feature.lower() in PLACEHOLDER_FEATURES:
-        return None
-    return feature
+    return parse_feature_from_active_body(active_body)
 
 
 def _normalize_for_match(text: str) -> str:

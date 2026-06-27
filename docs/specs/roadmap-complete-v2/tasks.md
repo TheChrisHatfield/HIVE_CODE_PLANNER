@@ -15,8 +15,9 @@
 ## Validation log
 
 ```text
-2026-06-26 — Stage 7 Phase 6 gate (pending)
-- roadmap-status 18/18
-- ci-check 5/5
-- pytest PASS
+2026-06-26 — Stage 7 Phase 6 gate
+- roadmap-status 18/18 PASS
+- ci-check 5/5 steps PASS
+- 148/148 pytest PASS
+- Stage 7 bug hunt: init subtree guard, placeholder active feature parsing
 ```

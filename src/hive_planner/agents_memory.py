@@ -140,6 +140,8 @@ def _match_section(sections: dict[str, str], required: str) -> str | None:
 
 
 def _parse_active_feature_from_sections(sections: dict[str, str]) -> str | None:
+    from hive_planner.spec_drift import parse_feature_from_active_body
+
     active_body = ""
     for title, body in sections.items():
         if title.startswith("Active feature"):
@@ -147,8 +149,7 @@ def _parse_active_feature_from_sections(sections: dict[str, str]) -> str | None:
             break
     if not active_body:
         active_body = sections.get("Active feature", "")
-    match = re.search(r"\*\*([a-z0-9][a-z0-9-]*)\*\*", active_body)
-    return match.group(1) if match else None
+    return parse_feature_from_active_body(active_body)
 
 
 def lint_agents_md(paths: RepoPaths, agents_path: Path | None = None) -> AgentsLintReport:
