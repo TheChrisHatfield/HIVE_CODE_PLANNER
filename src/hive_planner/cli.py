@@ -355,7 +355,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Wrote draft: cartridge/{rel}")
         print(f"Wrote status: {status_path.relative_to(root)}")
         payload = result.to_dict()
-        if not args.no_promote:
+        if not getattr(args, "no_promote", False):
             from hive_planner.cartridge_promote import promote_cartridge_drafts
 
             promote = promote_cartridge_drafts(
@@ -368,7 +368,8 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"Wrote CL candidates: {promote.candidates_path}")
             print(f"Promotion spec-drift ok: {promote.ok}")
         print(json.dumps(payload, indent=2))
-        return 0
+        promote_ok = payload.get("promote", {}).get("ok", True)
+        return 0 if promote_ok else 1
 
     if args.command == "cartridge-promote":
         from hive_planner.cartridge_promote import promote_cartridge_drafts
