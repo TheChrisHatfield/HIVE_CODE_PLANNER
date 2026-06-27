@@ -39,6 +39,46 @@ def test_init_creates_detectable_repo_root(tmp_path: Path) -> None:
     assert ".hive/project.json" in result.files_written
     meta = json.loads((target / ".hive" / "project.json").read_text(encoding="utf-8"))
     assert meta["bootstrap_profile"] == "minimal"
+    assert meta.get("agent_handoff_mode") == "unified"
+    assert meta["spec_kit_enabled"] is True
+    assert meta["continual_learning_enabled"] is True
+    assert (target / "docs" / "specs" / "example-feature" / "spec.md").exists()
+    assert (target / "docs" / "proposals" / "candidates-template.md").exists()
+
+
+def test_init_agent_handoff_off_skips_unified_artifacts(tmp_path: Path) -> None:
+    source = _hive_source(tmp_path)
+    target = tmp_path / "planning-only"
+
+    init_project(source, target, agent_handoff="off")
+
+    meta = json.loads((target / ".hive" / "project.json").read_text(encoding="utf-8"))
+    assert meta.get("agent_handoff_mode") == "off"
+    assert not (target / "docs" / "specs" / "example-feature" / "spec.md").exists()
+    assert not (target / "docs" / "proposals" / "candidates-template.md").exists()
+
+
+def test_init_with_spec_kit_writes_starter_artifacts(tmp_path: Path) -> None:
+    source = _hive_source(tmp_path)
+    target = tmp_path / "spec-project"
+
+    init_project(source, target, agent_handoff="unified")
+
+    meta = json.loads((target / ".hive" / "project.json").read_text(encoding="utf-8"))
+    assert meta["agent_handoff_mode"] == "unified"
+    assert (target / "docs" / "specs" / "example-feature" / "spec.md").exists()
+    assert (target / "spec-kit-agent-integration.md").exists()
+
+
+def test_init_unified_includes_continual_learning_template(tmp_path: Path) -> None:
+    source = _hive_source(tmp_path)
+    target = tmp_path / "cl-project"
+
+    init_project(source, target, agent_handoff="unified")
+
+    assert (target / "docs" / "proposals" / "candidates-template.md").exists()
+    meta = json.loads((target / ".hive" / "project.json").read_text(encoding="utf-8"))
+    assert meta["continual_learning_enabled"] is True
 
 
 def test_init_rejects_non_empty_target(tmp_path: Path) -> None:

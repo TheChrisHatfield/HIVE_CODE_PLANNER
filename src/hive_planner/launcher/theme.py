@@ -25,6 +25,48 @@ FONT_TITLE = ("Segoe UI", 18, "bold")
 FONT_SUBTITLE = ("Segoe UI", 9)
 
 
+def bind_mousewheel(widget: tk.Misc, *, target: tk.Misc | None = None) -> None:
+    """Scroll *target* (default *widget*) with the mouse wheel while the pointer is over *widget*."""
+    import sys
+
+    scroll_target = target or widget
+
+    def on_wheel(event) -> None:
+        if hasattr(scroll_target, "yview_scroll"):
+            scroll_target.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+    def on_wheel_up(_event) -> None:
+        if hasattr(scroll_target, "yview_scroll"):
+            scroll_target.yview_scroll(-1, "units")
+
+    def on_wheel_down(_event) -> None:
+        if hasattr(scroll_target, "yview_scroll"):
+            scroll_target.yview_scroll(1, "units")
+
+    if sys.platform == "win32":
+        wheel_bind = lambda: widget.bind_all("<MouseWheel>", on_wheel)
+        wheel_unbind = lambda: widget.unbind_all("<MouseWheel>")
+    else:
+        wheel_bind = lambda: (widget.bind_all("<Button-4>", on_wheel_up), widget.bind_all("<Button-5>", on_wheel_down))
+        wheel_unbind = lambda: (widget.unbind_all("<Button-4>"), widget.unbind_all("<Button-5>"))
+
+    def on_enter(_event=None) -> None:
+        wheel_bind()
+
+    def on_leave(_event=None) -> None:
+        wheel_unbind()
+
+    def on_destroy(_event=None) -> None:
+        try:
+            wheel_unbind()
+        except tk.TclError:
+            pass
+
+    widget.bind("<Enter>", on_enter, add="+")
+    widget.bind("<Leave>", on_leave, add="+")
+    widget.bind("<Destroy>", on_destroy, add="+")
+
+
 def apply_ttk_style(root: tk.Misc) -> None:
     style = ttk.Style(root)
     try:

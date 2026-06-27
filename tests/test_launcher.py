@@ -8,6 +8,7 @@ import sys
 
 import pytest
 
+from hive_planner.config import RepoPaths
 from hive_planner.launcher.config import LauncherConfig, linked_project_exists, load_config, normalize_project_path, prune_stale_projects, save_config
 from hive_planner.launcher.service import (
     PythonInstallation,
@@ -18,6 +19,9 @@ from hive_planner.launcher.service import (
     auto_complete_onboarding_if_ready,
     classify_workspace,
     clear_python_probe_cache,
+    pick_hive_bootstrap_target,
+    resolve_linked_project_root,
+    workspace_primary_folder,
     discover_cursor_workspaces,
     discover_python_installations,
     file_uri_to_path,
@@ -258,6 +262,129 @@ def test_file_uri_to_path_decodes_windows_drive() -> None:
     assert file_uri_to_path(uri) == "d:/DRIVE_DOWNLOADS/HIVE_CODE_PLANNER"
 
 
+def test_pick_hive_bootstrap_target_skips_multi_root_parent(tmp_path: Path) -> None:
+    parent = tmp_path / "HIVE CODE"
+    parent.mkdir()
+    profile = parent / "HIVE_CODE_PLANNER_PROFILE"
+    profile.mkdir()
+    (profile / ".cursor").mkdir()
+    (profile / "app.py").write_text("print('hi')\n", encoding="utf-8")
+    workspace_file = parent / "hive-code.code-workspace"
+    workspace_file.write_text(
+        json.dumps({"folders": [{"path": "."}, {"path": "HIVE_CODE_PLANNER_PROFILE"}]}),
+        encoding="utf-8",
+    )
+
+    picked = pick_hive_bootstrap_target(workspace_file)
+    assert picked == profile.resolve()
+
+
+def test_workspace_primary_folder_prefers_hive_root_in_multi_root_workspace(tmp_path: Path) -> None:
+    parent = tmp_path / "HIVE CODE"
+    parent.mkdir()
+    profile = parent / "HIVE_CODE_PLANNER_PROFILE"
+    profile.mkdir()
+    (profile / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    workspace_file = parent / "hive-code.code-workspace"
+    workspace_file.write_text(
+        json.dumps({"folders": [{"path": "."}, {"path": "HIVE_CODE_PLANNER_PROFILE"}]}),
+        encoding="utf-8",
+    )
+
+    assert workspace_primary_folder(workspace_file) == profile.resolve()
+
+
+def test_workspace_primary_folder_prefers_nested_profile_for_dot_only_workspace(tmp_path: Path) -> None:
+    parent = tmp_path / "HIVE CODE"
+    parent.mkdir()
+    (parent / "START_HERE.md").write_text("# parent\n", encoding="utf-8")
+    profile = parent / "HIVE_CODE_PLANNER_PROFILE"
+    profile.mkdir()
+    (profile / "START_HERE.md").write_text("# profile\n", encoding="utf-8")
+    (profile / "pyproject.toml").write_text("[project]\nname = 'demo'\n", encoding="utf-8")
+    (profile / "src").mkdir()
+    workspace_file = parent / "hive-code.code-workspace"
+    workspace_file.write_text(json.dumps({"folders": [{"path": "."}]}), encoding="utf-8")
+
+    assert workspace_primary_folder(workspace_file) == profile.resolve()
+    assert resolve_linked_project_root(workspace_file) == profile.resolve()
+
+
+def test_prepare_linked_project_root_repairs_legacy_agents(tmp_path: Path) -> None:
+    from hive_planner.launcher.service import prepare_linked_project_root
+    from hive_planner.spec_drift import parse_active_feature
+
+    project = tmp_path / "app"
+    project.mkdir()
+    (project / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    (project / "AGENTS.md").write_text(
+        "# AGENTS\n\n## Active feature\n\nNone — pending.\n\n## Durable Workspace Facts\n\n- ok\n",
+        encoding="utf-8",
+    )
+    feature = "example-feature"
+    spec_dir = project / "docs" / "specs" / feature
+    spec_dir.mkdir(parents=True)
+    (spec_dir / "spec.md").write_text("# Spec\n", encoding="utf-8")
+    (spec_dir / "plan.md").write_text("# Plan\n", encoding="utf-8")
+    (spec_dir / "tasks.md").write_text("# Tasks\n", encoding="utf-8")
+    micro = project / "docs" / "delta" / "20_micro"
+    micro.mkdir(parents=True)
+    (micro / f"{feature}.md").write_text("# Micro\n", encoding="utf-8")
+
+    root, repair = prepare_linked_project_root(project)
+    assert root == project.resolve()
+    assert repair is not None
+    assert repair.repaired is True
+    assert parse_active_feature(RepoPaths(root=project)) == feature
+
+
+def test_summarize_linked_project_auto_repairs_workspace_link(tmp_path: Path) -> None:
+    from hive_planner.launcher.service import summarize_linked_project
+    from hive_planner.spec_drift import parse_active_feature
+
+    parent = tmp_path / "HIVE CODE"
+    parent.mkdir()
+    (parent / "START_HERE.md").write_text("# parent\n", encoding="utf-8")
+    profile = parent / "HIVE_CODE_PLANNER_PROFILE"
+    profile.mkdir()
+    (profile / "START_HERE.md").write_text("# profile\n", encoding="utf-8")
+    (profile / "pyproject.toml").write_text("[project]\nname = 'demo'\n", encoding="utf-8")
+    (profile / "AGENTS.md").write_text(
+        "# AGENTS\n\n## Active feature\n\nNone — pending.\n\n## Durable Workspace Facts\n\n- ok\n",
+        encoding="utf-8",
+    )
+    feature = "example-feature"
+    spec_dir = profile / "docs" / "specs" / feature
+    spec_dir.mkdir(parents=True)
+    (spec_dir / "spec.md").write_text("# Spec\n", encoding="utf-8")
+    (spec_dir / "plan.md").write_text("# Plan\n", encoding="utf-8")
+    (spec_dir / "tasks.md").write_text("# Tasks\n", encoding="utf-8")
+    micro = profile / "docs" / "delta" / "20_micro"
+    micro.mkdir(parents=True)
+    (micro / f"{feature}.md").write_text("# Micro\n", encoding="utf-8")
+    workspace_file = parent / "hive-code.code-workspace"
+    workspace_file.write_text(json.dumps({"folders": [{"path": "."}]}), encoding="utf-8")
+
+    summary = summarize_linked_project(workspace_file)
+    assert summary.ok is True
+    assert summary.active_feature == feature
+    assert parse_active_feature(RepoPaths(root=profile)) == feature
+
+
+def test_pick_hive_bootstrap_target_prefers_nested_profile_for_dot_only_workspace(tmp_path: Path) -> None:
+    parent = tmp_path / "HIVE CODE"
+    parent.mkdir()
+    (parent / "START_HERE.md").write_text("# parent\n", encoding="utf-8")
+    profile = parent / "HIVE_CODE_PLANNER_PROFILE"
+    profile.mkdir()
+    (profile / "START_HERE.md").write_text("# profile\n", encoding="utf-8")
+    (profile / "pyproject.toml").write_text("[project]\nname = 'demo'\n", encoding="utf-8")
+    workspace_file = parent / "hive-code.code-workspace"
+    workspace_file.write_text(json.dumps({"folders": [{"path": "."}]}), encoding="utf-8")
+
+    assert pick_hive_bootstrap_target(workspace_file) == profile.resolve()
+
+
 def test_discover_cursor_workspaces_reads_state_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     repo = tmp_path / "my-repo"
     repo.mkdir()
@@ -452,6 +579,96 @@ def test_run_project_ci_check_rejects_invalid_project(tmp_path: Path) -> None:
     result = run_project_ci_check(tmp_path)
     assert result["ok"] is False
     assert "START_HERE" in result["error"]
+
+
+def test_run_project_ci_check_skips_roadmap_for_app_projects(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project = tmp_path / "my-app"
+    project.mkdir()
+    (project / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    (project / "pyproject.toml").write_text('[project]\nname = "my-app"\n', encoding="utf-8")
+    captured: dict = {}
+
+    def fake_ci_check(paths, **kwargs):
+        captured.update(kwargs)
+        from hive_planner.ci_handoff import CiCheckReport, CiStepResult
+
+        return CiCheckReport(steps=[CiStepResult("agents-lint", True, "ok")])
+
+    monkeypatch.setattr("hive_planner.launcher.service.run_ci_check", fake_ci_check)
+    result = run_project_ci_check(project)
+    assert captured.get("check_roadmap") is False
+    assert result.get("hints")
+
+
+def test_is_hive_planner_source_repo_detects_main_repo(tmp_path: Path) -> None:
+    from hive_planner.launcher.service import is_hive_planner_source_repo
+
+    repo = tmp_path / "hive"
+    repo.mkdir()
+    (repo / "pyproject.toml").write_text('[project]\nname = "hive-planner"\n', encoding="utf-8")
+    app = tmp_path / "app"
+    app.mkdir()
+    (app / "pyproject.toml").write_text('[project]\nname = "my-app"\n', encoding="utf-8")
+    assert is_hive_planner_source_repo(repo) is True
+    assert is_hive_planner_source_repo(app) is False
+
+
+def test_run_project_ci_check_repairs_legacy_active_feature(tmp_path: Path) -> None:
+    project = tmp_path / "legacy-app"
+    project.mkdir()
+    (project / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    feature = "example-feature"
+    (project / "AGENTS.md").write_text(
+        "\n".join(
+            [
+                "# AGENTS.md",
+                "",
+                "## Repository root",
+                "",
+                "`root`",
+                "",
+                "## Planning Rosetta Stone",
+                "",
+                "- hook `planning.rosetta`",
+                "",
+                "## Startup read order",
+                "",
+                "1. rosetta",
+                "",
+                "## Delta model",
+                "",
+                "- Holistic / Macro / Micro",
+                "",
+                "## Active feature",
+                "",
+                "**None** — set when Spec Kit work begins.",
+                "",
+                "## Durable Workspace Facts",
+                "",
+                "- Run ci-check before handoff.",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    spec_dir = project / "docs" / "specs" / feature
+    spec_dir.mkdir(parents=True)
+    (spec_dir / "spec.md").write_text("# Spec\n", encoding="utf-8")
+    (spec_dir / "plan.md").write_text("# Plan\n", encoding="utf-8")
+    (spec_dir / "tasks.md").write_text("# Tasks\n", encoding="utf-8")
+    micro = project / "docs" / "delta" / "20_micro"
+    micro.mkdir(parents=True)
+    (micro / f"{feature}.md").write_text("# Micro\n", encoding="utf-8")
+
+    result = run_project_ci_check(project)
+    assert result.get("repair", {}).get("feature") == feature
+    from hive_planner.config import RepoPaths
+    from hive_planner.spec_drift import parse_active_feature
+
+    assert parse_active_feature(RepoPaths(root=project)) == feature
+    handoff = next(s for s in result["steps"] if s["name"] == "handoff-artifacts")
+    assert handoff["ok"] is True
 
 
 def test_run_project_map_sync_rejects_invalid_project(tmp_path: Path) -> None:

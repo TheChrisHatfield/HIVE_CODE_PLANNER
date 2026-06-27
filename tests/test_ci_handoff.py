@@ -61,14 +61,46 @@ def test_parse_active_feature_from_file(tmp_path: Path) -> None:
 def test_ci_check_validates_handoff_artifacts(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     _write_agents(paths, _minimal_agents("git-handoff-ci-v1"))
-    report = run_ci_check(paths, skip_pytest=True, check_map_drift=False, check_roadmap=False)
+    report = run_ci_check(
+        paths, skip_pytest=True, check_map_drift=False, check_roadmap=False, check_spec_kit=True
+    )
     handoff = next(s for s in report.steps if s.name == "handoff-artifacts")
     assert not handoff.ok
 
     _write_handoff_artifacts(paths, "git-handoff-ci-v1")
-    report = run_ci_check(paths, skip_pytest=True, check_map_drift=False, check_roadmap=False)
+    report = run_ci_check(
+        paths, skip_pytest=True, check_map_drift=False, check_roadmap=False, check_spec_kit=True
+    )
     handoff = next(s for s in report.steps if s.name == "handoff-artifacts")
     assert handoff.ok
+
+
+def test_ci_check_skips_spec_kit_when_disabled(tmp_path: Path) -> None:
+    from hive_planner.project_profile import write_project_profile
+
+    paths = RepoPaths(root=tmp_path)
+    (paths.root / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    _write_agents(paths, _minimal_agents("none"))
+    write_project_profile(
+        paths.root,
+        profile="minimal",
+        project_name="demo",
+        agent_handoff_mode="off",
+    )
+    report = run_ci_check(
+        paths,
+        skip_pytest=True,
+        check_map_drift=False,
+        check_roadmap=False,
+        check_spec_kit=False,
+    )
+    handoff = next(s for s in report.steps if s.name == "handoff-artifacts")
+    drift = next(s for s in report.steps if s.name == "spec-drift")
+    assert handoff.ok is True
+    assert "skipped" in handoff.detail
+    assert "agent handoff off" in handoff.detail
+    assert drift.ok is True
+    assert "skipped" in drift.detail
 
 
 def test_ci_check_detects_map_drift(tmp_path: Path) -> None:

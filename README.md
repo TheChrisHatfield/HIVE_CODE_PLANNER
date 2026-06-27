@@ -4,6 +4,12 @@ Local Git repository root for Hive Code Planner work.
 
 This repo is used **locally only** (no remote required). All project files live under this directory and should be referenced from here.
 
+## Using the desktop app (plain-English guide)
+
+To launch Hive Planner and read a plain-English walkthrough of what the tool does and how to use it, see **[`scripts/README.md`](scripts/README.md)** — the same guide appears on the **Home** tab inside the app.
+
+Quick launch: double-click `scripts\HivePlanner.lnk`.
+
 ## Repository root
 
 ```

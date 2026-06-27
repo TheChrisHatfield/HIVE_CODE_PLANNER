@@ -5,8 +5,10 @@ import sys
 from dataclasses import dataclass, field
 
 from hive_planner.agents_memory import lint_agents_md
+from hive_planner.agent_handoff import AGENT_HANDOFF_UNIFIED, validate_unified_handoff
 from hive_planner.config import RepoPaths
 from hive_planner.map_sync import sync_impact_maps
+from hive_planner.project_profile import resolve_project_integrations
 from hive_planner.roadmap_status import validate_roadmap
 from hive_planner.spec_drift import check_memory_spec_drift, check_spec_handoff
 
@@ -39,28 +41,43 @@ def run_ci_check(
     skip_pytest: bool = False,
     check_map_drift: bool = True,
     check_roadmap: bool = True,
+    check_spec_kit: bool | None = None,
 ) -> CiCheckReport:
     report = CiCheckReport()
+    integrations = resolve_project_integrations(paths.root)
+    spec_kit = integrations.spec_kit_enabled if check_spec_kit is None else check_spec_kit
 
     lint = lint_agents_md(paths)
     lint_detail = "ok" if lint.ok else f"{sum(1 for i in lint.issues if i.severity == 'error')} error(s)"
     report.steps.append(CiStepResult("agents-lint", lint.ok, lint_detail))
 
-    handoff = check_spec_handoff(paths)
-    if handoff.feature:
-        detail = handoff.feature if handoff.ok else f"missing: {', '.join(handoff.missing)}"
-        report.steps.append(CiStepResult("handoff-artifacts", handoff.ok, detail))
+    if not spec_kit:
+        report.steps.append(CiStepResult("handoff-artifacts", True, "skipped (agent handoff off)"))
+        report.steps.append(CiStepResult("spec-drift", True, "skipped (agent handoff off)"))
+        report.steps.append(CiStepResult("agent-handoff-profile", True, "skipped (agent handoff off)"))
     else:
-        report.steps.append(CiStepResult("handoff-artifacts", False, "Could not parse active feature from AGENTS.md"))
+        handoff = check_spec_handoff(paths)
+        if handoff.feature:
+            detail = handoff.feature if handoff.ok else f"missing: {', '.join(handoff.missing)}"
+            report.steps.append(CiStepResult("handoff-artifacts", handoff.ok, detail))
+        else:
+            report.steps.append(CiStepResult("handoff-artifacts", False, "Could not parse active feature from AGENTS.md"))
 
-    drift = check_memory_spec_drift(paths, include_agents_facts=True)
-    if drift.drift_items:
-        detail = f"{len(drift.drift_items)} behavioral bullet(s) not reflected in spec"
-        report.steps.append(CiStepResult("spec-drift", False, detail))
-    elif not drift.handoff or not drift.handoff.ok:
-        report.steps.append(CiStepResult("spec-drift", False, "incomplete spec handoff"))
-    else:
-        report.steps.append(CiStepResult("spec-drift", True, "ok"))
+        drift = check_memory_spec_drift(paths, include_agents_facts=True)
+        if drift.drift_items:
+            detail = f"{len(drift.drift_items)} behavioral bullet(s) not reflected in spec"
+            report.steps.append(CiStepResult("spec-drift", False, detail))
+        elif not drift.handoff or not drift.handoff.ok:
+            report.steps.append(CiStepResult("spec-drift", False, "incomplete spec handoff"))
+        else:
+            report.steps.append(CiStepResult("spec-drift", True, "ok"))
+
+        profile = validate_unified_handoff(paths.root)
+        if profile.mode == AGENT_HANDOFF_UNIFIED:
+            detail = "unified (Spec Kit + Continual Learning)" if profile.complete else f"missing: {', '.join(profile.missing)}"
+            report.steps.append(CiStepResult("agent-handoff-profile", profile.complete, detail))
+        else:
+            report.steps.append(CiStepResult("agent-handoff-profile", True, "legacy spec kit only"))
 
     if check_map_drift:
         map_report = sync_impact_maps(paths, dry_run=True)

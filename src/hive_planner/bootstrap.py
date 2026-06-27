@@ -108,8 +108,21 @@ Before editing code, identify the active feature, map work to a `HOOK_ID`, and r
 """
 
 
-def _agents_md(project_name: str, repo_root: Path) -> str:
+def _agents_md(project_name: str, repo_root: Path, *, spec_kit: bool, continual_learning: bool) -> str:
     root_display = repo_root.as_posix()
+    if spec_kit and continual_learning:
+        active_feature = "**example-feature** — unified Spec Kit + Continual Learning scaffold; replace when real work begins."
+        symbiotic = (
+            "- **Symbiotic handoff:** behavioral truth in Spec Kit (`docs/specs/`), operational truth in this file "
+            "(Continual Learning / `agents-propose`). See `docs/cl-spec-integration.md`."
+        )
+    elif spec_kit:
+        active_feature = "**example-feature** — starter scaffold from bootstrap; replace when you begin real work."
+        symbiotic = ""
+    else:
+        active_feature = "**none** — enable unified agent handoff in Hive Planner when you want Spec Kit + memory."
+        symbiotic = ""
+    symbiotic_block = f"\n{symbiotic}\n" if symbiotic else "\n"
     return f"""{BOOTSTRAP_BANNER}
 
 # AGENTS.md — {project_name}
@@ -138,16 +151,31 @@ See [`START_HERE.md`](START_HERE.md).
 
 ## Active feature
 
-None — set to your first feature id (see `docs/specs/example-feature/`).
+{active_feature}
 
 ## Durable Workspace Facts
-
+{symbiotic_block}
 - Install Hive CLI from your Hive Code Planner repo: `py -3.11 -m pip install -e ".[dev]"` (run from that repo).
 - Run `py -3.11 -m hive_planner ci-check` before handoff when Hive tooling is wired.
 """
 
 
-def _planning_rosetta(project_name: str) -> str:
+def _planning_rosetta(project_name: str, *, spec_kit: bool, continual_learning: bool) -> str:
+    optional_rows = ""
+    primary_files = """- [`START_HERE.md`](../START_HERE.md)
+- [`AGENTS.md`](../AGENTS.md)
+- [`delta/00_holistic.md`](delta/00_holistic.md)
+- [`delta/10_macro.md`](delta/10_macro.md)
+- [`change-impact/policy.md`](change-impact/policy.md)"""
+    if spec_kit:
+        optional_rows += "| `spec.flow` | Spec Kit spec / plan / tasks |\n"
+        primary_files += """
+- [`specs/example-feature/spec.md`](specs/example-feature/spec.md)
+- [`spec-kit-agent-integration.md`](../spec-kit-agent-integration.md)"""
+    if continual_learning or spec_kit:
+        optional_rows += "| `integration.cl_spec` | Spec Kit (behavioral) + Continual Learning (operational) |\n"
+        primary_files += """
+- [`cl-spec-integration.md`](cl-spec-integration.md)"""
     return f"""{BOOTSTRAP_BANNER}
 
 # Planning Rosetta Stone — {project_name}
@@ -160,21 +188,13 @@ Search phrase: **Planning Rosetta Stone** · Hook: `planning.rosetta`
 |---------|---------|
 | `planning.rosetta` | This legend |
 | `context.delta` | Holistic / macro / micro docs |
-| `spec.flow` | Spec Kit spec / plan / tasks |
 | `cursor.rules` | `.cursor/rules/*.mdc` |
 | `change.impact` | Impact packets before edits |
 | `change.bugfix_mode` | Bugfix impact mode |
-| `integration.cl_spec` | AGENTS memory vs spec behavioral truth |
-
+{optional_rows}
 ## Primary files
 
-- [`START_HERE.md`](../START_HERE.md)
-- [`AGENTS.md`](../AGENTS.md)
-- [`delta/00_holistic.md`](delta/00_holistic.md)
-- [`delta/10_macro.md`](delta/10_macro.md)
-- [`specs/example-feature/spec.md`](specs/example-feature/spec.md)
-- [`change-impact/policy.md`](change-impact/policy.md)
-- [`spec-kit-agent-integration.md`](../spec-kit-agent-integration.md)
+{primary_files}
 """
 
 
@@ -224,15 +244,18 @@ Describe planning → spec → implementation flow.
 """
 
 
-def _micro_readme() -> str:
+def _micro_readme(*, spec_kit: bool) -> str:
+    starter = ""
+    if spec_kit:
+        starter = "\n**Starter feature:** [example-feature.md](./example-feature.md)\n"
+    else:
+        starter = "\nAdd feature briefs here when Spec Kit is enabled.\n"
     return f"""{BOOTSTRAP_BANNER}
 
 # Micro Briefs
 
 One file per feature: `docs/delta/20_micro/<feature>.md`
-
-**Starter feature:** [example-feature.md](./example-feature.md)
-"""
+{starter}"""
 
 
 def _micro_example() -> str:
@@ -587,7 +610,28 @@ def init_project(
     force: bool = False,
     profile: str = "minimal",
     git_init: bool = False,
+    agent_handoff: str | None = None,
+    spec_kit: bool | None = None,
+    continual_learning: bool | None = None,
 ) -> BootstrapResult:
+    from hive_planner.agent_handoff import AGENT_HANDOFF_OFF, AGENT_HANDOFF_UNIFIED, integrations_from_mode, normalize_agent_handoff_mode
+
+    if agent_handoff is not None:
+        mode = normalize_agent_handoff_mode(agent_handoff)
+        spec_kit_enabled, continual_learning_enabled = integrations_from_mode(mode)
+    elif spec_kit is not None or continual_learning is not None:
+        spec_kit_enabled = bool(spec_kit)
+        continual_learning_enabled = bool(continual_learning) if continual_learning is not None else spec_kit_enabled
+        if continual_learning_enabled and not spec_kit_enabled:
+            continual_learning_enabled = False
+        if spec_kit_enabled:
+            continual_learning_enabled = True
+            mode = AGENT_HANDOFF_UNIFIED
+        else:
+            mode = AGENT_HANDOFF_OFF
+    else:
+        mode = AGENT_HANDOFF_UNIFIED
+        spec_kit_enabled, continual_learning_enabled = integrations_from_mode(mode)
     if profile not in BOOTSTRAP_PROFILES:
         allowed = ", ".join(sorted(BOOTSTRAP_PROFILES))
         raise BootstrapError(f"Unknown bootstrap profile '{profile}' — use one of: {allowed}")
@@ -617,6 +661,8 @@ def init_project(
             force=force,
             written=written,
             warnings=warnings,
+            spec_kit=spec_kit_enabled,
+            continual_learning=continual_learning_enabled,
         )
     except OSError as exc:
         raise BootstrapError(f"Failed to write bootstrap files: {exc}") from exc
@@ -647,27 +693,44 @@ def _write_bootstrap_tree(
     force: bool,
     written: list[str],
     warnings: list[str],
+    spec_kit: bool,
+    continual_learning: bool,
 ) -> None:
     templates: list[tuple[str, str]] = [
         ("START_HERE.md", _start_here(project_name)),
-        ("AGENTS.md", _agents_md(project_name, target)),
+        ("AGENTS.md", _agents_md(project_name, target, spec_kit=spec_kit, continual_learning=continual_learning)),
         ("README.md", _readme(project_name)),
-        ("docs/planning-rosetta-stone.md", _planning_rosetta(project_name)),
+        (
+            "docs/planning-rosetta-stone.md",
+            _planning_rosetta(project_name, spec_kit=spec_kit, continual_learning=continual_learning),
+        ),
         ("docs/delta/00_holistic.md", _holistic(project_name)),
         ("docs/delta/10_macro.md", _macro(project_name)),
-        ("docs/delta/20_micro/README.md", _micro_readme()),
-        ("docs/delta/20_micro/example-feature.md", _micro_example()),
-        ("docs/specs/example-feature/spec.md", _example_spec()),
-        ("docs/specs/example-feature/plan.md", _example_plan()),
-        ("docs/specs/example-feature/tasks.md", _example_tasks()),
+        ("docs/delta/20_micro/README.md", _micro_readme(spec_kit=spec_kit)),
         ("docs/change-impact/policy.md", _change_impact_policy()),
         ("docs/change-impact/project-map.md", _project_map()),
         ("docs/change-impact/test-map.md", _test_map()),
-        ("docs/proposals/candidates-template.md", _candidates_template()),
         ("context-library/indexes/document-index.json", json.dumps({"documents": []}, indent=2) + "\n"),
         ("context-library/indexes/chunk-index.json", json.dumps({"chunks": []}, indent=2) + "\n"),
         ("context-library/indexes/embedding-index.json", json.dumps({"embeddings": [], "model_id": None}, indent=2) + "\n"),
     ]
+    if spec_kit:
+        templates.extend(
+            [
+                ("docs/delta/20_micro/example-feature.md", _micro_example()),
+                ("docs/specs/example-feature/spec.md", _example_spec()),
+                ("docs/specs/example-feature/plan.md", _example_plan()),
+                ("docs/specs/example-feature/tasks.md", _example_tasks()),
+            ]
+        )
+    if continual_learning:
+        templates.append(("docs/proposals/candidates-template.md", _candidates_template()))
+    if spec_kit and continual_learning:
+        cl_doc = source_paths.root / "docs" / "cl-spec-integration.md"
+        if cl_doc.is_file():
+            _copy_file(cl_doc, target, "docs/cl-spec-integration.md", force=force, written=written)
+        else:
+            warnings.append("Missing docs/cl-spec-integration.md in Hive source — skipped copy")
     for rel, content in templates:
         _write_text(target, rel, content, force=force, written=written)
 
@@ -685,9 +748,10 @@ def _write_bootstrap_tree(
         written.append(rel)
 
     kit = _starter_kit_dir(source_paths.root)
-    _copy_file(kit / "spec-kit-agent-integration.md", target, "spec-kit-agent-integration.md", force=force, written=written)
-    if not (target / "spec-kit-agent-integration.md").exists():
-        warnings.append("Missing starter-kit/spec-kit-agent-integration.md — skipped copy")
+    if spec_kit:
+        _copy_file(kit / "spec-kit-agent-integration.md", target, "spec-kit-agent-integration.md", force=force, written=written)
+        if not (target / "spec-kit-agent-integration.md").exists():
+            warnings.append("Missing starter-kit/spec-kit-agent-integration.md — skipped copy")
 
     rules = _rules_dir(source_paths.root)
     for rule_name in ("architecture.mdc", "task-execution.mdc", "validation.mdc"):
@@ -704,6 +768,7 @@ def _write_bootstrap_tree(
             written=written,
         )
 
+    from hive_planner.agent_handoff import AGENT_HANDOFF_OFF, AGENT_HANDOFF_UNIFIED
     from hive_planner.project_profile import write_project_profile
 
     try:
@@ -717,5 +782,50 @@ def _write_bootstrap_tree(
         profile=profile,
         project_name=project_name,
         hive_planner_version=hive_version,
+        agent_handoff_mode=AGENT_HANDOFF_UNIFIED if (spec_kit and continual_learning) else AGENT_HANDOFF_OFF,
     )
     written.append(meta_path.relative_to(target).as_posix())
+
+
+def deploy_agent_handoff_scaffold(
+    source_paths: RepoPaths,
+    target: Path,
+    *,
+    project_name: str | None = None,
+    force: bool = False,
+) -> tuple[list[str], list[str]]:
+    """Deploy unified Spec Kit + Continual Learning artifacts into an existing Hive project."""
+    from hive_planner.agent_handoff import AGENT_HANDOFF_UNIFIED, apply_agent_handoff_mode
+    from hive_planner.project_profile import read_project_profile, resolve_project_profile
+
+    target = target.resolve()
+    if not (target / "START_HERE.md").is_file():
+        raise BootstrapError(f"Not a Hive project (missing START_HERE.md): {target}")
+    meta = resolve_project_profile(target)
+    name = project_name or (meta.project_name if meta else target.name)
+    written: list[str] = []
+    warnings: list[str] = []
+    templates: list[tuple[str, str]] = [
+        ("docs/delta/20_micro/example-feature.md", _micro_example()),
+        ("docs/specs/example-feature/spec.md", _example_spec()),
+        ("docs/specs/example-feature/plan.md", _example_plan()),
+        ("docs/specs/example-feature/tasks.md", _example_tasks()),
+        ("docs/proposals/candidates-template.md", _candidates_template()),
+    ]
+    for rel, content in templates:
+        _write_text(target, rel, content, force=force, written=written)
+    kit = _starter_kit_dir(source_paths.root)
+    _copy_file(kit / "spec-kit-agent-integration.md", target, "spec-kit-agent-integration.md", force=force, written=written)
+    cl_doc = source_paths.root / "docs" / "cl-spec-integration.md"
+    if cl_doc.is_file():
+        _copy_file(cl_doc, target, "docs/cl-spec-integration.md", force=force, written=written)
+    else:
+        warnings.append("Missing docs/cl-spec-integration.md in Hive source — skipped copy")
+    existing = read_project_profile(target)
+    apply_agent_handoff_mode(
+        target,
+        AGENT_HANDOFF_UNIFIED,
+        hive_planner_version=existing.hive_planner_version if existing else None,
+    )
+    written.append(".hive/project.json")
+    return sorted(set(written)), warnings

@@ -16,11 +16,15 @@ from hive_planner.launcher.service import (
     is_code_workspace_file,
     open_in_cursor,
     open_path_in_explorer,
+    pick_hive_bootstrap_target,
+    prepare_linked_project_root,
     resolve_linked_project_root,
+    run_deploy_agent_handoff,
     run_install,
     run_project_ci_check,
     run_project_init,
     run_project_map_sync,
+    summarize_linked_project,
     summarize_project,
     workspace_primary_folder,
 )
@@ -189,9 +193,10 @@ class HivePlannerApp:
             card_title(intro, "What you get")
             tk.Label(
                 intro,
-                text="• Bootstrap Hive projects with Delta + Spec Kit stubs\n"
+                text="• Bootstrap Hive projects with Delta planning layout\n"
+                "• Unified agent handoff: Spec Kit + Continual Learning (symbiotic)\n"
                 "• Run ci-check health gates before handoff\n"
-                "• Sync impact maps and open projects in Explorer",
+                "• Sync impact maps and open projects in Cursor",
                 justify="left",
                 font=FONT,
                 bg=COLORS["card"],
@@ -369,6 +374,7 @@ class HivePlannerApp:
         for title, value in [
             ("Hive", self.setup.hive_version or "not installed"),
             ("Profile", self._active_profile_label() or "—"),
+            ("Handoff", self._active_handoff_label()),
             ("Feature", self._active_feature_label()),
         ]:
             cell = tk.Frame(row, bg=COLORS["secondary"], padx=12, pady=10)
@@ -381,6 +387,7 @@ class HivePlannerApp:
         primary_button(actions, "Run health check", self._on_ci_check)
         secondary_button(actions, "Open in Cursor", self._on_open_cursor)
         secondary_button(actions, "Sync impact maps", self._on_map_sync)
+        secondary_button(actions, "Deploy agent handoff", self._on_deploy_agent_handoff)
         secondary_button(actions, "Open in Explorer", self._on_explore)
 
         log_card = card(body)
@@ -439,6 +446,7 @@ class HivePlannerApp:
         self.new_target = tk.StringVar()
         self.new_profile = tk.StringVar(value=self.config.default_profile)
         self.new_git = tk.BooleanVar(value=True)
+        self.new_agent_handoff = tk.StringVar(value="unified")
         self._field(form, "Project name", self.new_name)
         self._field(form, "Target folder", self.new_target, browse=True)
         profile_row = tk.Frame(form, bg=COLORS["card"])
@@ -451,6 +459,31 @@ class HivePlannerApp:
             state="readonly",
             width=28,
         ).pack(side="left", fill="x", expand=True)
+        handoff_row = tk.Frame(form, bg=COLORS["card"])
+        handoff_row.pack(fill="x", padx=12, pady=(4, 4))
+        tk.Label(
+            handoff_row,
+            text="Agent handoff",
+            width=14,
+            anchor="w",
+            bg=COLORS["card"],
+            fg=COLORS["fg"],
+            font=FONT,
+        ).pack(side="left")
+        ttk.Combobox(
+            handoff_row,
+            textvariable=self.new_agent_handoff,
+            values=["unified", "off"],
+            state="readonly",
+            width=28,
+        ).pack(side="left", fill="x", expand=True)
+        tk.Label(
+            handoff_row,
+            text="Unified = Spec Kit + Continual Learning together",
+            bg=COLORS["card"],
+            fg=COLORS["muted"],
+            font=FONT_SUBTITLE,
+        ).pack(anchor="w", padx=(14, 0), pady=(2, 0))
         git_row = tk.Frame(form, bg=COLORS["card"])
         git_row.pack(fill="x", padx=12, pady=(4, 12))
         tk.Checkbutton(
@@ -648,19 +681,31 @@ class HivePlannerApp:
             return None
         return Path(self._recent_project_paths[selection[0]])
 
+    def _active_handoff_label(self) -> str:
+        if not self.config.active_project:
+            return "—"
+        from hive_planner.agent_handoff import validate_unified_handoff
+
+        root, _repair = prepare_linked_project_root(Path(self.config.active_project), repair_agents=False)
+        if not root:
+            return "—"
+        status = validate_unified_handoff(root)
+        if status.mode == "unified":
+            return "unified ✓" if status.complete else "unified (incomplete)"
+        return "off"
+
     def _active_feature_label(self) -> str:
         if not self.config.active_project:
             return "—"
-        root = resolve_linked_project_root(Path(self.config.active_project))
-        if not root:
+        summary = summarize_linked_project(Path(self.config.active_project))
+        if not summary.ok:
             return "—"
-        summary = summarize_project(root)
         return summary.active_feature or "—"
 
     def _active_profile_label(self) -> str:
         if not self.config.active_project:
             return "—"
-        root = resolve_linked_project_root(Path(self.config.active_project))
+        root, _repair = prepare_linked_project_root(Path(self.config.active_project))
         if not root:
             return ""
         stored = read_project_profile(root)
@@ -924,6 +969,15 @@ class HivePlannerApp:
             self.ci_list.insert("end", f"{mark}  {step.get('name')}: {step.get('detail')}")
         summary = "All checks passed." if report.get("ok") else "Some checks failed."
         self._append_log(self.home_log, summary)
+        repair = report.get("repair")
+        if repair:
+            self._append_log(
+                self.home_log,
+                f"Repaired AGENTS.md — {repair.get('detail', 'updated Active feature')}.",
+            )
+            self._show_dashboard()
+        for hint in report.get("hints", []):
+            self._append_log(self.home_log, f"Tip: {hint}")
 
     def _on_map_sync(self) -> None:
         root = self._active_linked_root()
@@ -946,6 +1000,41 @@ class HivePlannerApp:
             self._append_log(self.home_log, f"Impact maps synced: {added} added, {updated} updated.")
         else:
             self._append_log(self.home_log, "Impact maps already up to date.")
+
+    def _on_deploy_agent_handoff(self) -> None:
+        root = self._active_linked_root()
+        if not root:
+            messagebox.showwarning("No project", "Link a workspace first.")
+            return
+        cfg = load_config()
+        self._append_log(self.home_log, "Deploying unified agent handoff (Spec Kit + Continual Learning)…")
+        self._run_bg(
+            lambda: run_deploy_agent_handoff(
+                root,
+                hive_planner_root=cfg.normalized_hive_root(),
+                force=False,
+            ),
+            self._deploy_handoff_done,
+        )
+
+    def _deploy_handoff_done(self, result: dict) -> None:
+        if self._is_bg_error(result):
+            self._append_log(self.home_log, self._result_detail(result))
+            return
+        if not result.get("ok"):
+            self._append_log(self.home_log, self._result_detail(result))
+            return
+        count = len(result.get("files_written", []))
+        self._append_log(
+            self.home_log,
+            f"Agent handoff deployed ({count} file(s)). Mode: {result.get('agent_handoff_mode', 'unified')}.",
+        )
+        repair = result.get("repair")
+        if repair:
+            self._append_log(self.home_log, f"Repaired AGENTS.md — {repair.get('detail', 'updated')}.")
+        for warning in result.get("warnings", []):
+            self._append_log(self.home_log, f"Warning: {warning}")
+        self._show_dashboard()
 
     def _on_explore(self) -> None:
         if not self.config.active_project:
@@ -1085,7 +1174,12 @@ class HivePlannerApp:
             return False
 
         target = Path(workspace.path)
-        hive_folder = workspace_primary_folder(target) or target
+        hive_folder = (
+            resolve_linked_project_root(target)
+            or pick_hive_bootstrap_target(target)
+            or workspace_primary_folder(target)
+            or target
+        )
         self.config = load_config()
         already_known = any(
             normalize_project_path(entry) == normalize_project_path(target)
@@ -1102,17 +1196,18 @@ class HivePlannerApp:
                     "Set up this folder?",
                     f"Folder is empty:\n{hive_folder}\n\nCreate Hive planning files here now?",
                 ):
-                    return self._bootstrap_and_activate(hive_folder, notify=notify)
+                    return self._bootstrap_and_activate(hive_folder, notify=notify, link_path=target)
                 return False
             if workspace.has_cursor_dir or workspace.has_git or workspace.entry_kind == "workspace":
                 label = workspace.name
                 if messagebox.askyesno(
                     "Add Hive planning files?",
                     f"Cursor workspace:\n{label}\n\n"
-                    "Health checks and handoff tools need Hive planning files (START_HERE.md).\n\n"
+                    f"Hive files will be added to:\n{hive_folder}\n\n"
+                    "Health checks and handoff tools need START_HERE.md.\n\n"
                     "Add them now?",
                 ):
-                    return self._bootstrap_and_activate(hive_folder, notify=notify)
+                    return self._bootstrap_and_activate(hive_folder, notify=notify, link_path=target)
             elif not messagebox.askyesno(
                 "Link this folder?",
                 f"Link workspace:\n{hive_folder}\n\n"
@@ -1122,13 +1217,17 @@ class HivePlannerApp:
 
         self.config.add_recent_project(target)
         save_config(self.config)
+        _, repair = prepare_linked_project_root(target, repair_agents=True)
         if notify:
             if workspace.hive_ready and hive_folder.is_dir():
-                summary = summarize_project(hive_folder)
+                summary = summarize_linked_project(target, repair_agents=False)
                 profile = summary.bootstrap_profile or "—"
+                feature_line = summary.active_feature or "—"
+                if repair and repair.repaired:
+                    feature_line = repair.feature or feature_line
                 messagebox.showinfo(
                     "Workspace linked",
-                    f"{workspace.name}\n\nProfile: {profile}\nFeature: {summary.active_feature or '—'}",
+                    f"{workspace.name}\n\nProfile: {profile}\nFeature: {feature_line}",
                 )
             else:
                 messagebox.showinfo(
@@ -1142,26 +1241,57 @@ class HivePlannerApp:
     def _on_link_workspace(self) -> None:
         self._show_workspace_picker()
 
-    def _bootstrap_and_activate(self, path: Path, *, notify: bool = True) -> bool:
+    def _bootstrap_and_activate(
+        self,
+        path: Path,
+        *,
+        notify: bool = True,
+        force: bool = False,
+        link_path: Path | None = None,
+    ) -> bool:
         cfg = load_config()
+        bootstrap_target = pick_hive_bootstrap_target(path) or path
+        try:
+            non_empty = bootstrap_target.is_dir() and any(bootstrap_target.iterdir())
+        except OSError:
+            non_empty = False
+        if non_empty and not force and (bootstrap_target / "START_HERE.md").is_file():
+            messagebox.showinfo(
+                "Already a Hive project",
+                f"Hive planning files already exist in:\n{bootstrap_target}",
+            )
+            self.config = load_config()
+            self.config.add_recent_project(link_path or path)
+            save_config(self.config)
+            self._show_dashboard()
+            return True
+        if non_empty and not force:
+            if not messagebox.askyesno(
+                "Add to existing folder?",
+                f"Add Hive planning files to:\n{bootstrap_target}\n\n"
+                "Existing project files will be kept. Only missing Hive files are added.",
+            ):
+                return False
+            force = True
         result = run_project_init(
             cfg,
-            target=path,
-            name=path.name,
+            target=bootstrap_target,
+            name=bootstrap_target.name,
             profile=cfg.default_profile,
             git_init=False,
-            force=False,
+            force=force,
+            agent_handoff="unified",
         )
         if not result.get("ok"):
             messagebox.showerror("Setup failed", result.get("error", "Could not create Hive project."))
             return False
         self.config = load_config()
-        self.config.add_recent_project(Path(result["target"]))
+        self.config.add_recent_project(link_path or path)
         save_config(self.config)
         if notify:
             messagebox.showinfo(
                 "Hive project ready",
-                f"Created planning files in:\n{result['target']}\n\nProfile: {cfg.default_profile}",
+                f"Created planning files in:\n{bootstrap_target}\n\nProfile: {cfg.default_profile}",
             )
         self._show_dashboard()
         return True
@@ -1196,6 +1326,7 @@ class HivePlannerApp:
         name = self.new_name.get().strip() or None
         profile = self.new_profile.get().strip() or "full"
         git_init = self.new_git.get()
+        agent_handoff = self.new_agent_handoff.get().strip() or "unified"
         cfg = load_config()
 
         def work():
@@ -1206,6 +1337,7 @@ class HivePlannerApp:
                 profile=profile,
                 git_init=git_init,
                 force=False,
+                agent_handoff=agent_handoff,
             )
 
         self._run_bg(work, self._create_done)

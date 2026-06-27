@@ -1,14 +1,18 @@
 from __future__ import annotations
 
 import importlib.metadata
+import json
 import os
+import re
 import shlex
 import shutil
+import sqlite3
 import subprocess
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import unquote, urlparse
 
 from hive_planner.bootstrap import BootstrapError, init_project
 from hive_planner.ci_handoff import run_ci_check
@@ -16,7 +20,7 @@ from hive_planner.config import RepoPaths, is_repo_root
 from hive_planner.launcher.config import LauncherConfig
 from hive_planner.map_sync import sync_impact_maps
 from hive_planner.project_profile import resolve_project_profile
-from hive_planner.spec_drift import parse_active_feature
+from hive_planner.spec_drift import parse_active_feature, repair_agents_active_feature
 
 
 @dataclass
@@ -337,6 +341,17 @@ def get_setup_status(config: LauncherConfig) -> SetupStatus:
     )
 
 
+def auto_complete_onboarding_if_ready(config: LauncherConfig) -> bool:
+    """Mark onboarding done when Python, hive root, and package are already OK."""
+    if config.onboarding_complete:
+        return False
+    status = get_setup_status(config)
+    if status.python_ok and status.hive_root_ok and status.hive_installed:
+        config.onboarding_complete = True
+        return True
+    return False
+
+
 def run_install(config: LauncherConfig, *, extras: str = "dev") -> InstallResult:
     hive_root = config.normalized_hive_root()
     if not hive_root.is_dir():
@@ -382,14 +397,459 @@ def summarize_project(project_root: Path) -> ProjectSummary:
     return ProjectSummary(str(root), True, name, feature, profile, "ok")
 
 
+@dataclass
+class CursorWorkspace:
+    path: str
+    name: str
+    location: str
+    exists: bool
+    hive_ready: bool
+    has_cursor_dir: bool
+    has_git: bool
+    entry_kind: str = "folder"
+
+    def to_dict(self) -> dict:
+        return {
+            "path": self.path,
+            "name": self.name,
+            "location": self.location,
+            "exists": self.exists,
+            "hive_ready": self.hive_ready,
+            "has_cursor_dir": self.has_cursor_dir,
+            "has_git": self.has_git,
+            "entry_kind": self.entry_kind,
+        }
+
+
+def file_uri_to_path(uri: str) -> str | None:
+    raw = str(uri or "").strip()
+    if not raw.startswith("file://"):
+        return None
+    parsed = urlparse(raw)
+    path = unquote(parsed.path)
+    if sys.platform == "win32" and path.startswith("/") and len(path) > 2 and path[2] == ":":
+        path = path[1:]
+    return path or None
+
+
+def is_code_workspace_file(path: Path) -> bool:
+    return path.suffix.lower() == ".code-workspace"
+
+
+def read_code_workspace_folders(workspace_file: Path) -> list[Path]:
+    try:
+        data = json.loads(workspace_file.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    folders: list[Path] = []
+    for entry in data.get("folders") or []:
+        rel = entry.get("path") if isinstance(entry, dict) else entry
+        if not rel:
+            continue
+        rel_text = str(rel).strip()
+        try:
+            if rel_text in (".", "./"):
+                folders.append(workspace_file.parent.resolve())
+            else:
+                folders.append((workspace_file.parent / rel_text).resolve())
+        except OSError:
+            continue
+    return folders
+
+
+def list_workspace_roots(path: Path) -> list[Path]:
+    if is_code_workspace_file(path):
+        if not path.is_file():
+            return []
+        return read_code_workspace_folders(path)
+    try:
+        resolved = path.resolve()
+    except OSError:
+        resolved = path
+    return [resolved] if resolved.is_dir() else []
+
+
+def _filter_workspace_roots(link_path: Path, roots: list[Path]) -> list[Path]:
+    if not roots:
+        return []
+    workspace_parent = link_path.parent.resolve() if is_code_workspace_file(link_path) else None
+    filtered: list[Path] = []
+    seen: set[str] = set()
+    for root in roots:
+        try:
+            resolved = root.resolve()
+        except OSError:
+            continue
+        key = str(resolved).lower()
+        if key in seen:
+            continue
+        if workspace_parent is not None and len(roots) > 1 and resolved == workspace_parent:
+            continue
+        seen.add(key)
+        filtered.append(resolved)
+    return filtered or roots
+
+
+def _hive_root_score(path: Path) -> int:
+    if not path.is_dir():
+        return -1
+    score = 0
+    if (path / "START_HERE.md").is_file():
+        score += 10
+    if (path / "pyproject.toml").is_file():
+        score += 8
+    if (path / ".hive" / "project.json").is_file():
+        score += 4
+    if (path / "src").is_dir():
+        score += 2
+    if (path / "AGENTS.md").is_file():
+        score += 1
+    return score
+
+
+def _collect_hive_root_candidates(roots: list[Path]) -> list[Path]:
+    candidates: list[Path] = []
+    seen: set[str] = set()
+
+    def add(folder: Path) -> None:
+        try:
+            resolved = folder.resolve()
+        except OSError:
+            return
+        key = str(resolved).lower()
+        if key in seen:
+            return
+        seen.add(key)
+        candidates.append(resolved)
+
+    for root in roots:
+        if not root.is_dir():
+            continue
+        add(root)
+        try:
+            for child in root.iterdir():
+                if child.is_dir() and (child / "START_HERE.md").is_file():
+                    add(child)
+        except OSError:
+            continue
+    return candidates
+
+
+def _best_hive_root(candidates: list[Path]) -> Path | None:
+    if not candidates:
+        return None
+    scored = [(path, _hive_root_score(path)) for path in candidates]
+    viable = [(path, score) for path, score in scored if score > 0]
+    if viable:
+        viable.sort(key=lambda item: (item[1], len(str(item[0]))), reverse=True)
+        return viable[0][0]
+    for path in candidates:
+        if path.is_dir():
+            return path
+    return candidates[0]
+
+
+def _resolved_workspace_roots(link_path: Path) -> list[Path]:
+    return _filter_workspace_roots(link_path, list_workspace_roots(link_path))
+
+
+def pick_hive_bootstrap_target(link_path: Path) -> Path | None:
+    """Pick the best folder to add Hive planning files for a linked workspace."""
+    roots = _resolved_workspace_roots(link_path)
+    if not roots:
+        return workspace_primary_folder(link_path)
+
+    for root in roots:
+        if not root.is_dir():
+            continue
+        try:
+            if not any(root.iterdir()):
+                return root
+        except OSError:
+            continue
+
+    best = _best_hive_root(_collect_hive_root_candidates(roots))
+    if best is not None and _hive_root_score(best) > 0:
+        return best
+
+    for root in roots:
+        if not root.is_dir():
+            continue
+        if (root / ".cursor").is_dir() or (root / ".git").exists():
+            return root
+
+    for root in roots:
+        if root.is_dir():
+            return root
+    return roots[0]
+
+
+def workspace_primary_folder(path: Path) -> Path | None:
+    if is_code_workspace_file(path):
+        if not path.is_file():
+            return None
+        roots = _resolved_workspace_roots(path)
+        if not roots:
+            try:
+                return path.parent.resolve()
+            except OSError:
+                return path.parent
+        best = _best_hive_root(_collect_hive_root_candidates(roots))
+        if best is not None:
+            return best
+        for root in roots:
+            if root.is_dir():
+                return root
+        return roots[0]
+    try:
+        resolved = path.resolve()
+    except OSError:
+        resolved = path
+    if not resolved.is_dir():
+        return None
+    if (resolved / "START_HERE.md").is_file():
+        return resolved
+    nested = _best_hive_root(_collect_hive_root_candidates([resolved]))
+    if nested is not None and _hive_root_score(nested) > 0:
+        return nested
+    return resolved
+
+
+def resolve_linked_project_root(path: Path) -> Path | None:
+    """Folder used for Hive health checks and profile metadata."""
+    return workspace_primary_folder(path)
+
+
+def prepare_linked_project_root(path: Path, *, repair_agents: bool = True):
+    from hive_planner.project_profile import resolve_project_integrations
+    from hive_planner.spec_drift import AgentsRepairResult, repair_agents_active_feature
+
+    root = resolve_linked_project_root(path)
+    if not root:
+        return None, None
+    if not repair_agents:
+        return root, None
+    if not resolve_project_integrations(root).spec_kit_enabled:
+        return root, None
+    if not (root / "START_HERE.md").is_file() and not is_repo_root(root):
+        return root, None
+    repair = repair_agents_active_feature(RepoPaths(root=root))
+    if repair.repaired:
+        return root, repair
+    return root, None
+
+
+def summarize_linked_project(link_path: Path, *, repair_agents: bool = True) -> ProjectSummary:
+    root, _repair = prepare_linked_project_root(link_path, repair_agents=repair_agents)
+    if not root:
+        label = link_path.name if link_path else "project"
+        return ProjectSummary(str(link_path), False, label, None, None, "Could not resolve project root")
+    return summarize_project(root)
+
+
+def _cursor_state_db_path() -> Path | None:
+    appdata = os.environ.get("APPDATA", "")
+    if not appdata:
+        return None
+    db = Path(appdata) / "Cursor" / "User" / "globalStorage" / "state.vscdb"
+    return db if db.is_file() else None
+
+
+def _read_cursor_recent_entries() -> list[dict]:
+    db = _cursor_state_db_path()
+    if not db:
+        return []
+    try:
+        conn = sqlite3.connect(db)
+        row = conn.execute(
+            "SELECT value FROM ItemTable WHERE key = ?",
+            ("history.recentlyOpenedPathsList",),
+        ).fetchone()
+        conn.close()
+    except sqlite3.Error:
+        return []
+    if not row:
+        return []
+    raw = row[0]
+    text = raw.decode("utf-8") if isinstance(raw, bytes) else str(raw)
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        return []
+    entries = data.get("entries")
+    return entries if isinstance(entries, list) else []
+
+
+def _folder_workspace_flags(folder: Path) -> tuple[bool, bool, bool]:
+    exists = folder.is_dir()
+    if not exists:
+        return False, False, False
+    hive_ready = is_repo_root(folder) or (folder / "START_HERE.md").is_file()
+    has_cursor_dir = (folder / ".cursor").is_dir()
+    has_git = (folder / ".git").exists()
+    return hive_ready, has_cursor_dir, has_git
+
+
+def build_cursor_workspace(path: Path, *, entry_kind: str, display_name: str | None = None) -> CursorWorkspace:
+    if entry_kind == "workspace" or is_code_workspace_file(path):
+        exists = path.is_file()
+        location = str(path.parent)
+        name = display_name or f"{path.stem} (Workspace)"
+        primary = workspace_primary_folder(path) if exists else None
+        hive_ready, has_cursor_dir, has_git = (
+            _folder_workspace_flags(primary) if primary else (False, False, False)
+        )
+        resolved = str(path.resolve()) if exists else str(path)
+        return CursorWorkspace(
+            path=resolved,
+            name=name,
+            location=location,
+            exists=exists,
+            hive_ready=hive_ready,
+            has_cursor_dir=has_cursor_dir,
+            has_git=has_git,
+            entry_kind="workspace",
+        )
+
+    try:
+        resolved_path = path.resolve()
+    except OSError:
+        resolved_path = path
+    exists = resolved_path.is_dir()
+    hive_ready, has_cursor_dir, has_git = _folder_workspace_flags(resolved_path)
+    return CursorWorkspace(
+        path=str(resolved_path),
+        name=display_name or resolved_path.name or str(resolved_path),
+        location=str(resolved_path.parent),
+        exists=exists,
+        hive_ready=hive_ready,
+        has_cursor_dir=has_cursor_dir,
+        has_git=has_git,
+        entry_kind="folder",
+    )
+
+
+def classify_workspace(project_root: Path) -> CursorWorkspace:
+    path = Path(project_root)
+    if is_code_workspace_file(path):
+        return build_cursor_workspace(path, entry_kind="workspace")
+    return build_cursor_workspace(path, entry_kind="folder")
+
+
+def _workspace_from_recent_entry(entry: dict) -> CursorWorkspace | None:
+    workspace = entry.get("workspace")
+    if isinstance(workspace, dict):
+        uri = str(workspace.get("configPath") or workspace.get("configURIPath") or "")
+        raw_path = file_uri_to_path(uri)
+        if not raw_path:
+            return None
+        path = Path(raw_path)
+        return build_cursor_workspace(path, entry_kind="workspace")
+
+    uri = str(entry.get("folderUri") or "")
+    raw_path = file_uri_to_path(uri)
+    if not raw_path:
+        return None
+    return build_cursor_workspace(Path(raw_path), entry_kind="folder")
+
+
+def discover_cursor_workspaces() -> list[CursorWorkspace]:
+    """Match Cursor's Recent projects list (history.recentlyOpenedPathsList)."""
+    seen: set[str] = set()
+    workspaces: list[CursorWorkspace] = []
+    for entry in _read_cursor_recent_entries():
+        if not isinstance(entry, dict):
+            continue
+        workspace = _workspace_from_recent_entry(entry)
+        if not workspace:
+            continue
+        key = workspace.path.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        workspaces.append(workspace)
+    return workspaces
+
+
+def is_hive_planner_source_repo(root: Path) -> bool:
+    pyproject = root / "pyproject.toml"
+    if not pyproject.is_file():
+        return False
+    try:
+        text = pyproject.read_text(encoding="utf-8")
+    except OSError:
+        return False
+    return 'name = "hive-planner"' in text
+
+
+def ci_check_hints(root: Path, report) -> list[str]:
+    from hive_planner.ci_handoff import CiCheckReport
+    from hive_planner.project_profile import resolve_project_integrations
+
+    if not isinstance(report, CiCheckReport):
+        return []
+    hints: list[str] = []
+    paths = RepoPaths(root=root)
+    integrations = resolve_project_integrations(root)
+    feature = parse_active_feature(paths)
+    failed = {step.name for step in report.steps if not step.ok}
+    if integrations.spec_kit_enabled and "handoff-artifacts" in failed and not feature:
+        hints.append(
+            "Set Active feature in AGENTS.md to a real feature id (e.g. **example-feature**), "
+            "or re-bootstrap with Spec Kit enabled."
+        )
+    if integrations.spec_kit_enabled and "spec-drift" in failed and not feature:
+        hints.append("Spec drift stays red until Active feature is set and matching spec/delta files exist.")
+    if not is_hive_planner_source_repo(root):
+        hints.append(
+            "Full roadmap checks apply only to the Hive Planner source repo. "
+            "Bootstrapped app/workspace projects skip roadmap-artifacts."
+        )
+    elif "roadmap-artifacts" in failed:
+        hints.append("Roadmap failures mean spec/delta/tasks files are missing for planned features in this repo.")
+    return hints
+
+
 def run_project_ci_check(project_root: Path) -> dict:
     target = project_root.resolve()
     summary = summarize_project(target)
     if not summary.ok:
         return {"ok": False, "error": summary.detail}
     paths = RepoPaths(root=target)
-    report = run_ci_check(paths)
-    return report.to_dict()
+    repair = repair_agents_active_feature(paths)
+    report = run_ci_check(paths, check_roadmap=is_hive_planner_source_repo(target))
+    payload = report.to_dict()
+    if repair.repaired:
+        payload["repair"] = {"feature": repair.feature, "detail": repair.detail}
+    hints = ci_check_hints(target, report)
+    if hints:
+        payload["hints"] = hints
+    return payload
+
+
+def run_deploy_agent_handoff(project_root: Path, *, hive_planner_root: Path, force: bool = False) -> dict:
+    from hive_planner.bootstrap import BootstrapError, deploy_agent_handoff_scaffold
+    from hive_planner.spec_drift import repair_agents_active_feature
+
+    target = project_root.resolve()
+    summary = summarize_project(target)
+    if not summary.ok:
+        return {"ok": False, "error": summary.detail}
+    paths = RepoPaths(root=hive_planner_root.resolve())
+    try:
+        written, warnings = deploy_agent_handoff_scaffold(paths, target, force=force)
+    except BootstrapError as exc:
+        return {"ok": False, "error": str(exc)}
+    repair = repair_agents_active_feature(RepoPaths(root=target))
+    payload = {
+        "ok": True,
+        "files_written": written,
+        "warnings": warnings,
+        "agent_handoff_mode": "unified",
+    }
+    if repair.repaired:
+        payload["repair"] = {"feature": repair.feature, "detail": repair.detail}
+    return payload
 
 
 def run_project_map_sync(project_root: Path, *, dry_run: bool = False) -> dict:
@@ -417,6 +877,9 @@ def run_project_init(
     profile: str,
     git_init: bool,
     force: bool,
+    agent_handoff: str | None = None,
+    spec_kit: bool | None = None,
+    continual_learning: bool | None = None,
 ) -> dict:
     hive_root = config.normalized_hive_root()
     paths = RepoPaths(root=hive_root)
@@ -428,6 +891,9 @@ def run_project_init(
             force=force,
             profile=profile,
             git_init=git_init,
+            agent_handoff=agent_handoff,
+            spec_kit=spec_kit,
+            continual_learning=continual_learning,
         )
     except BootstrapError as exc:
         return {"ok": False, "error": str(exc)}
@@ -451,47 +917,199 @@ def open_path_in_explorer(path: Path) -> dict:
     return {"ok": True, "path": str(target)}
 
 
-def find_cursor_executable() -> str | None:
+_CURSOR_LOG_APP_ROOT = re.compile(
+    r"([A-Za-z]:\\[^\"'\s]+?\\cursor\\[^\\]+)\\resources\\app",
+    re.IGNORECASE,
+)
+
+
+def _cursor_exe_from_app_root(app_root: Path) -> str | None:
+    candidate = app_root / "Cursor.exe"
+    if candidate.is_file():
+        return str(candidate)
+    return None
+
+
+def _cursor_from_config(config: LauncherConfig | None) -> str | None:
+    if config is None:
+        return None
+    raw = config.cursor_executable.strip()
+    if not raw:
+        return None
+    candidate = Path(raw)
+    if candidate.is_file():
+        return str(candidate)
+    return None
+
+
+def _cursor_from_path() -> str | None:
     found = shutil.which("cursor")
     if found:
         return found
+    return None
+
+
+def _cursor_from_well_known_paths() -> str | None:
+    candidates: list[Path] = []
     if sys.platform == "win32":
         local = os.environ.get("LOCALAPPDATA", "")
         if local:
+            local_root = Path(local)
             for rel in (
                 "Programs/cursor/Cursor.exe",
                 "Programs/Cursor/Cursor.exe",
+                "Programs/cursor/_/Cursor.exe",
+                "Programs/Cursor/_/Cursor.exe",
+                "cursor/Cursor.exe",
+                "cursor/_/Cursor.exe",
             ):
-                candidate = Path(local) / rel
-                if candidate.is_file():
-                    return str(candidate)
+                candidates.append(local_root / rel)
+        for env_name in ("ProgramFiles", "ProgramFiles(x86)"):
+            env_val = os.environ.get(env_name, "")
+            if not env_val:
+                continue
+            root = Path(env_val)
+            candidates.extend(
+                (
+                    root / "cursor" / "Cursor.exe",
+                    root / "cursor" / "_" / "Cursor.exe",
+                    root / "Cursor" / "Cursor.exe",
+                    root / "Cursor" / "_" / "Cursor.exe",
+                )
+            )
     elif sys.platform == "darwin":
-        candidate = Path("/Applications/Cursor.app/Contents/MacOS/Cursor")
+        candidates.append(Path("/Applications/Cursor.app/Contents/MacOS/Cursor"))
+    for candidate in candidates:
         if candidate.is_file():
             return str(candidate)
     return None
 
 
-def open_in_cursor(project_root: Path) -> dict:
-    target = project_root.resolve()
-    if not target.is_dir():
-        return {"ok": False, "error": "Directory not found"}
-    summary = summarize_project(target)
-    if not summary.ok:
-        return {"ok": False, "error": summary.detail}
-    cursor_exe = find_cursor_executable()
+def _cursor_from_logs() -> str | None:
+    appdata = os.environ.get("APPDATA", "")
+    if not appdata:
+        return None
+    logs_root = Path(appdata) / "Cursor" / "logs"
+    if not logs_root.is_dir():
+        return None
+    log_files = sorted(
+        logs_root.rglob("*.log"),
+        key=lambda path: path.stat().st_mtime,
+        reverse=True,
+    )
+    for log_file in log_files[:30]:
+        try:
+            text = log_file.read_text(encoding="utf-8", errors="ignore")[:100_000]
+        except OSError:
+            continue
+        match = _CURSOR_LOG_APP_ROOT.search(text)
+        if not match:
+            continue
+        resolved = _cursor_exe_from_app_root(Path(match.group(1)))
+        if resolved:
+            return resolved
+    return None
+
+
+def _cursor_from_start_menu_shortcuts() -> str | None:
+    if sys.platform != "win32":
+        return None
+    start_dirs: list[Path] = []
+    for env_name in ("APPDATA", "PROGRAMDATA"):
+        env_val = os.environ.get(env_name, "")
+        if not env_val:
+            continue
+        start_dirs.append(Path(env_val) / "Microsoft" / "Windows" / "Start Menu" / "Programs")
+    for start_dir in start_dirs:
+        if not start_dir.is_dir():
+            continue
+        try:
+            links = sorted(start_dir.rglob("*.lnk"))
+        except OSError:
+            continue
+        for link in links:
+            if "cursor" not in link.name.lower():
+                continue
+            target = _resolve_windows_shortcut(link)
+            if target and Path(target).is_file():
+                return target
+    return None
+
+
+def _resolve_windows_shortcut(link_path: Path) -> str | None:
+    if sys.platform != "win32":
+        return None
+    try:
+        proc = _run_hidden(
+            [
+                "powershell",
+                "-NoProfile",
+                "-Command",
+                f"(New-Object -ComObject WScript.Shell).CreateShortcut('{link_path}').TargetPath",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    target = (proc.stdout or "").strip()
+    if proc.returncode != 0 or not target:
+        return None
+    return target
+
+
+def find_cursor_executable(config: LauncherConfig | None = None) -> str | None:
+    for resolver in (
+        lambda: _cursor_from_config(config),
+        _cursor_from_path,
+        _cursor_from_well_known_paths,
+        _cursor_from_logs,
+        _cursor_from_start_menu_shortcuts,
+    ):
+        found = resolver()
+        if found:
+            return found
+    return None
+
+
+def open_in_cursor(project_root: Path, *, config: LauncherConfig | None = None) -> dict:
+    raw = Path(project_root)
+    if is_code_workspace_file(raw):
+        target = raw
+        if not target.is_file():
+            return {"ok": False, "error": "Workspace file not found"}
+        launch_path = target.resolve()
+        cwd = str(launch_path.parent)
+    else:
+        try:
+            launch_path = raw.resolve()
+        except OSError as exc:
+            return {"ok": False, "error": str(exc)}
+        if not launch_path.is_dir():
+            return {"ok": False, "error": "Directory not found"}
+        cwd = str(launch_path)
+    cursor_exe = find_cursor_executable(config)
     if not cursor_exe:
         return {
             "ok": False,
-            "error": "Cursor not found. Install Cursor or add the cursor CLI to PATH.",
+            "error": (
+                "Cursor not found. Install Cursor, add the cursor CLI to PATH, "
+                "or set Cursor executable in Settings."
+            ),
         }
     try:
-        subprocess.Popen([cursor_exe, str(target)], cwd=str(target), shell=False)
+        subprocess.Popen([cursor_exe, str(launch_path)], cwd=cwd, shell=False)
     except OSError as exc:
         return {"ok": False, "error": str(exc)}
+    hive_root = resolve_linked_project_root(launch_path)
+    summary = summarize_project(hive_root) if hive_root else summarize_project(launch_path)
     return {
         "ok": True,
-        "path": str(target),
+        "path": str(launch_path),
         "cursor": cursor_exe,
+        "hive_ready": summary.ok,
         "bootstrap_profile": summary.bootstrap_profile,
+        "entry_kind": "workspace" if is_code_workspace_file(launch_path) else "folder",
     }

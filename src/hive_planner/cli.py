@@ -115,6 +115,22 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Run git init in the target after scaffolding (optional; requires git on PATH)",
     )
+    init_parser.add_argument(
+        "--agent-handoff",
+        default="unified",
+        choices=("off", "unified"),
+        help="Agent handoff profile: unified deploys Spec Kit + Continual Learning together; off = planning only",
+    )
+    init_parser.add_argument(
+        "--spec-kit",
+        action="store_true",
+        help="Deprecated alias for --agent-handoff unified",
+    )
+    init_parser.add_argument(
+        "--continual-learning",
+        action="store_true",
+        help="Deprecated; unified mode always enables both Spec Kit and Continual Learning",
+    )
 
     translate_parser = sub.add_parser("translate", help="Rule-based cartridge draft translation")
     translate_parser.add_argument("--input", required=True, type=Path, help="Research markdown input file")
@@ -183,6 +199,9 @@ def main(argv: list[str] | None = None) -> int:
         from hive_planner.bootstrap import BootstrapError, init_project
 
         try:
+            agent_handoff = args.agent_handoff
+            if args.spec_kit and agent_handoff == "off":
+                agent_handoff = "unified"
             result = init_project(
                 paths,
                 args.target,
@@ -190,6 +209,7 @@ def main(argv: list[str] | None = None) -> int:
                 force=args.force,
                 profile=args.profile,
                 git_init=args.git_init,
+                agent_handoff=agent_handoff,
             )
         except BootstrapError as exc:
             print(f"Error: {exc}", file=sys.stderr)

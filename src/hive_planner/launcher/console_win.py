@@ -3,6 +3,10 @@ from __future__ import annotations
 import sys
 
 _console_attached = False
+_console_visible = False
+
+SW_HIDE = 0
+SW_SHOW = 5
 
 
 def console_available() -> bool:
@@ -10,25 +14,32 @@ def console_available() -> bool:
 
 
 def is_console_visible() -> bool:
-    """True when the user (or --console) attached our debug console."""
-    return _console_attached if console_available() else False
+    """True when this app attached a debug console and it is shown."""
+    return _console_attached and _console_visible if console_available() else False
 
 
 def show_console() -> bool:
-    """Attach a visible console window (Windows only)."""
-    global _console_attached
+    """Attach or reveal a visible console window (Windows only)."""
+    global _console_attached, _console_visible
     if not console_available():
         return False
-    if _console_attached:
-        return True
 
     import ctypes
 
     kernel32 = ctypes.windll.kernel32
-    if kernel32.GetConsoleWindow():
+    user32 = ctypes.windll.user32
+
+    if kernel32.GetConsoleWindow() and not _console_attached:
         # Dev launches from an existing terminal already have a console; do not
-        # mark it as app-owned or hide_console would FreeConsole the parent shell.
+        # mark it as app-owned or hide would affect the parent shell.
         return True
+
+    if _console_attached:
+        hwnd = kernel32.GetConsoleWindow()
+        if hwnd:
+            user32.ShowWindow(hwnd, SW_SHOW)
+        _console_visible = bool(hwnd)
+        return _console_visible
 
     if not kernel32.AllocConsole():
         return False
@@ -37,21 +48,27 @@ def show_console() -> bool:
     sys.stderr = open("CONOUT$", "w", encoding="utf-8", buffering=1)  # noqa: SIM115
     sys.stdin = open("CONIN$", "r", encoding="utf-8")  # noqa: SIM115
     _console_attached = True
+    hwnd = kernel32.GetConsoleWindow()
+    if hwnd:
+        user32.ShowWindow(hwnd, SW_SHOW)
+    _console_visible = bool(hwnd)
     print("Hive Planner debug console")
-    return True
+    return _console_visible
 
 
 def hide_console() -> bool:
-    """Detach a console this app attached via show_console."""
-    global _console_attached
+    """Hide a console this app attached via show_console."""
+    global _console_visible
     if not console_available() or not _console_attached:
-        _console_attached = False
+        _console_visible = False
         return False
 
     import ctypes
 
     kernel32 = ctypes.windll.kernel32
-    if kernel32.GetConsoleWindow():
-        kernel32.FreeConsole()
-    _console_attached = False
+    user32 = ctypes.windll.user32
+    hwnd = kernel32.GetConsoleWindow()
+    if hwnd:
+        user32.ShowWindow(hwnd, SW_HIDE)
+    _console_visible = False
     return True
