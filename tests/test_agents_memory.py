@@ -114,6 +114,23 @@ def test_apply_merges_operational_candidates(tmp_path: Path) -> None:
     assert lint_agents_md(paths).ok
 
 
+def test_apply_preserves_preamble_before_first_section(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    agents = paths.root / "AGENTS.md"
+    preamble = "<!-- BOOTSTRAP: hive_planner init -->"
+    agents.write_text(
+        _minimal_agents().replace("# AGENTS.md", f"# AGENTS.md\n{preamble}"),
+        encoding="utf-8",
+    )
+    candidates = paths.root / "candidates.md"
+    candidates.write_text("- New durable fact from guarded apply.\n", encoding="utf-8")
+
+    run_agents_memory(paths, candidates, apply=True)
+    updated = agents.read_text(encoding="utf-8")
+    assert preamble in updated
+    assert updated.index(preamble) < updated.index("## Repository root")
+
+
 def test_apply_rejects_behavioral_candidate(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     (paths.root / "AGENTS.md").write_text(_minimal_agents(), encoding="utf-8")

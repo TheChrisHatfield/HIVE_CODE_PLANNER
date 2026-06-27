@@ -285,9 +285,17 @@ def _section_render_order(sections: dict[str, str], *, insert_key: str | None = 
     return order
 
 
+def _preamble_lines(text: str) -> list[str]:
+    preamble: list[str] = []
+    for line in text.splitlines():
+        if line.startswith("## "):
+            break
+        preamble.append(line)
+    return preamble
+
+
 def _apply_accepted_bullets(agents_text: str, accepted: list[str]) -> str:
-    lines = agents_text.splitlines()
-    title = lines[0] if lines and lines[0].startswith("# ") else "# AGENTS.md"
+    preamble = _preamble_lines(agents_text)
     sections = parse_sections(agents_text)
     matched_key = _match_section(sections, EDITABLE_SECTION)
     key = matched_key or EDITABLE_SECTION
@@ -295,7 +303,9 @@ def _apply_accepted_bullets(agents_text: str, accepted: list[str]) -> str:
     new_bullets = "\n".join(f"- {c}" for c in accepted)
     sections[key] = f"{current}\n{new_bullets}".strip() if current else new_bullets
 
-    out = [title, ""]
+    out = list(preamble)
+    if out and out[-1].strip():
+        out.append("")
     for heading in _section_render_order(sections, insert_key=None if matched_key else key):
         body = sections[heading]
         out.append(f"## {heading}")
