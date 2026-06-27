@@ -48,6 +48,7 @@ def build_source_map(feature: str) -> dict:
     return {
         "schema_version": "source-map.v1",
         "feature": feature,
+        "_auto_sync": True,
         "mappings": [
             {"cartridge": "cartridge/holistic.md", "delta": "docs/delta/00_holistic.md", "layer": "holistic"},
             {"cartridge": "cartridge/macro.md", "delta": "docs/delta/10_macro.md", "layer": "macro"},
@@ -231,6 +232,20 @@ def emit_rules_seed(
     return status, target, warnings
 
 
+def _should_skip_source_map(target: Path, *, force: bool) -> tuple[bool, str]:
+    if force or not target.exists():
+        return False, ""
+    try:
+        data = json.loads(target.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return False, ""
+    if data.get("_manual") is True:
+        return True, "manual source map (_manual flag)"
+    if data.get("_auto_sync") is True:
+        return False, ""
+    return True, "exists without auto-sync marker"
+
+
 def _emit_auto_sync_derivative(
     paths: RepoPaths,
     target: Path,
@@ -283,9 +298,18 @@ def emit_cartridge_pack(
     mappings_dir = paths.cartridge / "mappings"
     mappings_dir.mkdir(parents=True, exist_ok=True)
     source_map_path = mappings_dir / "source-map.json"
-    source_map_path.write_text(json.dumps(build_source_map(feature), indent=2), encoding="utf-8")
-    written["source_map"] = source_map_path
-    results["source_map"] = "written"
+    skip_map, map_reason = _should_skip_source_map(source_map_path, force=force)
+    if skip_map:
+        results["source_map"] = f"skipped ({map_reason})"
+        warnings.append(f"Skipped cartridge/mappings/source-map.json ({map_reason})")
+    else:
+        map_existed = source_map_path.exists()
+        source_map_path.write_text(
+            json.dumps(build_source_map(feature), indent=2) + "\n",
+            encoding="utf-8",
+        )
+        written["source_map"] = source_map_path
+        results["source_map"] = "updated" if map_existed else "written"
 
     micro_path = paths.root / "docs" / "delta" / "20_micro" / f"{feature}.md"
     research_path = paths.cartridge / "research-summary.md"

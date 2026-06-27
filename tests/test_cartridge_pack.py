@@ -287,3 +287,53 @@ def test_build_rule_seed_body_includes_macro_excerpt(tmp_path: Path) -> None:
     assert "## Architecture context" in body
     assert "Arch" in body
     assert feature in body
+
+
+def test_source_map_skips_manual_without_force(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    paths.ensure_dirs()
+    feature = "cartridge-pack-v2"
+    _write_feature_tree(paths, feature)
+    map_path = paths.cartridge / "mappings" / "source-map.json"
+    map_path.parent.mkdir(parents=True, exist_ok=True)
+    map_path.write_text(
+        json.dumps({"schema_version": "source-map.v1", "_manual": True, "mappings": []}, indent=2),
+        encoding="utf-8",
+    )
+    manual = map_path.read_text(encoding="utf-8")
+
+    _, results, warnings = emit_cartridge_pack(paths, feature, force=False)
+    assert results["source_map"].startswith("skipped")
+    assert map_path.read_text(encoding="utf-8") == manual
+    assert any("Skipped cartridge/mappings/source-map.json" in w for w in warnings)
+
+
+def test_source_map_auto_sync_updates_on_re_emit(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    paths.ensure_dirs()
+    feature = "cartridge-pack-v2"
+    _write_feature_tree(paths, feature)
+    emit_cartridge_pack(paths, feature, force=True)
+    first = json.loads((paths.cartridge / "mappings" / "source-map.json").read_text(encoding="utf-8"))
+    assert first.get("_auto_sync") is True
+
+    _, results, _ = emit_cartridge_pack(paths, feature, force=False)
+    assert results["source_map"] == "updated"
+
+
+def test_emit_skips_manual_source_context_without_force(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    paths.ensure_dirs()
+    feature = "cartridge-pack-v2"
+    _write_feature_tree(paths, feature)
+    (paths.root / "AGENTS.md").write_text(
+        "# AGENTS\n\n## Durable Workspace Facts\n\n- fact\n",
+        encoding="utf-8",
+    )
+    context_path = paths.cartridge / "source-context.md"
+    context_path.write_text("<!-- MANUAL: curated -->\n\n# Source Context\n", encoding="utf-8")
+    manual = context_path.read_text(encoding="utf-8")
+
+    _, warnings = emit_cartridge(paths, feature, force_delta=False)
+    assert context_path.read_text(encoding="utf-8") == manual
+    assert any("Skipped cartridge/source-context.md" in w for w in warnings)

@@ -148,7 +148,7 @@ def emit_cartridge(
         },
     }
 
-    from hive_planner.delta_emit import sync_delta_cartridge
+    from hive_planner.delta_emit import _auto_sync_banner, _should_skip_existing, sync_delta_cartridge
 
     delta_results, delta_paths, delta_warnings = sync_delta_cartridge(paths, feature, force=force_delta)
     warnings.extend(delta_warnings)
@@ -210,11 +210,18 @@ def emit_cartridge(
     )
 
     source_context_path = paths.cartridge / "source-context.md"
-    source_context_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-
-    outputs: dict[str, Path] = {
-        "source_context": source_context_path,
-    }
+    context_body = "\n".join(lines) + "\n"
+    skip_context, context_reason = _should_skip_existing(source_context_path, force=force_delta)
+    if skip_context:
+        warnings.append(f"Skipped cartridge/source-context.md ({context_reason})")
+        if source_context_path.exists():
+            outputs: dict[str, Path] = {"source_context": source_context_path}
+        else:
+            outputs = {}
+    else:
+        banner = _auto_sync_banner(paths.chunk_index, paths)
+        source_context_path.write_text(f"{banner}\n\n{context_body}", encoding="utf-8")
+        outputs = {"source_context": source_context_path}
     outputs.update(delta_paths)
     outputs.update(pack_paths)
 
