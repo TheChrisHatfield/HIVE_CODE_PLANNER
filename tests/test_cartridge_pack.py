@@ -146,7 +146,7 @@ def test_emit_cartridge_manifest_lists_files(tmp_path: Path) -> None:
     assert "files" in manifest
     assert "cartridge/research-summary.md" in manifest["files"]
     assert "pack_sync" in manifest["stats"]
-    assert manifest["targets"]["cursor_rules"] is False
+    assert manifest["targets"]["cursor_rules"] == "disabled"
 
 
 def test_emit_rules_seed_writes_draft_seed(tmp_path: Path) -> None:
@@ -247,7 +247,7 @@ def test_emit_cartridge_rules_seed_manifest_false_when_missing_micro(tmp_path: P
 
     _, warnings = emit_cartridge(paths, "missing-feature", force_delta=True, emit_rules_seeds=True)
     manifest = json.loads((paths.cartridge / "manifest.json").read_text(encoding="utf-8"))
-    assert manifest["targets"]["cursor_rules"] is False
+    assert manifest["targets"]["cursor_rules"] == "disabled"
     assert manifest["stats"]["pack_sync"]["rules_seed"] == "missing"
 
 

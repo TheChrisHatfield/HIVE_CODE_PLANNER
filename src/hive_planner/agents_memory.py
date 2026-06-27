@@ -152,6 +152,18 @@ def _parse_active_feature_from_sections(sections: dict[str, str]) -> str | None:
     return parse_feature_from_active_body(active_body)
 
 
+def _iter_section_bullets(text: str) -> list[tuple[str, int, str]]:
+    current_section: str | None = None
+    bullets: list[tuple[str, int, str]] = []
+    for line_no, line in enumerate(text.splitlines(), start=1):
+        if line.startswith("## "):
+            current_section = line[3:].strip()
+            continue
+        if current_section and line.strip().startswith("- "):
+            bullets.append((current_section, line_no, line.strip()[2:].strip()))
+    return bullets
+
+
 def lint_agents_md(paths: RepoPaths, agents_path: Path | None = None) -> AgentsLintReport:
     target = _resolve_agents_path(paths, agents_path)
     text = target.read_text(encoding="utf-8", errors="replace")
@@ -174,42 +186,38 @@ def lint_agents_md(paths: RepoPaths, agents_path: Path | None = None) -> AgentsL
         )
 
     seen_bullets: dict[str, int] = {}
-    line_offset = 0
-    for title, body in sections.items():
-        for line_no, bullet in _section_bullets(body):
-            absolute_line = line_offset + line_no
-            normalized = _normalize_bullet(bullet)
-            if normalized in seen_bullets:
+    for title, line_no, bullet in _iter_section_bullets(text):
+        normalized = _normalize_bullet(bullet)
+        if normalized in seen_bullets:
+            report.issues.append(
+                LintIssue(
+                    "warning",
+                    f"Duplicate bullet in ## {title}: {bullet[:80]}",
+                    line=line_no,
+                )
+            )
+        else:
+            seen_bullets[normalized] = line_no
+
+        if len(bullet) > MAX_BULLET_CHARS:
+            report.issues.append(
+                LintIssue(
+                    "warning",
+                    f"Bullet exceeds {MAX_BULLET_CHARS} chars in ## {title}",
+                    line=line_no,
+                )
+            )
+
+        for pattern in LOW_SIGNAL_PATTERNS:
+            if pattern.search(bullet):
                 report.issues.append(
                     LintIssue(
                         "warning",
-                        f"Duplicate bullet in ## {title}: {bullet[:80]}",
-                        line=absolute_line,
+                        f"Low-signal bullet pattern in ## {title}: {pattern.pattern}",
+                        line=line_no,
                     )
                 )
-            else:
-                seen_bullets[normalized] = absolute_line
-
-            if len(bullet) > MAX_BULLET_CHARS:
-                report.issues.append(
-                    LintIssue(
-                        "warning",
-                        f"Bullet exceeds {MAX_BULLET_CHARS} chars in ## {title}",
-                        line=absolute_line,
-                    )
-                )
-
-            for pattern in LOW_SIGNAL_PATTERNS:
-                if pattern.search(bullet):
-                    report.issues.append(
-                        LintIssue(
-                            "warning",
-                            f"Low-signal bullet pattern in ## {title}: {pattern.pattern}",
-                            line=absolute_line,
-                        )
-                    )
-                    break
-        line_offset += body.count("\n") + 3
+                break
 
     return report
 

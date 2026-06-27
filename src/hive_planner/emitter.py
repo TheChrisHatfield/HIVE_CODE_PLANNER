@@ -125,7 +125,7 @@ def emit_cartridge(
         "targets": {
             "delta_docs": True,
             "spec_kit": True,
-            "cursor_rules": False,
+            "cursor_rules": "disabled",
             "agents_md": False,
         },
         "features": [feature],

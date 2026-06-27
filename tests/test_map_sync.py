@@ -42,6 +42,37 @@ def test_import_module_to_src_path() -> None:
     assert import_module_to_src_path("other.mod") is None
 
 
+def test_import_module_to_src_path_resolves_package_init(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    pkg = paths.root / "src" / "hive_planner"
+    pkg.mkdir(parents=True)
+    (pkg / "__init__.py").write_text("", encoding="utf-8")
+    normalizers = pkg / "normalizers"
+    normalizers.mkdir()
+    (normalizers / "__init__.py").write_text("", encoding="utf-8")
+
+    assert (
+        import_module_to_src_path("hive_planner", repo_root=paths.root)
+        == "src/hive_planner/__init__.py"
+    )
+    assert (
+        import_module_to_src_path("hive_planner.normalizers", repo_root=paths.root)
+        == "src/hive_planner/normalizers/__init__.py"
+    )
+    assert import_module_to_src_path("hive_planner.missing", repo_root=paths.root) is None
+
+
+def test_discover_maps_package_submodule_import(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    pkg = paths.root / "src" / "hive_planner" / "normalizers"
+    pkg.mkdir(parents=True)
+    (pkg / "__init__.py").write_text("", encoding="utf-8")
+    (pkg / "pdf.py").write_text("pass\n", encoding="utf-8")
+    _write_test(paths, "test_pkg.py", "from hive_planner.normalizers import pdf\n")
+    mapping = discover_test_mappings(paths)
+    assert "tests/test_pkg.py" in mapping["src/hive_planner/normalizers/pdf.py"]
+
+
 def test_discover_src_modules(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     _write_src_module(paths, "src/hive_planner/foo.py", '"""Foo module."""\n')
@@ -55,6 +86,8 @@ def test_discover_src_modules(tmp_path: Path) -> None:
 
 def test_discover_test_mappings(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
+    _write_src_module(paths, "src/hive_planner/emitter.py", "def select_chunks(): pass\n")
+    _write_src_module(paths, "src/hive_planner/config.py", "class RepoPaths: pass\n")
     _write_test(
         paths,
         "test_sample.py",
@@ -182,6 +215,7 @@ def test_sync_escapes_pipe_in_table_cells(tmp_path: Path) -> None:
 
 def test_discover_test_mappings_in_subdirs(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
+    _write_src_module(paths, "src/hive_planner/config.py", "class RepoPaths: pass\n")
     nested = paths.root / "tests" / "integration"
     nested.mkdir(parents=True)
     (nested / "test_nested.py").write_text(

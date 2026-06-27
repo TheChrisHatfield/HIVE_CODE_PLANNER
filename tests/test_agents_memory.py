@@ -66,6 +66,44 @@ def test_lint_duplicate_bullets_warns(tmp_path: Path) -> None:
     assert any("Duplicate bullet" in i.message for i in report.issues)
 
 
+def test_lint_duplicate_bullet_reports_absolute_line_number(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    lines = [
+        "# AGENTS.md",
+        "",
+        "## Repository root",
+        "",
+        "root",
+        "",
+        "## Planning Rosetta Stone",
+        "",
+        "- hook `planning.rosetta`",
+        "",
+        "## Startup read order",
+        "",
+        "1. rosetta",
+        "",
+        "## Delta model",
+        "",
+        "- Holistic / Macro / Micro",
+        "",
+        "## Active feature",
+        "",
+        "**feature-x**",
+        "",
+        "## Durable Workspace Facts",
+        "",
+        "- Existing durable fact one.",
+        "- Existing durable fact one.",
+        "",
+    ]
+    (paths.root / "AGENTS.md").write_text("\n".join(lines), encoding="utf-8")
+    report = lint_agents_md(paths)
+    duplicate_issues = [i for i in report.issues if "Duplicate bullet" in i.message]
+    assert len(duplicate_issues) == 1
+    assert duplicate_issues[0].line == 26
+
+
 def test_lint_long_bullet_warns(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     long_bullet = "- " + ("x" * 250)
