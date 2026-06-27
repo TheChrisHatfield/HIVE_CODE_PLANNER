@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from unittest.mock import patch
 import subprocess
@@ -7,7 +8,7 @@ import sys
 
 import pytest
 
-from hive_planner.launcher.config import LauncherConfig, load_config, normalize_project_path, save_config
+from hive_planner.launcher.config import LauncherConfig, linked_project_exists, load_config, normalize_project_path, prune_stale_projects, save_config
 from hive_planner.launcher.service import (
     PythonInstallation,
     _hidden_subprocess_kwargs,
@@ -15,8 +16,12 @@ from hive_planner.launcher.service import (
     _py_launcher_commands,
     _version_supported,
     auto_complete_onboarding_if_ready,
+    classify_workspace,
     clear_python_probe_cache,
+    discover_cursor_workspaces,
     discover_python_installations,
+    file_uri_to_path,
+    find_cursor_executable,
     format_python_scan_report,
     get_setup_status,
     open_in_cursor,
@@ -194,10 +199,139 @@ def test_python_scan_resets_when_ui_rebuilds() -> None:
     assert app._python_scan_active is False
 
 
-def test_open_in_cursor_rejects_non_hive_project(tmp_path: Path) -> None:
-    result = open_in_cursor(tmp_path)
+def test_linked_project_exists_accepts_code_workspace_file(tmp_path: Path) -> None:
+    workspace_file = tmp_path / "hive.code-workspace"
+    workspace_file.write_text("{}", encoding="utf-8")
+    folder = tmp_path / "repo"
+    folder.mkdir()
+    assert linked_project_exists(workspace_file) is True
+    assert linked_project_exists(folder) is True
+    assert linked_project_exists(tmp_path / "missing") is False
+
+
+def test_prune_stale_projects_keeps_code_workspace_links(tmp_path: Path) -> None:
+    workspace_file = tmp_path / "hive.code-workspace"
+    workspace_file.write_text("{}", encoding="utf-8")
+    resolved = str(workspace_file.resolve())
+    cfg = LauncherConfig(recent_projects=[resolved], active_project=resolved)
+    assert prune_stale_projects(cfg) is False
+    assert cfg.recent_projects == [resolved]
+    assert cfg.active_project == resolved
+
+
+def test_open_in_cursor_opens_workspace_without_hive_files(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    workspace = tmp_path / "cursor-app"
+    workspace.mkdir()
+    (workspace / ".cursor").mkdir()
+
+    launched: dict[str, list] = {"cmd": []}
+
+    def fake_popen(cmd, **kwargs):
+        launched["cmd"] = cmd
+        return None
+
+    monkeypatch.setattr(
+        "hive_planner.launcher.service.find_cursor_executable",
+        lambda _config=None: r"C:\Cursor\Cursor.exe",
+    )
+    monkeypatch.setattr("hive_planner.launcher.service.subprocess.Popen", fake_popen)
+
+    result = open_in_cursor(workspace)
+    assert result["ok"] is True
+    assert result["hive_ready"] is False
+    assert launched["cmd"][1] == str(workspace.resolve())
+
+
+def test_open_in_cursor_rejects_missing_directory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    missing = tmp_path / "gone"
+    monkeypatch.setattr(
+        "hive_planner.launcher.service.find_cursor_executable",
+        lambda _config=None: r"C:\Cursor\Cursor.exe",
+    )
+    result = open_in_cursor(missing)
     assert result["ok"] is False
-    assert "START_HERE" in result["error"]
+    assert "not found" in result["error"].lower()
+
+
+def test_file_uri_to_path_decodes_windows_drive() -> None:
+    uri = "file:///d%3A/DRIVE_DOWNLOADS/HIVE_CODE_PLANNER"
+    assert file_uri_to_path(uri) == "d:/DRIVE_DOWNLOADS/HIVE_CODE_PLANNER"
+
+
+def test_discover_cursor_workspaces_reads_state_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo = tmp_path / "my-repo"
+    repo.mkdir()
+    (repo / ".cursor").mkdir()
+    workspace_file = tmp_path / "hive-code.code-workspace"
+    workspace_file.write_text(
+        json.dumps({"folders": [{"path": str(repo.name)}]}),
+        encoding="utf-8",
+    )
+
+    cursor_root = tmp_path / "Cursor" / "User" / "globalStorage"
+    cursor_root.mkdir(parents=True)
+    db = cursor_root / "state.vscdb"
+    entries = {
+        "entries": [
+            {"workspace": {"configPath": workspace_file.as_uri()}},
+            {"folderUri": repo.as_uri()},
+        ]
+    }
+    conn = __import__("sqlite3").connect(db)
+    conn.execute("CREATE TABLE ItemTable (key TEXT UNIQUE ON CONFLICT REPLACE, value BLOB)")
+    conn.execute(
+        "INSERT INTO ItemTable (key, value) VALUES (?, ?)",
+        ("history.recentlyOpenedPathsList", json.dumps(entries).encode("utf-8")),
+    )
+    conn.commit()
+    conn.close()
+
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+
+    workspaces = discover_cursor_workspaces()
+    assert len(workspaces) == 2
+    assert workspaces[0].name == "hive-code (Workspace)"
+    assert workspaces[0].entry_kind == "workspace"
+    assert workspaces[1].path == str(repo.resolve())
+
+
+def test_classify_workspace_detects_hive_and_cursor(tmp_path: Path) -> None:
+    cursor_repo = tmp_path / "cursor-only"
+    cursor_repo.mkdir()
+    (cursor_repo / ".cursor").mkdir()
+    ws = classify_workspace(cursor_repo)
+    assert ws.hive_ready is False
+    assert ws.has_cursor_dir is True
+
+    hive_repo = tmp_path / "hive"
+    hive_repo.mkdir()
+    (hive_repo / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    ws2 = classify_workspace(hive_repo)
+    assert ws2.hive_ready is True
+
+
+def test_open_in_cursor_opens_code_workspace_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo = tmp_path / "app"
+    repo.mkdir()
+    workspace_file = tmp_path / "hive.code-workspace"
+    workspace_file.write_text(json.dumps({"folders": [{"path": repo.name}]}), encoding="utf-8")
+
+    launched: dict[str, list] = {"cmd": []}
+
+    def fake_popen(cmd, **kwargs):
+        launched["cmd"] = cmd
+        return None
+
+    monkeypatch.setattr(
+        "hive_planner.launcher.service.find_cursor_executable",
+        lambda _config=None: r"C:\Cursor\Cursor.exe",
+    )
+    monkeypatch.setattr("hive_planner.launcher.service.subprocess.Popen", fake_popen)
+
+    result = open_in_cursor(workspace_file)
+    assert result["ok"] is True
+    assert result["entry_kind"] == "workspace"
+    assert launched["cmd"][1] == str(workspace_file.resolve())
 
 
 def test_open_in_cursor_launches_when_cursor_found(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -214,11 +348,15 @@ def test_open_in_cursor_launches_when_cursor_found(tmp_path: Path, monkeypatch: 
         launched["cmd"] = cmd
         return None
 
-    monkeypatch.setattr("hive_planner.launcher.service.find_cursor_executable", lambda: r"C:\Cursor\Cursor.exe")
+    monkeypatch.setattr(
+        "hive_planner.launcher.service.find_cursor_executable",
+        lambda _config=None: r"C:\Cursor\Cursor.exe",
+    )
     monkeypatch.setattr("hive_planner.launcher.service.subprocess.Popen", fake_popen)
 
     result = open_in_cursor(project)
     assert result["ok"] is True
+    assert result["hive_ready"] is True
     assert launched["cmd"][0] == r"C:\Cursor\Cursor.exe"
     assert launched["cmd"][1] == str(project.resolve())
 
@@ -227,10 +365,47 @@ def test_open_in_cursor_errors_when_cursor_missing(tmp_path: Path, monkeypatch: 
     project = tmp_path / "app"
     project.mkdir()
     (project / "START_HERE.md").write_text("# start\n", encoding="utf-8")
-    monkeypatch.setattr("hive_planner.launcher.service.find_cursor_executable", lambda: None)
+    monkeypatch.setattr("hive_planner.launcher.service.find_cursor_executable", lambda _config=None: None)
     result = open_in_cursor(project)
     assert result["ok"] is False
     assert "Cursor not found" in result["error"]
+
+
+def test_find_cursor_executable_uses_config_override(tmp_path: Path) -> None:
+    exe = tmp_path / "Cursor.exe"
+    exe.write_text("", encoding="utf-8")
+    config = LauncherConfig(cursor_executable=str(exe))
+    assert find_cursor_executable(config) == str(exe)
+
+
+def test_find_cursor_executable_discovers_from_cursor_logs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    app_root = tmp_path / "cursor" / "_"
+    app_root.mkdir(parents=True)
+    exe = app_root / "Cursor.exe"
+    exe.write_text("", encoding="utf-8")
+    logs_root = tmp_path / "Cursor" / "logs" / "session"
+    logs_root.mkdir(parents=True)
+    (logs_root / "main.log").write_text(
+        f"Require stack:\n- {app_root}\\resources\\app\\out\\main.js\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    monkeypatch.setattr("hive_planner.launcher.service._cursor_from_path", lambda: None)
+    monkeypatch.setattr("hive_planner.launcher.service._cursor_from_well_known_paths", lambda: None)
+    monkeypatch.setattr("hive_planner.launcher.service._cursor_from_start_menu_shortcuts", lambda: None)
+    assert find_cursor_executable() == str(exe)
+
+
+def test_find_cursor_executable_checks_updater_layout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    local = tmp_path / "LocalAppData"
+    exe = local / "Programs" / "cursor" / "_" / "Cursor.exe"
+    exe.parent.mkdir(parents=True)
+    exe.write_text("", encoding="utf-8")
+    monkeypatch.setenv("LOCALAPPDATA", str(local))
+    monkeypatch.setattr("hive_planner.launcher.service._cursor_from_path", lambda: None)
+    monkeypatch.setattr("hive_planner.launcher.service._cursor_from_logs", lambda: None)
+    monkeypatch.setattr("hive_planner.launcher.service._cursor_from_start_menu_shortcuts", lambda: None)
+    assert find_cursor_executable() == str(exe)
 
 
 def test_save_config_clears_probe_cache_when_python_changes(
@@ -506,6 +681,54 @@ def test_remove_recent_project_matches_normalized_path(tmp_path: Path) -> None:
     assert cfg.active_project == ""
 
 
+def test_delete_profile_resolves_code_workspace_link_to_project_root(tmp_path: Path) -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+    from hive_planner.project_profile import project_meta_path, write_project_profile
+
+    repo = tmp_path / "app"
+    repo.mkdir()
+    write_project_profile(repo, profile="minimal", project_name="App")
+    workspace_file = tmp_path / "hive.code-workspace"
+    workspace_file.write_text(json.dumps({"folders": [{"path": repo.name}]}), encoding="utf-8")
+
+    deleted: list[Path] = []
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.config = LauncherConfig(recent_projects=[str(workspace_file.resolve())])
+    app._recent_project_paths = [str(workspace_file.resolve())]
+    app.recent_list = type("L", (), {"curselection": lambda self: (0,)})()
+    app._show_dashboard = lambda: None  # type: ignore[method-assign]
+
+    import hive_planner.launcher.app as app_mod
+    import hive_planner.project_profile as profile_mod
+
+    def fake_delete(project_root: Path) -> tuple[bool, str]:
+        deleted.append(project_root)
+        return True, "Hive profile metadata deleted."
+
+    original_yesno = app_mod.messagebox.askyesno
+    original_delete = profile_mod.delete_project_profile
+    original_load = app_mod.load_config
+    original_save = app_mod.save_config
+    original_info = app_mod.messagebox.showinfo
+    app_mod.messagebox.askyesno = lambda *a, **k: True
+    app_mod.messagebox.showinfo = lambda *a, **k: None
+    app_mod.load_config = lambda: app.config
+    app_mod.save_config = lambda _cfg: None
+    profile_mod.delete_project_profile = fake_delete
+    try:
+        app._on_delete_profile()
+    finally:
+        app_mod.messagebox.askyesno = original_yesno
+        app_mod.messagebox.showinfo = original_info
+        app_mod.load_config = original_load
+        app_mod.save_config = original_save
+        profile_mod.delete_project_profile = original_delete
+
+    assert deleted == [repo.resolve()]
+    assert project_meta_path(repo).is_file()
+
+
 def test_delete_project_profile_removes_metadata(tmp_path: Path) -> None:
     from hive_planner.project_profile import delete_project_profile, project_meta_path, write_project_profile
 
@@ -574,7 +797,7 @@ def test_active_profile_label_uses_stored_metadata_not_inference(tmp_path: Path)
 
     (project / ".hive" / "project.json").unlink()
     (project / ".hive").rmdir()
-    assert app._active_profile_label() == "—"
+    assert app._active_profile_label() == ""
 
 
 def test_update_recent_scrollbar_hides_when_list_is_short() -> None:
@@ -597,18 +820,20 @@ def test_update_recent_scrollbar_hides_when_list_is_short() -> None:
 
     class FakeList:
         def __init__(self) -> None:
-            self._items = ["a", "b", "a", "b", "a", "b", "a", "b"]
+            self._items = ["a", "b"]
+            self._height = HivePlannerApp.RECENT_LIST_MIN_ROWS
 
         def size(self) -> int:
             return len(self._items)
 
+        def configure(self, **kwargs) -> None:
+            if "height" in kwargs:
+                self._height = kwargs["height"]
+
         def cget(self, key: str):
             if key == "height":
-                return 8
+                return self._height
             raise KeyError(key)
-
-        def configure(self, **_kwargs) -> None:
-            return None
 
         def yview_moveto(self, _pos) -> None:
             return None
@@ -618,10 +843,12 @@ def test_update_recent_scrollbar_hides_when_list_is_short() -> None:
     app.recent_scroll = FakeScroll()
     app._update_recent_scrollbar()
     assert packed == []
+    assert app.recent_list._height == HivePlannerApp.RECENT_LIST_MIN_ROWS
 
-    app.recent_list._items.extend(["extra"] * 3)
+    app.recent_list._items.extend(["c", "d", "e"])
     app._update_recent_scrollbar()
     assert packed == [True]
+    assert app.recent_list._height == HivePlannerApp.RECENT_LIST_MAX_ROWS
 
 
 def test_bind_mousewheel_scrolls_on_enter_and_unbinds_on_destroy() -> None:
@@ -659,11 +886,28 @@ def test_bind_mousewheel_scrolls_on_enter_and_unbinds_on_destroy() -> None:
 
 
 def test_format_recent_project_label_uses_folder_name_only() -> None:
-    from hive_planner.launcher.app import format_recent_project_label
+    from hive_planner.launcher.app import format_recent_project_label, format_workspace_picker_label
+    from hive_planner.launcher.service import CursorWorkspace
 
     path = r"F:\DRIVE DOWNLOADS\HIVE CODE\My Project"
     assert format_recent_project_label(path) == "My Project"
     assert format_recent_project_label(path, "full") == "My Project  [full]"
+    assert format_recent_project_label(path, "full", active=True) == "My Project  [full]  ← active"
+    assert (
+        format_recent_project_label(r"F:\HIVE CODE\hive-code.code-workspace")
+        == "hive-code (Workspace)"
+    )
+    ws = CursorWorkspace(
+        path=r"F:\HIVE CODE\hive-code.code-workspace",
+        name="hive-code (Workspace)",
+        location=r"F:\HIVE CODE",
+        exists=True,
+        hive_ready=True,
+        has_cursor_dir=True,
+        has_git=False,
+        entry_kind="workspace",
+    )
+    assert format_workspace_picker_label(ws) == "hive-code (Workspace)  ·  F:\\HIVE CODE"
 
 
 def test_recent_selection_uses_path_index_not_label_parse(tmp_path: Path) -> None:
@@ -839,16 +1083,67 @@ def test_select_recent_rejects_missing_project(tmp_path: Path) -> None:
     app.recent_list = type("L", (), {"curselection": lambda self: (0,), "get": lambda self, i: str(missing)})()
     import hive_planner.launcher.app as app_mod
 
-    original = app_mod.messagebox.showerror
+    original_err = app_mod.messagebox.showerror
+    original_load = app_mod.load_config
     app_mod.messagebox.showerror = showerror
+    app_mod.load_config = lambda: app.config
     try:
         app._on_select_recent()
     finally:
-        app_mod.messagebox.showerror = original
+        app_mod.messagebox.showerror = original_err
+        app_mod.load_config = original_load
 
     assert Box.calls
-    assert "Directory not found" in Box.calls[0][1]
+    assert "exist" in Box.calls[0][1].lower()
     assert app.config.active_project == ""
+
+
+def test_add_recent_project_dedupes_normalized_paths(tmp_path: Path) -> None:
+    project = tmp_path / "demo"
+    project.mkdir()
+    (project / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    raw = str(project)
+    resolved = str(project.resolve())
+    cfg = LauncherConfig(recent_projects=[raw if raw != resolved else f"{resolved}\\"])
+    cfg.add_recent_project(project)
+    assert len(cfg.recent_projects) == 1
+    assert cfg.recent_projects[0] == resolved
+    assert cfg.active_project == resolved
+
+
+def test_select_recent_persists_active_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    cfg_dir = tmp_path / "cfg"
+    cfg_dir.mkdir()
+    p1 = tmp_path / "proj1"
+    p2 = tmp_path / "proj2"
+    for project in (p1, p2):
+        project.mkdir()
+        (project / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+
+    monkeypatch.setattr("hive_planner.launcher.config.default_config_dir", lambda: cfg_dir)
+    save_config(
+        LauncherConfig(
+            active_project=str(p1.resolve()),
+            recent_projects=[str(p1.resolve()), str(p2.resolve())],
+        )
+    )
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.config = load_config()
+    app._recent_project_paths = [str(p2.resolve()), str(p1.resolve())]
+    app.recent_list = type("L", (), {"curselection": lambda self: (0,)})()
+    app._show_dashboard = lambda: None  # type: ignore[method-assign]
+
+    import hive_planner.launcher.app as app_mod
+
+    monkeypatch.setattr(app_mod.messagebox, "showinfo", lambda *a, **k: None)
+    app._on_select_recent()
+
+    loaded = load_config()
+    assert loaded.active_project == str(p2.resolve())
+    assert loaded.recent_projects[0] == str(p2.resolve())
 
 
 def test_recent_double_click_opens_folder(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

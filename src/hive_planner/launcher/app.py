@@ -5,18 +5,24 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, scrolledtext, ttk
 
-from hive_planner.launcher.config import LauncherConfig, load_config, normalize_project_path, save_config
+from hive_planner.launcher.config import LauncherConfig, linked_project_exists, load_config, normalize_project_path, save_config
 from hive_planner.launcher.service import (
+    CursorWorkspace,
+    classify_workspace,
+    discover_cursor_workspaces,
     discover_python_installations,
     format_python_scan_report,
     get_setup_status,
+    is_code_workspace_file,
     open_in_cursor,
     open_path_in_explorer,
+    resolve_linked_project_root,
     run_install,
     run_project_ci_check,
     run_project_init,
     run_project_map_sync,
     summarize_project,
+    workspace_primary_folder,
 )
 from hive_planner.launcher.theme import (
     COLORS,
@@ -36,14 +42,56 @@ from hive_planner.launcher.user_guide import load_user_guide, user_guide_path
 from hive_planner.project_profile import read_project_profile
 
 
-def format_recent_project_label(path: str, profile: str | None = None) -> str:
-    folder = Path(path).name or path
+def format_recent_project_label(path: str, profile: str | None = None, *, active: bool = False) -> str:
+    entry = Path(path)
+    if is_code_workspace_file(entry):
+        folder = f"{entry.stem} (Workspace)"
+    else:
+        folder = entry.name or path
     if profile:
-        return f"{folder}  [{profile}]"
-    return folder
+        label = f"{folder}  [{profile}]"
+    else:
+        label = folder
+    if active:
+        return f"{label}  ← active"
+    return label
+
+
+def format_workspace_picker_label(workspace: CursorWorkspace) -> str:
+    location = workspace.location
+    if not workspace.exists:
+        return f"{workspace.name}  ·  {location}  ·  missing"
+    return f"{workspace.name}  ·  {location}"
+
+
+def format_linked_workspace_label(path: str, profile: str | None = None, *, active: bool = False) -> str:
+    ws = classify_workspace(Path(path))
+    if ws.exists:
+        base = f"{ws.name}  ·  {ws.location}"
+    else:
+        base = f"{_linked_display_name(path)}  ·  missing"
+    if profile and ws.exists:
+        base = f"{ws.name}  [{profile}]  ·  {ws.location}"
+    if active:
+        return f"{base}  ← active"
+    return base
+
+
+def _linked_path_exists(path: str) -> bool:
+    return linked_project_exists(path)
+
+
+def _linked_display_name(path: str) -> str:
+    entry = Path(path)
+    if is_code_workspace_file(entry):
+        return f"{entry.stem} (Workspace)"
+    return entry.name or path
 
 
 class HivePlannerApp:
+    RECENT_LIST_MIN_ROWS = 2
+    RECENT_LIST_MAX_ROWS = 4
+
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
         self.config = load_config()
@@ -220,9 +268,17 @@ class HivePlannerApp:
         header = tk.Frame(self.container, bg=COLORS["bg"])
         header.pack(fill="x", padx=16, pady=(16, 8))
         tk.Label(header, text="Hive Planner", font=FONT_TITLE, bg=COLORS["bg"], fg=COLORS["fg"]).pack(side="left")
-        proj = self.config.active_project or "(no project selected)"
-        profile_label = self._active_profile_label()
-        header_detail = f"Active: {proj}" if not profile_label else f"Active: {proj}  ·  profile: {profile_label}"
+        proj = self.config.active_project
+        if proj:
+            proj_label = _linked_display_name(proj)
+            profile_label = self._active_profile_label()
+            header_detail = (
+                f"Active: {proj_label}  ·  profile: {profile_label}"
+                if profile_label
+                else f"Active: {proj_label}"
+            )
+        else:
+            header_detail = "No project selected"
         tk.Label(header, text=header_detail, font=FONT_SUBTITLE, bg=COLORS["bg"], fg=COLORS["muted"]).pack(
             side="right", padx=8
         )
@@ -312,7 +368,7 @@ class HivePlannerApp:
         row.pack(fill="x", padx=12, pady=(0, 12))
         for title, value in [
             ("Hive", self.setup.hive_version or "not installed"),
-            ("Profile", self._active_profile_label()),
+            ("Profile", self._active_profile_label() or "—"),
             ("Feature", self._active_feature_label()),
         ]:
             cell = tk.Frame(row, bg=COLORS["secondary"], padx=12, pady=10)
@@ -350,12 +406,23 @@ class HivePlannerApp:
         self._bind_page_wheel(body, canvas)
 
     def _build_projects_tab(self, parent: tk.Frame) -> None:
-        hub = card(parent)
-        card_title(hub, "Cursor project hub")
+        top_row = tk.Frame(parent, bg=COLORS["bg"])
+        top_row.pack(fill="x")
+        top_row.columnconfigure(0, weight=1)
+        top_row.columnconfigure(1, weight=1)
+
+        hub_host = tk.Frame(top_row, bg=COLORS["bg"])
+        hub_host.grid(row=0, column=0, sticky="nsew", padx=(0, 8))
+        form_host = tk.Frame(top_row, bg=COLORS["bg"])
+        form_host.grid(row=0, column=1, sticky="nsew")
+
+        hub = card(hub_host)
+        card_title(hub, "Cursor workspace hub")
         tk.Label(
             hub,
-            text="Link an existing Cursor/Hive repo to this launcher. Health checks and impact tools run against the active project.",
-            wraplength=760,
+            text="Link a Cursor workspace to Hive Planner, then use Open in Cursor to launch it. "
+            "Health checks run when Hive planning files are present.",
+            wraplength=360,
             justify="left",
             bg=COLORS["card"],
             fg=COLORS["muted"],
@@ -363,10 +430,10 @@ class HivePlannerApp:
         ).pack(anchor="w", padx=12, pady=(0, 8))
         hub_actions = tk.Frame(hub, bg=COLORS["card"])
         hub_actions.pack(fill="x", padx=12, pady=(0, 12))
-        primary_button(hub_actions, "Open project…", self._on_open_project)
-        secondary_button(hub_actions, "Open in Cursor", self._on_open_cursor)
+        primary_button(hub_actions, "Open in Cursor", self._on_open_cursor)
+        secondary_button(hub_actions, "Add link…", self._on_link_workspace)
 
-        form = card(parent)
+        form = card(form_host)
         card_title(form, "New project")
         self.new_name = tk.StringVar()
         self.new_target = tk.StringVar()
@@ -400,13 +467,22 @@ class HivePlannerApp:
         primary_button(btn_row, "Create project", self._on_create_project)
 
         recent_card = card(parent)
-        card_title(recent_card, "Recent projects")
+        card_title(recent_card, "Linked workspaces")
+        tk.Label(
+            recent_card,
+            text="Hive Planner only — add or remove links here without changing Cursor.",
+            wraplength=760,
+            justify="left",
+            bg=COLORS["card"],
+            fg=COLORS["muted"],
+            font=FONT_SUBTITLE,
+        ).pack(anchor="w", padx=12, pady=(0, 8))
         recent_list_frame = tk.Frame(recent_card, bg=COLORS["card"])
         recent_list_frame.pack(fill="x", padx=12, pady=(0, 8))
         self.recent_scroll = ttk.Scrollbar(recent_list_frame, orient="vertical")
         self.recent_list = tk.Listbox(
             recent_list_frame,
-            height=8,
+            height=self.RECENT_LIST_MIN_ROWS,
             font=FONT,
             bg=COLORS["card"],
             fg=COLORS["fg"],
@@ -418,7 +494,7 @@ class HivePlannerApp:
             highlightbackground=COLORS["border"],
             highlightcolor=COLORS["primary"],
         )
-        self.recent_list.pack(side="left", fill="both", expand=True)
+        self.recent_list.pack(side="left", fill="x", expand=True)
         self.recent_scroll.config(command=self.recent_list.yview)
         self.recent_list.bind("<Double-Button-1>", self._on_recent_double_click)
         bind_mousewheel(self.recent_scroll, target=self.recent_list)
@@ -428,8 +504,9 @@ class HivePlannerApp:
         self._populate_recent_list()
         btn_row2 = tk.Frame(recent_card, bg=COLORS["card"])
         btn_row2.pack(fill="x", padx=12, pady=(0, 12))
+        primary_button(btn_row2, "Add link…", self._on_link_workspace)
         secondary_button(btn_row2, "Set as active", self._on_select_recent)
-        secondary_button(btn_row2, "Remove from list", self._on_remove_recent)
+        secondary_button(btn_row2, "Remove link", self._on_remove_recent)
         secondary_button(btn_row2, "Delete profile…", self._on_delete_profile)
 
     def _build_settings_tab(self, parent: tk.Frame) -> None:
@@ -437,9 +514,11 @@ class HivePlannerApp:
         card_title(form, "Configuration")
         self.cfg_hive = tk.StringVar(value=str(self.config.normalized_hive_root()))
         self.cfg_python = tk.StringVar(value=self.config.python_executable)
+        self.cfg_cursor = tk.StringVar(value=self.config.cursor_executable)
         self.cfg_profile = tk.StringVar(value=self.config.default_profile)
         self._field(form, "Hive planner root", self.cfg_hive, browse=True)
         self._field(form, "Python command", self.cfg_python, scan_python=True)
+        self._field(form, "Cursor executable", self.cfg_cursor, browse_exe=True)
         profile_row = tk.Frame(form, bg=COLORS["card"])
         profile_row.pack(fill="x", padx=12, pady=4)
         tk.Label(profile_row, text="Default profile", width=14, anchor="w", bg=COLORS["card"], fg=COLORS["fg"], font=FONT).pack(side="left")
@@ -488,6 +567,7 @@ class HivePlannerApp:
         variable: tk.StringVar,
         *,
         browse: bool = False,
+        browse_exe: bool = False,
         scan_python: bool = False,
     ) -> None:
         row = tk.Frame(parent, bg=COLORS["card"])
@@ -497,8 +577,18 @@ class HivePlannerApp:
         entry.pack(side="left", fill="x", expand=True)
         if browse:
             secondary_button(row, "Browse…", lambda: self._browse_into(variable))
+        if browse_exe:
+            secondary_button(row, "Browse…", lambda: self._browse_exe_into(variable))
         if scan_python:
             secondary_button(row, "Scan…", lambda: self._on_scan_python(variable))
+
+    def _browse_exe_into(self, variable: tk.StringVar) -> None:
+        path = filedialog.askopenfilename(
+            title="Choose Cursor executable",
+            filetypes=[("Cursor", "Cursor.exe"), ("Executables", "*.exe"), ("All files", "*.*")],
+        )
+        if path:
+            variable.set(path)
 
     def _browse_into(self, variable: tk.StringVar) -> None:
         path = filedialog.askdirectory(title="Choose folder")
@@ -508,20 +598,42 @@ class HivePlannerApp:
     def _populate_recent_list(self) -> None:
         self.recent_list.delete(0, "end")
         self._recent_project_paths.clear()
+        active_norm = (
+            normalize_project_path(self.config.active_project)
+            if self.config.active_project
+            else ""
+        )
+        active_index: int | None = None
         for path in self.config.recent_projects:
-            stored = read_project_profile(Path(path))
-            label = format_recent_project_label(
-                path,
-                stored.bootstrap_profile if stored else None,
+            hive_root = resolve_linked_project_root(Path(path))
+            stored = read_project_profile(hive_root) if hive_root else None
+            cached = self.config.project_profiles.get(path) or self.config.project_profiles.get(
+                normalize_project_path(path)
             )
+            profile = stored.bootstrap_profile if stored else cached
+            is_active = bool(active_norm and normalize_project_path(path) == active_norm)
+            label = format_linked_workspace_label(
+                path,
+                profile,
+                active=is_active,
+            )
+            if is_active:
+                active_index = len(self._recent_project_paths)
             self._recent_project_paths.append(path)
             self.recent_list.insert("end", label)
         self._update_recent_scrollbar()
+        if active_index is not None:
+            self.recent_list.selection_set(active_index)
+            self.recent_list.see(active_index)
 
     def _update_recent_scrollbar(self) -> None:
         count = self.recent_list.size()
-        height = int(self.recent_list.cget("height"))
-        if count > height:
+        display_height = min(
+            max(count, self.RECENT_LIST_MIN_ROWS),
+            self.RECENT_LIST_MAX_ROWS,
+        )
+        self.recent_list.configure(height=display_height)
+        if count > display_height:
             if not self.recent_scroll.winfo_ismapped():
                 self.recent_scroll.pack(side="right", fill="y")
             self.recent_list.configure(yscrollcommand=self.recent_scroll.set)
@@ -539,20 +651,26 @@ class HivePlannerApp:
     def _active_feature_label(self) -> str:
         if not self.config.active_project:
             return "—"
-        summary = summarize_project(Path(self.config.active_project))
+        root = resolve_linked_project_root(Path(self.config.active_project))
+        if not root:
+            return "—"
+        summary = summarize_project(root)
         return summary.active_feature or "—"
 
     def _active_profile_label(self) -> str:
         if not self.config.active_project:
             return "—"
-        stored = read_project_profile(Path(self.config.active_project))
+        root = resolve_linked_project_root(Path(self.config.active_project))
+        if not root:
+            return ""
+        stored = read_project_profile(root)
         if stored:
             return stored.bootstrap_profile
         cached = self.config.project_profiles.get(self.config.active_project)
         if cached:
             return cached
         normalized = normalize_project_path(self.config.active_project)
-        return self.config.project_profiles.get(normalized) or "—"
+        return self.config.project_profiles.get(normalized) or ""
 
     def _append_log(self, widget: scrolledtext.ScrolledText, text: str) -> None:
         widget.configure(state="normal")
@@ -782,13 +900,18 @@ class HivePlannerApp:
         else:
             self._show_onboarding()
 
+    def _active_linked_root(self) -> Path | None:
+        if not self.config.active_project:
+            return None
+        return resolve_linked_project_root(Path(self.config.active_project))
+
     def _on_ci_check(self) -> None:
-        root = self.config.active_project
+        root = self._active_linked_root()
         if not root:
-            messagebox.showwarning("No project", "Select a recent project first (Projects tab).")
+            messagebox.showwarning("No project", "Link a workspace first (Projects tab).")
             return
         self._append_log(self.home_log, "Running ci-check…")
-        self._run_bg(lambda: run_project_ci_check(Path(root)), self._ci_check_done)
+        self._run_bg(lambda: run_project_ci_check(root), self._ci_check_done)
 
     def _ci_check_done(self, report: dict) -> None:
         if self._is_bg_error(report):
@@ -803,12 +926,12 @@ class HivePlannerApp:
         self._append_log(self.home_log, summary)
 
     def _on_map_sync(self) -> None:
-        root = self.config.active_project
+        root = self._active_linked_root()
         if not root:
-            messagebox.showwarning("No project", "Select a recent project first.")
+            messagebox.showwarning("No project", "Link a workspace first.")
             return
         self._append_log(self.home_log, "Syncing impact maps…")
-        self._run_bg(lambda: run_project_map_sync(Path(root)), self._map_sync_done)
+        self._run_bg(lambda: run_project_map_sync(root), self._map_sync_done)
 
     def _map_sync_done(self, result: dict) -> None:
         if self._is_bg_error(result):
@@ -825,11 +948,15 @@ class HivePlannerApp:
             self._append_log(self.home_log, "Impact maps already up to date.")
 
     def _on_explore(self) -> None:
-        root = self.config.active_project
-        if not root:
-            messagebox.showwarning("No project", "Select a recent project first.")
+        if not self.config.active_project:
+            messagebox.showwarning("No project", "Link a workspace first.")
             return
-        result = open_path_in_explorer(Path(root))
+        linked = Path(self.config.active_project)
+        if is_code_workspace_file(linked):
+            explore_target = workspace_primary_folder(linked) or linked.parent
+        else:
+            explore_target = linked
+        result = open_path_in_explorer(explore_target)
         if not result.get("ok"):
             messagebox.showerror("Open in Explorer", result.get("error", "Failed to open folder"))
             return
@@ -846,6 +973,175 @@ class HivePlannerApp:
             messagebox.showerror("Open guide", result.get("error", "Failed to open guide folder"))
             return
         messagebox.showinfo("User guide", f"Open this file in the folder:\n{path.name}")
+
+    def _show_workspace_picker(self) -> None:
+        self.config = load_config()
+        linked_paths = {
+            normalize_project_path(entry) for entry in self.config.recent_projects if entry
+        }
+        workspaces = discover_cursor_workspaces()
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Add workspace link")
+        dialog.transient(self.root)
+        dialog.grab_set()
+        dialog.configure(bg=COLORS["bg"])
+        dialog.geometry("600x440")
+        dialog.minsize(480, 320)
+
+        tk.Label(
+            dialog,
+            text="Add workspace link",
+            font=FONT_TITLE,
+            bg=COLORS["bg"],
+            fg=COLORS["fg"],
+        ).pack(anchor="w", padx=16, pady=(16, 4))
+        tk.Label(
+            dialog,
+            text="Pick from Cursor's recent workspaces, or browse to any folder. "
+            "Links are saved only in Hive Planner — Cursor is not changed.",
+            wraplength=560,
+            justify="left",
+            font=FONT_SUBTITLE,
+            bg=COLORS["bg"],
+            fg=COLORS["muted"],
+        ).pack(anchor="w", padx=16, pady=(0, 12))
+
+        list_card = tk.Frame(dialog, bg=COLORS["card"], highlightbackground=COLORS["border"], highlightthickness=1)
+        list_card.pack(fill="both", expand=True, padx=16, pady=(0, 12))
+        picker_list = tk.Listbox(
+            list_card,
+            font=FONT,
+            bg=COLORS["card"],
+            fg=COLORS["fg"],
+            selectbackground=COLORS["primary"],
+            selectforeground="white",
+            activestyle="none",
+            relief="flat",
+            highlightthickness=0,
+        )
+        picker_list.pack(side="left", fill="both", expand=True, padx=8, pady=8)
+        picker_scroll = ttk.Scrollbar(list_card, orient="vertical", command=picker_list.yview)
+        picker_scroll.pack(side="right", fill="y", pady=8)
+        picker_list.configure(yscrollcommand=picker_scroll.set)
+        bind_mousewheel(picker_scroll, target=picker_list)
+        bind_mousewheel(list_card, target=picker_list)
+        bind_mousewheel(picker_list)
+
+        workspace_rows: list[CursorWorkspace] = list(workspaces)
+        if workspace_rows:
+            for workspace in workspace_rows:
+                label = format_workspace_picker_label(workspace)
+                if normalize_project_path(workspace.path) in linked_paths:
+                    label = f"{label}  (linked)"
+                picker_list.insert("end", label)
+            picker_list.selection_set(0)
+        else:
+            picker_list.insert("end", "(No Cursor workspaces found — use Browse folder…)")
+
+        actions = tk.Frame(dialog, bg=COLORS["bg"])
+        actions.pack(fill="x", padx=16, pady=(0, 16))
+
+        def link_selected() -> None:
+            selection = picker_list.curselection()
+            if not selection or not workspace_rows:
+                messagebox.showwarning(
+                    "No selection",
+                    "Pick a workspace from the list, or use Browse folder…",
+                    parent=dialog,
+                )
+                return
+            workspace = workspace_rows[selection[0]]
+            if not workspace.exists:
+                messagebox.showerror(
+                    "Missing folder",
+                    f"That workspace folder no longer exists:\n{workspace.path}\n\n"
+                    "Pick another workspace or browse to a valid folder.",
+                    parent=dialog,
+                )
+                return
+            dialog.destroy()
+            self._link_workspace(Path(workspace.path))
+
+        def browse_folder() -> None:
+            dialog.destroy()
+            path = filedialog.askdirectory(title="Choose Cursor workspace folder")
+            if path:
+                self._link_workspace(Path(path))
+
+        primary_button(actions, "Add link", link_selected)
+        secondary_button(actions, "Browse…", browse_folder)
+        secondary_button(actions, "Cancel", dialog.destroy)
+
+        picker_list.bind("<Double-Button-1>", lambda _event: link_selected())
+        dialog.protocol("WM_DELETE_WINDOW", dialog.destroy)
+        dialog.wait_window()
+
+    def _link_workspace(self, path: Path, *, notify: bool = True) -> bool:
+        workspace = classify_workspace(path)
+        if not workspace.exists:
+            messagebox.showerror("Workspace not found", f"Path does not exist:\n{workspace.path}")
+            if hasattr(self, "recent_list") and callable(getattr(self.recent_list, "delete", None)):
+                self.config = load_config()
+                self._populate_recent_list()
+            return False
+
+        target = Path(workspace.path)
+        hive_folder = workspace_primary_folder(target) or target
+        self.config = load_config()
+        already_known = any(
+            normalize_project_path(entry) == normalize_project_path(target)
+            for entry in self.config.recent_projects
+        )
+
+        if not workspace.hive_ready and notify and not already_known:
+            try:
+                empty = hive_folder.is_dir() and not any(hive_folder.iterdir())
+            except OSError:
+                empty = False
+            if empty:
+                if messagebox.askyesno(
+                    "Set up this folder?",
+                    f"Folder is empty:\n{hive_folder}\n\nCreate Hive planning files here now?",
+                ):
+                    return self._bootstrap_and_activate(hive_folder, notify=notify)
+                return False
+            if workspace.has_cursor_dir or workspace.has_git or workspace.entry_kind == "workspace":
+                label = workspace.name
+                if messagebox.askyesno(
+                    "Add Hive planning files?",
+                    f"Cursor workspace:\n{label}\n\n"
+                    "Health checks and handoff tools need Hive planning files (START_HERE.md).\n\n"
+                    "Add them now?",
+                ):
+                    return self._bootstrap_and_activate(hive_folder, notify=notify)
+            elif not messagebox.askyesno(
+                "Link this folder?",
+                f"Link workspace:\n{hive_folder}\n\n"
+                "This folder is not a Cursor or Hive project yet. Link it anyway?",
+            ):
+                return False
+
+        self.config.add_recent_project(target)
+        save_config(self.config)
+        if notify:
+            if workspace.hive_ready and hive_folder.is_dir():
+                summary = summarize_project(hive_folder)
+                profile = summary.bootstrap_profile or "—"
+                messagebox.showinfo(
+                    "Workspace linked",
+                    f"{workspace.name}\n\nProfile: {profile}\nFeature: {summary.active_feature or '—'}",
+                )
+            else:
+                messagebox.showinfo(
+                    "Workspace linked",
+                    f"Linked: {workspace.name}\n\n"
+                    "Use Open in Cursor to launch it. Add Hive planning files when you want health checks.",
+                )
+        self._show_dashboard()
+        return True
+
+    def _on_link_workspace(self) -> None:
+        self._show_workspace_picker()
 
     def _bootstrap_and_activate(self, path: Path, *, notify: bool = True) -> bool:
         cfg = load_config()
@@ -871,62 +1167,26 @@ class HivePlannerApp:
         self._show_dashboard()
         return True
 
-    def _activate_project(self, path: Path, *, notify: bool = True) -> bool:
-        summary = summarize_project(path)
-        if not summary.ok:
-            if "START_HERE" in summary.detail and path.is_dir():
-                try:
-                    empty = not any(path.iterdir())
-                except OSError:
-                    empty = False
-                if empty and messagebox.askyesno(
-                    "Set up this folder as a Hive project?",
-                    f"No START_HERE.md found in:\n{path}\n\n"
-                    "Create Hive planning files here now?",
-                ):
-                    return self._bootstrap_and_activate(path, notify=notify)
-                messagebox.showerror(
-                    "Not a Hive project",
-                    f"This folder is missing START_HERE.md:\n{path}\n\n"
-                    "Try one of these:\n"
-                    "• Projects → Create project — scaffold a new folder\n"
-                    "• Open project… — pick a folder that already has START_HERE.md\n"
-                    "• Open project… on an empty folder — accept setup when prompted",
-                )
-            else:
-                messagebox.showerror("Invalid project", summary.detail)
-            return False
-        self.config = load_config()
-        self.config.add_recent_project(path)
-        save_config(self.config)
-        if notify:
-            profile = summary.bootstrap_profile or "—"
-            messagebox.showinfo(
-                "Active Cursor project",
-                f"{path}\n\nProfile: {profile}\nFeature: {summary.active_feature or '—'}",
-            )
-        self._show_dashboard()
-        return True
-
-    def _on_open_project(self) -> None:
-        path = filedialog.askdirectory(title="Open Hive / Cursor project folder")
-        if not path:
-            return
-        self._activate_project(Path(path))
-
     def _on_open_cursor(self) -> None:
         root = self.config.active_project
-        if not root:
-            messagebox.showwarning("No project", "Open or select a project first (Projects tab).")
+        if not root or not _linked_path_exists(root):
+            if messagebox.askyesno(
+                "No linked workspace",
+                "Link a Cursor workspace first?\n\n"
+                "Pick one from Cursor's recent list, or browse to your repo folder.",
+            ):
+                self._show_workspace_picker()
             return
-        result = open_in_cursor(Path(root))
+        result = open_in_cursor(Path(root), config=self.config)
         if not result.get("ok"):
             messagebox.showerror("Open in Cursor", result.get("error", "Failed to launch Cursor"))
             return
         if hasattr(self, "home_log"):
+            name = _linked_display_name(root)
+            hive_note = "hive ready" if result.get("hive_ready") else "cursor workspace"
             self._append_log(
                 self.home_log,
-                f"Opened in Cursor: {result.get('path')} ({result.get('bootstrap_profile') or 'profile unknown'})",
+                f"Opened in Cursor: {name} ({hive_note})",
             )
 
     def _on_create_project(self) -> None:
@@ -964,33 +1224,38 @@ class HivePlannerApp:
     def _on_select_recent(self) -> None:
         path = self._selected_recent_path()
         if path is None:
-            messagebox.showwarning("No selection", "Pick a recent project.")
+            messagebox.showwarning("No selection", "Pick a linked workspace.")
             return
-        self._activate_project(path)
+        self._link_workspace(path, notify=False)
 
     def _on_recent_double_click(self, _event=None) -> None:
         path = self._selected_recent_path()
         if path is None:
             return
-        result = open_path_in_explorer(path)
+        linked = Path(path)
+        if is_code_workspace_file(linked):
+            explore_target = workspace_primary_folder(linked) or linked.parent
+        else:
+            explore_target = linked
+        result = open_path_in_explorer(explore_target)
         if not result.get("ok"):
             messagebox.showerror("Open folder", result.get("error", "Failed to open folder"))
 
     def _on_remove_recent(self) -> None:
         path = self._selected_recent_path()
         if path is None:
-            messagebox.showwarning("No selection", "Pick a recent project.")
+            messagebox.showwarning("No selection", "Pick a linked workspace.")
             return
-        label = format_recent_project_label(str(path))
+        label = _linked_display_name(str(path))
         if not messagebox.askyesno(
-            "Remove from list",
-            f"Remove \"{label}\" from recent projects?\n\n"
-            "This only updates the launcher list. Nothing is deleted on disk.",
+            "Remove link",
+            f"Remove the Hive Planner link for:\n{label}\n\n"
+            "This only updates Hive Planner. Cursor and your files on disk are not changed.",
         ):
             return
         self.config = load_config()
         if not self.config.remove_recent_project(path):
-            messagebox.showwarning("Not found", "That project is not in the recent list.")
+            messagebox.showwarning("Not found", "That workspace link is not in your list.")
             return
         save_config(self.config)
         self._show_dashboard()
@@ -1000,10 +1265,18 @@ class HivePlannerApp:
 
         path = self._selected_recent_path()
         if path is None:
-            messagebox.showwarning("No selection", "Pick a recent project.")
+            messagebox.showwarning("No selection", "Pick a linked workspace.")
             return
-        folder = path.name
-        meta_file = project_meta_path(path)
+        profile_root = resolve_linked_project_root(path)
+        if profile_root is None:
+            messagebox.showerror(
+                "Delete profile",
+                "Could not resolve a project folder for this link.\n\n"
+                "If this is a workspace file, check that its folders still exist on disk.",
+            )
+            return
+        folder = profile_root.name
+        meta_file = project_meta_path(profile_root)
         if not messagebox.askyesno(
             "Delete Hive profile",
             f"Delete Hive profile metadata for:\n{folder}\n\n"
@@ -1018,7 +1291,7 @@ class HivePlannerApp:
             "This cannot be undone.",
         ):
             return
-        ok, detail = delete_project_profile(path)
+        ok, detail = delete_project_profile(profile_root)
         if not ok:
             messagebox.showerror("Delete profile", detail)
             return
@@ -1032,6 +1305,7 @@ class HivePlannerApp:
     def _on_save_settings(self) -> None:
         self.config.hive_planner_root = self.cfg_hive.get().strip()
         self.config.python_executable = self.cfg_python.get().strip() or "py -3.11"
+        self.config.cursor_executable = self.cfg_cursor.get().strip()
         self.config.default_profile = self.cfg_profile.get().strip() or "full"
         save_config(self.config)
         self.setup = get_setup_status(self.config)
