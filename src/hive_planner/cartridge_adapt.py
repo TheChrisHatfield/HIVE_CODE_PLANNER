@@ -218,10 +218,15 @@ def _should_write(target: Path, *, overwrite: bool) -> bool:
 
 
 def import_needs_cartridge_adapt(paths: RepoPaths, written: list[str]) -> bool:
+    cart = paths.cartridge
     for rel in written:
         if not str(rel).lower().endswith(".md"):
             continue
-        if not _is_standard_layer_path(Path(rel)):
+        rel_path = Path(rel)
+        if not _is_standard_layer_path(rel_path):
+            return True
+        target = cart / rel
+        if target.is_file() and not _is_cartridge_draft(target):
             return True
     return False
 

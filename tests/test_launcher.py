@@ -748,7 +748,7 @@ def test_run_cartridge_import_folder_copies_cartridge_tree(tmp_path: Path) -> No
     (external / "holistic.md").write_text("# Holistic\n", encoding="utf-8")
     (external / "manifest.json").write_text('{"schema_version":"cartridge.v1"}\n', encoding="utf-8")
 
-    result = run_cartridge_import_folder(project, external)
+    result = run_cartridge_import_folder(project, external, promote=False)
 
     assert result["ok"] is True
     assert result["mode"] == "import"
@@ -780,7 +780,7 @@ def test_run_cartridge_import_folder_overwrites_existing_when_requested(tmp_path
     existing.parent.mkdir(parents=True, exist_ok=True)
     existing.write_text("# Existing\n", encoding="utf-8")
 
-    result = run_cartridge_import_folder(project, external, overwrite=True)
+    result = run_cartridge_import_folder(project, external, overwrite=True, promote=False)
 
     assert result["ok"] is True
     assert result["written"] == ["holistic.md"]

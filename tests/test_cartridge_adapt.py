@@ -122,3 +122,23 @@ def test_manifest_layer_map_overrides_classification(tmp_path: Path) -> None:
 def test_cartridge_load_needs_feature_import_promote_optional() -> None:
     assert cartridge_load_needs_feature("import", will_promote=True) is False
     assert cartridge_load_needs_feature("sources", will_promote=False) is True
+
+
+def test_import_standard_layout_adds_draft_banners_when_promoting(tmp_path: Path) -> None:
+    project = _unified_project(tmp_path / "proj")
+    external = tmp_path / "bundle"
+    external.mkdir()
+    (external / "holistic.md").write_text("# Holistic\n\n- mission statement\n", encoding="utf-8")
+    (external / "macro.md").write_text("# Macro\n\n- subsystem flow\n", encoding="utf-8")
+
+    result = run_cartridge_import_folder(
+        project,
+        external,
+        feature="hive-dev-v1",
+        promote=True,
+    )
+
+    assert result["ok"] is True
+    holistic = (project / "cartridge" / "holistic.md").read_text(encoding="utf-8")
+    assert "DRAFT" in holistic
+    assert result["promote"]["promotions"]["holistic"] in {"written", "updated"}
