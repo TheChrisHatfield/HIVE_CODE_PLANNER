@@ -4,8 +4,11 @@ import json
 from pathlib import Path
 
 from hive_planner.cartridge_pack import (
+    RULE_SEED_DRAFT_BANNER,
+    build_rule_seed_body,
     build_source_map,
     emit_cartridge_pack,
+    emit_rules_seed,
     validate_pack_completeness,
 )
 from hive_planner.delta_emit import AUTO_SYNC_PREFIX
@@ -63,6 +66,7 @@ def test_build_source_map_includes_feature() -> None:
     data = build_source_map("cartridge-pack-v1")
     assert data["feature"] == "cartridge-pack-v1"
     assert any(m["layer"] == "micro" for m in data["mappings"])
+    assert any(m["layer"] == "cursor_rule_seed" for m in data["mappings"])
 
 
 def test_emit_cartridge_pack_writes_files(tmp_path: Path) -> None:
@@ -142,3 +146,118 @@ def test_emit_cartridge_manifest_lists_files(tmp_path: Path) -> None:
     assert "files" in manifest
     assert "cartridge/research-summary.md" in manifest["files"]
     assert "pack_sync" in manifest["stats"]
+    assert manifest["targets"]["cursor_rules"] is False
+
+
+def test_emit_rules_seed_writes_draft_seed(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    paths.ensure_dirs()
+    feature = "cartridge-pack-v2"
+    _write_feature_tree(paths, feature)
+
+    status, seed_path, _ = emit_rules_seed(paths, feature)
+    assert status == "written"
+    assert seed_path is not None
+    content = seed_path.read_text(encoding="utf-8")
+    assert content.startswith(RULE_SEED_DRAFT_BANNER)
+    assert "alwaysApply: false" in content
+    assert "In scope only." in content
+    assert "pytest" in content
+
+
+def test_emit_rules_seed_does_not_touch_cursor_rules(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    paths.ensure_dirs()
+    feature = "cartridge-pack-v2"
+    _write_feature_tree(paths, feature)
+    rules_dir = paths.root / ".cursor" / "rules"
+    rules_dir.mkdir(parents=True)
+    live_rule = rules_dir / "architecture.mdc"
+    live_rule.write_text("# Live rule\n", encoding="utf-8")
+
+    emit_rules_seed(paths, feature)
+    assert live_rule.read_text(encoding="utf-8") == "# Live rule\n"
+    assert (paths.cartridge / "rules" / f"{feature}.mdc.seed").exists()
+
+
+def test_rules_seed_skips_manual_banner(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    paths.ensure_dirs()
+    feature = "cartridge-pack-v2"
+    _write_feature_tree(paths, feature)
+    seed_path = paths.cartridge / "rules" / f"{feature}.mdc.seed"
+    seed_path.parent.mkdir(parents=True)
+    seed_path.write_text("<!-- MANUAL: reviewed rule -->\n\n# Custom\n", encoding="utf-8")
+
+    status, path, warnings = emit_rules_seed(paths, feature)
+    assert status.startswith("skipped")
+    assert path is None
+    assert seed_path.read_text(encoding="utf-8").startswith("<!-- MANUAL:")
+    assert any("Skipped" in w for w in warnings)
+
+
+def test_rules_seed_updates_on_re_emit(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    paths.ensure_dirs()
+    feature = "cartridge-pack-v2"
+    _write_feature_tree(paths, feature)
+
+    emit_rules_seed(paths, feature)
+    micro = paths.root / "docs" / "delta" / "20_micro" / f"{feature}.md"
+    micro.write_text(micro.read_text(encoding="utf-8").replace("In scope only.", "Expanded scope."), encoding="utf-8")
+
+    status, _, _ = emit_rules_seed(paths, feature)
+    seed = (paths.cartridge / "rules" / f"{feature}.mdc.seed").read_text(encoding="utf-8")
+    assert status == "updated"
+    assert "Expanded scope." in seed
+
+
+def test_emit_cartridge_with_rules_seeds_manifest(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    paths.ensure_dirs()
+    feature = "cartridge-pack-v2"
+    _write_feature_tree(paths, feature)
+
+    outputs, _ = emit_cartridge(paths, feature, force_delta=True, emit_rules_seeds=True)
+    manifest = json.loads((paths.cartridge / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["targets"]["cursor_rules"] == "seed"
+    assert manifest["stats"]["pack_sync"]["rules_seed"] in {"written", "updated"}
+    assert "rules_seed" in outputs
+    assert f"cartridge/rules/{feature}.mdc.seed" in manifest["files"]
+
+
+def test_emit_cartridge_pack_rules_seed_disabled_by_default(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    paths.ensure_dirs()
+    feature = "cartridge-pack-v2"
+    _write_feature_tree(paths, feature)
+
+    _, results, _ = emit_cartridge_pack(paths, feature, force=True)
+    assert results["rules_seed"] == "disabled"
+    assert not (paths.cartridge / "rules" / f"{feature}.mdc.seed").exists()
+
+
+def test_build_rule_seed_body_quotes_yaml_description(tmp_path: Path) -> None:
+    from hive_planner.cartridge_pack import _yaml_double_quoted
+
+    assert _yaml_double_quoted("Feature guardrails for feat:colon (review)") == (
+        '"Feature guardrails for feat:colon (review)"'
+    )
+
+    paths = RepoPaths(root=tmp_path)
+    feature = "cartridge-pack-v2"
+    _write_feature_tree(paths, feature)
+    body = build_rule_seed_body(paths, feature)
+    desc_line = next(line for line in body.splitlines() if line.startswith("description:"))
+    assert desc_line.startswith('description: "')
+    assert desc_line.endswith('"')
+
+
+def test_build_rule_seed_body_includes_macro_excerpt(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    feature = "cartridge-pack-v2"
+    _write_feature_tree(paths, feature)
+    body = build_rule_seed_body(paths, feature)
+    assert "## Architecture context" in body
+    assert "Arch" in body
+    assert feature in body

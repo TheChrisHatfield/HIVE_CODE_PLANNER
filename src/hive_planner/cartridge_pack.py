@@ -7,7 +7,10 @@ from pathlib import Path
 from hive_planner.agents_memory import EDITABLE_SECTION, parse_sections
 from hive_planner.config import RepoPaths
 from hive_planner.delta_emit import (
+    DRAFT_MARKER,
+    MANUAL_MARKER,
     _auto_sync_banner,
+    _first_content_line,
     _should_skip_existing,
     _strip_leading_banner,
 )
@@ -21,6 +24,13 @@ REQUIRED_PACK_FILES = (
     "source-context.md",
     "mappings/source-map.json",
 )
+
+RULE_SEED_DRAFT_BANNER = "<!-- DRAFT: rule seed — review before copying to .cursor/rules/*.mdc -->"
+
+
+def _yaml_double_quoted(value: str) -> str:
+    escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
 
 
 def _extract_section(body: str, heading: str) -> str:
@@ -52,6 +62,11 @@ def build_source_map(feature: str) -> dict:
                 "layer": "spec_seed",
             },
             {"cartridge": "cartridge/memory.md", "delta": "AGENTS.md", "layer": "memory"},
+            {
+                "cartridge": f"cartridge/rules/{feature}.mdc.seed",
+                "delta": f"docs/delta/20_micro/{feature}.md",
+                "layer": "cursor_rule_seed",
+            },
             {"cartridge": "cartridge/source-context.md", "delta": "context-library/indexes", "layer": "tertiary"},
         ],
     }
@@ -109,6 +124,112 @@ def _build_specseed_body(feature: str, spec_body: str) -> str:
     )
 
 
+def _extract_hook_line(micro_body: str) -> str:
+    match = re.search(r"^\*\*Hook:\*\*\s*(.+)$", micro_body, re.MULTILINE)
+    return match.group(1).strip() if match else "`cursor.rules`"
+
+
+def _macro_excerpt(macro_body: str, *, max_lines: int = 12) -> str:
+    body = _strip_leading_banner(macro_body).strip()
+    if not body:
+        return ""
+    lines: list[str] = []
+    for line in body.splitlines():
+        if line.startswith("# ") and lines:
+            break
+        if line.strip():
+            lines.append(line)
+        if len(lines) >= max_lines:
+            break
+    return "\n".join(lines).strip()
+
+
+def build_rule_seed_body(paths: RepoPaths, feature: str) -> str:
+    macro_path = paths.root / "docs" / "delta" / "10_macro.md"
+    micro_path = paths.root / "docs" / "delta" / "20_micro" / f"{feature}.md"
+    micro_body = micro_path.read_text(encoding="utf-8") if micro_path.exists() else ""
+    macro_body = macro_path.read_text(encoding="utf-8") if macro_path.exists() else ""
+
+    hook_line = _extract_hook_line(micro_body)
+    feature_name = _extract_section(micro_body, "Feature Name") or feature
+    scope = _extract_section(micro_body, "Scope") or "See micro brief."
+    acceptance = _extract_section(micro_body, "Acceptance Criteria") or "See spec acceptance criteria."
+    validation = _extract_section(micro_body, "Validation") or "Run feature validation commands."
+    macro_summary = _macro_excerpt(macro_body) or "See Delta macro layer."
+    description = f"Feature guardrails for {feature} (review seed — not auto-applied)"
+
+    return "\n".join(
+        [
+            "---",
+            f"description: {_yaml_double_quoted(description)}",
+            "alwaysApply: false",
+            "---",
+            "",
+            f"# {feature_name}",
+            "",
+            f"**Hook:** {hook_line}",
+            "",
+            "> Review this seed before copying to "
+            f"`.cursor/rules/{feature}.mdc`. "
+            "Remove this block and set `alwaysApply` as needed.",
+            "",
+            "## Architecture context",
+            "",
+            macro_summary,
+            "",
+            "## Scope",
+            "",
+            scope,
+            "",
+            "## Acceptance",
+            "",
+            acceptance,
+            "",
+            "## Validation",
+            "",
+            validation,
+            "",
+        ]
+    )
+
+
+def _should_skip_rules_seed(target: Path, *, force: bool) -> tuple[bool, str]:
+    if force or not target.exists():
+        return False, ""
+    content = target.read_text(encoding="utf-8")
+    first_line = _first_content_line(content)
+    if first_line.startswith(MANUAL_MARKER) or MANUAL_MARKER in content.splitlines()[0:3]:
+        return True, "manual banner"
+    if first_line.startswith(DRAFT_MARKER) or first_line.startswith(RULE_SEED_DRAFT_BANNER):
+        return False, ""
+    return True, "exists without draft banner (treat as reviewed/manual)"
+
+
+def emit_rules_seed(
+    paths: RepoPaths,
+    feature: str,
+    *,
+    force: bool = False,
+) -> tuple[str, Path | None, list[str]]:
+    warnings: list[str] = []
+    micro_path = paths.root / "docs" / "delta" / "20_micro" / f"{feature}.md"
+    if not micro_path.exists():
+        warnings.append(f"Missing micro brief for rule seed: docs/delta/20_micro/{feature}.md")
+        return "missing", None, warnings
+
+    target = paths.cartridge / "rules" / f"{feature}.mdc.seed"
+    skip, reason = _should_skip_rules_seed(target, force=force)
+    if skip:
+        warnings.append(f"Skipped cartridge/rules/{feature}.mdc.seed ({reason})")
+        return f"skipped ({reason})", None, warnings
+
+    body = build_rule_seed_body(paths, feature)
+    status = "updated" if target.exists() else "written"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(f"{RULE_SEED_DRAFT_BANNER}\n\n{body.strip()}\n", encoding="utf-8")
+    return status, target, warnings
+
+
 def _emit_auto_sync_derivative(
     paths: RepoPaths,
     target: Path,
@@ -151,6 +272,7 @@ def emit_cartridge_pack(
     feature: str,
     *,
     force: bool = False,
+    emit_rules_seeds: bool = False,
 ) -> tuple[dict[str, Path], dict[str, str], list[str]]:
     warnings: list[str] = []
     results: dict[str, str] = {}
@@ -219,5 +341,14 @@ def emit_cartridge_pack(
     else:
         results["specseed"] = "missing"
         warnings.append(f"Missing spec seed source: docs/specs/{feature}/spec.md")
+
+    if emit_rules_seeds:
+        seed_status, seed_path, seed_warnings = emit_rules_seed(paths, feature, force=force)
+        warnings.extend(seed_warnings)
+        results["rules_seed"] = seed_status
+        if seed_path:
+            written["rules_seed"] = seed_path
+    else:
+        results["rules_seed"] = "disabled"
 
     return written, results, warnings
