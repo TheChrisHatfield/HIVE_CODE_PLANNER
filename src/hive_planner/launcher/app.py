@@ -19,6 +19,9 @@ from hive_planner.launcher.service import (
     pick_hive_bootstrap_target,
     prepare_linked_project_root,
     resolve_linked_project_root,
+    run_cartridge_import_folder,
+    run_cartridge_load_sources,
+    run_cartridge_translate,
     run_deploy_agent_handoff,
     run_install,
     run_project_ci_check,
@@ -28,6 +31,7 @@ from hive_planner.launcher.service import (
     summarize_project,
     workspace_primary_folder,
 )
+from hive_planner.config import validate_feature_id
 from hive_planner.launcher.theme import (
     COLORS,
     FONT,
@@ -388,6 +392,7 @@ class HivePlannerApp:
         secondary_button(actions, "Open in Cursor", self._on_open_cursor)
         secondary_button(actions, "Sync impact maps", self._on_map_sync)
         secondary_button(actions, "Deploy agent handoff", self._on_deploy_agent_handoff)
+        secondary_button(actions, "Load cartridge…", self._on_load_cartridge)
         secondary_button(actions, "Open in Explorer", self._on_explore)
 
         log_card = card(body)
@@ -1016,6 +1021,209 @@ class HivePlannerApp:
             ),
             self._deploy_handoff_done,
         )
+
+    def _on_load_cartridge(self) -> None:
+        root = self._active_linked_root()
+        if not root:
+            messagebox.showwarning("No project", "Link a workspace first (Projects tab).")
+            return
+        summary = summarize_linked_project(Path(self.config.active_project))
+        default_feature = summary.active_feature or "example-feature"
+
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Load cartridge")
+        dialog.configure(bg=COLORS["bg"])
+        dialog.transient(self.root)
+        dialog.grab_set()
+        dialog.geometry("520x360")
+        dialog.minsize(480, 340)
+
+        tk.Label(
+            dialog,
+            text="Add reference docs, translate research into draft cartridge files, or import an existing cartridge folder.",
+            wraplength=480,
+            justify="left",
+            bg=COLORS["bg"],
+            fg=COLORS["muted"],
+            font=FONT,
+        ).pack(anchor="w", padx=16, pady=(16, 8))
+
+        mode_var = tk.StringVar(value="sources")
+        for value, label in (
+            ("sources", "Add source files — copy into context-library, ingest, and emit cartridge"),
+            ("translate", "Translate research — one markdown file into draft cartridge/*.md"),
+            ("import", "Import cartridge folder — copy cartridge markdown and manifest into the project"),
+        ):
+            tk.Radiobutton(
+                dialog,
+                text=label,
+                variable=mode_var,
+                value=value,
+                bg=COLORS["bg"],
+                fg=COLORS["fg"],
+                activebackground=COLORS["bg"],
+                activeforeground=COLORS["fg"],
+                selectcolor=COLORS["card"],
+                anchor="w",
+                justify="left",
+                font=FONT,
+                wraplength=470,
+            ).pack(anchor="w", padx=16, pady=2)
+
+        feature_row = tk.Frame(dialog, bg=COLORS["bg"])
+        feature_row.pack(fill="x", padx=16, pady=(12, 4))
+        tk.Label(feature_row, text="Feature id", width=12, anchor="w", bg=COLORS["bg"], fg=COLORS["fg"], font=FONT).pack(
+            side="left"
+        )
+        feature_var = tk.StringVar(value=default_feature)
+        feature_entry = tk.Entry(feature_row, textvariable=feature_var, font=FONT, bg=COLORS["card"], fg=COLORS["fg"])
+        feature_entry.pack(side="left", fill="x", expand=True)
+
+        selection_var = tk.StringVar(value="(none selected)")
+        tk.Label(
+            dialog,
+            textvariable=selection_var,
+            bg=COLORS["bg"],
+            fg=COLORS["muted"],
+            font=FONT_SUBTITLE,
+            wraplength=480,
+            justify="left",
+        ).pack(anchor="w", padx=16, pady=(8, 4))
+
+        selected_files: list[Path] = []
+        selected_folder: Path | None = None
+
+        source_types = [
+            ("Supported sources", "*.md *.txt *.pdf *.docx *.html *.htm *.csv *.pptx"),
+            ("Markdown", "*.md"),
+            ("All files", "*.*"),
+        ]
+
+        def browse() -> None:
+            nonlocal selected_folder
+            mode = mode_var.get()
+            if mode == "import":
+                folder = filedialog.askdirectory(title="Choose cartridge folder", parent=dialog)
+                if not folder:
+                    return
+                selected_folder = Path(folder)
+                selected_files.clear()
+                selection_var.set(selected_folder.as_posix())
+                return
+            if mode == "translate":
+                path = filedialog.askopenfilename(
+                    title="Choose research markdown",
+                    parent=dialog,
+                    filetypes=[("Markdown", "*.md"), ("All files", "*.*")],
+                )
+                if not path:
+                    return
+                selected_files[:] = [Path(path)]
+                selected_folder = None
+                selection_var.set(path)
+                return
+            paths = filedialog.askopenfilenames(
+                title="Choose source files",
+                parent=dialog,
+                filetypes=source_types,
+            )
+            if not paths:
+                return
+            selected_files[:] = [Path(p) for p in paths]
+            selected_folder = None
+            if len(selected_files) == 1:
+                selection_var.set(str(selected_files[0]))
+            else:
+                selection_var.set(f"{len(selected_files)} files selected")
+
+        browse_row = tk.Frame(dialog, bg=COLORS["bg"])
+        browse_row.pack(fill="x", padx=16, pady=(4, 8))
+        secondary_button(browse_row, "Browse…", browse)
+
+        def run_load() -> None:
+            mode = mode_var.get()
+            feature = feature_var.get().strip()
+            if mode in ("sources", "translate"):
+                try:
+                    validate_feature_id(feature)
+                except ValueError as exc:
+                    messagebox.showerror("Invalid feature", str(exc), parent=dialog)
+                    return
+            if mode == "import" and not selected_folder:
+                messagebox.showwarning("Nothing selected", "Choose a cartridge folder first.", parent=dialog)
+                return
+            if mode == "sources" and not selected_files:
+                messagebox.showwarning("Nothing selected", "Choose one or more source files first.", parent=dialog)
+                return
+            if mode == "translate" and not selected_files:
+                messagebox.showwarning("Nothing selected", "Choose a research markdown file first.", parent=dialog)
+                return
+
+            dialog.destroy()
+            if mode == "sources":
+                self._append_log(
+                    self.home_log,
+                    f"Loading {len(selected_files)} source file(s) and emitting cartridge for '{feature}'…",
+                )
+                self._run_bg(
+                    lambda: run_cartridge_load_sources(root, selected_files, feature),
+                    self._cartridge_load_done,
+                )
+            elif mode == "translate":
+                self._append_log(self.home_log, f"Translating research into draft cartridge for '{feature}'…")
+                self._run_bg(
+                    lambda: run_cartridge_translate(root, selected_files[0], feature),
+                    self._cartridge_load_done,
+                )
+            else:
+                self._append_log(self.home_log, "Importing cartridge folder…")
+                self._run_bg(
+                    lambda: run_cartridge_import_folder(root, selected_folder),
+                    self._cartridge_load_done,
+                )
+
+        action_row = tk.Frame(dialog, bg=COLORS["bg"])
+        action_row.pack(fill="x", padx=16, pady=(8, 16))
+        primary_button(action_row, "Load", run_load)
+        secondary_button(action_row, "Cancel", dialog.destroy)
+
+    def _cartridge_load_done(self, result: dict) -> None:
+        if self._is_bg_error(result):
+            self._append_log(self.home_log, self._result_detail(result))
+            return
+        if not result.get("ok"):
+            self._append_log(self.home_log, self._result_detail(result))
+            for warning in result.get("warnings", []):
+                self._append_log(self.home_log, f"Warning: {warning}")
+            return
+        mode = result.get("mode")
+        if mode == "sources":
+            self._append_log(
+                self.home_log,
+                f"Cartridge sources loaded ({result.get('processed', 0)} indexed, feature: {result.get('feature')}).",
+            )
+            for rel in result.get("copied", []):
+                self._append_log(self.home_log, f"  copied: {rel}")
+            for name, rel in (result.get("outputs") or {}).items():
+                self._append_log(self.home_log, f"  wrote {name}: {rel}")
+        elif mode == "translate":
+            self._append_log(
+                self.home_log,
+                f"Draft cartridge written for '{result.get('feature')}' ({len(result.get('files_written', []))} file(s)).",
+            )
+            for rel in result.get("files_written", []):
+                self._append_log(self.home_log, f"  cartridge/{rel}")
+        elif mode == "import":
+            self._append_log(
+                self.home_log,
+                f"Imported {len(result.get('written', []))} cartridge file(s).",
+            )
+            for rel in result.get("written", []):
+                self._append_log(self.home_log, f"  wrote: cartridge/{rel}")
+            for rel in result.get("skipped", []):
+                self._append_log(self.home_log, f"  skipped (exists): cartridge/{rel}")
+        for warning in result.get("warnings", []):
+            self._append_log(self.home_log, f"Warning: {warning}")
 
     def _deploy_handoff_done(self, result: dict) -> None:
         if self._is_bg_error(result):

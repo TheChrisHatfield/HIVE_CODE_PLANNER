@@ -16,9 +16,11 @@ from urllib.parse import unquote, urlparse
 
 from hive_planner.bootstrap import BootstrapError, init_project
 from hive_planner.ci_handoff import run_ci_check
-from hive_planner.config import RepoPaths, is_repo_root
+from hive_planner.config import SUPPORTED_EXTENSIONS, RepoPaths, is_repo_root, validate_feature_id
+from hive_planner.emitter import emit_cartridge
 from hive_planner.launcher.config import LauncherConfig
 from hive_planner.map_sync import sync_impact_maps
+from hive_planner.pipeline import ingest
 from hive_planner.project_profile import resolve_project_profile
 from hive_planner.spec_drift import parse_active_feature, repair_agents_active_feature
 
@@ -866,6 +868,185 @@ def run_project_map_sync(project_root: Path, *, dry_run: bool = False) -> dict:
         "test_added": sorted(report.test_added),
         "project_updated": sorted(report.project_updated),
         "test_updated": sorted(report.test_updated),
+    }
+
+
+_CARTRIDGE_IMPORT_SUFFIXES = {".md", ".json", ".mdc", ".seed"}
+
+
+def resolve_cartridge_import_root(folder: Path) -> Path:
+    source = folder.resolve()
+    if not source.is_dir():
+        raise ValueError(f"Folder not found: {folder}")
+    if (source / "manifest.json").is_file() or (source / "holistic.md").is_file():
+        return source
+    nested = source / "cartridge"
+    if nested.is_dir() and (
+        (nested / "manifest.json").is_file() or (nested / "holistic.md").is_file()
+    ):
+        return nested
+    return source
+
+
+def _cartridge_import_allowed(rel: Path) -> bool:
+    suffix = rel.suffix.lower()
+    if suffix in {".md", ".json"}:
+        return True
+    name = rel.name.lower()
+    return name.endswith(".mdc.seed")
+
+
+def _stage_context_sources(paths: RepoPaths, source_files: list[Path]) -> tuple[list[str], list[str]]:
+    dest_dir = paths.sources / "imported"
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    copied: list[str] = []
+    warnings: list[str] = []
+    for raw in source_files:
+        src = raw.resolve()
+        if not src.is_file():
+            warnings.append(f"Skipped (not a file): {src}")
+            continue
+        if src.suffix.lower() not in SUPPORTED_EXTENSIONS:
+            warnings.append(f"Skipped (unsupported type): {src.name}")
+            continue
+        dest = dest_dir / src.name
+        if dest.exists():
+            stem = dest.stem
+            suffix = dest.suffix
+            counter = 2
+            while dest.exists():
+                dest = dest_dir / f"{stem}-{counter}{suffix}"
+                counter += 1
+        shutil.copy2(src, dest)
+        copied.append(dest.relative_to(paths.root).as_posix())
+    return copied, warnings
+
+
+def run_cartridge_load_sources(
+    project_root: Path,
+    source_files: list[Path],
+    feature: str,
+    *,
+    embed: bool = False,
+) -> dict:
+    target = project_root.resolve()
+    summary = summarize_project(target)
+    if not summary.ok:
+        return {"ok": False, "error": summary.detail}
+    if not source_files:
+        return {"ok": False, "error": "Choose at least one source file."}
+    try:
+        validate_feature_id(feature.strip())
+    except ValueError as exc:
+        return {"ok": False, "error": str(exc)}
+
+    paths = RepoPaths(root=target)
+    copied, warnings = _stage_context_sources(paths, source_files)
+    if not copied:
+        return {"ok": False, "error": "No supported source files were copied.", "warnings": warnings}
+
+    ingest_report = ingest(paths, embed=embed)
+    try:
+        outputs, emit_warnings = emit_cartridge(paths, feature.strip())
+    except ValueError as exc:
+        return {"ok": False, "error": str(exc), "copied": copied, "warnings": warnings}
+
+    return {
+        "ok": True,
+        "mode": "sources",
+        "feature": feature.strip(),
+        "copied": copied,
+        "processed": ingest_report.processed,
+        "skipped": ingest_report.skipped,
+        "outputs": {name: path.relative_to(target).as_posix() for name, path in outputs.items()},
+        "warnings": warnings + list(ingest_report.warnings) + list(emit_warnings),
+    }
+
+
+def run_cartridge_translate(project_root: Path, input_file: Path, feature: str) -> dict:
+    from hive_planner.translator import TranslatorError, translate_document, write_translator_status
+
+    target = project_root.resolve()
+    summary = summarize_project(target)
+    if not summary.ok:
+        return {"ok": False, "error": summary.detail}
+    try:
+        validate_feature_id(feature.strip())
+    except ValueError as exc:
+        return {"ok": False, "error": str(exc)}
+
+    paths = RepoPaths(root=target)
+    try:
+        result = translate_document(paths, input_file, feature.strip())
+        status_path = write_translator_status(paths, result)
+    except (TranslatorError, ValueError) as exc:
+        return {"ok": False, "error": str(exc)}
+
+    return {
+        "ok": True,
+        "mode": "translate",
+        "feature": feature.strip(),
+        "input": str(input_file),
+        "files_written": result.files_written,
+        "status_path": status_path.relative_to(target).as_posix(),
+        "classification_counts": result.classification_counts,
+    }
+
+
+def run_cartridge_import_folder(
+    project_root: Path,
+    folder: Path,
+    *,
+    overwrite: bool = False,
+) -> dict:
+    target = project_root.resolve()
+    summary = summarize_project(target)
+    if not summary.ok:
+        return {"ok": False, "error": summary.detail}
+    try:
+        cart_src = resolve_cartridge_import_root(folder)
+    except ValueError as exc:
+        return {"ok": False, "error": str(exc)}
+
+    paths = RepoPaths(root=target)
+    paths.cartridge.mkdir(parents=True, exist_ok=True)
+    written: list[str] = []
+    skipped: list[str] = []
+    for path in sorted(cart_src.rglob("*")):
+        if not path.is_file():
+            continue
+        rel = path.relative_to(cart_src)
+        if not _cartridge_import_allowed(rel):
+            continue
+        dest = paths.cartridge / rel
+        if dest.exists() and not overwrite:
+            skipped.append(rel.as_posix())
+            continue
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(path, dest)
+        written.append(rel.as_posix())
+
+    if not written and not skipped:
+        return {
+            "ok": False,
+            "error": "No cartridge markdown or manifest files found in that folder.",
+        }
+    if not written:
+        return {
+            "ok": False,
+            "error": "All cartridge files already exist in the project (nothing imported).",
+            "mode": "import",
+            "import_root": str(cart_src),
+            "written": written,
+            "skipped": skipped,
+        }
+
+    return {
+        "ok": True,
+        "mode": "import",
+        "import_root": str(cart_src),
+        "written": written,
+        "skipped": skipped,
     }
 
 

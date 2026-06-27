@@ -112,6 +112,8 @@ The **active project** is the folder Hive Planner is “pointing at” right now
 | **Run health check** | Runs a bundle of checks (`ci-check`) on the active project. Green / passing means planning files, specs, and maps look aligned. |
 | **Open in Cursor** | Opens the active project folder in the Cursor editor |
 | **Sync impact maps** | Updates planning “impact map” files after you change code |
+| **Deploy agent handoff** | Writes Spec Kit + Continual Learning starter files for unified agent handoff |
+| **Load cartridge…** | Add reference docs, translate research markdown into draft `cartridge/`, or import an existing cartridge folder |
 | **Open in Explorer** | Opens the project folder in Windows File Explorer |
 
 The **Output** area at the bottom shows what just ran — read it if something fails.

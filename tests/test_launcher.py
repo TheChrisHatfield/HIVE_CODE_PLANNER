@@ -34,6 +34,10 @@ from hive_planner.launcher.service import (
     run_project_ci_check,
     run_project_init,
     run_project_map_sync,
+    resolve_cartridge_import_root,
+    run_cartridge_import_folder,
+    run_cartridge_load_sources,
+    run_cartridge_translate,
     summarize_project,
 )
 
@@ -675,6 +679,106 @@ def test_run_project_map_sync_rejects_invalid_project(tmp_path: Path) -> None:
     result = run_project_map_sync(tmp_path)
     assert result["ok"] is False
     assert "START_HERE" in result["error"]
+
+
+def _minimal_hive_project(root: Path) -> Path:
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    (root / "docs").mkdir(parents=True, exist_ok=True)
+    (root / "docs" / "planning-rosetta-stone.md").write_text("# rosetta\n", encoding="utf-8")
+    RepoPaths(root=root).ensure_dirs()
+    return root
+
+
+def test_run_cartridge_load_sources_copies_ingests_and_emits(tmp_path: Path) -> None:
+    project = _minimal_hive_project(tmp_path / "proj")
+    source = tmp_path / "notes.md"
+    source.write_text("# Research\n\nSubsystem workflow for cartridge testing.\n", encoding="utf-8")
+
+    result = run_cartridge_load_sources(project, [source], "my-feature")
+
+    assert result["ok"] is True
+    assert result["mode"] == "sources"
+    assert result["processed"] == 1
+    assert (project / "context-library" / "sources" / "imported" / "notes.md").is_file()
+    assert (project / "cartridge" / "manifest.json").is_file()
+    assert (project / "cartridge" / "source-context.md").is_file()
+
+
+def test_run_cartridge_translate_writes_draft_files(tmp_path: Path) -> None:
+    project = _minimal_hive_project(tmp_path / "proj")
+    research = tmp_path / "research.md"
+    research.write_text(
+        "\n".join(
+            [
+                "# Mission",
+                "",
+                "Goal: ship cartridge translation from the launcher.",
+                "",
+                "## Architecture",
+                "",
+                "Subsystem workflow for draft cartridge emission.",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_cartridge_translate(project, research, "launcher-cartridge")
+
+    assert result["ok"] is True
+    assert result["mode"] == "translate"
+    assert (project / "cartridge" / "holistic.md").is_file()
+    assert (project / "cartridge" / "micro" / "launcher-cartridge.md").is_file()
+
+
+def test_run_cartridge_import_folder_copies_cartridge_tree(tmp_path: Path) -> None:
+    project = _minimal_hive_project(tmp_path / "proj")
+    external = tmp_path / "external-cartridge"
+    external.mkdir()
+    (external / "holistic.md").write_text("# Holistic\n", encoding="utf-8")
+    (external / "manifest.json").write_text('{"schema_version":"cartridge.v1"}\n', encoding="utf-8")
+
+    result = run_cartridge_import_folder(project, external)
+
+    assert result["ok"] is True
+    assert result["mode"] == "import"
+    assert (project / "cartridge" / "holistic.md").read_text(encoding="utf-8") == "# Holistic\n"
+    assert (project / "cartridge" / "manifest.json").is_file()
+
+
+def test_run_cartridge_import_folder_fails_when_all_files_exist(tmp_path: Path) -> None:
+    project = _minimal_hive_project(tmp_path / "proj")
+    external = tmp_path / "external-cartridge"
+    external.mkdir()
+    (external / "holistic.md").write_text("# Holistic\n", encoding="utf-8")
+    (project / "cartridge" / "holistic.md").parent.mkdir(parents=True, exist_ok=True)
+    (project / "cartridge" / "holistic.md").write_text("# Existing\n", encoding="utf-8")
+
+    result = run_cartridge_import_folder(project, external)
+
+    assert result["ok"] is False
+    assert "already exist" in result["error"]
+    assert result["skipped"] == ["holistic.md"]
+
+
+def test_resolve_cartridge_import_root_prefers_nested_folder(tmp_path: Path) -> None:
+    bundle = tmp_path / "bundle"
+    nested = bundle / "cartridge"
+    nested.mkdir(parents=True)
+    (nested / "manifest.json").write_text("{}\n", encoding="utf-8")
+
+    assert resolve_cartridge_import_root(bundle) == nested.resolve()
+
+
+def test_run_cartridge_load_sources_rejects_invalid_feature(tmp_path: Path) -> None:
+    project = _minimal_hive_project(tmp_path / "proj")
+    source = tmp_path / "notes.md"
+    source.write_text("# x\n", encoding="utf-8")
+
+    result = run_cartridge_load_sources(project, [source], "Bad Feature")
+
+    assert result["ok"] is False
+    assert "Invalid feature" in result["error"]
 
 
 def test_load_user_guide_reads_scripts_readme(tmp_path: Path) -> None:
