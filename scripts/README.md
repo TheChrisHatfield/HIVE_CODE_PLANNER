@@ -113,7 +113,7 @@ The **active project** is the folder Hive Planner is “pointing at” right now
 | **Open in Cursor** | Opens the active project folder in the Cursor editor |
 | **Sync impact maps** | Updates planning “impact map” files after you change code |
 | **Deploy agent handoff** | Writes Spec Kit + Continual Learning starter files for unified agent handoff |
-| **Load cartridge…** | Add reference docs, translate research markdown into draft `cartridge/`, or import an existing cartridge folder |
+| **Load cartridge…** | Add reference docs, translate research markdown into draft `cartridge/`, or import an existing cartridge folder. With unified handoff, optionally **promote drafts** to Delta/Spec Kit, write CL candidate files, and run **spec-drift**. |
 | **Open in Explorer** | Opens the project folder in Windows File Explorer |
 
 The **Output** area at the bottom shows what just ran — read it if something fails.

@@ -32,6 +32,7 @@ from hive_planner.launcher.service import (
     workspace_primary_folder,
 )
 from hive_planner.config import validate_feature_id
+from hive_planner.agent_handoff import validate_unified_handoff
 from hive_planner.launcher.theme import (
     COLORS,
     FONT,
@@ -1035,8 +1036,8 @@ class HivePlannerApp:
         dialog.configure(bg=COLORS["bg"])
         dialog.transient(self.root)
         dialog.grab_set()
-        dialog.geometry("520x360")
-        dialog.minsize(480, 340)
+        dialog.geometry("520x400")
+        dialog.minsize(480, 380)
 
         tk.Label(
             dialog,
@@ -1078,6 +1079,25 @@ class HivePlannerApp:
         feature_var = tk.StringVar(value=default_feature)
         feature_entry = tk.Entry(feature_row, textvariable=feature_var, font=FONT, bg=COLORS["card"], fg=COLORS["fg"])
         feature_entry.pack(side="left", fill="x", expand=True)
+
+        handoff_status = validate_unified_handoff(root)
+        promote_var = tk.BooleanVar(value=handoff_status.mode == "unified")
+        promote_row = tk.Frame(dialog, bg=COLORS["bg"])
+        promote_row.pack(fill="x", padx=16, pady=(0, 4))
+        tk.Checkbutton(
+            promote_row,
+            text="Promote drafts to Delta/Spec Kit, stage CL candidates, and run spec-drift (unified handoff)",
+            variable=promote_var,
+            bg=COLORS["bg"],
+            fg=COLORS["fg"],
+            activebackground=COLORS["bg"],
+            activeforeground=COLORS["fg"],
+            selectcolor=COLORS["card"],
+            anchor="w",
+            font=FONT,
+            wraplength=470,
+            justify="left",
+        ).pack(anchor="w")
 
         selection_var = tk.StringVar(value="(none selected)")
         tk.Label(
@@ -1167,6 +1187,9 @@ class HivePlannerApp:
                 messagebox.showwarning("Nothing selected", "Choose a research markdown file first.", parent=dialog)
                 return
 
+            do_promote = promote_var.get()
+            do_feature = feature
+
             dialog.destroy()
             if mode == "sources":
                 self._append_log(
@@ -1174,19 +1197,28 @@ class HivePlannerApp:
                     f"Loading {len(selected_files)} source file(s) and emitting cartridge for '{feature}'…",
                 )
                 self._run_bg(
-                    lambda: run_cartridge_load_sources(root, selected_files, feature),
+                    lambda: run_cartridge_load_sources(
+                        root, selected_files, do_feature, promote=do_promote
+                    ),
                     self._cartridge_load_done,
                 )
             elif mode == "translate":
                 self._append_log(self.home_log, f"Translating research into draft cartridge for '{feature}'…")
                 self._run_bg(
-                    lambda: run_cartridge_translate(root, selected_files[0], feature),
+                    lambda: run_cartridge_translate(
+                        root, selected_files[0], do_feature, promote=do_promote
+                    ),
                     self._cartridge_load_done,
                 )
             else:
                 self._append_log(self.home_log, "Importing cartridge folder…")
                 self._run_bg(
-                    lambda: run_cartridge_import_folder(root, selected_folder),
+                    lambda: run_cartridge_import_folder(
+                        root,
+                        selected_folder,
+                        feature=do_feature,
+                        promote=do_promote,
+                    ),
                     self._cartridge_load_done,
                 )
 
@@ -1234,6 +1266,27 @@ class HivePlannerApp:
                 self._append_log(self.home_log, f"  wrote: cartridge/{rel}")
             for rel in result.get("skipped", []):
                 self._append_log(self.home_log, f"  skipped (exists): cartridge/{rel}")
+        promote = result.get("promote")
+        if promote:
+            self._append_log(self.home_log, "Promotion / symbiotic handoff:")
+            for layer, status in sorted(promote.get("promotions", {}).items()):
+                self._append_log(self.home_log, f"  {layer}: {status}")
+            if promote.get("candidates_path"):
+                self._append_log(
+                    self.home_log,
+                    f"  CL candidates (review, then agents-propose): {promote['candidates_path']}",
+                )
+            repair = promote.get("agents_repair")
+            if repair:
+                self._append_log(self.home_log, f"  AGENTS.md repair: {repair.get('detail')}")
+            drift = promote.get("spec_drift")
+            if drift is not None:
+                mark = "ok" if drift.get("ok") else "review needed"
+                self._append_log(self.home_log, f"  spec-drift: {mark}")
+            for warning in promote.get("warnings", []):
+                self._append_log(self.home_log, f"  Warning: {warning}")
+            if promote.get("ok") is False and result.get("ok"):
+                self._append_log(self.home_log, "Cartridge loaded; promotion/spec-drift needs review.")
         for warning in result.get("warnings", []):
             self._append_log(self.home_log, f"Warning: {warning}")
 

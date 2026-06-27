@@ -922,12 +922,32 @@ def _stage_context_sources(paths: RepoPaths, source_files: list[Path]) -> tuple[
     return copied, warnings
 
 
+def _merge_cartridge_promote(payload: dict, promote_result: dict | None) -> dict:
+    if not promote_result:
+        return payload
+    payload["promote"] = promote_result
+    if promote_result.get("ok") is False:
+        payload["ok"] = False
+    return payload
+
+
+def _run_cartridge_promote(project_root: Path, feature: str, *, promote: bool, force: bool = False) -> dict | None:
+    if not promote:
+        return None
+    from hive_planner.cartridge_promote import promote_cartridge_drafts
+
+    paths = RepoPaths(root=project_root.resolve())
+    return promote_cartridge_drafts(paths, feature.strip(), force=force).to_dict()
+
+
 def run_cartridge_load_sources(
     project_root: Path,
     source_files: list[Path],
     feature: str,
     *,
     embed: bool = False,
+    promote: bool = True,
+    force_promote: bool = False,
 ) -> dict:
     target = project_root.resolve()
     summary = summarize_project(target)
@@ -951,19 +971,29 @@ def run_cartridge_load_sources(
     except ValueError as exc:
         return {"ok": False, "error": str(exc), "copied": copied, "warnings": warnings}
 
-    return {
-        "ok": True,
-        "mode": "sources",
-        "feature": feature.strip(),
-        "copied": copied,
-        "processed": ingest_report.processed,
-        "skipped": ingest_report.skipped,
-        "outputs": {name: path.relative_to(target).as_posix() for name, path in outputs.items()},
-        "warnings": warnings + list(ingest_report.warnings) + list(emit_warnings),
-    }
+    return _merge_cartridge_promote(
+        {
+            "ok": True,
+            "mode": "sources",
+            "feature": feature.strip(),
+            "copied": copied,
+            "processed": ingest_report.processed,
+            "skipped": ingest_report.skipped,
+            "outputs": {name: path.relative_to(target).as_posix() for name, path in outputs.items()},
+            "warnings": warnings + list(ingest_report.warnings) + list(emit_warnings),
+        },
+        _run_cartridge_promote(target, feature, promote=promote, force=force_promote),
+    )
 
 
-def run_cartridge_translate(project_root: Path, input_file: Path, feature: str) -> dict:
+def run_cartridge_translate(
+    project_root: Path,
+    input_file: Path,
+    feature: str,
+    *,
+    promote: bool = True,
+    force_promote: bool = False,
+) -> dict:
     from hive_planner.translator import TranslatorError, translate_document, write_translator_status
 
     target = project_root.resolve()
@@ -982,15 +1012,18 @@ def run_cartridge_translate(project_root: Path, input_file: Path, feature: str) 
     except (TranslatorError, ValueError) as exc:
         return {"ok": False, "error": str(exc)}
 
-    return {
-        "ok": True,
-        "mode": "translate",
-        "feature": feature.strip(),
-        "input": str(input_file),
-        "files_written": result.files_written,
-        "status_path": status_path.relative_to(target).as_posix(),
-        "classification_counts": result.classification_counts,
-    }
+    return _merge_cartridge_promote(
+        {
+            "ok": True,
+            "mode": "translate",
+            "feature": feature.strip(),
+            "input": str(input_file),
+            "files_written": result.files_written,
+            "status_path": status_path.relative_to(target).as_posix(),
+            "classification_counts": result.classification_counts,
+        },
+        _run_cartridge_promote(target, feature, promote=promote, force=force_promote),
+    )
 
 
 def run_cartridge_import_folder(
@@ -998,6 +1031,9 @@ def run_cartridge_import_folder(
     folder: Path,
     *,
     overwrite: bool = False,
+    feature: str | None = None,
+    promote: bool = True,
+    force_promote: bool = False,
 ) -> dict:
     target = project_root.resolve()
     summary = summarize_project(target)
@@ -1041,13 +1077,25 @@ def run_cartridge_import_folder(
             "skipped": skipped,
         }
 
-    return {
+    payload = {
         "ok": True,
         "mode": "import",
         "import_root": str(cart_src),
         "written": written,
         "skipped": skipped,
     }
+    if promote and feature:
+        try:
+            validate_feature_id(feature.strip())
+            payload = _merge_cartridge_promote(
+                payload,
+                _run_cartridge_promote(target, feature, promote=True, force=force_promote),
+            )
+        except ValueError as exc:
+            payload["warnings"] = [str(exc)]
+    elif promote and not feature:
+        payload["warnings"] = ["Promotion skipped — set feature id for import mode."]
+    return payload
 
 
 def run_project_init(

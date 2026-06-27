@@ -135,6 +135,32 @@ def main(argv: list[str] | None = None) -> int:
     translate_parser = sub.add_parser("translate", help="Rule-based cartridge draft translation")
     translate_parser.add_argument("--input", required=True, type=Path, help="Research markdown input file")
     translate_parser.add_argument("--feature", required=True, help="Feature name for micro/spec outputs")
+    translate_parser.add_argument(
+        "--no-promote",
+        action="store_true",
+        help="Skip promoting drafts to Delta/Spec Kit and spec-drift check",
+    )
+    translate_parser.add_argument(
+        "--force-promote",
+        action="store_true",
+        help="Overwrite existing Delta/spec targets when promoting cartridge drafts",
+    )
+
+    promote_parser = sub.add_parser(
+        "cartridge-promote",
+        help="Promote draft cartridge files to Delta/Spec Kit and run spec-drift (hook: integration.cl_spec)",
+    )
+    promote_parser.add_argument("--feature", required=True, help="Feature name")
+    promote_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite existing non-bootstrap Delta/spec targets",
+    )
+    promote_parser.add_argument(
+        "--skip-spec-drift",
+        action="store_true",
+        help="Promote only — do not run spec-drift-check",
+    )
 
     agents_lint = sub.add_parser("agents-lint", help="Lint AGENTS.md structure and bullets")
     agents_lint.add_argument("--path", type=Path, default=None, help="AGENTS.md path (default: repo root)")
@@ -328,8 +354,42 @@ def main(argv: list[str] | None = None) -> int:
         for rel in result.files_written:
             print(f"Wrote draft: cartridge/{rel}")
         print(f"Wrote status: {status_path.relative_to(root)}")
-        print(json.dumps(result.to_dict(), indent=2))
+        payload = result.to_dict()
+        if not args.no_promote:
+            from hive_planner.cartridge_promote import promote_cartridge_drafts
+
+            promote = promote_cartridge_drafts(
+                paths,
+                args.feature,
+                force=args.force_promote,
+            )
+            payload["promote"] = promote.to_dict()
+            if promote.candidates_path:
+                print(f"Wrote CL candidates: {promote.candidates_path}")
+            print(f"Promotion spec-drift ok: {promote.ok}")
+        print(json.dumps(payload, indent=2))
         return 0
+
+    if args.command == "cartridge-promote":
+        from hive_planner.cartridge_promote import promote_cartridge_drafts
+
+        try:
+            result = promote_cartridge_drafts(
+                paths,
+                args.feature,
+                force=args.force,
+                run_spec_drift=not args.skip_spec_drift,
+            )
+        except ValueError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        print(f"Root: {root}")
+        if result.candidates_path:
+            print(f"Wrote CL candidates: {result.candidates_path}")
+        for warning in result.warnings:
+            print(f"Warning: {warning}", file=sys.stderr)
+        print(json.dumps(result.to_dict(), indent=2))
+        return 0 if result.ok else 1
 
     if args.command == "agents-lint":
         try:
