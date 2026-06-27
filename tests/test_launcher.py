@@ -7,6 +7,7 @@ import pytest
 
 from hive_planner.launcher.config import LauncherConfig, load_config, save_config
 from hive_planner.launcher.service import (
+    _python_command,
     get_setup_status,
     run_project_init,
     summarize_project,
@@ -70,6 +71,14 @@ def test_run_project_init_minimal(tmp_path: Path) -> None:
         )
     assert result["ok"] is True
     assert (target / "START_HERE.md").is_file()
+
+
+def test_python_command_preserves_quoted_paths() -> None:
+    cfg = LauncherConfig(python_executable=r'"C:\Program Files\Python311\python.exe"')
+    assert _python_command(cfg) == [r"C:\Program Files\Python311\python.exe"]
+
+    cfg2 = LauncherConfig(python_executable="py -3.11")
+    assert _python_command(cfg2) == ["py", "-3.11"]
 
 
 def test_install_result_failure_dict() -> None:
