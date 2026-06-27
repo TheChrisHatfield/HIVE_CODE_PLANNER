@@ -20,6 +20,7 @@
 - .cursor/rules/ untouched; MANUAL seeds skipped
 - manifest targets.cursor_rules = "seed" when flag set
 - test_cartridge_pack.py: 13/13 PASS
-- Full pytest: 129/129 PASS
+- Full pytest: 132/132 PASS
 - ci-check: 5/5 PASS
+- Bug hunt: YAML quote, manifest seed flag, duplicate micro warnings
 ```
