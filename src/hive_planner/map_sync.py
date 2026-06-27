@@ -81,7 +81,7 @@ def discover_test_mappings(paths: RepoPaths) -> dict[str, set[str]]:
     mapping: dict[str, set[str]] = {}
     if not tests_root.exists():
         return mapping
-    for test_file in sorted(tests_root.glob("test_*.py")):
+    for test_file in sorted(tests_root.rglob("test_*.py")):
         rel_test = test_file.relative_to(paths.root).as_posix()
         for src_module in _imports_in_test_file(test_file):
             mapping.setdefault(src_module, set()).add(rel_test)
@@ -103,13 +103,20 @@ def _module_role(module_path: Path) -> str:
     return module_path.stem.replace("_", " ")
 
 
-def _parse_project_map(content: str) -> tuple[list[str], dict[str, tuple[str, str]]]:
+def _escape_table_cell(text: str) -> str:
+    return text.replace("|", "\\|")
+
+
+def _parse_project_map(content: str) -> tuple[list[str], dict[str, tuple[str, str]], list[str]]:
     header: list[str] = []
+    footer: list[str] = []
     rows: dict[str, tuple[str, str]] = {}
     in_table = False
+    table_seen = False
     for line in content.splitlines():
         if line.startswith("| Module |"):
             in_table = True
+            table_seen = True
             continue
         if line.startswith("|--------"):
             continue
@@ -120,18 +127,23 @@ def _parse_project_map(content: str) -> tuple[list[str], dict[str, tuple[str, st
                 rows[module] = (role, deps)
                 continue
             in_table = False
-        if not rows and not in_table:
+        if table_seen and not in_table:
+            footer.append(line)
+        elif not table_seen:
             header.append(line)
-    return header, rows
+    return header, rows, footer
 
 
-def _parse_test_map(content: str) -> tuple[list[str], dict[str, set[str]]]:
+def _parse_test_map(content: str) -> tuple[list[str], dict[str, set[str]], list[str]]:
     header: list[str] = []
+    footer: list[str] = []
     rows: dict[str, set[str]] = {}
     in_table = False
+    table_seen = False
     for line in content.splitlines():
         if line.startswith("| Source module |"):
             in_table = True
+            table_seen = True
             continue
         if line.startswith("|---------------"):
             continue
@@ -143,14 +155,17 @@ def _parse_test_map(content: str) -> tuple[list[str], dict[str, set[str]]]:
                 rows[module] = {t for t in tests if t}
                 continue
             in_table = False
-        if not rows and not in_table:
+        if table_seen and not in_table:
+            footer.append(line)
+        elif not table_seen:
             header.append(line)
-    return header, rows
+    return header, rows, footer
 
 
 def _render_project_map(
     header_lines: list[str],
     rows: dict[str, tuple[str, str]],
+    footer_lines: list[str] | None = None,
 ) -> str:
     body = list(header_lines)
     if body and body[-1].strip():
@@ -163,11 +178,21 @@ def _render_project_map(
     )
     for module in sorted(rows):
         role, deps = rows[module]
-        body.append(f"| `{module}` | {role} | {deps} |")
+        body.append(
+            f"| `{module}` | {_escape_table_cell(role)} | {_escape_table_cell(deps)} |"
+        )
+    if footer_lines:
+        if body and body[-1].strip():
+            body.append("")
+        body.extend(footer_lines)
     return "\n".join(body).rstrip() + "\n"
 
 
-def _render_test_map(header_lines: list[str], rows: dict[str, set[str]]) -> str:
+def _render_test_map(
+    header_lines: list[str],
+    rows: dict[str, set[str]],
+    footer_lines: list[str] | None = None,
+) -> str:
     body = list(header_lines)
     if body and body[-1].strip():
         body.append("")
@@ -179,7 +204,11 @@ def _render_test_map(header_lines: list[str], rows: dict[str, set[str]]) -> str:
     )
     for module in sorted(rows):
         tests = ", ".join(f"`{t}`" for t in sorted(rows[module]))
-        body.append(f"| `{module}` | {tests} |")
+        body.append(f"| `{module}` | {_escape_table_cell(tests)} |")
+    if footer_lines:
+        if body and body[-1].strip():
+            body.append("")
+        body.extend(footer_lines)
     return "\n".join(body).rstrip() + "\n"
 
 
@@ -192,7 +221,7 @@ def sync_impact_maps(paths: RepoPaths, *, dry_run: bool = False) -> MapSyncRepor
     src_modules = discover_src_modules(paths)
     test_mappings = discover_test_mappings(paths)
 
-    project_header, project_rows = _parse_project_map(
+    project_header, project_rows, project_footer = _parse_project_map(
         project_path.read_text(encoding="utf-8") if project_path.exists() else "# Project Map\n"
     )
     manual_project = {k: v for k, v in project_rows.items() if not k.startswith("src/")}
@@ -208,7 +237,7 @@ def sync_impact_maps(paths: RepoPaths, *, dry_run: bool = False) -> MapSyncRepor
         merged_project[module] = (role, "(auto-sync)")
         report.project_added.append(module)
 
-    test_header, test_rows = _parse_test_map(
+    test_header, test_rows, test_footer = _parse_test_map(
         test_path.read_text(encoding="utf-8") if test_path.exists() else "# Test Map\n"
     )
     merged_tests: dict[str, set[str]] = {}
@@ -233,7 +262,13 @@ def sync_impact_maps(paths: RepoPaths, *, dry_run: bool = False) -> MapSyncRepor
 
     if not dry_run:
         change_dir.mkdir(parents=True, exist_ok=True)
-        project_path.write_text(_render_project_map(project_header, merged_project), encoding="utf-8")
-        test_path.write_text(_render_test_map(test_header, merged_tests), encoding="utf-8")
+        project_path.write_text(
+            _render_project_map(project_header, merged_project, project_footer),
+            encoding="utf-8",
+        )
+        test_path.write_text(
+            _render_test_map(test_header, merged_tests, test_footer),
+            encoding="utf-8",
+        )
 
     return report

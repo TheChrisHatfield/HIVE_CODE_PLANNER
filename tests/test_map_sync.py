@@ -141,3 +141,52 @@ def test_sync_adds_missing_src_module(tmp_path: Path) -> None:
     assert "src/hive_planner/discovery.py" in report.project_added
     project_map = (paths.root / "docs" / "change-impact" / "project-map.md").read_text(encoding="utf-8")
     assert "Discovery helpers" in project_map
+
+
+def test_sync_preserves_footer_after_table(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    _write_src_module(paths, "src/hive_planner/foo.py", "pass\n")
+    _write_project_map(
+        paths,
+        "# Project Map\n\n"
+        "| Module | Role | Spec / Delta deps |\n"
+        "|--------|------|-------------------|\n\n"
+        "## How to edit\n\n"
+        "Keep manual rows above auto-sync.\n",
+    )
+    _write_test_map(
+        paths,
+        "# Test Map\n\n| Source module | Tests |\n|---------------|-------|\n",
+    )
+    sync_impact_maps(paths)
+    content = (paths.root / "docs" / "change-impact" / "project-map.md").read_text(encoding="utf-8")
+    assert "Keep manual rows above auto-sync" in content
+    assert "src/hive_planner/foo.py" in content
+
+
+def test_sync_escapes_pipe_in_table_cells(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    _write_src_module(paths, "src/hive_planner/piped.py", '"""Role | with pipe."""\n')
+    _write_project_map(
+        paths,
+        "# Project Map\n\n| Module | Role | Spec / Delta deps |\n|--------|------|-------------------|\n",
+    )
+    _write_test_map(
+        paths,
+        "# Test Map\n\n| Source module | Tests |\n|---------------|-------|\n",
+    )
+    sync_impact_maps(paths)
+    content = (paths.root / "docs" / "change-impact" / "project-map.md").read_text(encoding="utf-8")
+    assert "Role \\| with pipe" in content
+
+
+def test_discover_test_mappings_in_subdirs(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    nested = paths.root / "tests" / "integration"
+    nested.mkdir(parents=True)
+    (nested / "test_nested.py").write_text(
+        "from hive_planner.config import RepoPaths\n",
+        encoding="utf-8",
+    )
+    mapping = discover_test_mappings(paths)
+    assert "tests/integration/test_nested.py" in mapping["src/hive_planner/config.py"]
