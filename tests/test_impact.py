@@ -226,6 +226,18 @@ def test_roadmap_complete_hooks_for_feature(tmp_path: Path) -> None:
     assert "workflow.tools" in packet.hook_ids
 
 
+def test_starter_kit_hooks_for_feature(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    _setup_feature_spec(paths, "starter-kit-v2")
+    src = paths.root / "src" / "hive_planner" / "bootstrap.py"
+    src.parent.mkdir(parents=True, exist_ok=True)
+    src.write_text("# bootstrap\n", encoding="utf-8")
+
+    packet = build_impact_packet(paths, "starter-kit-v2", [src])
+    assert "workflow.project_bootstrap" in packet.hook_ids
+    assert "repo.starter_files" in packet.hook_ids
+
+
 def _setup_call_graph_fixture(paths: RepoPaths) -> tuple[Path, Path]:
     pkg = paths.root / "src" / "hive_planner"
     pkg.mkdir(parents=True, exist_ok=True)

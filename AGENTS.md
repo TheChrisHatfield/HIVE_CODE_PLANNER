@@ -58,14 +58,21 @@ Primary truth drives the immediate task. Secondary governs behavior. Tertiary is
 
 ## Active feature
 
-**starter-kit-v2** — Stage 8: full bootstrap profile (`--profile full`, `--git-init`).
+**roadmap-complete-v3** — Stage 8 complete (v1.2.0). Extended roadmap: 20/20 artifacts.
+
+```powershell
+py -3.11 -m hive_planner roadmap-status
+py -3.11 -m hive_planner ci-check
+```
+
+Starter-kit v2 (Stage 8A):
 
 ```powershell
 py -3.11 -m hive_planner init --target D:\projects\my-app --profile full --git-init --name "My App"
-py -3.11 -m pytest tests/test_bootstrap.py -v
+py -3.11 -m pytest tests/test_bootstrap.py tests/test_security_validation.py -v
 ```
 
-Project bootstrap (Stage 7E / minimal profile):
+Project bootstrap minimal profile (Stage 7E):
 
 ```powershell
 py -3.11 -m hive_planner init --target D:\projects\my-app --name "My App"
@@ -171,6 +178,7 @@ Full thread export (reference only): `docs/HIVE_PLANNING_DEV.md`
 - Stage 6A adds full cartridge pack emit (research-summary, memory, specseed, source-map).
 - v1.0.0 — Stages 1–6 compiler roadmap complete; use `roadmap-status` to verify.
 - v1.1.0 — Stage 7 complete (CL/spec integration, memory v2, rule seeds, impact v3, project bootstrap); `roadmap-status` validates 18/18 features.
+- v1.2.0 — Stage 8 complete (starter-kit v2 full profile, path/feature validation hardening); `roadmap-status` validates 20/20 features.
 - `hive_planner init` must target a directory outside the Hive source tree (never a subdirectory of this repo).
 - Bootstrapped projects use plain `None` for active feature until the first real feature id is set.
 - Starter-kit v2 (`--profile full`) adds pyproject, src/tests layout, `.gitignore`, and GitHub CI stub; `--git-init` is optional.

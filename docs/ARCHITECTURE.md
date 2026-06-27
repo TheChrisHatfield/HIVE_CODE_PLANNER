@@ -14,7 +14,7 @@ Full planning archive: [`HIVE_PLANNING_DEV.md`](./HIVE_PLANNING_DEV.md)
 
 ## Status
 
-v1.1.0 — Stage 7 complete (18/18 roadmap artifacts). Stages 1–6 shipped at v1.0.0. Stage 7 adds CL/Spec Kit integration, memory v2 (`agents-apply` / `agents-ingest`), cartridge rule seeds (`--emit-rules-seeds`), change impact v3 (`--mode bugfix`, call graph), and project bootstrap (`hive_planner init`).
+v1.2.0 — Stage 8 complete (20/20 roadmap artifacts). v1.1.0 shipped Stage 7 (CL/spec integration, memory v2, rule seeds, impact v3, project bootstrap). v1.0.0 shipped Stages 1–6. Stage 8 adds starter-kit v2 (`--profile full`, `--git-init`) and path/feature validation hardening.
 
 Validate with:
 

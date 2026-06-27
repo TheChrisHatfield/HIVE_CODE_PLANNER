@@ -99,6 +99,8 @@ def _hook_ids_for_feature(feature: str) -> list[str]:
         hooks.extend(["context.cartridge", "context.cartridge_schema", "compiler.pipeline"])
     if feature.startswith("roadmap-complete"):
         hooks.extend(["workflow.tools", "workflow.blueprint_first", "change.validation"])
+    if feature.startswith("project-bootstrap") or feature.startswith("starter-kit"):
+        hooks.extend(["workflow.project_bootstrap", "repo.starter_files"])
     return hooks
 
 

@@ -3,11 +3,14 @@
 **Hook:** `workflow.tools`, `workflow.blueprint_first`
 
 Hive Code Planner compiler roadmap (Stages 1–6) is **complete** as of v1.0.0.  
-**Stage 7** (CL/spec integration, memory v2, rule seeds, impact v3, bootstrap) is **complete** as of v1.1.0.
+**Stage 7** (CL/spec integration, memory v2, rule seeds, impact v3, bootstrap) is **complete** as of v1.1.0.  
+**Stage 8** (starter-kit v2 full profile, security hardening) is **complete** as of v1.2.0.
 
 **Post-v1.0.0 bug audit:** 2026-06-21 — stage-by-stage audit complete; 103/103 pytest, ci-check 5/5.
 
 **Stage 7 closure:** 2026-06-26 — 18/18 roadmap artifacts, ci-check 5/5.
+
+**Stage 8 closure:** 2026-06-26 — 20/20 roadmap artifacts, 166 pytest, ci-check 5/5.
 
 | Stage | Feature | Status |
 |-------|---------|--------|
@@ -29,6 +32,8 @@ Hive Code Planner compiler roadmap (Stages 1–6) is **complete** as of v1.0.0.
 | 7D | change-impact-v3 | ✅ |
 | 7E | project-bootstrap-v1 | ✅ |
 | 7F | roadmap-complete-v2 | ✅ |
+| 8A | starter-kit-v2 | ✅ |
+| 8B | roadmap-complete-v3 | ✅ |
 
 Validate anytime:
 

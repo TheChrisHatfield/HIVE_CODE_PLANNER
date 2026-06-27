@@ -515,6 +515,7 @@ Use this file as the top-level legend for:
 
 - [project-bootstrap-guide.md](./project-bootstrap-guide.md)
 - [specs/project-bootstrap-v1/spec.md](./specs/project-bootstrap-v1/spec.md)
+- [specs/starter-kit-v2/spec.md](./specs/starter-kit-v2/spec.md)
 - [../src/hive_planner/bootstrap.py](../src/hive_planner/bootstrap.py)
 
 **UNLOCKS:**

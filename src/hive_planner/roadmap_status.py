@@ -23,6 +23,8 @@ ROADMAP_FEATURES: tuple[str, ...] = (
     "change-impact-v3",
     "project-bootstrap-v1",
     "roadmap-complete-v2",
+    "starter-kit-v2",
+    "roadmap-complete-v3",
 )
 
 
