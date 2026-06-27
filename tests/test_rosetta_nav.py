@@ -6,6 +6,7 @@ from hive_planner.config import RepoPaths
 from hive_planner.rosetta_nav import (
     ensure_handoff_rosetta_navigation,
     has_rosetta_navigation,
+    inject_after_header,
     inject_agents_rosetta_section,
     spec_navigation_block,
 )
@@ -18,6 +19,26 @@ def test_spec_navigation_block_includes_hook_map() -> None:
     assert "context.delta" in block
     assert "spec.flow" in block
     assert "hive-dev-v1.md" in block
+
+
+def test_inject_after_header_places_nav_before_first_section() -> None:
+    text = "\n".join(
+        [
+            "# Spec: hive-dev-v1",
+            "",
+            "**Hook:** `spec.flow`",
+            "**Delta:** [link](../../delta/20_micro/hive-dev-v1.md)",
+            "",
+            "## Requirements",
+            "",
+            "- GPU limit",
+            "",
+        ]
+    )
+    out = inject_after_header(text, spec_navigation_block("hive-dev-v1"))
+    req_idx = out.index("## Requirements")
+    nav_idx = out.index("Agent navigation")
+    assert nav_idx < req_idx
 
 
 def test_ensure_handoff_rosetta_navigation_patches_existing_spec(tmp_path: Path) -> None:

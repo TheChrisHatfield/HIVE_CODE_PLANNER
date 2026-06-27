@@ -106,10 +106,9 @@ def inject_after_header(text: str, block: str) -> str:
         if not stripped or stripped.startswith("<!--"):
             insert_at = idx + 1
             continue
-        if stripped.startswith("#"):
-            insert_at = idx + 1
-            continue
-        if stripped.startswith("**") and stripped.endswith("**"):
+        if stripped.startswith("## "):
+            break
+        if stripped.startswith("# "):
             insert_at = idx + 1
             continue
         if stripped.startswith("**"):
