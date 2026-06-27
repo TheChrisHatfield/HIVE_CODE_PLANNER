@@ -203,6 +203,36 @@ def test_console_python_pyw_branch(monkeypatch: pytest.MonkeyPatch) -> None:
     assert main_mod._console_python() == r"C:\Tools\py.exe"
 
 
+def test_console_visible_tracks_attachment_not_parent_console(monkeypatch: pytest.MonkeyPatch) -> None:
+    from hive_planner.launcher import console_win as cw
+
+    cw._console_attached = False
+    monkeypatch.setattr(cw, "console_available", lambda: True)
+
+    class FakeKernel:
+        @staticmethod
+        def GetConsoleWindow():
+            return 1  # parent console present (e.g. dev launch)
+
+        @staticmethod
+        def AllocConsole():
+            return 1
+
+        @staticmethod
+        def FreeConsole():
+            return 1
+
+    import ctypes
+
+    monkeypatch.setattr(ctypes, "windll", type("W", (), {"kernel32": FakeKernel})())
+    assert cw.is_console_visible() is False
+    assert cw.show_console() is True
+    assert cw.is_console_visible() is True
+    assert cw.hide_console() is True
+    assert cw.is_console_visible() is False
+    cw._console_attached = False
+
+
 def test_console_available_on_windows_only() -> None:
     import sys
 
