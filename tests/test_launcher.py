@@ -9,9 +9,11 @@ import pytest
 from hive_planner.launcher.config import LauncherConfig, load_config, normalize_project_path, save_config
 from hive_planner.launcher.service import (
     PythonInstallation,
+    _hidden_subprocess_kwargs,
     _python_command,
     _py_launcher_commands,
     _version_supported,
+    clear_python_probe_cache,
     discover_python_installations,
     format_python_scan_report,
     get_setup_status,
@@ -22,6 +24,7 @@ from hive_planner.launcher.service import (
     run_project_map_sync,
     summarize_project,
 )
+import subprocess
 
 
 def test_version_supported() -> None:
@@ -88,11 +91,72 @@ def test_probe_python_command_reads_version(monkeypatch: pytest.MonkeyPatch) -> 
             {"returncode": 0, "stdout": "3.11.4\nC:\\Python311\\python.exe\n", "stderr": ""},
         )(),
     )
-    inst = probe_python_command(["py", "-3.11"])
+    clear_python_probe_cache()
+    inst = probe_python_command(["py", "-3.11"], use_cache=False)
     assert inst is not None
     assert inst.version == "3.11.4"
     assert inst.supported is True
     assert inst.command == "py -3.11"
+
+
+def test_probe_python_command_caches_results(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = {"count": 0}
+
+    def fake_run(*args, **kwargs):
+        calls["count"] += 1
+        return type("R", (), {"returncode": 0, "stdout": "3.11.4\nC:\\Python311\\python.exe\n", "stderr": ""})()
+
+    monkeypatch.setattr("hive_planner.launcher.service.subprocess.run", fake_run)
+    clear_python_probe_cache()
+    first = probe_python_command(["py", "-3.11"])
+    second = probe_python_command(["py", "-3.11"])
+    assert first is not None
+    assert second == first
+    assert calls["count"] == 1
+
+
+def test_hidden_subprocess_kwargs_on_windows(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("hive_planner.launcher.service.sys.platform", "win32")
+    kwargs = _hidden_subprocess_kwargs()
+    assert kwargs["creationflags"] == subprocess.CREATE_NO_WINDOW
+    assert kwargs["startupinfo"].wShowWindow == subprocess.SW_HIDE
+
+
+def test_probe_python_uses_hidden_subprocess(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict = {}
+
+    def fake_run(*args, **kwargs):
+        captured.update(kwargs)
+        return type("R", (), {"returncode": 0, "stdout": "3.11.4\nC:\\Python311\\python.exe\n", "stderr": ""})()
+
+    monkeypatch.setattr("hive_planner.launcher.service.subprocess.run", fake_run)
+    monkeypatch.setattr("hive_planner.launcher.service.sys.platform", "win32")
+    clear_python_probe_cache()
+    inst = probe_python_command(["py", "-3.11"], use_cache=False)
+    assert inst is not None
+    assert captured.get("creationflags") == subprocess.CREATE_NO_WINDOW
+
+
+def test_discover_python_reports_progress(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[int, int, str]] = []
+
+    monkeypatch.setattr(
+        "hive_planner.launcher.service._collect_probe_candidates",
+        lambda: [["py", "-3.11"], [sys.executable]],
+    )
+    monkeypatch.setattr(
+        "hive_planner.launcher.service.probe_python_command",
+        lambda _cmd, use_cache=True: PythonInstallation(
+            command="py -3.11",
+            version="3.11.4",
+            executable=sys.executable,
+            supported=True,
+        ),
+    )
+    discover_python_installations(on_progress=lambda c, t, m: calls.append((c, t, m)))
+    assert calls[0][2] == "Collecting candidates"
+    assert calls[-1] == (2, 2, "Done")
+    assert any(msg == "py -3.11" for _, _, msg in calls)
 
 
 def test_python_scan_ignores_duplicate_clicks() -> None:

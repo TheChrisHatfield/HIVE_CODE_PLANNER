@@ -85,6 +85,7 @@ class HivePlannerApp:
     def _invalidate_bg_callbacks(self) -> None:
         self._bg_generation += 1
         self._python_scan_active = False
+        self._hide_python_scan_progress()
 
     def _show_onboarding(self) -> None:
         self._clear_container()
@@ -425,10 +426,91 @@ class HivePlannerApp:
             return
         self._python_scan_active = True
         self._python_scan_target = target_var
-        self._run_bg(discover_python_installations, self._python_scan_done)
+        self._show_python_scan_progress()
+
+        def work():
+            def on_progress(current: int, total: int, message: str) -> None:
+                self.root.after(
+                    0,
+                    lambda c=current, t=total, m=message: self._update_python_scan_progress(c, t, m),
+                )
+
+            return discover_python_installations(on_progress=on_progress)
+
+        self._run_bg(work, self._python_scan_done)
+
+    def _show_python_scan_progress(self) -> None:
+        self._hide_python_scan_progress()
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Scanning for Python")
+        dialog.configure(bg=COLORS["bg"])
+        dialog.transient(self.root)
+        dialog.grab_set()
+        dialog.resizable(False, False)
+        dialog.geometry("440x130")
+        self._python_scan_dialog = dialog
+
+        tk.Label(
+            dialog,
+            text="Scanning for Python installations",
+            bg=COLORS["bg"],
+            fg=COLORS["fg"],
+            font=FONT_BOLD,
+        ).pack(anchor="w", padx=16, pady=(16, 4))
+
+        self._python_scan_status = tk.StringVar(value="Starting scan…")
+        tk.Label(
+            dialog,
+            textvariable=self._python_scan_status,
+            bg=COLORS["bg"],
+            fg=COLORS["muted"],
+            font=FONT,
+            wraplength=400,
+            justify="left",
+        ).pack(anchor="w", padx=16, pady=(0, 8))
+
+        self._python_scan_bar = ttk.Progressbar(dialog, mode="determinate", maximum=100, length=400)
+        self._python_scan_bar.pack(padx=16, pady=(0, 16))
+        self._python_scan_bar["value"] = 0
+
+    def _update_python_scan_progress(self, current: int, total: int, message: str) -> None:
+        dialog = getattr(self, "_python_scan_dialog", None)
+        if dialog is None:
+            return
+        try:
+            if not dialog.winfo_exists():
+                return
+        except tk.TclError:
+            return
+
+        if message == "Collecting candidates":
+            self._python_scan_status.set("Collecting Python locations…")
+            self._python_scan_bar["value"] = 5
+            return
+        if message == "Done":
+            self._python_scan_status.set("Finishing scan…")
+            self._python_scan_bar["value"] = 100
+            return
+
+        safe_total = max(total, 1)
+        pct = min(99, int(((current + 1) / safe_total) * 100))
+        self._python_scan_bar["value"] = pct
+        self._python_scan_status.set(f"Checking {message} ({current + 1}/{safe_total})…")
+
+    def _hide_python_scan_progress(self) -> None:
+        dialog = getattr(self, "_python_scan_dialog", None)
+        if dialog is not None:
+            try:
+                if dialog.winfo_exists():
+                    dialog.grab_release()
+                    dialog.destroy()
+            except tk.TclError:
+                pass
+        self._python_scan_dialog = None
 
     def _python_scan_done(self, result) -> None:
         self._python_scan_active = False
+        self._hide_python_scan_progress()
         if self._is_bg_error(result):
             messagebox.showerror("Python scan failed", self._result_detail(result))
             return

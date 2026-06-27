@@ -6,6 +6,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -91,6 +92,30 @@ def _python_command(config: LauncherConfig) -> list[str]:
     return [part.strip('"').strip("'") for part in parts]
 
 
+def _hidden_subprocess_kwargs() -> dict:
+    """Prevent console/PowerShell windows from flashing on Windows."""
+    if sys.platform != "win32":
+        return {}
+    startupinfo = subprocess.STARTUPINFO()
+    startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    startupinfo.wShowWindow = subprocess.SW_HIDE
+    return {
+        "startupinfo": startupinfo,
+        "creationflags": subprocess.CREATE_NO_WINDOW,
+    }
+
+
+def _run_hidden(args: list[str], **kwargs):
+    return subprocess.run(args, **_hidden_subprocess_kwargs(), **kwargs)
+
+
+_probe_cache: dict[str, PythonInstallation | None] = {}
+
+
+def clear_python_probe_cache() -> None:
+    _probe_cache.clear()
+
+
 def _command_label(command: list[str]) -> str:
     if len(command) == 1:
         return command[0]
@@ -109,9 +134,12 @@ def _version_supported(version: str) -> bool:
     return (major, minor) >= (3, 10)
 
 
-def probe_python_command(command: list[str]) -> PythonInstallation | None:
+def probe_python_command(command: list[str], *, use_cache: bool = True) -> PythonInstallation | None:
+    cache_key = _command_label(command).lower()
+    if use_cache and cache_key in _probe_cache:
+        return _probe_cache[cache_key]
     try:
-        proc = subprocess.run(
+        proc = _run_hidden(
             command
             + [
                 "-c",
@@ -123,29 +151,36 @@ def probe_python_command(command: list[str]) -> PythonInstallation | None:
             check=False,
         )
     except (OSError, subprocess.TimeoutExpired):
-        return None
-    if proc.returncode != 0:
-        return None
-    lines = (proc.stdout or "").strip().splitlines()
-    if len(lines) < 2:
-        return None
-    version = lines[0].strip()
-    executable = lines[1].strip()
-    if not version or not executable:
-        return None
-    return PythonInstallation(
-        command=_command_label(command),
-        version=version,
-        executable=executable,
-        supported=_version_supported(version),
-    )
+        result = None
+    else:
+        if proc.returncode != 0:
+            result = None
+        else:
+            lines = (proc.stdout or "").strip().splitlines()
+            if len(lines) < 2:
+                result = None
+            else:
+                version = lines[0].strip()
+                executable = lines[1].strip()
+                if not version or not executable:
+                    result = None
+                else:
+                    result = PythonInstallation(
+                        command=_command_label(command),
+                        version=version,
+                        executable=executable,
+                        supported=_version_supported(version),
+                    )
+    if use_cache:
+        _probe_cache[cache_key] = result
+    return result
 
 
 def _py_launcher_commands() -> list[list[str]]:
     if sys.platform != "win32" or not shutil.which("py"):
         return []
     try:
-        proc = subprocess.run(["py", "-0p"], capture_output=True, text=True, timeout=15, check=False)
+        proc = _run_hidden(["py", "-0p"], capture_output=True, text=True, timeout=15, check=False)
     except (OSError, subprocess.TimeoutExpired):
         return []
     commands: list[list[str]] = []
@@ -192,31 +227,56 @@ def _well_known_python_commands() -> list[list[str]]:
     return commands
 
 
-def discover_python_installations() -> list[PythonInstallation]:
+def _dedupe_probe_commands(commands: list[list[str]]) -> list[list[str]]:
+    seen: set[str] = set()
+    unique: list[list[str]] = []
+    for command in commands:
+        key = _command_label(command).lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(command)
+    return unique
+
+
+def _collect_probe_candidates() -> list[list[str]]:
+    commands: list[list[str]] = [[sys.executable]]
+    commands.extend(_py_launcher_commands())
+    py_path = shutil.which("py")
+    if py_path:
+        commands.append([py_path])
+    commands.extend(_well_known_python_commands())
+    return _dedupe_probe_commands(commands)
+
+
+def discover_python_installations(
+    on_progress: Callable[[int, int, str], None] | None = None,
+) -> list[PythonInstallation]:
+    if on_progress:
+        on_progress(0, 1, "Collecting candidates")
+    clear_python_probe_cache()
+    candidates = _collect_probe_candidates()
+    total = len(candidates) or 1
     seen: set[str] = set()
     found: list[PythonInstallation] = []
 
-    def add(command: list[str]) -> None:
-        inst = probe_python_command(command)
+    for index, command in enumerate(candidates):
+        if on_progress:
+            on_progress(index, total, _command_label(command))
+        inst = probe_python_command(command, use_cache=True)
         if not inst:
-            return
+            continue
         try:
             key = str(Path(inst.executable).resolve()).lower()
         except OSError:
             key = inst.executable.lower()
         if key in seen:
-            return
+            continue
         seen.add(key)
         found.append(inst)
 
-    add([sys.executable])
-    for command in _py_launcher_commands():
-        add(command)
-    py_path = shutil.which("py")
-    if py_path:
-        add([py_path])
-    for command in _well_known_python_commands():
-        add(command)
+    if on_progress:
+        on_progress(total, total, "Done")
 
     def sort_key(item: PythonInstallation) -> tuple:
         parts = item.version.split(".")
