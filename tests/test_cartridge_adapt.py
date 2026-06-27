@@ -49,6 +49,14 @@ def test_infer_feature_id_from_dev_filename() -> None:
     assert feature == "hive-dev-v1"
 
 
+def test_infer_feature_id_prefers_shortest_dev_candidate() -> None:
+    feature = infer_feature_id(
+        requested="example-feature",
+        imported_rels=["MLP_DECIMACON_DEV_1.md", "HIVE_DEV_V1.md"],
+    )
+    assert feature == "hive-dev-v1"
+
+
 def test_adapt_custom_import_names_to_standard_layers(tmp_path: Path) -> None:
     project = _unified_project(tmp_path / "proj")
     paths = RepoPaths(root=project)

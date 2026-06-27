@@ -95,16 +95,21 @@ def infer_feature_id(
     if not root_markdown:
         root_markdown = [Path(rel) for rel in imported_rels if rel.lower().endswith(".md")]
 
-    for path in root_markdown:
-        hint = _filename_layer_hint(path.name)
-        if hint in {"micro", "specseed"}:
-            return slugify_feature_id(path.stem)
+    micro_candidates = [
+        path
+        for path in root_markdown
+        if _filename_layer_hint(path.name) in {"micro", "specseed"}
+    ]
+    if micro_candidates:
+        micro_candidates.sort(key=lambda path: (len(path.stem), path.stem.lower()))
+        return slugify_feature_id(micro_candidates[0].stem)
 
     if len(root_markdown) == 1:
         return slugify_feature_id(root_markdown[0].stem)
 
     if root_markdown:
-        return slugify_feature_id(root_markdown[0].stem)
+        ordered = sorted(root_markdown, key=lambda path: (len(path.stem), path.stem.lower()))
+        return slugify_feature_id(ordered[0].stem)
 
     raise ValueError("Could not infer feature id — enter a Feature id or add features[] to manifest.json.")
 
