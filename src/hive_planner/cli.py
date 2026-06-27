@@ -304,6 +304,10 @@ def main(argv: list[str] | None = None) -> int:
             if promote.candidates_path:
                 print(f"Wrote CL candidates: {promote.candidates_path}")
             print(f"Promotion spec-drift ok: {promote.ok}")
+            if not promote.ok:
+                from hive_planner.cartridge_promote import HANDOFF_INCOMPLETE_MSG
+
+                print(HANDOFF_INCOMPLETE_MSG, file=sys.stderr)
             print(json.dumps(payload, indent=2))
             from hive_planner.cartridge_promote import promote_cli_exit_code
 
@@ -394,6 +398,10 @@ def main(argv: list[str] | None = None) -> int:
             if promote.candidates_path:
                 print(f"Wrote CL candidates: {promote.candidates_path}")
             print(f"Promotion spec-drift ok: {promote.ok}")
+            if not promote.ok:
+                from hive_planner.cartridge_promote import HANDOFF_INCOMPLETE_MSG
+
+                print(HANDOFF_INCOMPLETE_MSG, file=sys.stderr)
         print(json.dumps(payload, indent=2))
         from hive_planner.cartridge_promote import promote_cli_exit_code
 

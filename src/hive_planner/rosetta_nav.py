@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 ROSETTA_NAV_HEADING = "## Agent navigation (Rosetta Stone)"
 ROSETTA_NAV_MARKER = "<!-- ROSETTA-NAV -->"
+AGENTS_ROSETTA_HEADING = "## Planning Rosetta Stone"
 
 
 def has_rosetta_navigation(text: str) -> bool:
@@ -94,6 +96,8 @@ Before planning or coding, load the hook map into normal context:
 Follow linked hooks (`context.delta`, `spec.flow`, `change.impact`, etc.) before diving into spec or Delta files.
 """
 
+DEPLOY_HANDOFF_NAV_LAYERS = frozenset({"holistic", "macro", "micro"})
+
 
 def inject_after_header(text: str, block: str) -> str:
     """Insert navigation block after title/hook lines and before first ## section."""
@@ -168,10 +172,34 @@ def ensure_handoff_rosetta_navigation(
     return patched
 
 
+def agents_has_rosetta_section(text: str) -> bool:
+    return re.search(rf"^{re.escape(AGENTS_ROSETTA_HEADING)}", text, re.MULTILINE) is not None
+
+
 def agents_missing_rosetta_section(text: str) -> bool:
-    if "planning.rosetta" in text and "Planning Rosetta Stone" in text:
-        return False
-    return True
+    return not agents_has_rosetta_section(text)
+
+
+def missing_handoff_rosetta_navigation(paths, feature: str) -> list[str]:
+    """Return repo-relative labels for handoff files missing Rosetta navigation."""
+    from hive_planner.config import RepoPaths
+
+    root: RepoPaths = paths
+    missing: list[str] = []
+    checks = [
+        f"docs/specs/{feature}/spec.md",
+        f"docs/specs/{feature}/plan.md",
+        f"docs/specs/{feature}/tasks.md",
+        f"docs/delta/20_micro/{feature}.md",
+    ]
+    for rel in checks:
+        path = root.root / rel
+        if not path.is_file():
+            continue
+        text = path.read_text(encoding="utf-8", errors="replace")
+        if not has_rosetta_navigation(text):
+            missing.append(f"{rel} missing Rosetta navigation")
+    return missing
 
 
 def inject_agents_rosetta_section(text: str) -> str:

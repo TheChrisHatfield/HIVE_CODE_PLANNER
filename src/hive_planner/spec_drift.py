@@ -217,6 +217,8 @@ def classify_bullet(text: str) -> ClassifiedBullet:
 
 
 def check_spec_handoff(paths: RepoPaths, feature: str | None = None) -> SpecHandoffReport:
+    from hive_planner.rosetta_nav import agents_missing_rosetta_section, missing_handoff_rosetta_navigation
+
     active = feature or parse_active_feature(paths)
     if not active:
         return SpecHandoffReport(feature=None, ok=False, missing=["active feature in AGENTS.md"])
@@ -231,7 +233,14 @@ def check_spec_handoff(paths: RepoPaths, feature: str | None = None) -> SpecHand
         f"docs/specs/{active}/tasks.md": paths.root / "docs" / "specs" / active / "tasks.md",
         f"docs/delta/20_micro/{active}.md": paths.root / "docs" / "delta" / "20_micro" / f"{active}.md",
     }
+    agents_path = paths.root / "AGENTS.md"
     missing = [label for label, path in required.items() if not path.exists()]
+    if not missing:
+        missing.extend(missing_handoff_rosetta_navigation(paths, active))
+        if agents_path.is_file():
+            agents_text = agents_path.read_text(encoding="utf-8", errors="replace")
+            if agents_missing_rosetta_section(agents_text):
+                missing.append("AGENTS.md missing Planning Rosetta Stone section")
     return SpecHandoffReport(feature=active, ok=not missing, missing=missing)
 
 

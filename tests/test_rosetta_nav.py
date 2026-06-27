@@ -105,3 +105,13 @@ def test_inject_agents_rosetta_section_idempotent() -> None:
     base = inject_agents_rosetta_section("# AGENTS\n\n## Active feature\n")
     again = inject_agents_rosetta_section(base)
     assert base == again
+
+
+def test_agents_missing_rosetta_requires_section_heading() -> None:
+    from hive_planner.rosetta_nav import agents_has_rosetta_section, agents_missing_rosetta_section
+
+    bullet_only = "# AGENTS\n\n- hook `planning.rosetta`\n"
+    assert agents_missing_rosetta_section(bullet_only) is True
+    assert agents_has_rosetta_section(bullet_only) is False
+    with_heading = "# AGENTS\n\n## Planning Rosetta Stone\n\n- hook `planning.rosetta`\n"
+    assert agents_missing_rosetta_section(with_heading) is False

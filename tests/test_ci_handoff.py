@@ -13,14 +13,34 @@ def _write_agents(paths: RepoPaths, body: str) -> None:
 
 
 def _write_handoff_artifacts(paths: RepoPaths, feature: str) -> None:
+    from hive_planner.rosetta_nav import (
+        delta_micro_navigation_block,
+        inject_after_header,
+        plan_navigation_block,
+        spec_navigation_block,
+        tasks_navigation_block,
+    )
+
     spec_dir = paths.root / "docs" / "specs" / feature
     spec_dir.mkdir(parents=True, exist_ok=True)
-    (spec_dir / "spec.md").write_text("# Spec\n", encoding="utf-8")
-    (spec_dir / "plan.md").write_text("# Plan\n", encoding="utf-8")
-    (spec_dir / "tasks.md").write_text("# Tasks\n", encoding="utf-8")
+    (spec_dir / "spec.md").write_text(
+        inject_after_header("# Spec\n\n", spec_navigation_block(feature)),
+        encoding="utf-8",
+    )
+    (spec_dir / "plan.md").write_text(
+        inject_after_header("# Plan\n\n", plan_navigation_block(feature)),
+        encoding="utf-8",
+    )
+    (spec_dir / "tasks.md").write_text(
+        inject_after_header("# Tasks\n\n", tasks_navigation_block(feature)),
+        encoding="utf-8",
+    )
     micro_dir = paths.root / "docs" / "delta" / "20_micro"
     micro_dir.mkdir(parents=True, exist_ok=True)
-    (micro_dir / f"{feature}.md").write_text("# Micro\n", encoding="utf-8")
+    (micro_dir / f"{feature}.md").write_text(
+        inject_after_header("# Micro\n\n", delta_micro_navigation_block(feature)),
+        encoding="utf-8",
+    )
 
 
 def _minimal_agents(feature: str) -> str:

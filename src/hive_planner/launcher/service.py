@@ -831,7 +831,8 @@ def run_project_ci_check(project_root: Path) -> dict:
 
 def run_deploy_agent_handoff(project_root: Path, *, hive_planner_root: Path, force: bool = False) -> dict:
     from hive_planner.bootstrap import BootstrapError, deploy_agent_handoff_scaffold
-    from hive_planner.spec_drift import repair_agents_active_feature
+    from hive_planner.rosetta_nav import DEPLOY_HANDOFF_NAV_LAYERS, ensure_handoff_rosetta_navigation
+    from hive_planner.spec_drift import BOOTSTRAP_DEFAULT_FEATURE, repair_agents_active_feature, repair_agents_rosetta_section
 
     target = project_root.resolve()
     summary = summarize_project(target)
@@ -842,7 +843,14 @@ def run_deploy_agent_handoff(project_root: Path, *, hive_planner_root: Path, for
         written, warnings = deploy_agent_handoff_scaffold(paths, target, force=force)
     except BootstrapError as exc:
         return {"ok": False, "error": str(exc)}
-    repair = repair_agents_active_feature(RepoPaths(root=target))
+    target_paths = RepoPaths(root=target)
+    repair = repair_agents_active_feature(target_paths)
+    rosetta_repair = repair_agents_rosetta_section(target_paths)
+    patched = ensure_handoff_rosetta_navigation(
+        target_paths,
+        BOOTSTRAP_DEFAULT_FEATURE,
+        promoted_layers=set(DEPLOY_HANDOFF_NAV_LAYERS),
+    )
     payload = {
         "ok": True,
         "files_written": written,
@@ -851,6 +859,16 @@ def run_deploy_agent_handoff(project_root: Path, *, hive_planner_root: Path, for
     }
     if repair.repaired:
         payload["repair"] = {"feature": repair.feature, "detail": repair.detail}
+    rosetta_details: list[str] = []
+    if rosetta_repair.repaired:
+        rosetta_details.append(rosetta_repair.detail)
+    if patched:
+        rosetta_details.append(f"patched navigation in {len(patched)} handoff file(s)")
+    if rosetta_details or patched:
+        payload["rosetta_repair"] = {
+            "detail": "; ".join(rosetta_details) if rosetta_details else "navigation updated",
+            "patched": patched,
+        }
     return payload
 
 

@@ -9,6 +9,59 @@ import sys
 import pytest
 
 from hive_planner.config import RepoPaths
+from hive_planner.rosetta_nav import (
+    delta_micro_navigation_block,
+    inject_after_header,
+    plan_navigation_block,
+    spec_navigation_block,
+    tasks_navigation_block,
+)
+
+
+def _write_handoff_bundle(project: Path, feature: str) -> None:
+    spec_dir = project / "docs" / "specs" / feature
+    spec_dir.mkdir(parents=True, exist_ok=True)
+    (spec_dir / "spec.md").write_text(
+        inject_after_header("# Spec\n\n", spec_navigation_block(feature)),
+        encoding="utf-8",
+    )
+    (spec_dir / "plan.md").write_text(
+        inject_after_header("# Plan\n\n", plan_navigation_block(feature)),
+        encoding="utf-8",
+    )
+    (spec_dir / "tasks.md").write_text(
+        inject_after_header("# Tasks\n\n", tasks_navigation_block(feature)),
+        encoding="utf-8",
+    )
+    micro = project / "docs" / "delta" / "20_micro"
+    micro.mkdir(parents=True, exist_ok=True)
+    (micro / f"{feature}.md").write_text(
+        inject_after_header("# Micro\n\n", delta_micro_navigation_block(feature)),
+        encoding="utf-8",
+    )
+
+
+def _legacy_agents_with_rosetta(active_line: str) -> str:
+    return "\n".join(
+        [
+            "# AGENTS",
+            "",
+            "## Planning Rosetta Stone",
+            "",
+            "- hook `planning.rosetta`",
+            "",
+            "## Active feature",
+            "",
+            active_line,
+            "",
+            "## Durable Workspace Facts",
+            "",
+            "- ok",
+            "",
+        ]
+    )
+
+
 from hive_planner.launcher.config import (
     LauncherConfig,
     clear_project_profile_cache,
@@ -332,18 +385,11 @@ def test_prepare_linked_project_root_repairs_legacy_agents(tmp_path: Path) -> No
     project.mkdir()
     (project / "START_HERE.md").write_text("# start\n", encoding="utf-8")
     (project / "AGENTS.md").write_text(
-        "# AGENTS\n\n## Active feature\n\nNone — pending.\n\n## Durable Workspace Facts\n\n- ok\n",
+        _legacy_agents_with_rosetta("None — pending."),
         encoding="utf-8",
     )
     feature = "example-feature"
-    spec_dir = project / "docs" / "specs" / feature
-    spec_dir.mkdir(parents=True)
-    (spec_dir / "spec.md").write_text("# Spec\n", encoding="utf-8")
-    (spec_dir / "plan.md").write_text("# Plan\n", encoding="utf-8")
-    (spec_dir / "tasks.md").write_text("# Tasks\n", encoding="utf-8")
-    micro = project / "docs" / "delta" / "20_micro"
-    micro.mkdir(parents=True)
-    (micro / f"{feature}.md").write_text("# Micro\n", encoding="utf-8")
+    _write_handoff_bundle(project, feature)
 
     root, repair = prepare_linked_project_root(project)
     assert root == project.resolve()
@@ -364,18 +410,11 @@ def test_summarize_linked_project_auto_repairs_workspace_link(tmp_path: Path) ->
     (profile / "START_HERE.md").write_text("# profile\n", encoding="utf-8")
     (profile / "pyproject.toml").write_text("[project]\nname = 'demo'\n", encoding="utf-8")
     (profile / "AGENTS.md").write_text(
-        "# AGENTS\n\n## Active feature\n\nNone — pending.\n\n## Durable Workspace Facts\n\n- ok\n",
+        _legacy_agents_with_rosetta("None — pending."),
         encoding="utf-8",
     )
     feature = "example-feature"
-    spec_dir = profile / "docs" / "specs" / feature
-    spec_dir.mkdir(parents=True)
-    (spec_dir / "spec.md").write_text("# Spec\n", encoding="utf-8")
-    (spec_dir / "plan.md").write_text("# Plan\n", encoding="utf-8")
-    (spec_dir / "tasks.md").write_text("# Tasks\n", encoding="utf-8")
-    micro = profile / "docs" / "delta" / "20_micro"
-    micro.mkdir(parents=True)
-    (micro / f"{feature}.md").write_text("# Micro\n", encoding="utf-8")
+    _write_handoff_bundle(profile, feature)
     workspace_file = parent / "hive-code.code-workspace"
     workspace_file.write_text(json.dumps({"folders": [{"path": "."}]}), encoding="utf-8")
 
@@ -666,14 +705,7 @@ def test_run_project_ci_check_repairs_legacy_active_feature(tmp_path: Path) -> N
         ),
         encoding="utf-8",
     )
-    spec_dir = project / "docs" / "specs" / feature
-    spec_dir.mkdir(parents=True)
-    (spec_dir / "spec.md").write_text("# Spec\n", encoding="utf-8")
-    (spec_dir / "plan.md").write_text("# Plan\n", encoding="utf-8")
-    (spec_dir / "tasks.md").write_text("# Tasks\n", encoding="utf-8")
-    micro = project / "docs" / "delta" / "20_micro"
-    micro.mkdir(parents=True)
-    (micro / f"{feature}.md").write_text("# Micro\n", encoding="utf-8")
+    _write_handoff_bundle(project, feature)
 
     result = run_project_ci_check(project)
     assert result.get("repair", {}).get("feature") == feature

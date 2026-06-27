@@ -48,14 +48,34 @@ def _minimal_agents(feature: str = "feature-x") -> str:
 
 
 def _write_full_handoff(paths: RepoPaths, feature: str, spec_body: str = "# Spec\n") -> None:
+    from hive_planner.rosetta_nav import (
+        delta_micro_navigation_block,
+        inject_after_header,
+        plan_navigation_block,
+        spec_navigation_block,
+        tasks_navigation_block,
+    )
+
     spec_dir = paths.root / "docs" / "specs" / feature
     spec_dir.mkdir(parents=True, exist_ok=True)
-    (spec_dir / "spec.md").write_text(spec_body, encoding="utf-8")
-    (spec_dir / "plan.md").write_text("# Plan\n", encoding="utf-8")
-    (spec_dir / "tasks.md").write_text("# Tasks\n", encoding="utf-8")
+    (spec_dir / "spec.md").write_text(
+        inject_after_header(spec_body, spec_navigation_block(feature)),
+        encoding="utf-8",
+    )
+    (spec_dir / "plan.md").write_text(
+        inject_after_header(f"# Plan\n\n", plan_navigation_block(feature)),
+        encoding="utf-8",
+    )
+    (spec_dir / "tasks.md").write_text(
+        inject_after_header(f"# Tasks\n\n", tasks_navigation_block(feature)),
+        encoding="utf-8",
+    )
     micro = paths.root / "docs" / "delta" / "20_micro"
     micro.mkdir(parents=True, exist_ok=True)
-    (micro / f"{feature}.md").write_text("# Micro\n", encoding="utf-8")
+    (micro / f"{feature}.md").write_text(
+        inject_after_header(f"# Micro\n\n", delta_micro_navigation_block(feature)),
+        encoding="utf-8",
+    )
 
 
 def test_classify_operational_bullet() -> None:
@@ -113,6 +133,24 @@ def test_check_spec_handoff_requires_full_trio(tmp_path: Path) -> None:
     _write_full_handoff(paths, "my-feature")
     report = check_spec_handoff(paths)
     assert report.ok
+
+
+def test_check_spec_handoff_requires_rosetta_navigation(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    (paths.root / "AGENTS.md").write_text(_minimal_agents("my-feature"), encoding="utf-8")
+    spec_dir = paths.root / "docs" / "specs" / "my-feature"
+    spec_dir.mkdir(parents=True)
+    (spec_dir / "spec.md").write_text("# Spec\n", encoding="utf-8")
+    (spec_dir / "plan.md").write_text("# Plan\n", encoding="utf-8")
+    (spec_dir / "tasks.md").write_text("# Tasks\n", encoding="utf-8")
+    micro = paths.root / "docs" / "delta" / "20_micro"
+    micro.mkdir(parents=True)
+    (micro / "my-feature.md").write_text("# Micro\n", encoding="utf-8")
+
+    report = check_spec_handoff(paths)
+
+    assert not report.ok
+    assert any("Rosetta navigation" in item for item in report.missing)
 
 
 def test_spec_drift_flags_behavioral_not_in_spec(tmp_path: Path) -> None:

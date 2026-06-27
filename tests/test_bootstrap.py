@@ -43,7 +43,26 @@ def test_init_creates_detectable_repo_root(tmp_path: Path) -> None:
     assert meta["spec_kit_enabled"] is True
     assert meta["continual_learning_enabled"] is True
     assert (target / "docs" / "specs" / "example-feature" / "spec.md").exists()
+    spec_text = (target / "docs" / "specs" / "example-feature" / "spec.md").read_text(encoding="utf-8")
+    assert "Agent navigation (Rosetta Stone)" in spec_text
     assert (target / "docs" / "proposals" / "candidates-template.md").exists()
+
+
+def test_deploy_agent_handoff_scaffold_includes_rosetta_navigation(tmp_path: Path) -> None:
+    from hive_planner.bootstrap import deploy_agent_handoff_scaffold
+
+    source = _hive_source(tmp_path)
+    (source.root / "docs").mkdir(exist_ok=True)
+    (source.root / "docs" / "cl-spec-integration.md").write_text("# CL\n", encoding="utf-8")
+    target = tmp_path / "existing-project"
+    target.mkdir()
+    (target / "START_HERE.md").write_text("# Start\n", encoding="utf-8")
+
+    deploy_agent_handoff_scaffold(source, target, force=True)
+
+    spec_text = (target / "docs" / "specs" / "example-feature" / "spec.md").read_text(encoding="utf-8")
+    assert "planning.rosetta" in spec_text
+    assert "Agent navigation (Rosetta Stone)" in spec_text
 
 
 def test_init_agent_handoff_off_skips_unified_artifacts(tmp_path: Path) -> None:

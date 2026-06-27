@@ -31,6 +31,9 @@ from hive_planner.rosetta_nav import (
 )
 
 PROMOTED_BANNER = "<!-- PROMOTED: from cartridge — review before handoff -->"
+HANDOFF_INCOMPLETE_MSG = (
+    "Handoff incomplete — files saved but promotion/spec-drift needs review (see promote output above)."
+)
 
 
 @dataclass

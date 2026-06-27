@@ -259,11 +259,15 @@ One file per feature: `docs/delta/20_micro/<feature>.md`
 
 
 def _micro_example() -> str:
+    from hive_planner.rosetta_nav import delta_micro_navigation_block
+
     return f"""{BOOTSTRAP_BANNER}
 
 # Feature Micro Brief: example-feature
 
 **Hook:** `spec.flow`
+
+{delta_micro_navigation_block("example-feature")}
 
 ## Feature Name
 
@@ -284,6 +288,8 @@ Example feature — replace with your first real feature.
 
 
 def _example_spec() -> str:
+    from hive_planner.rosetta_nav import spec_navigation_block
+
     return f"""{BOOTSTRAP_BANNER}
 
 # Spec: example-feature
@@ -291,6 +297,8 @@ def _example_spec() -> str:
 **Hook:** `spec.flow`  
 **Status:** draft  
 **Delta:** [example-feature.md](../../delta/20_micro/example-feature.md)
+
+{spec_navigation_block("example-feature")}
 
 ## What
 
@@ -309,12 +317,16 @@ Production implementation until spec is reviewed.
 
 
 def _example_plan() -> str:
+    from hive_planner.rosetta_nav import plan_navigation_block
+
     return f"""{BOOTSTRAP_BANNER}
 
 # Plan: example-feature
 
 **Hook:** `spec.flow`  
 **Spec:** [spec.md](./spec.md)
+
+{plan_navigation_block("example-feature")}
 
 ## Approach
 
@@ -323,9 +335,13 @@ Describe technical approach after spec review.
 
 
 def _example_tasks() -> str:
+    from hive_planner.rosetta_nav import tasks_navigation_block
+
     return f"""{BOOTSTRAP_BANNER}
 
 # Tasks: example-feature
+
+{tasks_navigation_block("example-feature")}
 
 ## Task 1 — Replace scaffold
 

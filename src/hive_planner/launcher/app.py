@@ -1631,6 +1631,11 @@ class HivePlannerApp:
         repair = result.get("repair")
         if repair:
             self._append_log(self.home_log, f"Repaired AGENTS.md — {repair.get('detail', 'updated')}.")
+        rosetta = result.get("rosetta_repair")
+        if rosetta:
+            self._append_log(self.home_log, f"  Rosetta navigation: {rosetta.get('detail')}")
+            for rel in rosetta.get("patched") or []:
+                self._append_log(self.home_log, f"    patched: {rel}")
         for warning in result.get("warnings", []):
             self._append_log(self.home_log, f"Warning: {warning}")
         self._show_dashboard()
