@@ -54,20 +54,42 @@ def test_open_in_cursor_errors_when_cursor_missing(tmp_path: Path, monkeypatch: 
     assert "Cursor not found" in result["error"]
 
 
+def test_load_config_prunes_missing_recent_projects(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    alive = tmp_path / "alive"
+    alive.mkdir()
+    gone = tmp_path / "gone"
+    cfg_dir = tmp_path / "cfg"
+    monkeypatch.setattr("hive_planner.launcher.config.default_config_dir", lambda: cfg_dir)
+    save_config(
+        LauncherConfig(
+            active_project=str(gone),
+            recent_projects=[str(alive), str(gone)],
+            project_profiles={str(alive): "minimal", str(gone): "full"},
+        )
+    )
+    loaded = load_config()
+    assert loaded.recent_projects == [str(alive.resolve())]
+    assert loaded.active_project == ""
+    assert str(gone.resolve()) not in loaded.project_profiles
+    assert loaded.project_profiles[str(alive.resolve())] == "minimal"
+
+
 def test_config_roundtrip(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     cfg_dir = tmp_path / "appdata"
     monkeypatch.setattr("hive_planner.launcher.config.default_config_dir", lambda: cfg_dir)
+    proj = tmp_path / "proj-a"
+    proj.mkdir()
     original = LauncherConfig(
         onboarding_complete=True,
         hive_planner_root=str(tmp_path),
         python_executable="py -3.11",
-        recent_projects=[str(tmp_path / "proj-a")],
+        recent_projects=[str(proj)],
     )
     save_config(original)
     loaded = load_config()
     assert loaded.onboarding_complete is True
     assert loaded.hive_planner_root == str(tmp_path)
-    assert loaded.recent_projects == [str(tmp_path / "proj-a")]
+    assert loaded.recent_projects == [str(proj.resolve())]
 
 
 def test_add_recent_project_dedupes_and_stores_profile(tmp_path: Path) -> None:

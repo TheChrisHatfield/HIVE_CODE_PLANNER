@@ -24,6 +24,36 @@ def normalize_project_path(path: str | Path) -> str:
     return str(Path(raw).resolve())
 
 
+def prune_stale_projects(config: LauncherConfig) -> bool:
+    """Remove missing directories from recents and clear a stale active project."""
+    changed = False
+    valid_recent: list[str] = []
+    seen: set[str] = set()
+    for entry in config.recent_projects:
+        if not entry or entry in seen:
+            if entry:
+                changed = True
+            continue
+        if Path(entry).is_dir():
+            valid_recent.append(entry)
+            seen.add(entry)
+        else:
+            changed = True
+    if valid_recent != config.recent_projects:
+        config.recent_projects = valid_recent
+        changed = True
+
+    if config.active_project and not Path(config.active_project).is_dir():
+        config.active_project = ""
+        changed = True
+
+    pruned_profiles = {k: v for k, v in config.project_profiles.items() if k in config.recent_projects}
+    if pruned_profiles != config.project_profiles:
+        config.project_profiles = pruned_profiles
+        changed = True
+    return changed
+
+
 @dataclass
 class LauncherConfig:
     onboarding_complete: bool = False
@@ -90,7 +120,7 @@ def load_config() -> LauncherConfig:
         for k, v in profiles_raw.items()
         if str(v) in ("minimal", "full") and str(k).strip()
     }
-    return LauncherConfig(
+    cfg = LauncherConfig(
         onboarding_complete=bool(data.get("onboarding_complete", False)),
         hive_planner_root=str(data.get("hive_planner_root") or default_hive_root().resolve()),
         python_executable=str(data.get("python_executable") or "py -3.11"),
@@ -100,6 +130,9 @@ def load_config() -> LauncherConfig:
         recent_projects=recent,
         project_profiles=profiles,
     )
+    if prune_stale_projects(cfg):
+        save_config(cfg)
+    return cfg
 
 
 def save_config(config: LauncherConfig) -> None:
