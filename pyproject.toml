@@ -25,6 +25,9 @@ hive-planner = "hive_planner.cli:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+hive_planner = ["bootstrap_templates/**/*"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]

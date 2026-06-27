@@ -10,6 +10,7 @@ Manual v1 map of modules → dependencies. Use `impact-sync-maps` to merge new s
 | `docs/planning-rosetta-stone.md` | Hook legend | `planning.rosetta` |
 | `src/hive_planner/__main__.py` |   main   | (auto-sync) |
 | `src/hive_planner/agents_memory.py` | AGENTS.md lint/propose | `agents-memory-ci-v1` |
+| `src/hive_planner/bootstrap.py` | bootstrap | (auto-sync) |
 | `src/hive_planner/call_graph.py` | call graph | (auto-sync) |
 | `src/hive_planner/cartridge_pack.py` | cartridge pack | (auto-sync) |
 | `src/hive_planner/chunker.py` | Chunking | `compiler.pipeline` |

@@ -1,0 +1,12 @@
+---
+description: Keep execution narrow and deterministic
+alwaysApply: true
+---
+
+# Task Execution
+
+**Hook:** `cursor.rules`, `spec.flow`
+
+- Work on one micro task at a time.
+- Identify exact target files before editing.
+- Prefer minimal complete changes over broad cleanup.
