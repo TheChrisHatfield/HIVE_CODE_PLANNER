@@ -18,11 +18,11 @@ class PackageGraph:
 def _collect_definitions(tree: ast.Module) -> set[str]:
     names: set[str] = set()
     for node in tree.body:
-        if isinstance(node, ast.FunctionDef):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             names.add(node.name)
         elif isinstance(node, ast.ClassDef):
             for item in node.body:
-                if isinstance(item, ast.FunctionDef):
+                if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
                     names.add(f"{node.name}.{item.name}")
     return names
 

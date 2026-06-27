@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from hive_planner import __version__ as COMPILER_VERSION
-from hive_planner.config import RepoPaths
+from hive_planner.config import RepoPaths, validate_feature_id
 from hive_planner.indexer import load_chunk_index, load_document_index
 from hive_planner.embeddings import embed_query, embedding_lookup, load_embedding_index
 from hive_planner.models import ChunkRecord
@@ -84,6 +84,7 @@ def emit_cartridge(
     force_delta: bool = False,
     emit_rules_seeds: bool = False,
 ) -> tuple[dict[str, Path], list[str]]:
+    validate_feature_id(feature)
     paths.ensure_dirs()
     paths.cartridge.mkdir(parents=True, exist_ok=True)
     warnings: list[str] = []

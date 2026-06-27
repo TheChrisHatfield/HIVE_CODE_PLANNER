@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
-from hive_planner.config import RepoPaths
+from hive_planner.config import RepoPaths, resolve_repo_agents_path
 
 EDITABLE_SECTION = "Durable Workspace Facts"
 MAX_BULLET_CHARS = 240
@@ -122,12 +122,12 @@ def _section_bullets(section_body: str) -> list[tuple[int, str]]:
 
 
 def _resolve_agents_path(paths: RepoPaths, agents_path: Path | None) -> Path:
-    target = agents_path if agents_path else paths.root / "AGENTS.md"
-    if not target.is_absolute():
-        target = paths.root / target
-    if not target.exists():
-        raise AgentsMemoryError(f"AGENTS.md not found: {target}")
-    return target
+    try:
+        return resolve_repo_agents_path(paths, agents_path)
+    except ValueError as exc:
+        raise AgentsMemoryError(str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise AgentsMemoryError(str(exc)) from exc
 
 
 def _match_section(sections: dict[str, str], required: str) -> str | None:

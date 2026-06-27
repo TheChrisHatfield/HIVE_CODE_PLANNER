@@ -595,6 +595,8 @@ def init_project(
     target = target.resolve()
     _validate_target(source_paths, target)
     project_name = (name or target.name).strip() or target.name
+    if any(ch in project_name for ch in "\n\r"):
+        raise BootstrapError("Project name cannot contain line breaks")
     written: list[str] = []
     warnings: list[str] = []
 

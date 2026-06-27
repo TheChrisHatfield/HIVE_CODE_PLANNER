@@ -5,7 +5,7 @@ import re
 from pathlib import Path
 
 from hive_planner.agents_memory import EDITABLE_SECTION, parse_sections
-from hive_planner.config import RepoPaths
+from hive_planner.config import RepoPaths, validate_feature_id
 from hive_planner.delta_emit import (
     DRAFT_MARKER,
     MANUAL_MARKER,
@@ -211,6 +211,7 @@ def emit_rules_seed(
     *,
     force: bool = False,
 ) -> tuple[str, Path | None, list[str]]:
+    validate_feature_id(feature)
     warnings: list[str] = []
     micro_path = paths.root / "docs" / "delta" / "20_micro" / f"{feature}.md"
     if not micro_path.exists():
@@ -274,6 +275,7 @@ def emit_cartridge_pack(
     force: bool = False,
     emit_rules_seeds: bool = False,
 ) -> tuple[dict[str, Path], dict[str, str], list[str]]:
+    validate_feature_id(feature)
     warnings: list[str] = []
     results: dict[str, str] = {}
     written: dict[str, Path] = {}

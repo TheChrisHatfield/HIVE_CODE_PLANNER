@@ -7,7 +7,7 @@ from pathlib import Path
 
 from hive_planner.agents_memory import AgentsMemoryError, ingest_agents_candidates, lint_agents_md, run_agents_memory
 from hive_planner.ci_handoff import run_ci_check
-from hive_planner.config import RepoPaths, is_repo_root, resolve_root
+from hive_planner.config import RepoPaths, resolve_repo_file_path, is_repo_root, resolve_root
 from hive_planner.roadmap_status import validate_roadmap
 from hive_planner.spec_drift import check_memory_spec_drift
 from hive_planner.emitter import emit_cartridge
@@ -218,12 +218,16 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "emit":
-        outputs, warnings = emit_cartridge(
-            paths,
-            args.feature,
-            force_delta=args.force_delta,
-            emit_rules_seeds=args.emit_rules_seeds,
-        )
+        try:
+            outputs, warnings = emit_cartridge(
+                paths,
+                args.feature,
+                force_delta=args.force_delta,
+                emit_rules_seeds=args.emit_rules_seeds,
+            )
+        except ValueError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
         print(f"Root: {root}")
         for warning in warnings:
             print(f"Warning: {warning}")
@@ -240,7 +244,11 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "impact":
-        file_paths = [Path(f) for f in args.files]
+        try:
+            file_paths = [resolve_repo_file_path(paths, Path(f)) for f in args.files]
+        except ValueError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
         try:
             packet = build_impact_packet(
                 paths,
@@ -290,6 +298,9 @@ def main(argv: list[str] | None = None) -> int:
         try:
             result = translate_document(paths, args.input, args.feature)
             status_path = write_translator_status(paths, result)
+        except ValueError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
         except TranslatorError as exc:
             print(f"Error: {exc}", file=sys.stderr)
             return 1

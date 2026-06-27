@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from hive_planner.agents_memory import EDITABLE_SECTION, _match_section, _section_bullets, parse_sections
-from hive_planner.config import RepoPaths
+from hive_planner.config import RepoPaths, validate_feature_id
 
 FEATURE_RE = re.compile(r"\*\*([a-z0-9][a-z0-9-]*)\*\*")
 
@@ -140,6 +140,10 @@ def check_spec_handoff(paths: RepoPaths, feature: str | None = None) -> SpecHand
     active = feature or parse_active_feature(paths)
     if not active:
         return SpecHandoffReport(feature=None, ok=False, missing=["active feature in AGENTS.md"])
+    try:
+        validate_feature_id(active)
+    except ValueError:
+        return SpecHandoffReport(feature=active, ok=False, missing=[f"invalid feature id: {active}"])
 
     required = {
         f"docs/specs/{active}/spec.md": paths.root / "docs" / "specs" / active / "spec.md",
@@ -222,7 +226,11 @@ def check_memory_spec_drift(
     if candidates_path is not None:
         candidate_file = candidates_path if candidates_path.is_absolute() else paths.root / candidates_path
         if not candidate_file.exists():
-            spec_actions.append(f"Candidates file not found: {candidate_file.relative_to(paths.root)}")
+            try:
+                rel = candidate_file.relative_to(paths.root)
+                spec_actions.append(f"Candidates file not found: {rel.as_posix()}")
+            except ValueError:
+                spec_actions.append(f"Candidates file not found: {candidate_file}")
         else:
             candidate_bullets = _collect_bullets_from_candidates(
                 candidate_file.read_text(encoding="utf-8", errors="replace")

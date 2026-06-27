@@ -5,7 +5,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
-from hive_planner.config import RepoPaths
+from hive_planner.config import RepoPaths, validate_feature_id
 from hive_planner.call_graph import build_package_graph, secondary_call_targets
 
 
@@ -127,9 +127,16 @@ def build_impact_packet(
     if mode not in {"default", "bugfix"}:
         raise ImpactError(f"Unknown impact mode '{mode}' — use default or bugfix")
 
+    try:
+        feature = validate_feature_id(feature)
+    except ValueError as exc:
+        raise ImpactError(str(exc)) from exc
+
     spec_dir = _feature_spec_dir(paths, feature)
-    if not spec_dir.exists():
-        raise ImpactError(f"Unknown feature '{feature}' — missing {spec_dir.relative_to(paths.root)}")
+    spec_file = spec_dir / "spec.md"
+    if not spec_file.is_file():
+        rel = spec_file.relative_to(paths.root)
+        raise ImpactError(f"Unknown feature '{feature}' — missing {rel.as_posix()}")
 
     if not files:
         raise ImpactError("At least one --files path is required")

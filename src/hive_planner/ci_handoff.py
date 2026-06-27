@@ -64,9 +64,17 @@ def run_ci_check(
 
     if check_map_drift:
         map_report = sync_impact_maps(paths, dry_run=True)
-        drift = bool(map_report.project_added or map_report.test_added)
+        drift = bool(
+            map_report.project_added
+            or map_report.test_added
+            or map_report.project_updated
+            or map_report.test_updated
+        )
         detail = "maps current" if not drift else (
-            f"drift: +{len(map_report.project_added)} project, +{len(map_report.test_added)} test rows"
+            f"drift: +{len(map_report.project_added)} project, "
+            f"+{len(map_report.test_added)} test rows, "
+            f"~{len(map_report.project_updated)} project updates, "
+            f"~{len(map_report.test_updated)} test updates"
         )
         report.steps.append(CiStepResult("impact-map-drift", not drift, detail))
 

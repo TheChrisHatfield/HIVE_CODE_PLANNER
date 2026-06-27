@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
 
-from hive_planner.config import RepoPaths
+from hive_planner.config import RepoPaths, validate_feature_id
 
 Bucket = Literal["holistic", "macro", "micro", "memory", "reject"]
 
@@ -275,6 +275,7 @@ def _write_draft_markdown(path: Path, title: str, bullets: list[str], cartridge_
 
 
 def translate_document(paths: RepoPaths, input_path: Path, feature: str) -> TranslatorResult:
+    validate_feature_id(feature)
     source = _resolve_input_path(paths, input_path)
     text = source.read_text(encoding="utf-8", errors="replace")
     raw_segments = segment_text(text)

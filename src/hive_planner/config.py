@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -52,6 +53,40 @@ class RepoPaths:
 
 
 SUPPORTED_EXTENSIONS = {".md", ".txt", ".pdf", ".docx", ".html", ".htm", ".csv", ".pptx"}
+
+FEATURE_ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+
+
+def validate_feature_id(feature: str) -> str:
+    if not FEATURE_ID_RE.match(feature):
+        raise ValueError(
+            f"Invalid feature id '{feature}' — use lowercase letters, digits, and hyphens only"
+        )
+    return feature
+
+
+def resolve_repo_file_path(paths: RepoPaths, file_path: Path) -> Path:
+    target = file_path if file_path.is_absolute() else paths.root / file_path
+    resolved = target.resolve()
+    try:
+        resolved.relative_to(paths.root.resolve())
+    except ValueError as exc:
+        raise ValueError(f"Path must be inside repo root: {file_path}") from exc
+    return resolved
+
+
+def resolve_repo_agents_path(paths: RepoPaths, agents_path: Path | None) -> Path:
+    target = agents_path if agents_path else paths.root / "AGENTS.md"
+    if not target.is_absolute():
+        target = paths.root / target
+    resolved = target.resolve()
+    try:
+        resolved.relative_to(paths.root.resolve())
+    except ValueError as exc:
+        raise ValueError(f"AGENTS.md path must be inside repo root: {agents_path}") from exc
+    if not resolved.is_file():
+        raise FileNotFoundError(f"AGENTS.md not found: {resolved}")
+    return resolved
 
 
 def resolve_root(root: Path | None) -> tuple[Path, bool]:
