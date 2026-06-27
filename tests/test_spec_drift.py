@@ -123,6 +123,42 @@ def test_propose_accepts_operational_rejects_behavioral_mixed(tmp_path: Path) ->
     assert "Spec Kit actions required" in proposal
 
 
+def test_infer_repairable_active_feature_ignores_missing_rosetta_nav(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    (paths.root / "AGENTS.md").write_text(
+        "\n".join(
+            [
+                "# AGENTS",
+                "",
+                "## Planning Rosetta Stone",
+                "",
+                "- hook `planning.rosetta`",
+                "",
+                "## Active feature",
+                "",
+                "**None** — pending.",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    feature = "example-feature"
+    spec_dir = paths.root / "docs" / "specs" / feature
+    spec_dir.mkdir(parents=True)
+    (spec_dir / "spec.md").write_text("# Spec\n", encoding="utf-8")
+    (spec_dir / "plan.md").write_text("# Plan\n", encoding="utf-8")
+    (spec_dir / "tasks.md").write_text("# Tasks\n", encoding="utf-8")
+    micro = paths.root / "docs" / "delta" / "20_micro"
+    micro.mkdir(parents=True)
+    (micro / f"{feature}.md").write_text("# Micro\n", encoding="utf-8")
+
+    from hive_planner.spec_drift import infer_repairable_active_feature
+
+    assert infer_repairable_active_feature(paths) == feature
+    handoff = check_spec_handoff(paths, feature)
+    assert handoff.ok is False
+
+
 def test_check_spec_handoff_requires_full_trio(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     (paths.root / "AGENTS.md").write_text(_minimal_agents("my-feature"), encoding="utf-8")

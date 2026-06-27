@@ -133,6 +133,23 @@ def bootstrap_active_feature_body(feature: str = BOOTSTRAP_DEFAULT_FEATURE, *, u
     return f"**{feature}** — starter scaffold from bootstrap; replace when you begin real work."
 
 
+def handoff_artifact_paths(paths: RepoPaths, feature: str) -> dict[str, Path]:
+    return {
+        f"docs/specs/{feature}/spec.md": paths.root / "docs" / "specs" / feature / "spec.md",
+        f"docs/specs/{feature}/plan.md": paths.root / "docs" / "specs" / feature / "plan.md",
+        f"docs/specs/{feature}/tasks.md": paths.root / "docs" / "specs" / feature / "tasks.md",
+        f"docs/delta/20_micro/{feature}.md": paths.root / "docs" / "delta" / "20_micro" / f"{feature}.md",
+    }
+
+
+def handoff_artifacts_present(paths: RepoPaths, feature: str) -> bool:
+    try:
+        validate_feature_id(feature)
+    except ValueError:
+        return False
+    return all(path.is_file() for path in handoff_artifact_paths(paths, feature).values())
+
+
 def infer_repairable_active_feature(paths: RepoPaths) -> str | None:
     from hive_planner.project_profile import resolve_project_integrations
 
@@ -140,8 +157,7 @@ def infer_repairable_active_feature(paths: RepoPaths) -> str | None:
         return None
     if parse_active_feature(paths):
         return None
-    handoff = check_spec_handoff(paths, BOOTSTRAP_DEFAULT_FEATURE)
-    if handoff.ok:
+    if handoff_artifacts_present(paths, BOOTSTRAP_DEFAULT_FEATURE):
         return BOOTSTRAP_DEFAULT_FEATURE
     return None
 
@@ -227,12 +243,7 @@ def check_spec_handoff(paths: RepoPaths, feature: str | None = None) -> SpecHand
     except ValueError:
         return SpecHandoffReport(feature=active, ok=False, missing=[f"invalid feature id: {active}"])
 
-    required = {
-        f"docs/specs/{active}/spec.md": paths.root / "docs" / "specs" / active / "spec.md",
-        f"docs/specs/{active}/plan.md": paths.root / "docs" / "specs" / active / "plan.md",
-        f"docs/specs/{active}/tasks.md": paths.root / "docs" / "specs" / active / "tasks.md",
-        f"docs/delta/20_micro/{active}.md": paths.root / "docs" / "delta" / "20_micro" / f"{active}.md",
-    }
+    required = handoff_artifact_paths(paths, active)
     agents_path = paths.root / "AGENTS.md"
     missing = [label for label, path in required.items() if not path.exists()]
     if not missing:
