@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import keyword
 import re
 import shutil
 import subprocess
@@ -394,6 +395,8 @@ def _package_slug(folder_name: str) -> str:
     slug = re.sub(r"[^a-z0-9]+", "_", folder_name.lower()).strip("_")
     if not slug or slug[0].isdigit():
         slug = f"app_{slug}" if slug else "app"
+    if not slug.isidentifier() or keyword.iskeyword(slug):
+        slug = f"{slug}_pkg"
     return slug
 
 

@@ -140,6 +140,18 @@ def test_init_full_profile_generates_valid_python_and_toml(tmp_path: Path) -> No
     tomllib.loads((target / "pyproject.toml").read_text(encoding="utf-8"))
 
 
+def test_init_full_profile_avoids_python_keyword_package_slug(tmp_path: Path) -> None:
+    source = _hive_source(tmp_path)
+    target = tmp_path / "class"
+
+    init_project(source, target, profile="full")
+
+    assert (target / "src" / "class_pkg" / "__init__.py").exists()
+    test_src = (target / "tests" / "test_placeholder.py").read_text(encoding="utf-8")
+    assert "import class_pkg" in test_src
+    compile(test_src, "test", "exec")
+
+
 def test_init_unknown_profile_errors(tmp_path: Path) -> None:
     source = _hive_source(tmp_path)
     target = tmp_path / "bad-profile"
