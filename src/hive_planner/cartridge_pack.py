@@ -343,11 +343,14 @@ def emit_cartridge_pack(
         warnings.append(f"Missing spec seed source: docs/specs/{feature}/spec.md")
 
     if emit_rules_seeds:
-        seed_status, seed_path, seed_warnings = emit_rules_seed(paths, feature, force=force)
-        warnings.extend(seed_warnings)
-        results["rules_seed"] = seed_status
-        if seed_path:
-            written["rules_seed"] = seed_path
+        if not micro_path.exists():
+            results["rules_seed"] = "missing"
+        else:
+            seed_status, seed_path, seed_warnings = emit_rules_seed(paths, feature, force=force)
+            warnings.extend(seed_warnings)
+            results["rules_seed"] = seed_status
+            if seed_path:
+                written["rules_seed"] = seed_path
     else:
         results["rules_seed"] = "disabled"
 
