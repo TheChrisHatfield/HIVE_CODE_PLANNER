@@ -252,10 +252,7 @@ def test_run_project_map_sync_rejects_invalid_project(tmp_path: Path) -> None:
 
 def test_map_sync_done_formats_success() -> None:
     from hive_planner.launcher.app import HivePlannerApp
-    import tkinter as tk
 
-    root = tk.Tk()
-    root.withdraw()
     app = HivePlannerApp.__new__(HivePlannerApp)
     app.home_log = type("L", (), {"configure": lambda *a, **k: None})()
     lines: list[str] = []
@@ -269,8 +266,30 @@ def test_map_sync_done_formats_success() -> None:
             "test_updated": [],
         }
     )
-    root.destroy()
     assert lines == ["Impact maps synced: 1 added, 1 updated."]
+
+
+def test_stale_scan_callback_cleans_progress_state() -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app._bg_generation = 1
+    app._python_scan_active = True
+    hidden = {"called": False}
+    app._hide_python_scan_progress = lambda: hidden.update(called=True)  # type: ignore[method-assign]
+
+    generation = 0
+
+    def finish() -> None:
+        if generation != app._bg_generation:
+            if app._python_scan_active:
+                app._python_scan_active = False
+                app._hide_python_scan_progress()
+            return
+
+    finish()
+    assert app._python_scan_active is False
+    assert hidden["called"] is True
 
 
 def test_run_install_uses_hidden_subprocess(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

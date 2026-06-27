@@ -72,6 +72,12 @@ class HivePlannerApp:
 
             def finish() -> None:
                 if generation != self._bg_generation:
+                    if self._python_scan_active:
+                        self._python_scan_active = False
+                        try:
+                            self._hide_python_scan_progress()
+                        except tk.TclError:
+                            pass
                     return
                 try:
                     on_done(result)
