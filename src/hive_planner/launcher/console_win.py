@@ -26,7 +26,8 @@ def show_console() -> bool:
 
     kernel32 = ctypes.windll.kernel32
     if kernel32.GetConsoleWindow():
-        _console_attached = True
+        # Dev launches from an existing terminal already have a console; do not
+        # mark it as app-owned or hide_console would FreeConsole the parent shell.
         return True
 
     if not kernel32.AllocConsole():

@@ -371,10 +371,38 @@ def test_console_visible_tracks_attachment_not_parent_console(monkeypatch: pytes
 
     monkeypatch.setattr(ctypes, "windll", type("W", (), {"kernel32": FakeKernel})())
     assert cw.is_console_visible() is False
+    # Parent console present (e.g. dev launch) — visible but not app-owned.
+    assert cw.show_console() is True
+    assert cw.is_console_visible() is False
+    assert cw.hide_console() is False
+
+    cw._console_attached = False
+    calls = {"alloc": 0, "free": 0, "has_console": False}
+
+    class AllocKernel:
+        @staticmethod
+        def GetConsoleWindow():
+            return 1 if calls["has_console"] else 0
+
+        @staticmethod
+        def AllocConsole():
+            calls["alloc"] += 1
+            calls["has_console"] = True
+            return 1
+
+        @staticmethod
+        def FreeConsole():
+            calls["free"] += 1
+            calls["has_console"] = False
+            return 1
+
+    monkeypatch.setattr(ctypes, "windll", type("W", (), {"kernel32": AllocKernel})())
     assert cw.show_console() is True
     assert cw.is_console_visible() is True
     assert cw.hide_console() is True
     assert cw.is_console_visible() is False
+    assert calls["alloc"] == 1
+    assert calls["free"] == 1
     cw._console_attached = False
 
 
