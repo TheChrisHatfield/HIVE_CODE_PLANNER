@@ -71,6 +71,15 @@ def test_init_rejects_hive_source_root(tmp_path: Path) -> None:
         init_project(source, source.root, force=True)
 
 
+def test_init_rejects_subdirectory_of_hive_source(tmp_path: Path) -> None:
+    source = _hive_source(tmp_path)
+    nested = source.root / "scratch" / "nested"
+    nested.mkdir(parents=True)
+
+    with pytest.raises(BootstrapError, match="inside the Hive source"):
+        init_project(source, nested, force=True)
+
+
 def test_init_wraps_write_failures_as_bootstrap_error(tmp_path: Path) -> None:
     source = _hive_source(tmp_path)
     target = tmp_path / "blocked"

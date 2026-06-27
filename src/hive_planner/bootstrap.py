@@ -385,10 +385,19 @@ def _candidates_template() -> str:
 def _validate_target(source_paths: RepoPaths, target: Path) -> None:
     if target.exists() and not target.is_dir():
         raise BootstrapError(f"Target must be a directory, not a file: {target}")
-    if target.resolve() == source_paths.root.resolve():
+    source_root = source_paths.root.resolve()
+    target_resolved = target.resolve()
+    if target_resolved == source_root:
         raise BootstrapError(
             f"Target cannot be the Hive source repository: {target} — choose a separate project directory"
         )
+    try:
+        target_resolved.relative_to(source_root)
+    except ValueError:
+        return
+    raise BootstrapError(
+        f"Target cannot be inside the Hive source repository: {target} — choose a separate project directory"
+    )
 
 
 def init_project(
