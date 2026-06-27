@@ -1093,6 +1093,14 @@ class HivePlannerApp:
         selected_files: list[Path] = []
         selected_folder: Path | None = None
 
+        def clear_cartridge_selection(*_args: object) -> None:
+            nonlocal selected_folder
+            selected_files.clear()
+            selected_folder = None
+            selection_var.set("(none selected)")
+
+        mode_var.trace_add("write", clear_cartridge_selection)
+
         source_types = [
             ("Supported sources", "*.md *.txt *.pdf *.docx *.html *.htm *.csv *.pptx"),
             ("Markdown", "*.md"),
