@@ -478,7 +478,12 @@ class HivePlannerApp:
         if not root:
             messagebox.showwarning("No project", "Select a recent project first.")
             return
-        open_path_in_explorer(Path(root))
+        result = open_path_in_explorer(Path(root))
+        if not result.get("ok"):
+            messagebox.showerror("Open in Explorer", result.get("error", "Failed to open folder"))
+            return
+        if hasattr(self, "home_log"):
+            self._append_log(self.home_log, f"Opened in Explorer: {result.get('path')}")
 
     def _activate_project(self, path: Path, *, notify: bool = True) -> bool:
         summary = summarize_project(path)

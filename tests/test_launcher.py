@@ -481,6 +481,29 @@ def test_console_visible_tracks_attachment_not_parent_console(monkeypatch: pytes
     cw._console_attached = False
 
 
+def test_on_explore_shows_error_for_missing_path(tmp_path: Path) -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    missing = tmp_path / "gone"
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.config = LauncherConfig(active_project=str(missing))
+
+    errors: list[tuple[str, str]] = []
+
+    import hive_planner.launcher.app as app_mod
+
+    original = app_mod.messagebox.showerror
+    app_mod.messagebox.showerror = lambda title, message: errors.append((title, message))
+    try:
+        app._on_explore()
+    finally:
+        app_mod.messagebox.showerror = original
+
+    assert errors
+    assert errors[0][0] == "Open in Explorer"
+    assert "exist" in errors[0][1].lower()
+
+
 def test_toggle_console_keeps_show_label_for_parent_terminal(monkeypatch: pytest.MonkeyPatch) -> None:
     from hive_planner.launcher import console_win as cw
     from hive_planner.launcher.app import HivePlannerApp
