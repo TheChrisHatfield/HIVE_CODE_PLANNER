@@ -35,6 +35,7 @@ class HivePlannerApp:
         self.config = load_config()
         self.setup = get_setup_status(self.config)
         self._wizard_step = 0
+        self._bg_generation = 0
 
         root.title("Hive Planner")
         root.geometry("920x680")
@@ -51,18 +52,33 @@ class HivePlannerApp:
             self._show_dashboard()
 
     def _clear_container(self) -> None:
+        self._invalidate_bg_callbacks()
         for child in self.container.winfo_children():
             child.destroy()
 
     def _run_bg(self, work, on_done) -> None:
+        generation = self._bg_generation
+
         def runner() -> None:
             try:
                 result = work()
             except Exception as exc:  # noqa: BLE001 — surface in UI log
                 result = {"ok": False, "error": str(exc)}
-            self.root.after(0, lambda: on_done(result))
+
+            def finish() -> None:
+                if generation != self._bg_generation:
+                    return
+                try:
+                    on_done(result)
+                except tk.TclError:
+                    return
+
+            self.root.after(0, finish)
 
         threading.Thread(target=runner, daemon=True).start()
+
+    def _invalidate_bg_callbacks(self) -> None:
+        self._bg_generation += 1
 
     def _show_onboarding(self) -> None:
         self._clear_container()
@@ -369,6 +385,9 @@ class HivePlannerApp:
         self._run_bg(lambda: run_project_ci_check(Path(root)), self._ci_check_done)
 
     def _ci_check_done(self, report: dict) -> None:
+        if self._result_failed(report):
+            self._append_log(self.home_log, self._result_detail(report))
+            return
         self.ci_list.delete(0, "end")
         for step in report.get("steps", []):
             mark = "✓" if step.get("ok") else "✗"

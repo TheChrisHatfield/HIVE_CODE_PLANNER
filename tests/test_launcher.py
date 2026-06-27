@@ -93,3 +93,45 @@ def test_install_result_failure_dict() -> None:
     assert "pip failed" in app._result_detail({"ok": False, "error": "pip failed"})
     root.destroy()
 
+
+def test_bg_generation_invalidates_stale_callbacks() -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+    import tkinter as tk
+
+    root = tk.Tk()
+    root.withdraw()
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app._bg_generation = 0
+    app.root = root
+    called = {"value": False}
+
+    def on_done(_result) -> None:
+        called["value"] = True
+
+    generation = app._bg_generation
+
+    def finish() -> None:
+        if generation != app._bg_generation:
+            return
+        on_done({})
+
+    app._invalidate_bg_callbacks()
+    finish()
+    assert called["value"] is False
+
+    app._bg_generation = generation
+    finish()
+    assert called["value"] is True
+    root.destroy()
+
+    from hive_planner.launcher.app import HivePlannerApp
+    import tkinter as tk
+
+    root = tk.Tk()
+    root.withdraw()
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    assert app._result_failed({"ok": False, "error": "pip failed"}) is True
+    assert app._result_failed({"ok": True}) is False
+    assert "pip failed" in app._result_detail({"ok": False, "error": "pip failed"})
+    root.destroy()
+
