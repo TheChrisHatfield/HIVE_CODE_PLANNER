@@ -1296,9 +1296,13 @@ class HivePlannerApp:
                 self._append_log(self.home_log, f"  skipped (exists): cartridge/{rel}")
             for warning in result.get("warnings", []):
                 self._append_log(self.home_log, f"Warning: {warning}")
-            if not worked:
-                self._log_cartridge_promote(result.get("promote"))
-                return
+            if worked:
+                self._append_log(
+                    self.home_log,
+                    "Cartridge load incomplete — partial work saved; see errors above.",
+                )
+            self._log_cartridge_promote(result.get("promote"))
+            return
 
         mode = result.get("mode")
         if mode == "sources":

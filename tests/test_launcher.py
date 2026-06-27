@@ -809,6 +809,32 @@ def test_run_cartridge_load_sources_preserves_copied_on_emit_failure(
     assert (project / "context-library" / "sources" / "imported" / "notes.md").is_file()
 
 
+def test_cartridge_load_done_does_not_log_success_after_emit_failure() -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.home_log = type("L", (), {"configure": lambda *a, **k: None})()
+    lines: list[str] = []
+    app._append_log = lambda _w, text: lines.append(text)  # type: ignore[method-assign]
+    app._log_cartridge_promote = lambda _promote: None  # type: ignore[method-assign]
+
+    app._cartridge_load_done(
+        {
+            "ok": False,
+            "mode": "sources",
+            "error": "emit failed",
+            "copied": ["context-library/sources/imported/notes.md"],
+            "processed": 1,
+            "feature": "my-feature",
+        }
+    )
+
+    joined = "\n".join(lines)
+    assert "emit failed" in joined
+    assert "Cartridge sources loaded" not in joined
+    assert "Cartridge load incomplete" in joined
+
+
 def test_merge_cartridge_promote_keeps_load_ok_when_spec_drift_fails(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
