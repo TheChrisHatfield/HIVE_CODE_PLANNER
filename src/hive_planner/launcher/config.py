@@ -24,30 +24,45 @@ def normalize_project_path(path: str | Path) -> str:
     return str(Path(raw).resolve())
 
 
+def linked_project_exists(path: str | Path) -> bool:
+    entry = Path(path)
+    if entry.suffix.lower() == ".code-workspace":
+        return entry.is_file()
+    try:
+        return entry.resolve().is_dir()
+    except OSError:
+        return False
+
+
 def prune_stale_projects(config: LauncherConfig) -> bool:
-    """Remove missing directories from recents and clear a stale active project."""
+    """Dedupe linked workspaces and clear a stale active project when its path is missing."""
     changed = False
     valid_recent: list[str] = []
     seen: set[str] = set()
     for entry in config.recent_projects:
-        if not entry or entry in seen:
-            if entry:
-                changed = True
-            continue
-        if Path(entry).is_dir():
-            valid_recent.append(entry)
-            seen.add(entry)
-        else:
+        if not entry:
             changed = True
+            continue
+        normalized = normalize_project_path(entry)
+        if not normalized or normalized in seen:
+            changed = True
+            continue
+        seen.add(normalized)
+        valid_recent.append(normalized)
     if valid_recent != config.recent_projects:
         config.recent_projects = valid_recent
         changed = True
 
-    if config.active_project and not Path(config.active_project).is_dir():
+    if config.active_project and not linked_project_exists(config.active_project):
         config.active_project = ""
         changed = True
 
-    pruned_profiles = {k: v for k, v in config.project_profiles.items() if k in config.recent_projects}
+    recent_keys = {normalize_project_path(p) for p in config.recent_projects}
+    pruned_profiles = {
+        normalize_project_path(k): v
+        for k, v in config.project_profiles.items()
+        if normalize_project_path(k) in recent_keys
+    }
     if pruned_profiles != config.project_profiles:
         config.project_profiles = pruned_profiles
         changed = True
@@ -59,6 +74,7 @@ class LauncherConfig:
     onboarding_complete: bool = False
     hive_planner_root: str = ""
     python_executable: str = "py -3.11"
+    cursor_executable: str = ""
     default_profile: str = "full"
     theme: str = "light"
     active_project: str = ""
@@ -77,10 +93,24 @@ class LauncherConfig:
         value = normalize_project_path(project_root)
         if not value:
             return
-        self.recent_projects = [value] + [p for p in self.recent_projects if p != value]
+        self.recent_projects = [
+            value,
+            *(
+                p
+                for p in self.recent_projects
+                if normalize_project_path(p) != value
+            ),
+        ]
         self.recent_projects = self.recent_projects[:8]
         self.active_project = value
-        meta = resolve_project_profile(Path(value))
+        profile_root = Path(value)
+        if profile_root.suffix.lower() == ".code-workspace":
+            from hive_planner.launcher.service import workspace_primary_folder
+
+            primary = workspace_primary_folder(profile_root)
+            if primary:
+                profile_root = primary
+        meta = resolve_project_profile(profile_root)
         if meta:
             self.project_profiles[value] = meta.bootstrap_profile
         self.project_profiles = {
@@ -91,7 +121,14 @@ class LauncherConfig:
         for recent in self.recent_projects:
             if recent in self.project_profiles:
                 continue
-            inferred = resolve_project_profile(Path(recent))
+            root = Path(recent)
+            if root.suffix.lower() == ".code-workspace":
+                from hive_planner.launcher.service import workspace_primary_folder
+
+                primary = workspace_primary_folder(root)
+                if primary:
+                    root = primary
+            inferred = resolve_project_profile(root)
             if inferred:
                 self.project_profiles[recent] = inferred.bootstrap_profile
 
@@ -142,6 +179,7 @@ def load_config() -> LauncherConfig:
         onboarding_complete=bool(data.get("onboarding_complete", False)),
         hive_planner_root=str(data.get("hive_planner_root") or default_hive_root().resolve()),
         python_executable=str(data.get("python_executable") or "py -3.11"),
+        cursor_executable=str(data.get("cursor_executable") or ""),
         default_profile=str(data.get("default_profile") or "full"),
         theme=str(data.get("theme") or "light"),
         active_project=active,

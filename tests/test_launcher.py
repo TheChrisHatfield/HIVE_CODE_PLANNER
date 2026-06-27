@@ -427,7 +427,7 @@ def test_save_config_clears_probe_cache_when_python_changes(
     assert cleared == [True]
 
 
-def test_load_config_prunes_missing_recent_projects(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_load_config_keeps_missing_links_but_clears_active(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     alive = tmp_path / "alive"
     alive.mkdir()
     gone = tmp_path / "gone"
@@ -441,10 +441,11 @@ def test_load_config_prunes_missing_recent_projects(tmp_path: Path, monkeypatch:
         )
     )
     loaded = load_config()
-    assert loaded.recent_projects == [str(alive.resolve())]
+    assert str(alive.resolve()) in loaded.recent_projects
+    assert str(gone.resolve()) in loaded.recent_projects
     assert loaded.active_project == ""
-    assert str(gone.resolve()) not in loaded.project_profiles
     assert loaded.project_profiles[str(alive.resolve())] == "minimal"
+    assert loaded.project_profiles[str(gone.resolve())] == "full"
 
 
 def test_run_project_ci_check_rejects_invalid_project(tmp_path: Path) -> None:
