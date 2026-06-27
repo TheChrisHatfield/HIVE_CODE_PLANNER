@@ -2,19 +2,116 @@ from __future__ import annotations
 
 from pathlib import Path
 from unittest.mock import patch
+import sys
 
 import pytest
 
 from hive_planner.launcher.config import LauncherConfig, load_config, normalize_project_path, save_config
 from hive_planner.launcher.service import (
+    PythonInstallation,
     _python_command,
+    _py_launcher_commands,
+    _version_supported,
+    discover_python_installations,
+    format_python_scan_report,
     get_setup_status,
     open_in_cursor,
+    probe_python_command,
     run_project_ci_check,
     run_project_init,
     run_project_map_sync,
     summarize_project,
 )
+
+
+def test_version_supported() -> None:
+    assert _version_supported("3.11.4") is True
+    assert _version_supported("3.10.0") is True
+    assert _version_supported("3.9.13") is False
+
+
+def test_format_python_scan_report_empty() -> None:
+    report = format_python_scan_report([])
+    assert "No Python installations found" in report
+
+
+def test_format_python_scan_report_lists_entries() -> None:
+    report = format_python_scan_report(
+        [
+            PythonInstallation(
+                command="py -3.11",
+                version="3.11.4",
+                executable=r"C:\Python311\python.exe",
+                supported=True,
+            )
+        ]
+    )
+    assert "3.11.4" in report
+    assert "py -3.11" in report
+
+
+def test_discover_python_installations_includes_current() -> None:
+    installs = discover_python_installations()
+    assert installs
+    assert any(Path(inst.executable).resolve() == Path(sys.executable).resolve() for inst in installs)
+
+
+def test_py_launcher_commands_parses_output(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    exe311 = tmp_path / "python311.exe"
+    exe311.write_text("", encoding="utf-8")
+    monkeypatch.setattr("hive_planner.launcher.service.sys.platform", "win32")
+    monkeypatch.setattr("hive_planner.launcher.service.shutil.which", lambda name: "py" if name == "py" else None)
+    monkeypatch.setattr(
+        "hive_planner.launcher.service.subprocess.run",
+        lambda *a, **k: type(
+            "R",
+            (),
+            {
+                "returncode": 0,
+                "stdout": f" -V:3.11 *        {exe311}\n -V:3.12          C:\\Python312\\python.exe\n",
+                "stderr": "",
+            },
+        )(),
+    )
+    commands = _py_launcher_commands()
+    assert [str(exe311)] in commands
+    assert ["py", "-3.11"] in commands
+    assert ["py", "-3.12"] in commands
+
+
+def test_probe_python_command_reads_version(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "hive_planner.launcher.service.subprocess.run",
+        lambda *a, **k: type(
+            "R",
+            (),
+            {"returncode": 0, "stdout": "3.11.4\nC:\\Python311\\python.exe\n", "stderr": ""},
+        )(),
+    )
+    inst = probe_python_command(["py", "-3.11"])
+    assert inst is not None
+    assert inst.version == "3.11.4"
+    assert inst.supported is True
+    assert inst.command == "py -3.11"
+
+
+def test_python_scan_ignores_duplicate_clicks() -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app._python_scan_active = True
+    app._run_bg = lambda work, done: (_ for _ in ()).throw(AssertionError("should not run"))  # type: ignore[method-assign]
+    app._on_scan_python()
+
+
+def test_python_scan_resets_when_ui_rebuilds() -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app._bg_generation = 0
+    app._python_scan_active = True
+    app._invalidate_bg_callbacks()
+    assert app._python_scan_active is False
 
 
 def test_open_in_cursor_rejects_non_hive_project(tmp_path: Path) -> None:
@@ -224,6 +321,23 @@ def test_summarize_non_hive_project(tmp_path: Path) -> None:
     assert "START_HERE" in summary.detail
 
 
+def test_get_setup_status_uses_configured_python(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "hive_planner.launcher.service.probe_python_command",
+        lambda _cmd: PythonInstallation(
+            command="py -3.12",
+            version="3.12.1",
+            executable=r"C:\Python312\python.exe",
+            supported=True,
+        ),
+    )
+    cfg = LauncherConfig(python_executable="py -3.12")
+    status = get_setup_status(cfg)
+    assert status.python_ok is True
+    assert "3.12.1" in status.python_version
+    assert "py -3.12" in status.python_version
+
+
 def test_get_setup_status_reads_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     cfg_dir = tmp_path / "cfg"
     monkeypatch.setattr("hive_planner.launcher.config.default_config_dir", lambda: cfg_dir)
@@ -262,14 +376,10 @@ def test_python_command_preserves_quoted_paths() -> None:
 
 def test_select_recent_rejects_missing_project(tmp_path: Path) -> None:
     from hive_planner.launcher.app import HivePlannerApp
-    import tkinter as tk
 
     missing = tmp_path / "gone"
-    root = tk.Tk()
-    root.withdraw()
     app = HivePlannerApp.__new__(HivePlannerApp)
     app.config = LauncherConfig(recent_projects=[str(missing)])
-    app.root = root
     app._recent_project_paths = [str(missing)]
 
     class Box:
@@ -287,7 +397,6 @@ def test_select_recent_rejects_missing_project(tmp_path: Path) -> None:
         app._on_select_recent()
     finally:
         app_mod.messagebox.showerror = original
-    root.destroy()
 
     assert Box.calls
     assert "Directory not found" in Box.calls[0][1]
@@ -326,26 +435,18 @@ def test_ci_check_report_is_not_bg_error() -> None:
 
 def test_install_result_failure_dict() -> None:
     from hive_planner.launcher.app import HivePlannerApp
-    import tkinter as tk
 
-    root = tk.Tk()
-    root.withdraw()
     app = HivePlannerApp.__new__(HivePlannerApp)
     assert app._result_failed({"ok": False, "error": "pip failed"}) is True
     assert app._result_failed({"ok": True}) is False
     assert "pip failed" in app._result_detail({"ok": False, "error": "pip failed"})
-    root.destroy()
 
 
 def test_bg_generation_invalidates_stale_callbacks() -> None:
     from hive_planner.launcher.app import HivePlannerApp
-    import tkinter as tk
 
-    root = tk.Tk()
-    root.withdraw()
     app = HivePlannerApp.__new__(HivePlannerApp)
     app._bg_generation = 0
-    app.root = root
     called = {"value": False}
 
     def on_done(_result) -> None:
@@ -365,7 +466,6 @@ def test_bg_generation_invalidates_stale_callbacks() -> None:
     app._bg_generation = generation
     finish()
     assert called["value"] is True
-    root.destroy()
 
 
 def test_load_config_recovers_corrupt_json(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

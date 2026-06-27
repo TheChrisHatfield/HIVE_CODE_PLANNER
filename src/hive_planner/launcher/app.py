@@ -7,6 +7,8 @@ from tkinter import filedialog, messagebox, scrolledtext, ttk
 
 from hive_planner.launcher.config import LauncherConfig, load_config, save_config
 from hive_planner.launcher.service import (
+    discover_python_installations,
+    format_python_scan_report,
     get_setup_status,
     open_in_cursor,
     open_path_in_explorer,
@@ -38,6 +40,7 @@ class HivePlannerApp:
         self.setup = get_setup_status(self.config)
         self._wizard_step = 0
         self._bg_generation = 0
+        self._python_scan_active = False
 
         root.title("Hive Planner")
         root.geometry("920x680")
@@ -81,6 +84,7 @@ class HivePlannerApp:
 
     def _invalidate_bg_callbacks(self) -> None:
         self._bg_generation += 1
+        self._python_scan_active = False
 
     def _show_onboarding(self) -> None:
         self._clear_container()
@@ -144,6 +148,7 @@ class HivePlannerApp:
                 badge = COLORS["success"] if ok else COLORS["warning"]
                 tk.Label(row, text=detail, bg=COLORS["card"], fg=badge, font=FONT_BOLD).pack(side="left")
             secondary_button(actions, "← Back", lambda: self._advance_wizard(0))
+            secondary_button(actions, "Scan for Python", self._on_scan_python)
             secondary_button(actions, "Install / update", self._on_install)
             primary_button(actions, "Continue →", lambda: self._advance_wizard(2))
         elif self._wizard_step == 2:
@@ -152,7 +157,7 @@ class HivePlannerApp:
             self._hive_root_var = tk.StringVar(value=str(self.config.normalized_hive_root()))
             self._python_var = tk.StringVar(value=self.config.python_executable)
             self._field(paths_card, "Hive planner root", self._hive_root_var, browse=True)
-            self._field(paths_card, "Python command", self._python_var)
+            self._field(paths_card, "Python command", self._python_var, scan_python=True)
             secondary_button(actions, "← Back", lambda: self._advance_wizard(1))
             primary_button(actions, "Continue →", self._save_wizard_paths)
         else:
@@ -325,7 +330,7 @@ class HivePlannerApp:
         self.cfg_python = tk.StringVar(value=self.config.python_executable)
         self.cfg_profile = tk.StringVar(value=self.config.default_profile)
         self._field(form, "Hive planner root", self.cfg_hive, browse=True)
-        self._field(form, "Python command", self.cfg_python)
+        self._field(form, "Python command", self.cfg_python, scan_python=True)
         profile_row = tk.Frame(form, bg=COLORS["card"])
         profile_row.pack(fill="x", padx=12, pady=4)
         tk.Label(profile_row, text="Default profile", width=14, anchor="w", bg=COLORS["card"], fg=COLORS["fg"], font=FONT).pack(side="left")
@@ -367,7 +372,15 @@ class HivePlannerApp:
             font=FONT,
         ).pack(anchor="w", padx=12, pady=(0, 12))
 
-    def _field(self, parent, label: str, variable: tk.StringVar, *, browse: bool = False) -> None:
+    def _field(
+        self,
+        parent,
+        label: str,
+        variable: tk.StringVar,
+        *,
+        browse: bool = False,
+        scan_python: bool = False,
+    ) -> None:
         row = tk.Frame(parent, bg=COLORS["card"])
         row.pack(fill="x", padx=12, pady=4)
         tk.Label(row, text=label, width=14, anchor="w", bg=COLORS["card"], fg=COLORS["fg"], font=FONT).pack(side="left")
@@ -375,6 +388,8 @@ class HivePlannerApp:
         entry.pack(side="left", fill="x", expand=True)
         if browse:
             secondary_button(row, "Browse…", lambda: self._browse_into(variable))
+        if scan_python:
+            secondary_button(row, "Scan…", lambda: self._on_scan_python(variable))
 
     def _browse_into(self, variable: tk.StringVar) -> None:
         path = filedialog.askdirectory(title="Choose folder")
@@ -405,6 +420,113 @@ class HivePlannerApp:
     def _on_install(self) -> None:
         self._run_bg(lambda: run_install(load_config()), self._install_done)
 
+    def _on_scan_python(self, target_var: tk.StringVar | None = None) -> None:
+        if self._python_scan_active:
+            return
+        self._python_scan_active = True
+        self._python_scan_target = target_var
+        self._run_bg(discover_python_installations, self._python_scan_done)
+
+    def _python_scan_done(self, result) -> None:
+        self._python_scan_active = False
+        if self._is_bg_error(result):
+            messagebox.showerror("Python scan failed", self._result_detail(result))
+            return
+        installations = result if isinstance(result, list) else []
+        target_var = getattr(self, "_python_scan_target", None)
+        self._show_python_scan_results(installations, target_var)
+
+    def _show_python_scan_results(self, installations, target_var: tk.StringVar | None) -> None:
+        if not installations:
+            messagebox.showwarning("Python scan", format_python_scan_report([]))
+            return
+
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Python installations")
+        dialog.configure(bg=COLORS["bg"])
+        dialog.transient(self.root)
+        dialog.grab_set()
+        dialog.geometry("640x360")
+
+        tk.Label(
+            dialog,
+            text="Select a Python to use for pip install and Hive commands.",
+            bg=COLORS["bg"],
+            fg=COLORS["muted"],
+            font=FONT,
+            wraplength=600,
+            justify="left",
+        ).pack(anchor="w", padx=16, pady=(16, 8))
+
+        list_frame = tk.Frame(dialog, bg=COLORS["bg"])
+        list_frame.pack(fill="both", expand=True, padx=16, pady=8)
+        picker = tk.Listbox(
+            list_frame,
+            height=10,
+            font=FONT,
+            bg=COLORS["card"],
+            fg=COLORS["fg"],
+            relief="flat",
+            activestyle="dotbox",
+        )
+        picker.pack(side="left", fill="both", expand=True)
+        scroll = tk.Scrollbar(list_frame, command=picker.yview)
+        scroll.pack(side="right", fill="y")
+        picker.configure(yscrollcommand=scroll.set)
+
+        default_index = 0
+        supported = [i for i, inst in enumerate(installations) if inst.supported]
+        if supported:
+            default_index = supported[0]
+        for index, inst in enumerate(installations):
+            status = "OK" if inst.supported else "old"
+            label = f"{status}  {inst.version}  —  {inst.command}"
+            picker.insert("end", label)
+        picker.selection_set(default_index)
+        picker.activate(default_index)
+
+        report = scrolledtext.ScrolledText(
+            dialog,
+            height=5,
+            font=("Consolas", 9),
+            bg=COLORS["secondary"],
+            fg=COLORS["fg"],
+            relief="flat",
+            wrap="word",
+        )
+        report.pack(fill="x", padx=16, pady=(0, 8))
+        report.insert("end", format_python_scan_report(installations))
+        report.configure(state="disabled")
+
+        actions = tk.Frame(dialog, bg=COLORS["bg"])
+        actions.pack(fill="x", padx=16, pady=(0, 16))
+
+        def apply_selection() -> None:
+            selection = picker.curselection()
+            if not selection:
+                messagebox.showwarning("No selection", "Pick a Python installation.", parent=dialog)
+                return
+            inst = installations[selection[0]]
+            if not inst.supported:
+                if not messagebox.askyesno(
+                    "Python too old",
+                    f"Python {inst.version} is older than 3.10.\n\nUse it anyway?",
+                    parent=dialog,
+                ):
+                    return
+            if target_var is not None:
+                target_var.set(inst.command)
+            else:
+                self.config.python_executable = inst.command
+                save_config(self.config)
+                self.setup = get_setup_status(self.config)
+            dialog.destroy()
+            if target_var is None and not self.config.onboarding_complete:
+                self._show_onboarding()
+
+        primary_button(actions, "Use selected", apply_selection)
+        secondary_button(actions, "Close", dialog.destroy)
+
     def _is_bg_error(self, result) -> bool:
         """True only for _run_bg exception wrappers, not ci-check/map-sync payloads."""
         return isinstance(result, dict) and bool(result.get("error"))
@@ -425,7 +547,8 @@ class HivePlannerApp:
             messagebox.showerror("Install failed", detail)
         else:
             messagebox.showinfo("Install", detail)
-        self.setup = get_setup_status(load_config())
+        self.config = load_config()
+        self.setup = get_setup_status(self.config)
         if self.config.onboarding_complete:
             self._show_dashboard()
         else:

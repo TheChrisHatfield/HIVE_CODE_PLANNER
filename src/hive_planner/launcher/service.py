@@ -50,6 +50,22 @@ class InstallResult:
 
 
 @dataclass
+class PythonInstallation:
+    command: str
+    version: str
+    executable: str
+    supported: bool
+
+    def to_dict(self) -> dict:
+        return {
+            "command": self.command,
+            "version": self.version,
+            "executable": self.executable,
+            "supported": self.supported,
+        }
+
+
+@dataclass
 class ProjectSummary:
     root: str
     ok: bool
@@ -75,9 +91,173 @@ def _python_command(config: LauncherConfig) -> list[str]:
     return [part.strip('"').strip("'") for part in parts]
 
 
+def _command_label(command: list[str]) -> str:
+    if len(command) == 1:
+        return command[0]
+    if sys.platform == "win32":
+        return subprocess.list2cmdline(command)
+    return shlex.join(command)
+
+
+def _version_supported(version: str) -> bool:
+    parts = version.split(".")
+    try:
+        major = int(parts[0])
+        minor = int(parts[1]) if len(parts) > 1 else 0
+    except (ValueError, IndexError):
+        return False
+    return (major, minor) >= (3, 10)
+
+
+def probe_python_command(command: list[str]) -> PythonInstallation | None:
+    try:
+        proc = subprocess.run(
+            command
+            + [
+                "-c",
+                "import sys; print('.'.join(map(str, sys.version_info[:3]))); print(sys.executable)",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if proc.returncode != 0:
+        return None
+    lines = (proc.stdout or "").strip().splitlines()
+    if len(lines) < 2:
+        return None
+    version = lines[0].strip()
+    executable = lines[1].strip()
+    if not version or not executable:
+        return None
+    return PythonInstallation(
+        command=_command_label(command),
+        version=version,
+        executable=executable,
+        supported=_version_supported(version),
+    )
+
+
+def _py_launcher_commands() -> list[list[str]]:
+    if sys.platform != "win32" or not shutil.which("py"):
+        return []
+    try:
+        proc = subprocess.run(["py", "-0p"], capture_output=True, text=True, timeout=15, check=False)
+    except (OSError, subprocess.TimeoutExpired):
+        return []
+    commands: list[list[str]] = []
+    for line in (proc.stdout or "").splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("-V:"):
+            continue
+        rest = stripped[3:].strip()
+        if not rest:
+            continue
+        tag = rest.split()[0].rstrip("*")
+        path = rest.split(None, 1)[1].strip() if len(rest.split()) > 1 else ""
+        path = path.lstrip("*").strip()
+        if path and Path(path).is_file():
+            commands.append([path])
+        if tag:
+            commands.append(["py", f"-{tag}"])
+    return commands
+
+
+def _well_known_python_commands() -> list[list[str]]:
+    commands: list[list[str]] = []
+    if sys.platform == "win32":
+        roots: list[Path] = []
+        local = os.environ.get("LOCALAPPDATA", "")
+        if local:
+            roots.append(Path(local) / "Programs" / "Python")
+        for env_name in ("ProgramFiles", "ProgramFiles(x86)"):
+            env_val = os.environ.get(env_name, "")
+            if env_val:
+                roots.append(Path(env_val))
+        for root in roots:
+            if not root.is_dir():
+                continue
+            for pattern in ("Python3*", "Python\\Python3*"):
+                for match in root.glob(pattern):
+                    exe = match / "python.exe" if match.is_dir() else None
+                    if exe and exe.is_file():
+                        commands.append([str(exe)])
+    for name in ("python3", "python"):
+        found = shutil.which(name)
+        if found:
+            commands.append([found])
+    return commands
+
+
+def discover_python_installations() -> list[PythonInstallation]:
+    seen: set[str] = set()
+    found: list[PythonInstallation] = []
+
+    def add(command: list[str]) -> None:
+        inst = probe_python_command(command)
+        if not inst:
+            return
+        try:
+            key = str(Path(inst.executable).resolve()).lower()
+        except OSError:
+            key = inst.executable.lower()
+        if key in seen:
+            return
+        seen.add(key)
+        found.append(inst)
+
+    add([sys.executable])
+    for command in _py_launcher_commands():
+        add(command)
+    py_path = shutil.which("py")
+    if py_path:
+        add([py_path])
+    for command in _well_known_python_commands():
+        add(command)
+
+    def sort_key(item: PythonInstallation) -> tuple:
+        parts = item.version.split(".")
+        try:
+            nums = tuple(int(p) for p in parts[:3])
+        except ValueError:
+            nums = (0, 0, 0)
+        while len(nums) < 3:
+            nums = (*nums, 0)
+        return (0 if item.supported else 1, -nums[0], -nums[1], -nums[2])
+
+    found.sort(key=sort_key)
+    return found
+
+
+def format_python_scan_report(installations: list[PythonInstallation]) -> str:
+    if not installations:
+        return (
+            "No Python installations found.\n\n"
+            "Install Python 3.10+ from python.org or the Microsoft Store, then scan again."
+        )
+    lines = ["Found Python installations:", ""]
+    for inst in installations:
+        status = "OK" if inst.supported else "too old"
+        lines.append(f"{status:8}  {inst.version}  —  {inst.command}")
+        lines.append(f"          {inst.executable}")
+        lines.append("")
+    lines.append("Hive Planner requires Python 3.10 or newer.")
+    return "\n".join(lines).rstrip()
+
+
 def get_setup_status(config: LauncherConfig) -> SetupStatus:
     hive_root = config.normalized_hive_root()
-    version = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+    runtime_version = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+    configured = probe_python_command(_python_command(config))
+    if configured:
+        python_ok = configured.supported
+        python_version = f"{configured.version}  ({configured.command})"
+    else:
+        python_ok = sys.version_info >= (3, 10)
+        python_version = f"{runtime_version}  (launcher runtime)"
     hive_version = ""
     hive_installed = False
     try:
@@ -86,8 +266,8 @@ def get_setup_status(config: LauncherConfig) -> SetupStatus:
     except importlib.metadata.PackageNotFoundError:
         pass
     return SetupStatus(
-        python_ok=sys.version_info >= (3, 10),
-        python_version=version,
+        python_ok=python_ok,
+        python_version=python_version,
         hive_root=str(hive_root),
         hive_root_ok=hive_root.is_dir() and (hive_root / "pyproject.toml").is_file(),
         hive_installed=hive_installed,
