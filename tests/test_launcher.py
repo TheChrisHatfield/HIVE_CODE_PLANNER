@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from unittest.mock import patch
+import subprocess
 import sys
 
 import pytest
@@ -639,6 +640,27 @@ def test_ensure_installed_exits_when_pip_fails(monkeypatch: pytest.MonkeyPatch, 
 
     with pytest.raises(SystemExit):
         main_mod.ensure_installed()
+
+
+def test_ensure_installed_uses_hidden_subprocess(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from hive_planner.launcher import __main__ as main_mod
+
+    repo = tmp_path / "hive"
+    repo.mkdir()
+    (repo / "pyproject.toml").write_text("[project]\nname='hive-planner'\n", encoding="utf-8")
+    captured: dict = {}
+    install_checks = iter([False, True])
+    monkeypatch.setattr(main_mod, "_repo_root", lambda: repo)
+    monkeypatch.setattr(main_mod, "_package_installed", lambda: next(install_checks))
+
+    def fake_run(*args, **kwargs):
+        captured.update(kwargs)
+        return type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+
+    monkeypatch.setattr(main_mod.subprocess, "run", fake_run)
+    monkeypatch.setattr(main_mod.sys, "platform", "win32")
+    main_mod.ensure_installed()
+    assert captured.get("creationflags") == subprocess.CREATE_NO_WINDOW
 
 
 def test_console_visible_tracks_attachment_not_parent_console(monkeypatch: pytest.MonkeyPatch) -> None:

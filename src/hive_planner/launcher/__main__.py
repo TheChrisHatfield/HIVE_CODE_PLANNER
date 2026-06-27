@@ -6,6 +6,9 @@ import sys
 from pathlib import Path
 
 
+from hive_planner.launcher.service import _hidden_subprocess_kwargs
+
+
 def _repo_root() -> Path:
     return Path(__file__).resolve().parents[3]
 
@@ -64,6 +67,7 @@ def ensure_installed() -> None:
         capture_output=True,
         text=True,
         check=False,
+        **_hidden_subprocess_kwargs(),
     )
     if _package_installed():
         return
