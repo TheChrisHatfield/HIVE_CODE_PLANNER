@@ -241,7 +241,7 @@ def promote_cartridge_drafts(
     for name, (src, dest) in layers.items():
         status, _path = _promote_to_target(paths, src, dest, force=force)
         result.promotions[name] = status
-        if status.startswith("skipped") and src.exists():
+        if status.startswith("skipped") and src.exists() and _is_cartridge_draft(src):
             result.warnings.append(f"{name}: {status}")
 
     specseed = paths.cartridge / "specs" / f"{feature}.specseed.md"

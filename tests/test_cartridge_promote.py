@@ -131,3 +131,21 @@ def test_promote_skips_non_draft_cartridge(tmp_path: Path) -> None:
 
     assert result.promotions["micro"] == "skipped (not draft)"
     assert target.read_text(encoding="utf-8") == "# Existing truth\n"
+
+
+def test_promote_does_not_warn_for_autosync_cartridge_layers(tmp_path: Path) -> None:
+    from hive_planner.delta_emit import AUTO_SYNC_PREFIX
+
+    project = _unified_project(tmp_path / "proj")
+    feature = "emit-feature"
+    paths = RepoPaths(root=project)
+    for rel in ("holistic.md", "macro.md", f"micro/{feature}.md"):
+        path = paths.cartridge / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(f"{AUTO_SYNC_PREFIX} from docs/delta -->\n\n# Layer\n", encoding="utf-8")
+
+    result = promote_cartridge_drafts(paths, feature, run_spec_drift=False)
+
+    assert result.promotions["holistic"] == "skipped (not draft)"
+    assert not any("holistic:" in w for w in result.warnings)
+    assert not any("macro:" in w for w in result.warnings)
