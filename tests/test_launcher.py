@@ -525,6 +525,24 @@ def test_delete_project_profile_removes_metadata(tmp_path: Path) -> None:
     assert "No Hive profile" in msg2
 
 
+def test_recent_label_uses_stored_profile_not_inferred(tmp_path: Path) -> None:
+    from hive_planner.project_profile import delete_project_profile, read_project_profile, write_project_profile
+
+    project = tmp_path / "demo"
+    project.mkdir()
+    (project / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    (project / "pyproject.toml").write_text("[project]\nname='demo'\n", encoding="utf-8")
+    write_project_profile(project, profile="minimal", project_name="Demo")
+
+    stored = read_project_profile(project)
+    assert stored is not None
+    assert format_recent_project_label(str(project), stored.bootstrap_profile) == "demo  [minimal]"
+
+    delete_project_profile(project)
+    assert read_project_profile(project) is None
+    assert format_recent_project_label(str(project), None) == "demo"
+
+
 def test_bind_mousewheel_uses_widget_binding_not_bind_all() -> None:
     from hive_planner.launcher.app import HivePlannerApp
 

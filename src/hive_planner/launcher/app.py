@@ -32,6 +32,7 @@ from hive_planner.launcher.theme import (
 )
 from hive_planner.launcher import console_win
 from hive_planner.launcher.user_guide import load_user_guide, user_guide_path
+from hive_planner.project_profile import read_project_profile
 
 
 def format_recent_project_label(path: str, profile: str | None = None) -> str:
@@ -495,8 +496,11 @@ class HivePlannerApp:
         self.recent_list.delete(0, "end")
         self._recent_project_paths.clear()
         for path in self.config.recent_projects:
-            summary = summarize_project(Path(path))
-            label = format_recent_project_label(path, summary.bootstrap_profile)
+            stored = read_project_profile(Path(path))
+            label = format_recent_project_label(
+                path,
+                stored.bootstrap_profile if stored else None,
+            )
             self._recent_project_paths.append(path)
             self.recent_list.insert("end", label)
 
