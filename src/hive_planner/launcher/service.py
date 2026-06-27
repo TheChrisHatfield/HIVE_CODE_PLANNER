@@ -171,7 +171,7 @@ def probe_python_command(command: list[str], *, use_cache: bool = True) -> Pytho
                         executable=executable,
                         supported=_version_supported(version),
                     )
-    if use_cache:
+    if use_cache and result is not None:
         _probe_cache[cache_key] = result
     return result
 
@@ -362,6 +362,7 @@ def run_install(config: LauncherConfig, *, extras: str = "dev") -> InstallResult
     except importlib.metadata.PackageNotFoundError:
         pass
     detail = f"Installed hive-planner {version}" if version else "Install complete"
+    clear_python_probe_cache()
     return InstallResult(True, detail, output=output[-4000:])
 
 

@@ -100,6 +100,20 @@ def test_probe_python_command_reads_version(monkeypatch: pytest.MonkeyPatch) -> 
     assert inst.command == "py -3.11"
 
 
+def test_probe_python_command_does_not_cache_failures(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = {"count": 0}
+
+    def fake_run(*args, **kwargs):
+        calls["count"] += 1
+        return type("R", (), {"returncode": 1, "stdout": "", "stderr": "nope"})()
+
+    monkeypatch.setattr("hive_planner.launcher.service.subprocess.run", fake_run)
+    clear_python_probe_cache()
+    assert probe_python_command(["py", "-3.11"], use_cache=True) is None
+    assert probe_python_command(["py", "-3.11"], use_cache=True) is None
+    assert calls["count"] == 2
+
+
 def test_probe_python_command_caches_results(monkeypatch: pytest.MonkeyPatch) -> None:
     calls = {"count": 0}
 
