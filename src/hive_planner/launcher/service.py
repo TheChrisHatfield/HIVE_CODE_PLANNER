@@ -1090,9 +1090,22 @@ def run_cartridge_import_folder(
                 _run_cartridge_promote(target, feature, promote=promote, force=force_promote),
             )
         except ValueError as exc:
-            payload["warnings"] = [str(exc)]
+            msg = str(exc)
+            payload.setdefault("warnings", []).append(msg)
+            payload["promote"] = {
+                "ok": False,
+                "feature": feature.strip(),
+                "promotions": {},
+                "warnings": [msg],
+            }
     elif promote and not feature:
-        payload["warnings"] = ["Promotion skipped — set feature id for import mode."]
+        payload.setdefault("warnings", []).append("Promotion skipped — set feature id for import mode.")
+        payload["promote"] = {
+            "ok": False,
+            "feature": None,
+            "promotions": {},
+            "warnings": ["Promotion skipped — set feature id for import mode."],
+        }
     return payload
 
 

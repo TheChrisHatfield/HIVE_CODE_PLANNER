@@ -814,6 +814,24 @@ def test_merge_cartridge_promote_keeps_load_ok_when_spec_drift_fails(
     assert merged["promote"]["ok"] is False
 
 
+def test_run_cartridge_import_invalid_feature_promote_reports_error(tmp_path: Path) -> None:
+    project = _minimal_hive_project(tmp_path / "proj")
+    external = tmp_path / "external-cartridge"
+    external.mkdir()
+    (external / "holistic.md").write_text("# Holistic\n", encoding="utf-8")
+
+    result = run_cartridge_import_folder(
+        project,
+        external,
+        feature="Bad Feature",
+        promote=True,
+    )
+
+    assert result["ok"] is True
+    assert result["promote"]["ok"] is False
+    assert "Invalid feature" in result["promote"]["warnings"][0]
+
+
 def test_load_user_guide_reads_scripts_readme(tmp_path: Path) -> None:
     from hive_planner.launcher.user_guide import load_user_guide, user_guide_path
 
