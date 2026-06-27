@@ -10,6 +10,20 @@ This starter kit packages the blueprint into actual repo-ready files for a spec-
 
 ## Included files
 
+**Minimal profile (v1):** planning scaffold, Delta docs, Cursor rules, Spec Kit starter.
+
+**Full profile (v2):** everything in minimal plus `pyproject.toml`, `src/<package>/`, `tests/`, `.gitignore`, `.github/workflows/ci.yml`.
+
+Use:
+
+```powershell
+py -3.11 -m hive_planner init --target /path/to/project --profile full --git-init
+```
+
+See [../docs/project-bootstrap-guide.md](../docs/project-bootstrap-guide.md).
+
+## Minimal file list
+
 - `AGENTS.md`
 - `docs/delta/00_holistic.md`
 - `docs/delta/10_macro.md`

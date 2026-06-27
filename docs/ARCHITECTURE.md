@@ -14,7 +14,7 @@ Full planning archive: [`HIVE_PLANNING_DEV.md`](./HIVE_PLANNING_DEV.md)
 
 ## Status
 
-v1.0.0 — Stages 1–6 compiler roadmap complete. Stage 7 Phase 1 adds Continual Learning + Spec Kit integration (`integration.cl_spec`, `spec-drift-check`, `agents-propose` behavioral rejection).
+v1.1.0 — Stage 7 complete (18/18 roadmap artifacts). Stages 1–6 shipped at v1.0.0. Stage 7 adds CL/Spec Kit integration, memory v2 (`agents-apply` / `agents-ingest`), cartridge rule seeds (`--emit-rules-seeds`), change impact v3 (`--mode bugfix`, call graph), and project bootstrap (`hive_planner init`).
 
 Validate with:
 

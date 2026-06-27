@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
+import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from hive_planner.config import RepoPaths, is_repo_root
 
 BOOTSTRAP_BANNER = "<!-- BOOTSTRAP: hive_planner init -->"
+BOOTSTRAP_PROFILES = frozenset({"minimal", "full"})
 
 
 class BootstrapError(Exception):
@@ -18,6 +21,8 @@ class BootstrapError(Exception):
 class BootstrapResult:
     target: Path
     project_name: str
+    profile: str = "minimal"
+    git_initialized: bool = False
     files_written: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
 
@@ -25,6 +30,8 @@ class BootstrapResult:
         return {
             "target": str(self.target),
             "project_name": self.project_name,
+            "profile": self.profile,
+            "git_initialized": self.git_initialized,
             "files_written": self.files_written,
             "warnings": self.warnings,
         }
@@ -382,6 +389,169 @@ def _candidates_template() -> str:
 """
 
 
+def _package_slug(folder_name: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "_", folder_name.lower()).strip("_")
+    if not slug or slug[0].isdigit():
+        slug = f"app_{slug}" if slug else "app"
+    return slug
+
+
+def _pyproject_toml(project_name: str, package_slug: str) -> str:
+    return f"""{BOOTSTRAP_BANNER}
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "{package_slug}"
+version = "0.1.0"
+description = "{project_name}"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+"""
+
+
+def _gitignore() -> str:
+    return """# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+build/
+.venv/
+venv/
+
+# Test / tooling
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Hive / agent artifacts (optional local)
+cartridge/
+"""
+
+
+def _github_ci_workflow() -> str:
+    return """name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  hive-handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Hive CLI
+        env:
+          HIVE_PLANNER_PATH: ${{ vars.HIVE_PLANNER_PATH }}
+        run: |
+          if [ -z "$HIVE_PLANNER_PATH" ]; then
+            echo "Set repository variable HIVE_PLANNER_PATH to your Hive Code Planner checkout"
+            exit 1
+          fi
+          pip install -e "$HIVE_PLANNER_PATH[dev]"
+
+      - name: Sync impact maps
+        run: python -m hive_planner impact-sync-maps
+
+      - name: Hive handoff check
+        run: python -m hive_planner ci-check
+
+  project-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dev dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Run tests
+        run: pytest -q
+"""
+
+
+def _src_init(package_slug: str, project_name: str) -> str:
+    return f'''{BOOTSTRAP_BANNER}
+"""{project_name} application package."""
+'''
+
+
+def _test_placeholder(package_slug: str) -> str:
+    return f"""{BOOTSTRAP_BANNER}
+
+def test_package_importable() -> None:
+    import {package_slug}
+
+    assert {package_slug}.__doc__
+"""
+
+
+def _write_full_profile(
+    target: Path,
+    *,
+    project_name: str,
+    package_slug: str,
+    force: bool,
+    written: list[str],
+) -> None:
+    full_templates: list[tuple[str, str]] = [
+        ("pyproject.toml", _pyproject_toml(project_name, package_slug)),
+        (".gitignore", _gitignore()),
+        (f"src/{package_slug}/__init__.py", _src_init(package_slug, project_name)),
+        ("tests/test_placeholder.py", _test_placeholder(package_slug)),
+        (".github/workflows/ci.yml", _github_ci_workflow()),
+    ]
+    for rel, content in full_templates:
+        _write_text(target, rel, content, force=force, written=written)
+
+
+def _run_git_init(target: Path, warnings: list[str]) -> bool:
+    if (target / ".git").exists():
+        warnings.append("Git repository already exists — skipped git init")
+        return False
+    try:
+        proc = subprocess.run(
+            ["git", "init"],
+            cwd=target,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError as exc:
+        warnings.append(f"git init failed: {exc}")
+        return False
+    if proc.returncode != 0:
+        detail = (proc.stderr or proc.stdout or "").strip() or f"exit {proc.returncode}"
+        warnings.append(f"git init failed: {detail}")
+        return False
+    return True
+
+
 def _validate_target(source_paths: RepoPaths, target: Path) -> None:
     if target.exists() and not target.is_dir():
         raise BootstrapError(f"Target must be a directory, not a file: {target}")
@@ -406,7 +576,13 @@ def init_project(
     *,
     name: str | None = None,
     force: bool = False,
+    profile: str = "minimal",
+    git_init: bool = False,
 ) -> BootstrapResult:
+    if profile not in BOOTSTRAP_PROFILES:
+        allowed = ", ".join(sorted(BOOTSTRAP_PROFILES))
+        raise BootstrapError(f"Unknown bootstrap profile '{profile}' — use one of: {allowed}")
+
     target = target.resolve()
     _validate_target(source_paths, target)
     project_name = (name or target.name).strip() or target.name
@@ -426,6 +602,7 @@ def init_project(
             source_paths,
             target,
             project_name=project_name,
+            profile=profile,
             force=force,
             written=written,
             warnings=warnings,
@@ -436,7 +613,18 @@ def init_project(
     if not is_repo_root(target):
         raise BootstrapError("Bootstrap incomplete — missing START_HERE.md or planning rosetta")
 
-    return BootstrapResult(target=target, project_name=project_name, files_written=sorted(set(written)), warnings=warnings)
+    git_initialized = False
+    if git_init:
+        git_initialized = _run_git_init(target, warnings)
+
+    return BootstrapResult(
+        target=target,
+        project_name=project_name,
+        profile=profile,
+        git_initialized=git_initialized,
+        files_written=sorted(set(written)),
+        warnings=warnings,
+    )
 
 
 def _write_bootstrap_tree(
@@ -444,6 +632,7 @@ def _write_bootstrap_tree(
     target: Path,
     *,
     project_name: str,
+    profile: str,
     force: bool,
     written: list[str],
     warnings: list[str],
@@ -494,3 +683,12 @@ def _write_bootstrap_tree(
         _copy_file(rules / rule_name, target, f".cursor/rules/{rule_name}", force=force, written=written)
         if not (target / ".cursor/rules" / rule_name).exists():
             warnings.append(f"Missing rule template {rule_name} — not copied")
+
+    if profile == "full":
+        _write_full_profile(
+            target,
+            project_name=project_name,
+            package_slug=_package_slug(target.name),
+            force=force,
+            written=written,
+        )

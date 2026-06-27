@@ -15,6 +15,27 @@ py -3.11 -m hive_planner init --target D:\projects\my-app --name "My App"
 
 Optional `--force` rewrites bootstrap-managed files in a non-empty directory.
 
+## Profiles
+
+| Profile | Flag | Adds |
+|---------|------|------|
+| **minimal** (default) | `--profile minimal` | v1 scaffold only (START_HERE, Delta, rules, context-library) |
+| **full** (starter-kit v2) | `--profile full` | `pyproject.toml`, `src/<pkg>/`, `tests/`, `.gitignore`, `.github/workflows/ci.yml` |
+
+Full profile example:
+
+```powershell
+py -3.11 -m hive_planner init --target D:\projects\my-app --name "My App" --profile full --git-init
+```
+
+`--git-init` runs `git init` when git is available (skips with warning if `.git` already exists).
+
+### CI on bootstrapped repos
+
+The generated workflow expects a GitHub repository variable **`HIVE_PLANNER_PATH`** pointing to your Hive Code Planner checkout (absolute path on the runner or a checked-out sibling path).
+
+Set it under **Settings → Secrets and variables → Actions → Variables**, then push to enable Hive handoff checks in CI.
+
 ## What gets created
 
 | Path | Purpose |
@@ -27,6 +48,10 @@ Optional `--force` rewrites bootstrap-managed files in a non-empty directory.
 | `docs/change-impact/` | Impact policy + maps |
 | `.cursor/rules/` | Architecture, task, validation rules |
 | `context-library/` | Empty ingest scaffold |
+| `pyproject.toml` | **full profile only** — setuptools + pytest |
+| `src/<package>/` | **full profile only** — importable package stub |
+| `tests/` | **full profile only** — placeholder pytest |
+| `.github/workflows/ci.yml` | **full profile only** — Hive handoff + project tests |
 
 ## Hive CLI on the new project
 

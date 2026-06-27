@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -96,3 +97,69 @@ def test_init_force_rewrites_scaffold(tmp_path: Path) -> None:
     init_project(source, target, name="First")
     init_project(source, target, name="Second", force=True)
     assert "Second" in (target / "AGENTS.md").read_text(encoding="utf-8")
+
+
+def test_init_minimal_profile_skips_pyproject(tmp_path: Path) -> None:
+    source = _hive_source(tmp_path)
+    target = tmp_path / "minimal-app"
+
+    result = init_project(source, target, profile="minimal")
+
+    assert result.profile == "minimal"
+    assert not (target / "pyproject.toml").exists()
+    assert not (target / ".github" / "workflows" / "ci.yml").exists()
+
+
+def test_init_full_profile_writes_dev_scaffold(tmp_path: Path) -> None:
+    source = _hive_source(tmp_path)
+    target = tmp_path / "my_app"
+
+    result = init_project(source, target, name="My App", profile="full")
+
+    assert result.profile == "full"
+    assert (target / "pyproject.toml").exists()
+    assert (target / ".gitignore").exists()
+    assert (target / "src" / "my_app" / "__init__.py").exists()
+    assert (target / "tests" / "test_placeholder.py").exists()
+    assert (target / ".github" / "workflows" / "ci.yml").exists()
+    assert "my_app" in (target / "pyproject.toml").read_text(encoding="utf-8")
+    assert "pyproject.toml" in result.files_written
+
+
+def test_init_unknown_profile_errors(tmp_path: Path) -> None:
+    source = _hive_source(tmp_path)
+    target = tmp_path / "bad-profile"
+
+    with pytest.raises(BootstrapError, match="Unknown bootstrap profile"):
+        init_project(source, target, profile="enterprise")
+
+
+def test_init_git_init_creates_repo(tmp_path: Path) -> None:
+    import shutil
+
+    if shutil.which("git") is None:
+        pytest.skip("git not on PATH")
+
+    source = _hive_source(tmp_path)
+    target = tmp_path / "git-app"
+    result = init_project(source, target, profile="full", git_init=True)
+
+    assert result.git_initialized is True
+    assert (target / ".git").exists()
+
+
+def test_init_git_init_skips_existing_repo(tmp_path: Path) -> None:
+    import shutil
+
+    if shutil.which("git") is None:
+        pytest.skip("git not on PATH")
+
+    source = _hive_source(tmp_path)
+    target = tmp_path / "existing-git"
+    target.mkdir()
+    subprocess.run(["git", "init"], cwd=target, check=True, capture_output=True)
+
+    result = init_project(source, target, profile="full", git_init=True, force=True)
+
+    assert result.git_initialized is False
+    assert any("already exists" in w for w in result.warnings)

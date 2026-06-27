@@ -18,13 +18,15 @@ d:\DRIVE_DOWNLOADS\HIVE_CODE_PLANNER
 
 ## Active development
 
-**Feature:** `roadmap-complete-v1` — **v1.0.0 — Stages 1–6 complete**
+**Feature:** `roadmap-complete-v2` — **v1.1.0 — Stage 7 complete (18/18)**
 
 | Stage | Hooks | Command |
 |-------|-------|---------|
-| 6B | `workflow.tools` | `py -3.11 -m hive_planner roadmap-status` |
-| 6A | `context.cartridge_schema` | `py -3.11 -m hive_planner emit --feature <feature> --force-delta` |
-| 5C | `workflow.git_handoff` | `py -3.11 -m hive_planner ci-check` |
+| 7F | `workflow.tools` | `py -3.11 -m hive_planner roadmap-status` |
+| 7E | `workflow.project_bootstrap` | `py -3.11 -m hive_planner init --target <path> --name "My App"` |
+| 7D | `change.bugfix_mode` | `py -3.11 -m hive_planner impact --mode bugfix --files <path>` |
+| 7C | `cursor.rules` | `py -3.11 -m hive_planner emit --emit-rules-seeds --feature <feature>` |
+| 6B | `workflow.tools` | `py -3.11 -m hive_planner ci-check` |
 
 ```powershell
 py -3.11 -m pytest -v

@@ -104,6 +104,17 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Scaffold into a non-empty or partially initialized directory",
     )
+    init_parser.add_argument(
+        "--profile",
+        default="minimal",
+        choices=("minimal", "full"),
+        help="Bootstrap profile: minimal (v1) or full starter-kit v2 (pyproject, CI stub, src/tests)",
+    )
+    init_parser.add_argument(
+        "--git-init",
+        action="store_true",
+        help="Run git init in the target after scaffolding (optional; requires git on PATH)",
+    )
 
     translate_parser = sub.add_parser("translate", help="Rule-based cartridge draft translation")
     translate_parser.add_argument("--input", required=True, type=Path, help="Research markdown input file")
@@ -172,7 +183,14 @@ def main(argv: list[str] | None = None) -> int:
         from hive_planner.bootstrap import BootstrapError, init_project
 
         try:
-            result = init_project(paths, args.target, name=args.name, force=args.force)
+            result = init_project(
+                paths,
+                args.target,
+                name=args.name,
+                force=args.force,
+                profile=args.profile,
+                git_init=args.git_init,
+            )
         except BootstrapError as exc:
             print(f"Error: {exc}", file=sys.stderr)
             return 1

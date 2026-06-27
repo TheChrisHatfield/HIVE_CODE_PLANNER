@@ -522,6 +522,8 @@ Use this file as the top-level legend for:
 - one-folder-one-profile workflow
 - starter-kit / bootstrap_templates copy
 - detectable repo root via `is_repo_root()`
+- `--profile full` starter-kit v2 (pyproject, CI stub, src/tests)
+- optional `--git-init`
 
 **THREAD COVERAGE:** New project scaffolding without mutating Hive source tree.
 

@@ -58,9 +58,33 @@ Primary truth drives the immediate task. Secondary governs behavior. Tertiary is
 
 ## Active feature
 
-**roadmap-complete-v1** — Stages 1–6 roadmap complete (v1.0.0).
+**starter-kit-v2** — Stage 8: full bootstrap profile (`--profile full`, `--git-init`).
 
-Roadmap validation (Stage 6B):
+```powershell
+py -3.11 -m hive_planner init --target D:\projects\my-app --profile full --git-init --name "My App"
+py -3.11 -m pytest tests/test_bootstrap.py -v
+```
+
+Project bootstrap (Stage 7E / minimal profile):
+
+```powershell
+py -3.11 -m hive_planner init --target D:\projects\my-app --name "My App"
+```
+
+Change impact v3 / bugfix mode (Stage 7D):
+
+```powershell
+py -3.11 -m hive_planner impact --feature change-impact-v3 --mode bugfix --files src/hive_planner/impact.py
+py -3.11 -m hive_planner impact --feature change-impact-v3 --deep --files src/hive_planner/call_graph.py
+```
+
+Cartridge rule seeds (Stage 7C):
+
+```powershell
+py -3.11 -m hive_planner emit --feature cartridge-pack-v2 --emit-rules-seeds --force-delta
+```
+
+Roadmap validation (Stage 6B / 7F):
 
 ```powershell
 py -3.11 -m hive_planner roadmap-status
@@ -146,3 +170,7 @@ Full thread export (reference only): `docs/HIVE_PLANNING_DEV.md`
 - Stage 5C adds `ci-check` for handoff validation (pytest, agents-lint, spec artifacts, map drift, spec-drift).
 - Stage 6A adds full cartridge pack emit (research-summary, memory, specseed, source-map).
 - v1.0.0 — Stages 1–6 compiler roadmap complete; use `roadmap-status` to verify.
+- v1.1.0 — Stage 7 complete (CL/spec integration, memory v2, rule seeds, impact v3, project bootstrap); `roadmap-status` validates 18/18 features.
+- `hive_planner init` must target a directory outside the Hive source tree (never a subdirectory of this repo).
+- Bootstrapped projects use plain `None` for active feature until the first real feature id is set.
+- Starter-kit v2 (`--profile full`) adds pyproject, src/tests layout, `.gitignore`, and GitHub CI stub; `--git-init` is optional.
