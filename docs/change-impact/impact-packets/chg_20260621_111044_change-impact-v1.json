@@ -1,0 +1,31 @@
+{
+  "packet_id": "chg_20260621_111044_change-impact-v1",
+  "feature": "change-impact-v1",
+  "hook_ids": [
+    "change.impact",
+    "change.levels",
+    "change.validation",
+    "next.files"
+  ],
+  "primary": [
+    {
+      "path": "src/hive_planner/impact.py",
+      "level": "primary",
+      "reason": "Direct source edit target"
+    }
+  ],
+  "secondary": [
+    {
+      "path": "tests/test_impact.py",
+      "level": "secondary",
+      "reason": "Mapped test for src/hive_planner/impact.py"
+    }
+  ],
+  "tertiary": [],
+  "risk_score": "low",
+  "validations": [
+    "Run mapped pytest targets",
+    "Re-run hive_planner ingest/emit if compiler paths changed"
+  ],
+  "created_at": "2026-06-21T11:10:44.657083+00:00"
+}

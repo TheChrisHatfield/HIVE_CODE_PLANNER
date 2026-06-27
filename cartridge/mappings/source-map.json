@@ -1,0 +1,36 @@
+{
+  "schema_version": "source-map.v1",
+  "feature": "cartridge-pack-v1",
+  "mappings": [
+    {
+      "cartridge": "cartridge/holistic.md",
+      "delta": "docs/delta/00_holistic.md",
+      "layer": "holistic"
+    },
+    {
+      "cartridge": "cartridge/macro.md",
+      "delta": "docs/delta/10_macro.md",
+      "layer": "macro"
+    },
+    {
+      "cartridge": "cartridge/micro/cartridge-pack-v1.md",
+      "delta": "docs/delta/20_micro/cartridge-pack-v1.md",
+      "layer": "micro"
+    },
+    {
+      "cartridge": "cartridge/specs/cartridge-pack-v1.specseed.md",
+      "delta": "docs/specs/cartridge-pack-v1/spec.md",
+      "layer": "spec_seed"
+    },
+    {
+      "cartridge": "cartridge/memory.md",
+      "delta": "AGENTS.md",
+      "layer": "memory"
+    },
+    {
+      "cartridge": "cartridge/source-context.md",
+      "delta": "context-library/indexes",
+      "layer": "tertiary"
+    }
+  ]
+}

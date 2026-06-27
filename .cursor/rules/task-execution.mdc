@@ -1,0 +1,14 @@
+---
+description: Keep execution narrow and deterministic
+alwaysApply: true
+---
+
+# Task Execution
+
+**Hook:** `cursor.rules`, `spec.flow`
+
+- Work on one micro task at a time (see active task in `docs/specs/*/tasks.md`).
+- Identify exact target files before editing.
+- Avoid opportunistic refactors unless required for the task.
+- State assumptions when interfaces are ambiguous.
+- Prefer minimal complete changes over broad cleanup.

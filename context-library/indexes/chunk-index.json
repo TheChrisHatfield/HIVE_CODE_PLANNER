@@ -1,0 +1,66 @@
+{
+  "chunks": [
+    {
+      "chunk_id": "b6ade3b680171279-c000",
+      "doc_id": "b6ade3b680171279",
+      "heading_path": "Sample reference: Planning Rosetta Stone usage",
+      "text": "# Sample reference: Planning Rosetta Stone usage\n\nThis file lives in the context library as a **tertiary source** example.\n\nWhen you run `python -m hive_planner ingest`, the compiler should:\n\n1. Discover this file under `context-library/sources/`\n2. Normalize it to `context-library/normalized/markdown/<doc_id>.md`\n3. Chunk by `#` headings\n4. Include excerpts in `cartridge/source-context.md` when relevant to a feature query",
+      "keywords": [
+        "sample",
+        "reference",
+        "planning",
+        "rosetta",
+        "stone",
+        "usage",
+        "this",
+        "file",
+        "lives",
+        "the",
+        "context",
+        "library"
+      ],
+      "chunk_index": 0,
+      "page": null
+    },
+    {
+      "chunk_id": "b6ade3b680171279-c001",
+      "doc_id": "b6ade3b680171279",
+      "heading_path": "Sample reference: Planning Rosetta Stone usage > Keywords for retrieval testing",
+      "text": "## Keywords for retrieval testing\n\ncartridge compiler ingest normalize chunk index manifest rosetta stone planning",
+      "keywords": [
+        "keywords",
+        "for",
+        "retrieval",
+        "testing",
+        "cartridge",
+        "compiler",
+        "ingest",
+        "normalize",
+        "chunk",
+        "index",
+        "manifest",
+        "rosetta"
+      ],
+      "chunk_index": 1,
+      "page": null
+    },
+    {
+      "chunk_id": "b6ade3b680171279-c002",
+      "doc_id": "b6ade3b680171279",
+      "heading_path": "Sample reference: Planning Rosetta Stone usage > Related hooks",
+      "text": "## Related hooks\n\n- `planning.rosetta`\n- `compiler.pipeline`\n- `context.library`",
+      "keywords": [
+        "related",
+        "hooks",
+        "planning",
+        "rosetta",
+        "compiler",
+        "pipeline",
+        "context",
+        "library"
+      ],
+      "chunk_index": 2,
+      "page": null
+    }
+  ]
+}

@@ -1,0 +1,51 @@
+---
+description: After Rosetta hooks, load long docs for deep synthesis detail
+alwaysApply: true
+---
+
+# Secondary Deep Context (after hooks)
+
+**Hook:** `planning.rosetta`, `context.tri_level`  
+**Runs after:** `planning-rosetta-stone.mdc` — hooks first, long docs second.
+
+## When to use
+
+After identifying `HOOK_ID`(s) from `docs/planning-rosetta-stone.md`, load **long-form reference docs** for implementation detail. Do not skip hooks and jump straight to the archive.
+
+## Read order (secondary pass)
+
+1. Active primary truth (unchanged): Delta + `docs/specs/<feature>/` + micro brief
+2. Hook `PRIMARY FILES` from Rosetta Stone (short/medium docs)
+3. **This rule:** long docs below, matched to active hook(s)
+4. Tertiary only if needed: `cartridge/source-context.md`, context library excerpts
+5. Archive last: `docs/HIVE_PLANNING_DEV.md` — search by heading/hook, do not load whole file
+
+## Long documents by hook
+
+| Hook | Long docs for deep detail |
+|------|---------------------------|
+| `planning.rosetta` | `docs/thread-outline-with-metatags.md` |
+| `context.delta`, `workflow.tools` | `docs/agentic-coding-blueprint.md` |
+| `context.cartridge`, `context.cartridge_schema` | `docs/cartridge-schema-v1.md`, `docs/cartridge-schema-v1-updated.md` |
+| `compiler.pipeline` | `docs/cartridge-compiler-implementation.md` |
+| `context.document_sourcing`, `context.library`, `context.metadata` | `docs/cartridge-document-sourcing-extension.md`, `docs/context-library-structure-guide.md`, `docs/document-context-metadata-standard.md` |
+| `change.impact`, `change.validation`, `next.files` | `docs/change-impact-lift.md`, `docs/change-impact/project-map.md`, `docs/change-impact/test-map.md` |
+| `workflow.git_handoff`, `memory.agents_md` | `docs/context-handoff-and-automation.md` |
+| `spec.flow` | `starter-kit/spec-kit-agent-integration.md` |
+
+## How to read long docs
+
+- Use **outline first**: scan headings, then load only sections tied to the active task or hook.
+- **Synthesize** into: constraints, file targets, acceptance criteria, edge cases — do not dump prose into chat.
+- Prefer extracted docs over `HIVE_PLANNING_DEV.md` when both cover the same topic.
+- If a long doc is marked *(pending extract)* or missing, search `docs/HIVE_PLANNING_DEV.md` by section title from the hook.
+
+## Context priority (do not invert)
+
+- Long docs = **secondary** depth after hooks and specs
+- They must **not** override active spec/plan/tasks or Delta docs
+- `HIVE_PLANNING_DEV.md` = reference archive, not execution truth
+
+## Trigger phrases
+
+User says: **deep context**, **secondary lookup**, **long docs after hooks**, **more detail from planning** → run this secondary pass for the active hook(s).

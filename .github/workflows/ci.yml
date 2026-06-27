@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  handoff-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install package
+        run: pip install -e ".[dev]"
+
+      - name: Sync impact maps
+        run: python -m hive_planner impact-sync-maps
+
+      - name: Handoff CI check
+        run: python -m hive_planner ci-check
+
+      - name: Roadmap status
+        run: python -m hive_planner roadmap-status

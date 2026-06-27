@@ -10,6 +10,7 @@ alwaysApply: true
 ## Rules
 
 1. Write all new project files under this directory unless the user explicitly asks otherwise.
-2. Reference paths from this repo root (e.g. `docs/ARCHITECTURE.md`, `plans/`, `src/`).
-3. This is a local Git repo on branch `main`. Use normal Git workflow for version history.
-4. Do not assume a GitHub remote exists unless one is configured.
+2. Reference paths from this repo root (e.g. `docs/planning-rosetta-stone.md`, `plans/`, `src/`).
+3. For planning context, load `docs/planning-rosetta-stone.md` via hook `planning.rosetta` or search **Planning Rosetta Stone** (see `START_HERE.md`).
+4. This is a local Git repo on branch `main`. Use normal Git workflow for version history.
+5. Do not assume a GitHub remote exists unless one is configured.

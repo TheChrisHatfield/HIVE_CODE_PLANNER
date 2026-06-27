@@ -1,0 +1,14 @@
+---
+description: Enforce traceability from code changes to blueprint and spec
+alwaysApply: true
+---
+
+# Architecture
+
+**Hook:** `cursor.rules`, `context.delta`
+
+- Every implementation change must reference one relevant spec or micro task.
+- Before editing, summarize how the task maps to Holistic, Macro, and Micro layers.
+- Load `docs/planning-rosetta-stone.md` (hook `planning.rosetta`) when context layer is unclear.
+- Do not introduce new architectural patterns unless Delta docs are updated first.
+- If a task conflicts with existing architecture, stop and propose a Delta doc revision.

@@ -1,0 +1,16 @@
+---
+description: Load Planning Rosetta Stone (planning.rosetta) as first context anchor
+alwaysApply: true
+---
+
+# Planning Rosetta Stone
+
+When the user mentions **Planning Rosetta Stone**, **planning mark**, or hook **`planning.rosetta`**:
+
+1. Load `docs/planning-rosetta-stone.md` into normal context (file reference, not inline paste).
+2. Use `HOOK_ID` entries to find related concepts and follow `PRIMARY FILES` / `UNLOCKS`.
+3. Load `docs/thread-outline-with-metatags.md` when meta-tag detail is needed.
+4. Prefer distilled repo files over re-reading `docs/HIVE_PLANNING_DEV.md` unless a hook points there or content is not yet extracted.
+5. **Secondary pass:** follow `.cursor/rules/deep-context-secondary.mdc` — load long docs mapped to the active hook(s) for implementation detail.
+
+Startup order: `START_HERE.md` → `docs/planning-rosetta-stone.md` → `AGENTS.md` → active task artifacts → secondary long docs (by hook).

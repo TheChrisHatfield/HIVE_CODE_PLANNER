@@ -1,0 +1,14 @@
+---
+description: Require validation before completion
+alwaysApply: true
+---
+
+# Validation
+
+**Hook:** `change.validation`, `cursor.rules`
+
+- Every completed task must include validation evidence.
+- For behavior changes, add or update tests.
+- For interface changes, explain downstream impact.
+- For architecture changes, update Delta docs and linked specs.
+- Do not mark complete if validation is missing.

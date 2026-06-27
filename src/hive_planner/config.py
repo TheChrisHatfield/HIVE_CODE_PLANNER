@@ -1,0 +1,69 @@
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from pathlib import Path
+
+
+@dataclass(frozen=True)
+class RepoPaths:
+    root: Path
+
+    @property
+    def sources(self) -> Path:
+        return self.root / "context-library" / "sources"
+
+    @property
+    def normalized_md(self) -> Path:
+        return self.root / "context-library" / "normalized" / "markdown"
+
+    @property
+    def normalized_meta(self) -> Path:
+        return self.root / "context-library" / "normalized" / "metadata"
+
+    @property
+    def indexes(self) -> Path:
+        return self.root / "context-library" / "indexes"
+
+    @property
+    def document_index(self) -> Path:
+        return self.indexes / "document-index.json"
+
+    @property
+    def chunk_index(self) -> Path:
+        return self.indexes / "chunk-index.json"
+
+    @property
+    def embedding_index(self) -> Path:
+        return self.indexes / "embedding-index.json"
+
+    @property
+    def cartridge(self) -> Path:
+        return self.root / "cartridge"
+
+    def ensure_dirs(self) -> None:
+        for path in (
+            self.sources,
+            self.normalized_md,
+            self.normalized_meta,
+            self.indexes,
+            self.cartridge,
+        ):
+            path.mkdir(parents=True, exist_ok=True)
+
+
+SUPPORTED_EXTENSIONS = {".md", ".txt", ".pdf", ".docx", ".html", ".htm", ".csv", ".pptx"}
+
+
+def resolve_root(root: Path | None) -> tuple[Path, bool]:
+    """Return (repo_root, was_auto_detected)."""
+    if root is not None:
+        return root.resolve(), False
+    cwd = Path.cwd().resolve()
+    for candidate in (cwd, *cwd.parents):
+        if (candidate / "START_HERE.md").exists() and (candidate / "docs" / "planning-rosetta-stone.md").exists():
+            return candidate, True
+    return cwd, False
+
+
+def is_repo_root(path: Path) -> bool:
+    return (path / "START_HERE.md").exists() and (path / "docs" / "planning-rosetta-stone.md").exists()

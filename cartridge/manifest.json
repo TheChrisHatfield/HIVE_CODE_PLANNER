@@ -1,0 +1,60 @@
+{
+  "schema_version": "cartridge.v1",
+  "cartridge_id": "ctx-2026-06-27-cartridge-pack-v1",
+  "title": "Cartridge context for cartridge-pack-v1",
+  "created_at": "2026-06-27T03:31:59.281186+00:00",
+  "source": {
+    "type": "context-library",
+    "compiler": "hive_planner",
+    "version": "1.0.0"
+  },
+  "targets": {
+    "delta_docs": true,
+    "spec_kit": true,
+    "cursor_rules": false,
+    "agents_md": false
+  },
+  "features": [
+    "cartridge-pack-v1"
+  ],
+  "status": "draft",
+  "source_context": {
+    "enabled": true,
+    "library_root": "context-library/sources",
+    "normalized_root": "context-library/normalized",
+    "mode": "supplemental",
+    "max_documents": 3,
+    "max_excerpts": 8
+  },
+  "stats": {
+    "documents": 1,
+    "chunks": 3,
+    "embeddings": 3,
+    "selected_chunks": 3,
+    "selected_documents": 1,
+    "retrieval_mode": "hybrid",
+    "delta_sync": {
+      "holistic": "updated",
+      "macro": "updated",
+      "micro": "updated"
+    },
+    "pack_sync": {
+      "source_map": "written",
+      "research_summary": "updated",
+      "memory": "updated",
+      "specseed": "updated"
+    },
+    "pack_files": 9
+  },
+  "files": [
+    "cartridge/holistic.md",
+    "cartridge/macro.md",
+    "cartridge/mappings/source-map.json",
+    "cartridge/memory.md",
+    "cartridge/micro/cartridge-pack-v1.md",
+    "cartridge/research-summary.md",
+    "cartridge/source-context.md",
+    "cartridge/specs/cartridge-pack-v1.specseed.md",
+    "cartridge/manifest.json"
+  ]
+}

@@ -1,0 +1,37 @@
+name: Agents Memory Proposal
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidates_path:
+        description: Repo-relative candidates file path
+        required: true
+        default: docs/proposals/candidates-template.md
+
+jobs:
+  propose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install package
+        run: pip install -e ".[dev]"
+
+      - name: Lint AGENTS.md
+        run: python -m hive_planner agents-lint
+
+      - name: Spec drift check
+        run: python -m hive_planner spec-drift-check
+
+      - name: Write memory proposal
+        run: python -m hive_planner agents-propose --candidates "${{ github.event.inputs.candidates_path }}"
+
+      - name: Upload proposal artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: agents-memory-proposal
+          path: docs/proposals/agents-memory-*.md

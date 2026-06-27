@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      {
+        "command": "py -3.11 .cursor/hooks/hive_session_start.py"
+      }
+    ],
+    "stop": [
+      {
+        "command": "py -3.11 .cursor/hooks/hive_session_stop.py"
+      }
+    ],
+    "afterFileEdit": [
+      {
+        "command": "py -3.11 .cursor/hooks/hive_agents_lint.py",
+        "matcher": "AGENTS\\.md$"
+      }
+    ]
+  }
+}

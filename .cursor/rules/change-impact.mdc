@@ -1,0 +1,15 @@
+---
+description: Require change impact review before coding or bug fixes
+alwaysApply: true
+---
+
+# Change Impact
+
+**Hook:** `change.impact`, `change.validation`
+
+- Before editing, identify primary, secondary, and tertiary effects.
+- Read or generate an impact packet under `docs/change-impact/impact-packets/` when changing `src/` or Delta docs.
+- List directly affected tests and dependent files from `docs/change-impact/test-map.md`.
+- Flag spec, architecture, or memory artifacts that may need updates.
+- Impact guidance is **secondary context** — active spec/plan/tasks remain primary execution truth.
+- If risk is high, minimize scope and validate before expanding the patch.

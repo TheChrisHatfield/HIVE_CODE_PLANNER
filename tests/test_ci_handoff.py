@@ -1,0 +1,118 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+from hive_planner.ci_handoff import run_ci_check
+from hive_planner.config import RepoPaths
+from hive_planner.map_sync import sync_impact_maps
+from hive_planner.spec_drift import parse_active_feature
+
+
+def _write_agents(paths: RepoPaths, body: str) -> None:
+    (paths.root / "AGENTS.md").write_text(body, encoding="utf-8")
+
+
+def _write_handoff_artifacts(paths: RepoPaths, feature: str) -> None:
+    spec_dir = paths.root / "docs" / "specs" / feature
+    spec_dir.mkdir(parents=True, exist_ok=True)
+    (spec_dir / "spec.md").write_text("# Spec\n", encoding="utf-8")
+    (spec_dir / "plan.md").write_text("# Plan\n", encoding="utf-8")
+    (spec_dir / "tasks.md").write_text("# Tasks\n", encoding="utf-8")
+    micro_dir = paths.root / "docs" / "delta" / "20_micro"
+    micro_dir.mkdir(parents=True, exist_ok=True)
+    (micro_dir / f"{feature}.md").write_text("# Micro\n", encoding="utf-8")
+
+
+def _minimal_agents(feature: str) -> str:
+    return "\n".join(
+        [
+            "# AGENTS",
+            "",
+            "## Repository root",
+            "",
+            "x",
+            "",
+            "## Planning Rosetta Stone",
+            "",
+            "x",
+            "",
+            "## Startup read order",
+            "",
+            "x",
+            "",
+            "## Delta model",
+            "",
+            "x",
+            "",
+            "## Active feature",
+            "",
+            f"**{feature}** — test",
+            "",
+        ]
+    )
+
+
+def test_parse_active_feature_from_file(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    _write_agents(paths, "# AGENTS\n\n## Active feature\n\n**git-handoff-ci-v1** — complete.\n")
+    assert parse_active_feature(paths) == "git-handoff-ci-v1"
+
+
+def test_ci_check_validates_handoff_artifacts(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    _write_agents(paths, _minimal_agents("git-handoff-ci-v1"))
+    report = run_ci_check(paths, skip_pytest=True, check_map_drift=False, check_roadmap=False)
+    handoff = next(s for s in report.steps if s.name == "handoff-artifacts")
+    assert not handoff.ok
+
+    _write_handoff_artifacts(paths, "git-handoff-ci-v1")
+    report = run_ci_check(paths, skip_pytest=True, check_map_drift=False, check_roadmap=False)
+    handoff = next(s for s in report.steps if s.name == "handoff-artifacts")
+    assert handoff.ok
+
+
+def test_ci_check_detects_map_drift(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    src = paths.root / "src" / "hive_planner"
+    src.mkdir(parents=True, exist_ok=True)
+    (src / "newmod.py").write_text('"""New."""\n', encoding="utf-8")
+    ci = paths.root / "docs" / "change-impact"
+    ci.mkdir(parents=True, exist_ok=True)
+    (ci / "project-map.md").write_text(
+        "# Project Map\n\n| Module | Role | Spec / Delta deps |\n|--------|------|-------------------|\n",
+        encoding="utf-8",
+    )
+    (ci / "test-map.md").write_text(
+        "# Test Map\n\n| Source module | Tests |\n|---------------|-------|\n",
+        encoding="utf-8",
+    )
+    _write_agents(paths, _minimal_agents("git-handoff-ci-v1"))
+    _write_handoff_artifacts(paths, "git-handoff-ci-v1")
+
+    report = run_ci_check(paths, skip_pytest=True, check_map_drift=True, check_roadmap=False)
+    drift = next(s for s in report.steps if s.name == "impact-map-drift")
+    assert not drift.ok
+
+    report2 = run_ci_check(paths, skip_pytest=True, check_map_drift=False, check_roadmap=False)
+    assert not any(s.name == "impact-map-drift" for s in report2.steps)
+
+
+def test_render_does_not_duplicate_table_header(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    src = paths.root / "src" / "hive_planner"
+    src.mkdir(parents=True, exist_ok=True)
+    (src / "sample.py").write_text("pass\n", encoding="utf-8")
+    ci = paths.root / "docs" / "change-impact"
+    ci.mkdir(parents=True, exist_ok=True)
+    (ci / "project-map.md").write_text(
+        "# Project Map\n\n| Module | Role | Spec / Delta deps |\n|--------|------|-------------------|\n",
+        encoding="utf-8",
+    )
+    (ci / "test-map.md").write_text(
+        "# Test Map\n\n| Source module | Tests |\n|---------------|-------|\n",
+        encoding="utf-8",
+    )
+    sync_impact_maps(paths)
+    content = (ci / "project-map.md").read_text(encoding="utf-8")
+    assert content.count("| Module | Role | Spec / Delta deps |") == 1
+    assert content.count("|--------|------|-------------------|") == 1

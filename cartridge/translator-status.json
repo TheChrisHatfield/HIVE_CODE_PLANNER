@@ -1,0 +1,23 @@
+{
+  "status": "ok",
+  "cartridge_id": "ctx-2026-06-21-cartridge-translator-v1",
+  "files_written": [
+    "holistic.md",
+    "macro.md",
+    "micro/cartridge-translator-v1.md",
+    "memory.md"
+  ],
+  "promotions": {
+    "agents_md_candidates": 0,
+    "cursor_rule_candidates": 0,
+    "spec_seed_created": false
+  },
+  "rejections": 2,
+  "classification_counts": {
+    "holistic": 1,
+    "macro": 1,
+    "micro": 5,
+    "memory": 0,
+    "reject": 2
+  }
+}

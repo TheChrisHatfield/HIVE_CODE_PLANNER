@@ -10,10 +10,39 @@ This repo is used **locally only** (no remote required). All project files live 
 d:\DRIVE_DOWNLOADS\HIVE_CODE_PLANNER
 ```
 
+## Agent startup
+
+1. Read [`START_HERE.md`](START_HERE.md)
+2. Load [`docs/planning-rosetta-stone.md`](docs/planning-rosetta-stone.md) — search **Planning Rosetta Stone** or hook `planning.rosetta`
+3. Read [`AGENTS.md`](AGENTS.md)
+
+## Active development
+
+**Feature:** `roadmap-complete-v1` — **v1.0.0 — Stages 1–6 complete**
+
+| Stage | Hooks | Command |
+|-------|-------|---------|
+| 6B | `workflow.tools` | `py -3.11 -m hive_planner roadmap-status` |
+| 6A | `context.cartridge_schema` | `py -3.11 -m hive_planner emit --feature <feature> --force-delta` |
+| 5C | `workflow.git_handoff` | `py -3.11 -m hive_planner ci-check` |
+
+```powershell
+py -3.11 -m pytest -v
+py -3.11 -m hive_planner roadmap-status
+py -3.11 -m hive_planner ci-check
+```
+
+See [docs/delta/STAGE_ROADMAP.md](docs/delta/STAGE_ROADMAP.md).
+
 ## Layout
 
 | Path | Purpose |
 |------|---------|
+| `START_HERE.md` | Agent context loader and read order |
+| `AGENTS.md` | Durable agent operating guidance |
+| `docs/planning-rosetta-stone.md` | Planning Rosetta Stone — hook legend |
+| `docs/thread-outline-with-metatags.md` | Meta-tag anchor map |
+| `docs/HIVE_PLANNING_DEV.md` | Full planning thread archive |
 | `docs/` | Architecture, decisions, and reference notes |
 | `plans/` | Planning artifacts, specs, and task breakdowns |
 | `src/` | Source code and scripts |

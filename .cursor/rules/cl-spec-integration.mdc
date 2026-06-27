@@ -1,0 +1,16 @@
+---
+description: Connect Continual Learning memory with Spec Kit behavioral truth
+alwaysApply: true
+---
+
+# CL + Spec Kit Integration
+
+**Hook:** `integration.cl_spec`, `spec.flow`, `memory.agents_md`
+
+- `AGENTS.md` stores **operational** facts (commands, paths, conventions), not product behavior.
+- Behavioral changes (APIs, acceptance criteria, requirements) belong in `docs/specs/<feature>/spec.md` first.
+- Do not promote Continual Learning bullets that describe **what the system must do** into `AGENTS.md`.
+- Before ending a session with memory updates, run `py -3.11 -m hive_planner spec-drift-check`.
+- If `agents-propose` rejects a candidate as behavioral, update the active spec before retrying.
+
+See [docs/cl-spec-integration.md](../docs/cl-spec-integration.md).
