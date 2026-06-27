@@ -14,6 +14,7 @@ from hive_planner.launcher.service import (
     _python_command,
     _py_launcher_commands,
     _version_supported,
+    auto_complete_onboarding_if_ready,
     clear_python_probe_cache,
     discover_python_installations,
     format_python_scan_report,
@@ -283,6 +284,101 @@ def test_run_project_map_sync_rejects_invalid_project(tmp_path: Path) -> None:
     assert "START_HERE" in result["error"]
 
 
+def test_load_user_guide_reads_scripts_readme(tmp_path: Path) -> None:
+    from hive_planner.launcher.user_guide import load_user_guide, user_guide_path
+
+    hive = tmp_path / "hive"
+    scripts = hive / "scripts"
+    scripts.mkdir(parents=True)
+    guide = scripts / "README.md"
+    guide.write_text("# Test guide\n\nWhat is Hive Planner?\n", encoding="utf-8")
+    cfg = LauncherConfig(hive_planner_root=str(hive))
+
+    assert user_guide_path(cfg) == guide.resolve()
+    text = load_user_guide(cfg)
+    assert "Test guide" in text
+    assert "What is Hive Planner?" in text
+
+
+def test_load_user_guide_fallback_when_missing(tmp_path: Path) -> None:
+    from hive_planner.launcher.user_guide import load_user_guide
+
+    cfg = LauncherConfig(hive_planner_root=str(tmp_path / "missing"))
+    text = load_user_guide(cfg)
+    assert "Hive Planner" in text
+    assert "First time?" in text
+
+
+def test_auto_complete_onboarding_when_setup_ready(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    hive = tmp_path / "hive"
+    hive.mkdir()
+    (hive / "pyproject.toml").write_text("[project]\nname='hive-planner'\n", encoding="utf-8")
+    cfg = LauncherConfig(
+        hive_planner_root=str(hive),
+        python_executable="py -3.11",
+        onboarding_complete=False,
+    )
+    monkeypatch.setattr(
+        "hive_planner.launcher.service.probe_python_command",
+        lambda _cmd: PythonInstallation(
+            command="py -3.11",
+            version="3.11.4",
+            executable=r"C:\Python311\python.exe",
+            supported=True,
+        ),
+    )
+    monkeypatch.setattr("hive_planner.launcher.service.importlib.metadata.version", lambda _name: "1.2.0")
+
+    assert auto_complete_onboarding_if_ready(cfg) is True
+    assert cfg.onboarding_complete is True
+
+
+def test_auto_complete_onboarding_skips_when_incomplete(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    cfg = LauncherConfig(onboarding_complete=False, hive_planner_root=str(tmp_path))
+    monkeypatch.setattr(
+        "hive_planner.launcher.service.get_setup_status",
+        lambda _cfg: type(
+            "S",
+            (),
+            {
+                "python_ok": True,
+                "hive_root_ok": True,
+                "hive_installed": False,
+            },
+        )(),
+    )
+    assert auto_complete_onboarding_if_ready(cfg) is False
+    assert cfg.onboarding_complete is False
+
+
+def test_load_config_auto_completes_onboarding(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    hive = tmp_path / "hive"
+    hive.mkdir()
+    (hive / "pyproject.toml").write_text("[project]\nname='hive-planner'\n", encoding="utf-8")
+    cfg_dir = tmp_path / "cfg"
+    monkeypatch.setattr("hive_planner.launcher.config.default_config_dir", lambda: cfg_dir)
+    save_config(
+        LauncherConfig(
+            hive_planner_root=str(hive),
+            python_executable="py -3.11",
+            onboarding_complete=False,
+        )
+    )
+    monkeypatch.setattr(
+        "hive_planner.launcher.service.probe_python_command",
+        lambda _cmd: PythonInstallation(
+            command="py -3.11",
+            version="3.11.4",
+            executable=r"C:\Python311\python.exe",
+            supported=True,
+        ),
+    )
+    monkeypatch.setattr("hive_planner.launcher.service.importlib.metadata.version", lambda _name: "1.2.0")
+
+    loaded = load_config()
+    assert loaded.onboarding_complete is True
+
+
 def test_map_sync_done_formats_success() -> None:
     from hive_planner.launcher.app import HivePlannerApp
 
@@ -375,6 +471,68 @@ def test_add_recent_project_dedupes_and_stores_profile(tmp_path: Path) -> None:
     assert cfg.recent_projects[0] == str(b.resolve())
     assert len(cfg.recent_projects) == 2
     assert cfg.project_profiles[str(b.resolve())] == "full"
+
+
+def test_remove_recent_project_updates_active_and_profiles(tmp_path: Path) -> None:
+    alive = tmp_path / "alive"
+    other = tmp_path / "other"
+    alive.mkdir()
+    other.mkdir()
+    cfg = LauncherConfig(
+        active_project=str(alive.resolve()),
+        recent_projects=[str(alive.resolve()), str(other.resolve())],
+        project_profiles={str(alive.resolve()): "full", str(other.resolve()): "minimal"},
+    )
+    assert cfg.remove_recent_project(alive) is True
+    assert cfg.recent_projects == [str(other.resolve())]
+    assert cfg.active_project == ""
+    assert str(alive.resolve()) not in cfg.project_profiles
+    assert cfg.remove_recent_project(tmp_path / "missing") is False
+
+
+def test_delete_project_profile_removes_metadata(tmp_path: Path) -> None:
+    from hive_planner.project_profile import delete_project_profile, project_meta_path, write_project_profile
+
+    project = tmp_path / "demo"
+    project.mkdir()
+    write_project_profile(project, profile="minimal", project_name="Demo")
+    meta = project_meta_path(project)
+    assert meta.is_file()
+
+    ok, msg = delete_project_profile(project)
+    assert ok is True
+    assert not meta.is_file()
+    assert not (project / ".hive").exists()
+
+    ok2, msg2 = delete_project_profile(project)
+    assert ok2 is False
+    assert "No Hive profile" in msg2
+
+
+def test_bind_mousewheel_uses_widget_binding_not_bind_all() -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    bindings: dict[str, list[str]] = {"bind": [], "bind_all": []}
+
+    class FakeListbox:
+        def bind(self, seq, _func) -> None:
+            bindings["bind"].append(seq)
+
+        def bind_all(self, seq, _func) -> None:
+            bindings["bind_all"].append(seq)
+
+    app._bind_mousewheel(FakeListbox())  # type: ignore[arg-type]
+    assert "<MouseWheel>" in bindings["bind"]
+    assert bindings["bind_all"] == []
+
+
+def test_format_recent_project_label_uses_folder_name_only() -> None:
+    from hive_planner.launcher.app import format_recent_project_label
+
+    path = r"F:\DRIVE DOWNLOADS\HIVE CODE\My Project"
+    assert format_recent_project_label(path) == "My Project"
+    assert format_recent_project_label(path, "full") == "My Project  [full]"
 
 
 def test_recent_selection_uses_path_index_not_label_parse(tmp_path: Path) -> None:
@@ -540,6 +698,25 @@ def test_select_recent_rejects_missing_project(tmp_path: Path) -> None:
     assert app.config.active_project == ""
 
 
+def test_recent_double_click_opens_folder(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    project = tmp_path / "demo-app"
+    project.mkdir()
+    opened: list[str] = []
+    monkeypatch.setattr(
+        "hive_planner.launcher.app.open_path_in_explorer",
+        lambda path: opened.append(str(path)) or {"ok": True, "path": str(path)},
+    )
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app._recent_project_paths = [str(project)]
+    app.recent_list = type("L", (), {"curselection": lambda self: (0,)})()
+
+    app._on_recent_double_click()
+    assert opened == [str(project.resolve())]
+
+
 def test_ci_check_done_clears_stale_steps_on_error() -> None:
     from hive_planner.launcher.app import HivePlannerApp
 
@@ -685,6 +862,7 @@ def test_console_visible_tracks_attachment_not_parent_console(monkeypatch: pytes
     from hive_planner.launcher import console_win as cw
 
     cw._console_attached = False
+    cw._console_visible = False
     monkeypatch.setattr(cw, "console_available", lambda: True)
 
     class FakeKernel:
@@ -696,13 +874,18 @@ def test_console_visible_tracks_attachment_not_parent_console(monkeypatch: pytes
         def AllocConsole():
             return 1
 
+    class FakeUser:
         @staticmethod
-        def FreeConsole():
+        def ShowWindow(_hwnd, _cmd):
             return 1
 
     import ctypes
 
-    monkeypatch.setattr(ctypes, "windll", type("W", (), {"kernel32": FakeKernel})())
+    monkeypatch.setattr(
+        ctypes,
+        "windll",
+        type("W", (), {"kernel32": FakeKernel, "user32": FakeUser})(),
+    )
     assert cw.is_console_visible() is False
     # Parent console present (e.g. dev launch) — visible but not app-owned.
     assert cw.show_console() is True
@@ -710,7 +893,8 @@ def test_console_visible_tracks_attachment_not_parent_console(monkeypatch: pytes
     assert cw.hide_console() is False
 
     cw._console_attached = False
-    calls = {"alloc": 0, "free": 0, "has_console": False}
+    cw._console_visible = False
+    calls = {"alloc": 0, "show": 0, "hide": 0, "has_console": False, "visible": False}
 
     class AllocKernel:
         @staticmethod
@@ -721,22 +905,38 @@ def test_console_visible_tracks_attachment_not_parent_console(monkeypatch: pytes
         def AllocConsole():
             calls["alloc"] += 1
             calls["has_console"] = True
+            calls["visible"] = True
             return 1
 
+    class AllocUser:
         @staticmethod
-        def FreeConsole():
-            calls["free"] += 1
-            calls["has_console"] = False
+        def ShowWindow(_hwnd, cmd):
+            if cmd == cw.SW_SHOW:
+                calls["show"] += 1
+                calls["visible"] = True
+            elif cmd == cw.SW_HIDE:
+                calls["hide"] += 1
+                calls["visible"] = False
             return 1
 
-    monkeypatch.setattr(ctypes, "windll", type("W", (), {"kernel32": AllocKernel})())
+    monkeypatch.setattr(
+        ctypes,
+        "windll",
+        type("W", (), {"kernel32": AllocKernel, "user32": AllocUser})(),
+    )
     assert cw.show_console() is True
     assert cw.is_console_visible() is True
+    assert calls["alloc"] == 1
+    assert calls["show"] == 1
     assert cw.hide_console() is True
     assert cw.is_console_visible() is False
+    assert calls["hide"] == 1
+    assert cw.show_console() is True
+    assert cw.is_console_visible() is True
     assert calls["alloc"] == 1
-    assert calls["free"] == 1
+    assert calls["show"] == 2
     cw._console_attached = False
+    cw._console_visible = False
 
 
 def test_on_explore_shows_error_for_missing_path(tmp_path: Path) -> None:
@@ -767,6 +967,7 @@ def test_toggle_console_keeps_show_label_for_parent_terminal(monkeypatch: pytest
     from hive_planner.launcher.app import HivePlannerApp
 
     cw._console_attached = False
+    cw._console_visible = False
     monkeypatch.setattr(cw, "console_available", lambda: True)
 
     class FakeKernel:
@@ -774,9 +975,18 @@ def test_toggle_console_keeps_show_label_for_parent_terminal(monkeypatch: pytest
         def GetConsoleWindow():
             return 1
 
+    class FakeUser:
+        @staticmethod
+        def ShowWindow(_hwnd, _cmd):
+            return 1
+
     import ctypes
 
-    monkeypatch.setattr(ctypes, "windll", type("W", (), {"kernel32": FakeKernel})())
+    monkeypatch.setattr(
+        ctypes,
+        "windll",
+        type("W", (), {"kernel32": FakeKernel, "user32": FakeUser})(),
+    )
 
     class FakeBtn:
         text = "Show console"
@@ -793,6 +1003,7 @@ def test_toggle_console_keeps_show_label_for_parent_terminal(monkeypatch: pytest
     app._on_toggle_console()
     assert app.console_btn.text == "Show console"
     cw._console_attached = False
+    cw._console_visible = False
 
 
 def test_console_available_on_windows_only() -> None:

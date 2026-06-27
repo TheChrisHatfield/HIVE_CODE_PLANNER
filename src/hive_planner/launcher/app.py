@@ -31,6 +31,14 @@ from hive_planner.launcher.theme import (
     secondary_button,
 )
 from hive_planner.launcher import console_win
+from hive_planner.launcher.user_guide import load_user_guide, user_guide_path
+
+
+def format_recent_project_label(path: str, profile: str | None = None) -> str:
+    folder = Path(path).name or path
+    if profile:
+        return f"{folder}  [{profile}]"
+    return folder
 
 
 class HivePlannerApp:
@@ -139,7 +147,10 @@ class HivePlannerApp:
                 bg=COLORS["card"],
                 fg=COLORS["muted"],
             ).pack(anchor="w", padx=12, pady=(0, 12))
-            primary_button(actions, "Get started →", lambda: self._advance_wizard(1))
+            if self.setup.python_ok and self.setup.hive_installed and self.setup.hive_root_ok:
+                primary_button(actions, "Open dashboard →", self._finish_onboarding)
+            else:
+                primary_button(actions, "Get started →", lambda: self._advance_wizard(1))
         elif self._wizard_step == 1:
             self.setup = get_setup_status(self.config)
             status_card = card(body)
@@ -157,7 +168,10 @@ class HivePlannerApp:
             secondary_button(actions, "← Back", lambda: self._advance_wizard(0))
             secondary_button(actions, "Scan for Python", self._on_scan_python)
             secondary_button(actions, "Install / update", self._on_install)
-            primary_button(actions, "Continue →", lambda: self._advance_wizard(2))
+            if self.setup.python_ok and self.setup.hive_installed and self.setup.hive_root_ok:
+                primary_button(actions, "Open dashboard →", self._finish_onboarding)
+            else:
+                primary_button(actions, "Continue →", lambda: self._advance_wizard(2))
         elif self._wizard_step == 2:
             paths_card = card(body)
             card_title(paths_card, "Paths")
@@ -225,8 +239,57 @@ class HivePlannerApp:
         self._build_projects_tab(projects)
         self._build_settings_tab(settings)
 
+    def _scrollable_tab(self, parent: tk.Frame) -> tk.Frame:
+        canvas = tk.Canvas(parent, bg=COLORS["bg"], highlightthickness=0)
+        scrollbar = ttk.Scrollbar(parent, orient="vertical", command=canvas.yview)
+        canvas.configure(yscrollcommand=scrollbar.set)
+        scrollbar.pack(side="right", fill="y")
+        canvas.pack(side="left", fill="both", expand=True)
+        inner = tk.Frame(canvas, bg=COLORS["bg"])
+        window_id = canvas.create_window((0, 0), window=inner, anchor="nw")
+
+        def _sync_scroll(_event=None) -> None:
+            canvas.configure(scrollregion=canvas.bbox("all"))
+
+        def _sync_width(event) -> None:
+            canvas.itemconfig(window_id, width=event.width)
+
+        inner.bind("<Configure>", _sync_scroll)
+        canvas.bind("<Configure>", _sync_width)
+        return inner
+
     def _build_home_tab(self, parent: tk.Frame) -> None:
-        stats = card(parent)
+        body = self._scrollable_tab(parent)
+
+        guide_card = card(body)
+        card_title(guide_card, "How to use Hive Planner")
+        tk.Label(
+            guide_card,
+            text="Plain-English guide — what this tool is and how to use it. Scroll to read.",
+            wraplength=760,
+            justify="left",
+            bg=COLORS["card"],
+            fg=COLORS["muted"],
+            font=FONT_SUBTITLE,
+        ).pack(anchor="w", padx=12, pady=(0, 6))
+        self.home_guide = scrolledtext.ScrolledText(
+            guide_card,
+            height=16,
+            font=FONT,
+            bg=COLORS["secondary"],
+            fg=COLORS["fg"],
+            relief="flat",
+            wrap="word",
+        )
+        self.home_guide.pack(fill="both", expand=True, padx=12, pady=(0, 8))
+        self.home_guide.insert("1.0", load_user_guide(self.config))
+        self.home_guide.configure(state="disabled")
+        guide_actions = tk.Frame(guide_card, bg=COLORS["card"])
+        guide_actions.pack(fill="x", padx=12, pady=(0, 12))
+        secondary_button(guide_actions, "Open guide in Explorer", self._on_open_user_guide)
+        secondary_button(guide_actions, "Run setup wizard", self._on_reset_onboarding)
+
+        stats = card(body)
         card_title(stats, "Status")
         row = tk.Frame(stats, bg=COLORS["card"])
         row.pack(fill="x", padx=12, pady=(0, 12))
@@ -240,18 +303,18 @@ class HivePlannerApp:
             tk.Label(cell, text=value, font=("Segoe UI", 14, "bold"), bg=COLORS["secondary"], fg=COLORS["primary"]).pack()
             tk.Label(cell, text=title, font=FONT_SUBTITLE, bg=COLORS["secondary"], fg=COLORS["muted"]).pack()
 
-        actions = tk.Frame(parent, bg=COLORS["bg"])
+        actions = tk.Frame(body, bg=COLORS["bg"])
         actions.pack(fill="x", padx=16, pady=8)
         primary_button(actions, "Run health check", self._on_ci_check)
         secondary_button(actions, "Open in Cursor", self._on_open_cursor)
         secondary_button(actions, "Sync impact maps", self._on_map_sync)
         secondary_button(actions, "Open in Explorer", self._on_explore)
 
-        log_card = card(parent)
+        log_card = card(body)
         card_title(log_card, "Output")
         self.home_log = scrolledtext.ScrolledText(
             log_card,
-            height=14,
+            height=10,
             font=("Consolas", 9),
             bg=COLORS["secondary"],
             fg=COLORS["fg"],
@@ -261,7 +324,7 @@ class HivePlannerApp:
         self.home_log.pack(fill="both", expand=True, padx=12, pady=(0, 12))
         self.home_log.configure(state="disabled")
 
-        check_card = card(parent)
+        check_card = card(body)
         card_title(check_card, "Latest ci-check")
         self.ci_list = tk.Listbox(check_card, height=6, font=FONT, bg=COLORS["card"], fg=COLORS["fg"], relief="flat")
         self.ci_list.pack(fill="x", padx=12, pady=(0, 12))
@@ -318,17 +381,36 @@ class HivePlannerApp:
 
         recent_card = card(parent)
         card_title(recent_card, "Recent projects")
-        self.recent_list = tk.Listbox(recent_card, height=8, font=FONT, bg=COLORS["card"], fg=COLORS["fg"], relief="flat")
-        self.recent_list.pack(fill="x", padx=12, pady=(0, 8))
+        recent_list_frame = tk.Frame(recent_card, bg=COLORS["card"])
+        recent_list_frame.pack(fill="x", padx=12, pady=(0, 8))
+        recent_scroll = ttk.Scrollbar(recent_list_frame, orient="vertical")
+        recent_scroll.pack(side="right", fill="y")
+        self.recent_list = tk.Listbox(
+            recent_list_frame,
+            height=8,
+            font=FONT,
+            bg=COLORS["card"],
+            fg=COLORS["fg"],
+            selectbackground=COLORS["primary"],
+            selectforeground="white",
+            activestyle="none",
+            relief="flat",
+            highlightthickness=1,
+            highlightbackground=COLORS["border"],
+            highlightcolor=COLORS["primary"],
+            yscrollcommand=recent_scroll.set,
+        )
+        self.recent_list.pack(side="left", fill="both", expand=True)
+        recent_scroll.config(command=self.recent_list.yview)
+        self.recent_list.bind("<Double-Button-1>", self._on_recent_double_click)
+        self._bind_mousewheel(self.recent_list)
         self._recent_project_paths: list[str] = []
-        for path in self.config.recent_projects:
-            summary = summarize_project(Path(path))
-            label = path if not summary.bootstrap_profile else f"{path}  [{summary.bootstrap_profile}]"
-            self._recent_project_paths.append(path)
-            self.recent_list.insert("end", label)
+        self._populate_recent_list()
         btn_row2 = tk.Frame(recent_card, bg=COLORS["card"])
         btn_row2.pack(fill="x", padx=12, pady=(0, 12))
         secondary_button(btn_row2, "Set as active", self._on_select_recent)
+        secondary_button(btn_row2, "Remove from list", self._on_remove_recent)
+        secondary_button(btn_row2, "Delete profile…", self._on_delete_profile)
 
     def _build_settings_tab(self, parent: tk.Frame) -> None:
         form = card(parent)
@@ -402,6 +484,27 @@ class HivePlannerApp:
         path = filedialog.askdirectory(title="Choose folder")
         if path:
             variable.set(path)
+
+    def _bind_mousewheel(self, widget: tk.Listbox) -> None:
+        def on_wheel(event) -> None:
+            widget.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+        widget.bind("<MouseWheel>", on_wheel)
+
+    def _populate_recent_list(self) -> None:
+        self.recent_list.delete(0, "end")
+        self._recent_project_paths.clear()
+        for path in self.config.recent_projects:
+            summary = summarize_project(Path(path))
+            label = format_recent_project_label(path, summary.bootstrap_profile)
+            self._recent_project_paths.append(path)
+            self.recent_list.insert("end", label)
+
+    def _selected_recent_path(self) -> Path | None:
+        selection = self.recent_list.curselection()
+        if not selection:
+            return None
+        return Path(self._recent_project_paths[selection[0]])
 
     def _active_feature_label(self) -> str:
         if not self.config.active_project:
@@ -696,6 +799,17 @@ class HivePlannerApp:
         if hasattr(self, "home_log"):
             self._append_log(self.home_log, f"Opened in Explorer: {result.get('path')}")
 
+    def _on_open_user_guide(self) -> None:
+        path = user_guide_path(self.config)
+        if not path.is_file():
+            messagebox.showwarning("Guide not found", f"Could not find:\n{path}")
+            return
+        result = open_path_in_explorer(path.parent)
+        if not result.get("ok"):
+            messagebox.showerror("Open guide", result.get("error", "Failed to open guide folder"))
+            return
+        messagebox.showinfo("User guide", f"Open this file in the folder:\n{path.name}")
+
     def _activate_project(self, path: Path, *, notify: bool = True) -> bool:
         summary = summarize_project(path)
         if not summary.ok:
@@ -767,12 +881,72 @@ class HivePlannerApp:
         self._show_dashboard()
 
     def _on_select_recent(self) -> None:
-        selection = self.recent_list.curselection()
-        if not selection:
+        path = self._selected_recent_path()
+        if path is None:
             messagebox.showwarning("No selection", "Pick a recent project.")
             return
-        path = Path(self._recent_project_paths[selection[0]])
         self._activate_project(path)
+
+    def _on_recent_double_click(self, _event=None) -> None:
+        path = self._selected_recent_path()
+        if path is None:
+            return
+        result = open_path_in_explorer(path)
+        if not result.get("ok"):
+            messagebox.showerror("Open folder", result.get("error", "Failed to open folder"))
+
+    def _on_remove_recent(self) -> None:
+        path = self._selected_recent_path()
+        if path is None:
+            messagebox.showwarning("No selection", "Pick a recent project.")
+            return
+        label = format_recent_project_label(str(path))
+        if not messagebox.askyesno(
+            "Remove from list",
+            f"Remove \"{label}\" from recent projects?\n\n"
+            "This only updates the launcher list. Nothing is deleted on disk.",
+        ):
+            return
+        self.config = load_config()
+        if not self.config.remove_recent_project(path):
+            messagebox.showwarning("Not found", "That project is not in the recent list.")
+            return
+        save_config(self.config)
+        self._show_dashboard()
+
+    def _on_delete_profile(self) -> None:
+        from hive_planner.project_profile import delete_project_profile, project_meta_path
+
+        path = self._selected_recent_path()
+        if path is None:
+            messagebox.showwarning("No selection", "Pick a recent project.")
+            return
+        folder = path.name
+        meta_file = project_meta_path(path)
+        if not messagebox.askyesno(
+            "Delete Hive profile",
+            f"Delete Hive profile metadata for:\n{folder}\n\n"
+            f"File removed: {meta_file.name}\n"
+            "Your project code, docs, and other files are kept.\n\n"
+            "Continue?",
+        ):
+            return
+        if not messagebox.askyesno(
+            "Confirm permanent deletion",
+            f"Permanent action — delete the Hive profile for \"{folder}\"?\n\n"
+            "This cannot be undone.",
+        ):
+            return
+        ok, detail = delete_project_profile(path)
+        if not ok:
+            messagebox.showerror("Delete profile", detail)
+            return
+        self.config = load_config()
+        normalized = str(path.resolve())
+        self.config.project_profiles.pop(normalized, None)
+        save_config(self.config)
+        messagebox.showinfo("Profile deleted", detail)
+        self._show_dashboard()
 
     def _on_save_settings(self) -> None:
         self.config.hive_planner_root = self.cfg_hive.get().strip()
@@ -783,6 +957,11 @@ class HivePlannerApp:
         messagebox.showinfo("Saved", "Settings updated.")
 
     def _on_reset_onboarding(self) -> None:
+        if not messagebox.askyesno(
+            "Setup wizard",
+            "Show the first-time setup wizard again?\n\nYour install and settings are kept.",
+        ):
+            return
         self.config.onboarding_complete = False
         save_config(self.config)
         self._wizard_step = 0
