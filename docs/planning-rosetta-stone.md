@@ -505,6 +505,28 @@ Use this file as the top-level legend for:
 
 ***
 
+## [HOOK:workflow.project_bootstrap]
+
+**HOOK_ID:** `workflow.project_bootstrap`
+
+**Meaning:** Bootstrap a new Hive agent profile directory from starter templates via `hive_planner init`.
+
+**PRIMARY FILES:**
+
+- [project-bootstrap-guide.md](./project-bootstrap-guide.md)
+- [specs/project-bootstrap-v1/spec.md](./specs/project-bootstrap-v1/spec.md)
+- [../src/hive_planner/bootstrap.py](../src/hive_planner/bootstrap.py)
+
+**UNLOCKS:**
+
+- one-folder-one-profile workflow
+- starter-kit / bootstrap_templates copy
+- detectable repo root via `is_repo_root()`
+
+**THREAD COVERAGE:** New project scaffolding without mutating Hive source tree.
+
+***
+
 ## [HOOK:repo.starter_files]
 
 **HOOK_ID:** `repo.starter_files`

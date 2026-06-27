@@ -17,6 +17,12 @@ ROADMAP_FEATURES: tuple[str, ...] = (
     "git-handoff-ci-v1",
     "cartridge-pack-v1",
     "roadmap-complete-v1",
+    "cl-spec-integration-v1",
+    "agents-memory-ci-v2",
+    "cartridge-pack-v2",
+    "change-impact-v3",
+    "project-bootstrap-v1",
+    "roadmap-complete-v2",
 )
 
 
