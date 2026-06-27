@@ -9,9 +9,49 @@ from hive_planner.launcher.config import LauncherConfig, load_config, normalize_
 from hive_planner.launcher.service import (
     _python_command,
     get_setup_status,
+    open_in_cursor,
     run_project_init,
     summarize_project,
 )
+
+
+def test_open_in_cursor_rejects_non_hive_project(tmp_path: Path) -> None:
+    result = open_in_cursor(tmp_path)
+    assert result["ok"] is False
+    assert "START_HERE" in result["error"]
+
+
+def test_open_in_cursor_launches_when_cursor_found(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    project = tmp_path / "app"
+    project.mkdir()
+    (project / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    from hive_planner.project_profile import write_project_profile
+
+    write_project_profile(project, profile="minimal", project_name="App")
+
+    launched: dict[str, list] = {"cmd": []}
+
+    def fake_popen(cmd, **kwargs):
+        launched["cmd"] = cmd
+        return None
+
+    monkeypatch.setattr("hive_planner.launcher.service.find_cursor_executable", lambda: r"C:\Cursor\Cursor.exe")
+    monkeypatch.setattr("hive_planner.launcher.service.subprocess.Popen", fake_popen)
+
+    result = open_in_cursor(project)
+    assert result["ok"] is True
+    assert launched["cmd"][0] == r"C:\Cursor\Cursor.exe"
+    assert launched["cmd"][1] == str(project.resolve())
+
+
+def test_open_in_cursor_errors_when_cursor_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    project = tmp_path / "app"
+    project.mkdir()
+    (project / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    monkeypatch.setattr("hive_planner.launcher.service.find_cursor_executable", lambda: None)
+    result = open_in_cursor(project)
+    assert result["ok"] is False
+    assert "Cursor not found" in result["error"]
 
 
 def test_config_roundtrip(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -75,11 +115,17 @@ def test_recent_selection_uses_path_index_not_label_parse(tmp_path: Path) -> Non
     import hive_planner.launcher.app as app_mod
 
     original_info = app_mod.messagebox.showinfo
+    original_load = app_mod.load_config
+    original_save = app_mod.save_config
     app_mod.messagebox.showinfo = lambda *a, **k: None
+    app_mod.load_config = lambda: app.config
+    app_mod.save_config = lambda cfg: None
     try:
         app._on_select_recent()
     finally:
         app_mod.messagebox.showinfo = original_info
+        app_mod.load_config = original_load
+        app_mod.save_config = original_save
     root.destroy()
 
     assert activated["path"] == str(tricky.resolve())

@@ -8,6 +8,7 @@ from tkinter import filedialog, messagebox, scrolledtext, ttk
 from hive_planner.launcher.config import LauncherConfig, load_config, save_config
 from hive_planner.launcher.service import (
     get_setup_status,
+    open_in_cursor,
     open_path_in_explorer,
     run_install,
     run_project_ci_check,
@@ -230,6 +231,7 @@ class HivePlannerApp:
         actions = tk.Frame(parent, bg=COLORS["bg"])
         actions.pack(fill="x", padx=16, pady=8)
         primary_button(actions, "Run health check", self._on_ci_check)
+        secondary_button(actions, "Open in Cursor", self._on_open_cursor)
         secondary_button(actions, "Sync impact maps", self._on_map_sync)
         secondary_button(actions, "Open in Explorer", self._on_explore)
 
@@ -253,6 +255,22 @@ class HivePlannerApp:
         self.ci_list.pack(fill="x", padx=12, pady=(0, 12))
 
     def _build_projects_tab(self, parent: tk.Frame) -> None:
+        hub = card(parent)
+        card_title(hub, "Cursor project hub")
+        tk.Label(
+            hub,
+            text="Link an existing Cursor/Hive repo to this launcher. Health checks and impact tools run against the active project.",
+            wraplength=760,
+            justify="left",
+            bg=COLORS["card"],
+            fg=COLORS["muted"],
+            font=FONT,
+        ).pack(anchor="w", padx=12, pady=(0, 8))
+        hub_actions = tk.Frame(hub, bg=COLORS["card"])
+        hub_actions.pack(fill="x", padx=12, pady=(0, 12))
+        primary_button(hub_actions, "Open project…", self._on_open_project)
+        secondary_button(hub_actions, "Open in Cursor", self._on_open_cursor)
+
         form = card(parent)
         card_title(form, "New project")
         self.new_name = tk.StringVar()
@@ -447,6 +465,44 @@ class HivePlannerApp:
             return
         open_path_in_explorer(Path(root))
 
+    def _activate_project(self, path: Path, *, notify: bool = True) -> bool:
+        summary = summarize_project(path)
+        if not summary.ok:
+            messagebox.showerror("Invalid project", summary.detail)
+            return False
+        self.config = load_config()
+        self.config.add_recent_project(path)
+        save_config(self.config)
+        if notify:
+            profile = summary.bootstrap_profile or "—"
+            messagebox.showinfo(
+                "Active Cursor project",
+                f"{path}\n\nProfile: {profile}\nFeature: {summary.active_feature or '—'}",
+            )
+        self._show_dashboard()
+        return True
+
+    def _on_open_project(self) -> None:
+        path = filedialog.askdirectory(title="Open Hive / Cursor project folder")
+        if not path:
+            return
+        self._activate_project(Path(path))
+
+    def _on_open_cursor(self) -> None:
+        root = self.config.active_project
+        if not root:
+            messagebox.showwarning("No project", "Open or select a project first (Projects tab).")
+            return
+        result = open_in_cursor(Path(root))
+        if not result.get("ok"):
+            messagebox.showerror("Open in Cursor", result.get("error", "Failed to launch Cursor"))
+            return
+        if hasattr(self, "home_log"):
+            self._append_log(
+                self.home_log,
+                f"Opened in Cursor: {result.get('path')} ({result.get('bootstrap_profile') or 'profile unknown'})",
+            )
+
     def _on_create_project(self) -> None:
         target = self.new_target.get().strip()
         if not target:
@@ -484,15 +540,8 @@ class HivePlannerApp:
         if not selection:
             messagebox.showwarning("No selection", "Pick a recent project.")
             return
-        path = self._recent_project_paths[selection[0]]
-        summary = summarize_project(Path(path))
-        if not summary.ok:
-            messagebox.showerror("Invalid project", summary.detail)
-            return
-        self.config.add_recent_project(Path(path))
-        save_config(self.config)
-        messagebox.showinfo("Active project", path)
-        self._show_dashboard()
+        path = Path(self._recent_project_paths[selection[0]])
+        self._activate_project(path)
 
     def _on_save_settings(self) -> None:
         self.config.hive_planner_root = self.cfg_hive.get().strip()

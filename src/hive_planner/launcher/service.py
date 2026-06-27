@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.metadata
+import os
 import shlex
 import shutil
 import subprocess
@@ -198,3 +199,49 @@ def open_path_in_explorer(path: Path) -> dict:
     else:
         subprocess.Popen(["xdg-open", str(target)])
     return {"ok": True, "path": str(target)}
+
+
+def find_cursor_executable() -> str | None:
+    found = shutil.which("cursor")
+    if found:
+        return found
+    if sys.platform == "win32":
+        local = os.environ.get("LOCALAPPDATA", "")
+        if local:
+            for rel in (
+                "Programs/cursor/Cursor.exe",
+                "Programs/Cursor/Cursor.exe",
+            ):
+                candidate = Path(local) / rel
+                if candidate.is_file():
+                    return str(candidate)
+    elif sys.platform == "darwin":
+        candidate = Path("/Applications/Cursor.app/Contents/MacOS/Cursor")
+        if candidate.is_file():
+            return str(candidate)
+    return None
+
+
+def open_in_cursor(project_root: Path) -> dict:
+    target = project_root.resolve()
+    if not target.is_dir():
+        return {"ok": False, "error": "Directory not found"}
+    summary = summarize_project(target)
+    if not summary.ok:
+        return {"ok": False, "error": summary.detail}
+    cursor_exe = find_cursor_executable()
+    if not cursor_exe:
+        return {
+            "ok": False,
+            "error": "Cursor not found. Install Cursor or add the cursor CLI to PATH.",
+        }
+    try:
+        subprocess.Popen([cursor_exe, str(target)], cwd=str(target), shell=False)
+    except OSError as exc:
+        return {"ok": False, "error": str(exc)}
+    return {
+        "ok": True,
+        "path": str(target),
+        "cursor": cursor_exe,
+        "bootstrap_profile": summary.bootstrap_profile,
+    }
