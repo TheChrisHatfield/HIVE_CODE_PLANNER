@@ -1558,6 +1558,12 @@ class HivePlannerApp:
             if result.get("feature"):
                 self._append_log(self.home_log, f"  using feature id: {result['feature']}")
         self._log_cartridge_promote(result.get("promote"))
+        promote = result.get("promote") or {}
+        if promote and promote.get("ok") is False:
+            self._append_log(
+                self.home_log,
+                "Cartridge load incomplete — files saved but promotion/handoff needs review (see above).",
+            )
         for warning in result.get("warnings", []):
             self._append_log(self.home_log, f"Warning: {warning}")
 

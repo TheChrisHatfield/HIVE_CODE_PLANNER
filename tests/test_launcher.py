@@ -853,6 +853,30 @@ def test_cartridge_load_done_does_not_log_success_after_emit_failure() -> None:
     assert "Cartridge load incomplete" in joined
 
 
+def test_cartridge_load_done_warns_when_promote_fails_on_success() -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.home_log = type("L", (), {"configure": lambda *a, **k: None})()
+    lines: list[str] = []
+    app._append_log = lambda _w, text: lines.append(text)  # type: ignore[method-assign]
+    app._log_cartridge_promote = lambda _promote: lines.append("PROMOTE_LOG")  # type: ignore[method-assign]
+
+    app._cartridge_load_done(
+        {
+            "ok": True,
+            "mode": "import",
+            "written": ["holistic.md"],
+            "promote": {"ok": False, "promotions": {"holistic": "skipped (not draft)"}},
+        }
+    )
+
+    joined = "\n".join(lines)
+    assert "Imported 1 cartridge file(s)." in joined
+    assert "PROMOTE_LOG" in joined
+    assert "promotion/handoff needs review" in joined
+
+
 def test_merge_cartridge_promote_keeps_load_ok_when_spec_drift_fails(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
