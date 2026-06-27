@@ -39,6 +39,11 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Overwrite cartridge holistic/macro/micro even when draft or manual banners exist",
     )
+    emit_parser.add_argument(
+        "--emit-rules-seeds",
+        action="store_true",
+        help="Write cartridge/rules/<feature>.mdc.seed from Delta macro/micro (never writes .cursor/rules/)",
+    )
     sub.add_parser("status", help="Show ingest/index/cartridge status")
 
     impact_parser = sub.add_parser("impact", help="Generate change-impact packet (hook: change.impact)")
@@ -153,7 +158,12 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "emit":
-        outputs, warnings = emit_cartridge(paths, args.feature, force_delta=args.force_delta)
+        outputs, warnings = emit_cartridge(
+            paths,
+            args.feature,
+            force_delta=args.force_delta,
+            emit_rules_seeds=args.emit_rules_seeds,
+        )
         print(f"Root: {root}")
         for warning in warnings:
             print(f"Warning: {warning}")
