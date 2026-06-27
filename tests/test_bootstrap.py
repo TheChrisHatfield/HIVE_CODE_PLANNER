@@ -152,6 +152,17 @@ def test_init_full_profile_avoids_python_keyword_package_slug(tmp_path: Path) ->
     compile(test_src, "test", "exec")
 
 
+def test_init_full_profile_escapes_quotes_in_pyproject_description(tmp_path: Path) -> None:
+    import tomllib
+
+    source = _hive_source(tmp_path)
+    target = tmp_path / "quoted_app"
+    init_project(source, target, name='My "Quoted" App', profile="full")
+
+    data = tomllib.loads((target / "pyproject.toml").read_text(encoding="utf-8"))
+    assert data["project"]["description"] == 'My "Quoted" App'
+
+
 def test_init_unknown_profile_errors(tmp_path: Path) -> None:
     source = _hive_source(tmp_path)
     target = tmp_path / "bad-profile"
