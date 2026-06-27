@@ -400,6 +400,11 @@ def _package_slug(folder_name: str) -> str:
     return slug
 
 
+def _toml_basic_string(value: str) -> str:
+    escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
+
+
 def _pyproject_toml(project_name: str, package_slug: str) -> str:
     return f"""{BOOTSTRAP_COMMENT}
 
@@ -410,7 +415,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "{package_slug}"
 version = "0.1.0"
-description = "{project_name}"
+description = {_toml_basic_string(project_name)}
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = []
