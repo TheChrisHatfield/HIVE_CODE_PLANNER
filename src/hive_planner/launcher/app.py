@@ -29,6 +29,7 @@ from hive_planner.launcher.theme import (
     card_title,
     primary_button,
     secondary_button,
+    bind_mousewheel,
 )
 from hive_planner.launcher import console_win
 from hive_planner.launcher.user_guide import load_user_guide, user_guide_path
@@ -240,12 +241,13 @@ class HivePlannerApp:
         self._build_projects_tab(projects)
         self._build_settings_tab(settings)
 
-    def _scrollable_tab(self, parent: tk.Frame) -> tk.Frame:
+    def _scrollable_tab(self, parent: tk.Frame) -> tuple[tk.Frame, tk.Canvas]:
         canvas = tk.Canvas(parent, bg=COLORS["bg"], highlightthickness=0)
         scrollbar = ttk.Scrollbar(parent, orient="vertical", command=canvas.yview)
         canvas.configure(yscrollcommand=scrollbar.set)
         scrollbar.pack(side="right", fill="y")
         canvas.pack(side="left", fill="both", expand=True)
+        bind_mousewheel(scrollbar, target=canvas)
         inner = tk.Frame(canvas, bg=COLORS["bg"])
         window_id = canvas.create_window((0, 0), window=inner, anchor="nw")
 
@@ -257,10 +259,23 @@ class HivePlannerApp:
 
         inner.bind("<Configure>", _sync_scroll)
         canvas.bind("<Configure>", _sync_width)
-        return inner
+        return inner, canvas
+
+    _PAGE_WHEEL_SKIP = (tk.Listbox, tk.Text)
+
+    def _bind_page_wheel(self, parent: tk.Misc, canvas: tk.Canvas) -> None:
+        bind_mousewheel(canvas, target=canvas)
+        self._bind_page_wheel_children(parent, canvas)
+
+    def _bind_page_wheel_children(self, parent: tk.Misc, canvas: tk.Canvas) -> None:
+        for child in parent.winfo_children():
+            if isinstance(child, self._PAGE_WHEEL_SKIP):
+                continue
+            bind_mousewheel(child, target=canvas)
+            self._bind_page_wheel_children(child, canvas)
 
     def _build_home_tab(self, parent: tk.Frame) -> None:
-        body = self._scrollable_tab(parent)
+        body, canvas = self._scrollable_tab(parent)
 
         guide_card = card(body)
         card_title(guide_card, "How to use Hive Planner")
@@ -285,6 +300,7 @@ class HivePlannerApp:
         self.home_guide.pack(fill="both", expand=True, padx=12, pady=(0, 8))
         self.home_guide.insert("1.0", load_user_guide(self.config))
         self.home_guide.configure(state="disabled")
+        bind_mousewheel(self.home_guide)
         guide_actions = tk.Frame(guide_card, bg=COLORS["card"])
         guide_actions.pack(fill="x", padx=12, pady=(0, 12))
         secondary_button(guide_actions, "Open guide in Explorer", self._on_open_user_guide)
@@ -324,11 +340,14 @@ class HivePlannerApp:
         )
         self.home_log.pack(fill="both", expand=True, padx=12, pady=(0, 12))
         self.home_log.configure(state="disabled")
+        bind_mousewheel(self.home_log)
 
         check_card = card(body)
         card_title(check_card, "Latest ci-check")
         self.ci_list = tk.Listbox(check_card, height=6, font=FONT, bg=COLORS["card"], fg=COLORS["fg"], relief="flat")
         self.ci_list.pack(fill="x", padx=12, pady=(0, 12))
+        bind_mousewheel(self.ci_list)
+        self._bind_page_wheel(body, canvas)
 
     def _build_projects_tab(self, parent: tk.Frame) -> None:
         hub = card(parent)
@@ -384,8 +403,7 @@ class HivePlannerApp:
         card_title(recent_card, "Recent projects")
         recent_list_frame = tk.Frame(recent_card, bg=COLORS["card"])
         recent_list_frame.pack(fill="x", padx=12, pady=(0, 8))
-        recent_scroll = ttk.Scrollbar(recent_list_frame, orient="vertical")
-        recent_scroll.pack(side="right", fill="y")
+        self.recent_scroll = ttk.Scrollbar(recent_list_frame, orient="vertical")
         self.recent_list = tk.Listbox(
             recent_list_frame,
             height=8,
@@ -399,12 +417,13 @@ class HivePlannerApp:
             highlightthickness=1,
             highlightbackground=COLORS["border"],
             highlightcolor=COLORS["primary"],
-            yscrollcommand=recent_scroll.set,
         )
         self.recent_list.pack(side="left", fill="both", expand=True)
-        recent_scroll.config(command=self.recent_list.yview)
+        self.recent_scroll.config(command=self.recent_list.yview)
         self.recent_list.bind("<Double-Button-1>", self._on_recent_double_click)
-        self._bind_mousewheel(self.recent_list)
+        bind_mousewheel(self.recent_scroll, target=self.recent_list)
+        bind_mousewheel(recent_list_frame, target=self.recent_list)
+        bind_mousewheel(self.recent_list)
         self._recent_project_paths: list[str] = []
         self._populate_recent_list()
         btn_row2 = tk.Frame(recent_card, bg=COLORS["card"])
@@ -486,12 +505,6 @@ class HivePlannerApp:
         if path:
             variable.set(path)
 
-    def _bind_mousewheel(self, widget: tk.Listbox) -> None:
-        def on_wheel(event) -> None:
-            widget.yview_scroll(int(-1 * (event.delta / 120)), "units")
-
-        widget.bind("<MouseWheel>", on_wheel)
-
     def _populate_recent_list(self) -> None:
         self.recent_list.delete(0, "end")
         self._recent_project_paths.clear()
@@ -503,6 +516,19 @@ class HivePlannerApp:
             )
             self._recent_project_paths.append(path)
             self.recent_list.insert("end", label)
+        self._update_recent_scrollbar()
+
+    def _update_recent_scrollbar(self) -> None:
+        count = self.recent_list.size()
+        height = int(self.recent_list.cget("height"))
+        if count > height:
+            if not self.recent_scroll.winfo_ismapped():
+                self.recent_scroll.pack(side="right", fill="y")
+            self.recent_list.configure(yscrollcommand=self.recent_scroll.set)
+        else:
+            self.recent_scroll.pack_forget()
+            self.recent_list.configure(yscrollcommand=lambda *_args: None)
+            self.recent_list.yview_moveto(0)
 
     def _selected_recent_path(self) -> Path | None:
         selection = self.recent_list.curselection()
@@ -668,6 +694,9 @@ class HivePlannerApp:
         scroll = tk.Scrollbar(list_frame, command=picker.yview)
         scroll.pack(side="right", fill="y")
         picker.configure(yscrollcommand=scroll.set)
+        bind_mousewheel(scroll, target=picker)
+        bind_mousewheel(list_frame, target=picker)
+        bind_mousewheel(picker)
 
         default_index = 0
         supported = [i for i, inst in enumerate(installations) if inst.supported]
@@ -692,6 +721,7 @@ class HivePlannerApp:
         report.pack(fill="x", padx=16, pady=(0, 8))
         report.insert("end", format_python_scan_report(installations))
         report.configure(state="disabled")
+        bind_mousewheel(report)
 
         actions = tk.Frame(dialog, bg=COLORS["bg"])
         actions.pack(fill="x", padx=16, pady=(0, 16))
@@ -814,10 +844,54 @@ class HivePlannerApp:
             return
         messagebox.showinfo("User guide", f"Open this file in the folder:\n{path.name}")
 
+    def _bootstrap_and_activate(self, path: Path, *, notify: bool = True) -> bool:
+        cfg = load_config()
+        result = run_project_init(
+            cfg,
+            target=path,
+            name=path.name,
+            profile=cfg.default_profile,
+            git_init=False,
+            force=False,
+        )
+        if not result.get("ok"):
+            messagebox.showerror("Setup failed", result.get("error", "Could not create Hive project."))
+            return False
+        self.config = load_config()
+        self.config.add_recent_project(Path(result["target"]))
+        save_config(self.config)
+        if notify:
+            messagebox.showinfo(
+                "Hive project ready",
+                f"Created planning files in:\n{result['target']}\n\nProfile: {cfg.default_profile}",
+            )
+        self._show_dashboard()
+        return True
+
     def _activate_project(self, path: Path, *, notify: bool = True) -> bool:
         summary = summarize_project(path)
         if not summary.ok:
-            messagebox.showerror("Invalid project", summary.detail)
+            if "START_HERE" in summary.detail and path.is_dir():
+                try:
+                    empty = not any(path.iterdir())
+                except OSError:
+                    empty = False
+                if empty and messagebox.askyesno(
+                    "Set up this folder as a Hive project?",
+                    f"No START_HERE.md found in:\n{path}\n\n"
+                    "Create Hive planning files here now?",
+                ):
+                    return self._bootstrap_and_activate(path, notify=notify)
+                messagebox.showerror(
+                    "Not a Hive project",
+                    f"This folder is missing START_HERE.md:\n{path}\n\n"
+                    "Try one of these:\n"
+                    "• Projects → Create project — scaffold a new folder\n"
+                    "• Open project… — pick a folder that already has START_HERE.md\n"
+                    "• Open project… on an empty folder — accept setup when prompted",
+                )
+            else:
+                messagebox.showerror("Invalid project", summary.detail)
             return False
         self.config = load_config()
         self.config.add_recent_project(path)

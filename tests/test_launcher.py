@@ -544,22 +544,85 @@ def test_recent_label_uses_stored_profile_not_inferred(tmp_path: Path) -> None:
     assert format_recent_project_label(str(project), None) == "demo"
 
 
-def test_bind_mousewheel_uses_widget_binding_not_bind_all() -> None:
+def test_update_recent_scrollbar_hides_when_list_is_short() -> None:
     from hive_planner.launcher.app import HivePlannerApp
 
+    packed: list[bool] = []
+
+    class FakeScroll:
+        def winfo_ismapped(self) -> bool:
+            return bool(packed)
+
+        def pack(self, **_kwargs) -> None:
+            packed.append(True)
+
+        def pack_forget(self) -> None:
+            packed.clear()
+
+        def set(self, *_args) -> None:
+            return None
+
+    class FakeList:
+        def __init__(self) -> None:
+            self._items = ["a", "b", "a", "b", "a", "b", "a", "b"]
+
+        def size(self) -> int:
+            return len(self._items)
+
+        def cget(self, key: str):
+            if key == "height":
+                return 8
+            raise KeyError(key)
+
+        def configure(self, **_kwargs) -> None:
+            return None
+
+        def yview_moveto(self, _pos) -> None:
+            return None
+
     app = HivePlannerApp.__new__(HivePlannerApp)
-    bindings: dict[str, list[str]] = {"bind": [], "bind_all": []}
+    app.recent_list = FakeList()
+    app.recent_scroll = FakeScroll()
+    app._update_recent_scrollbar()
+    assert packed == []
 
-    class FakeListbox:
-        def bind(self, seq, _func) -> None:
-            bindings["bind"].append(seq)
+    app.recent_list._items.extend(["extra"] * 3)
+    app._update_recent_scrollbar()
+    assert packed == [True]
 
-        def bind_all(self, seq, _func) -> None:
-            bindings["bind_all"].append(seq)
 
-    app._bind_mousewheel(FakeListbox())  # type: ignore[arg-type]
-    assert "<MouseWheel>" in bindings["bind"]
-    assert bindings["bind_all"] == []
+def test_bind_mousewheel_scrolls_on_enter_and_unbinds_on_destroy() -> None:
+    from hive_planner.launcher.theme import bind_mousewheel
+
+    handlers: dict = {}
+    scrolled: list[int] = []
+
+    class FakeWidget:
+        def bind(self, seq, func, add=None) -> None:
+            handlers[seq] = func
+
+        def bind_all(self, seq, func) -> None:
+            handlers["<MouseWheel>"] = func
+
+        def unbind_all(self, seq) -> None:
+            handlers.pop("<MouseWheel>", None)
+
+        def yview_scroll(self, amount, _what) -> None:
+            scrolled.append(amount)
+
+    widget = FakeWidget()
+    bind_mousewheel(widget, target=widget)
+
+    handlers["<Enter>"](None)
+    handlers["<MouseWheel>"](type("E", (), {"delta": 120})())
+    assert scrolled == [-1]
+
+    handlers["<Leave>"](None)
+    assert "<MouseWheel>" not in handlers
+
+    handlers["<Enter>"](None)
+    handlers["<Destroy>"](None)
+    assert "<MouseWheel>" not in handlers
 
 
 def test_format_recent_project_label_uses_folder_name_only() -> None:
@@ -610,6 +673,28 @@ def test_recent_selection_uses_path_index_not_label_parse(tmp_path: Path) -> Non
         app_mod.save_config = original_save
 
     assert activated["path"] == str(tricky.resolve())
+
+
+def test_bootstrap_and_activate_scaffolds_empty_folder(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    hive_root = Path(__file__).resolve().parents[1]
+    target = tmp_path / "new-app"
+    target.mkdir()
+    cfg = LauncherConfig(hive_planner_root=str(hive_root), default_profile="minimal")
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app._show_dashboard = lambda: None  # type: ignore[method-assign]
+
+    import hive_planner.launcher.app as app_mod
+
+    monkeypatch.setattr(app_mod, "load_config", lambda: cfg)
+    monkeypatch.setattr(app_mod, "save_config", lambda _cfg: None)
+    monkeypatch.setattr(app_mod.messagebox, "showinfo", lambda *a, **k: None)
+
+    assert app._bootstrap_and_activate(target) is True
+    assert (target / "START_HERE.md").is_file()
+    assert (target / "AGENTS.md").is_file()
 
 
 def test_load_config_normalizes_project_paths(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
