@@ -10,6 +10,7 @@ from pathlib import Path
 from hive_planner.config import RepoPaths, is_repo_root
 
 BOOTSTRAP_BANNER = "<!-- BOOTSTRAP: hive_planner init -->"
+BOOTSTRAP_COMMENT = "# BOOTSTRAP: hive_planner init"
 BOOTSTRAP_PROFILES = frozenset({"minimal", "full"})
 
 
@@ -397,7 +398,7 @@ def _package_slug(folder_name: str) -> str:
 
 
 def _pyproject_toml(project_name: str, package_slug: str) -> str:
-    return f"""{BOOTSTRAP_BANNER}
+    return f"""{BOOTSTRAP_COMMENT}
 
 [build-system]
 requires = ["setuptools>=61"]
@@ -496,13 +497,13 @@ jobs:
 
 
 def _src_init(package_slug: str, project_name: str) -> str:
-    return f'''{BOOTSTRAP_BANNER}
+    return f'''{BOOTSTRAP_COMMENT}
 """{project_name} application package."""
 '''
 
 
 def _test_placeholder(package_slug: str) -> str:
-    return f"""{BOOTSTRAP_BANNER}
+    return f"""{BOOTSTRAP_COMMENT}
 
 def test_package_importable() -> None:
     import {package_slug}

@@ -126,6 +126,20 @@ def test_init_full_profile_writes_dev_scaffold(tmp_path: Path) -> None:
     assert "pyproject.toml" in result.files_written
 
 
+def test_init_full_profile_generates_valid_python_and_toml(tmp_path: Path) -> None:
+    import tomllib
+
+    source = _hive_source(tmp_path)
+    target = tmp_path / "valid_app"
+    init_project(source, target, name="Valid App", profile="full")
+
+    init_src = (target / "src" / "valid_app" / "__init__.py").read_text(encoding="utf-8")
+    test_src = (target / "tests" / "test_placeholder.py").read_text(encoding="utf-8")
+    compile(init_src, "init", "exec")
+    compile(test_src, "test", "exec")
+    tomllib.loads((target / "pyproject.toml").read_text(encoding="utf-8"))
+
+
 def test_init_unknown_profile_errors(tmp_path: Path) -> None:
     source = _hive_source(tmp_path)
     target = tmp_path / "bad-profile"
