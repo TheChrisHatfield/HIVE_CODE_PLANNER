@@ -82,6 +82,7 @@ def emit_cartridge(
     feature: str,
     *,
     force_delta: bool = False,
+    emit_rules_seeds: bool = False,
 ) -> tuple[dict[str, Path], list[str]]:
     paths.ensure_dirs()
     paths.cartridge.mkdir(parents=True, exist_ok=True)
@@ -120,7 +121,12 @@ def emit_cartridge(
         "title": f"Cartridge context for {feature}",
         "created_at": datetime.now(timezone.utc).isoformat(),
         "source": {"type": "context-library", "compiler": "hive_planner", "version": COMPILER_VERSION},
-        "targets": {"delta_docs": True, "spec_kit": True, "cursor_rules": False, "agents_md": False},
+        "targets": {
+            "delta_docs": True,
+            "spec_kit": True,
+            "cursor_rules": False,
+            "agents_md": False,
+        },
         "features": [feature],
         "status": "draft",
         "source_context": {
@@ -148,11 +154,18 @@ def emit_cartridge(
 
     from hive_planner.cartridge_pack import emit_cartridge_pack, validate_pack_completeness
 
-    pack_paths, pack_results, pack_warnings = emit_cartridge_pack(paths, feature, force=force_delta)
+    pack_paths, pack_results, pack_warnings = emit_cartridge_pack(
+        paths,
+        feature,
+        force=force_delta,
+        emit_rules_seeds=emit_rules_seeds,
+    )
     warnings.extend(pack_warnings)
 
     manifest["stats"]["delta_sync"] = delta_results
     manifest["stats"]["pack_sync"] = pack_results
+    if emit_rules_seeds and pack_results.get("rules_seed") in {"written", "updated"}:
+        manifest["targets"]["cursor_rules"] = "seed"
 
     lines = [
         "# Source Context",

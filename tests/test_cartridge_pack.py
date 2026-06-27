@@ -237,6 +237,32 @@ def test_emit_cartridge_pack_rules_seed_disabled_by_default(tmp_path: Path) -> N
     assert not (paths.cartridge / "rules" / f"{feature}.mdc.seed").exists()
 
 
+def test_emit_cartridge_rules_seed_manifest_false_when_missing_micro(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    paths.ensure_dirs()
+    (paths.root / "AGENTS.md").write_text(
+        "# AGENTS\n\n## Durable Workspace Facts\n\n- fact\n",
+        encoding="utf-8",
+    )
+
+    _, warnings = emit_cartridge(paths, "missing-feature", force_delta=True, emit_rules_seeds=True)
+    manifest = json.loads((paths.cartridge / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["targets"]["cursor_rules"] is False
+    assert manifest["stats"]["pack_sync"]["rules_seed"] == "missing"
+
+
+def test_emit_cartridge_avoids_duplicate_micro_warnings(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    paths.ensure_dirs()
+    (paths.root / "AGENTS.md").write_text(
+        "# AGENTS\n\n## Durable Workspace Facts\n\n- fact\n",
+        encoding="utf-8",
+    )
+
+    _, warnings = emit_cartridge(paths, "missing-feature", force_delta=True, emit_rules_seeds=True)
+    assert sum("Missing micro brief" in w for w in warnings) == 1
+
+
 def test_build_rule_seed_body_quotes_yaml_description(tmp_path: Path) -> None:
     from hive_planner.cartridge_pack import _yaml_double_quoted
 
