@@ -558,6 +558,25 @@ def test_recent_label_uses_stored_profile_not_inferred(tmp_path: Path) -> None:
     assert format_recent_project_label(str(project), None) == "demo"
 
 
+def test_active_profile_label_uses_stored_metadata_not_inference(tmp_path: Path) -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+    from hive_planner.project_profile import write_project_profile
+
+    project = tmp_path / "demo"
+    project.mkdir()
+    (project / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    (project / "pyproject.toml").write_text("[project]\nname='demo'\n", encoding="utf-8")
+    write_project_profile(project, profile="minimal", project_name="Demo")
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.config = LauncherConfig(active_project=str(project.resolve()))
+    assert app._active_profile_label() == "minimal"
+
+    (project / ".hive" / "project.json").unlink()
+    (project / ".hive").rmdir()
+    assert app._active_profile_label() == "—"
+
+
 def test_update_recent_scrollbar_hides_when_list_is_short() -> None:
     from hive_planner.launcher.app import HivePlannerApp
 

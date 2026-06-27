@@ -545,11 +545,14 @@ class HivePlannerApp:
     def _active_profile_label(self) -> str:
         if not self.config.active_project:
             return "—"
-        summary = summarize_project(Path(self.config.active_project))
-        if summary.bootstrap_profile:
-            return summary.bootstrap_profile
+        stored = read_project_profile(Path(self.config.active_project))
+        if stored:
+            return stored.bootstrap_profile
         cached = self.config.project_profiles.get(self.config.active_project)
-        return cached or "—"
+        if cached:
+            return cached
+        normalized = normalize_project_path(self.config.active_project)
+        return self.config.project_profiles.get(normalized) or "—"
 
     def _append_log(self, widget: scrolledtext.ScrolledText, text: str) -> None:
         widget.configure(state="normal")
