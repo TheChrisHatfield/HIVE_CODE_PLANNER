@@ -44,6 +44,47 @@ def test_add_recent_project_dedupes_and_stores_profile(tmp_path: Path) -> None:
     assert cfg.project_profiles[str(b.resolve())] == "full"
 
 
+def test_recent_selection_uses_path_index_not_label_parse(tmp_path: Path) -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+    import tkinter as tk
+
+    tricky = tmp_path / "weird  [full]-name"
+    tricky.mkdir()
+    (tricky / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+
+    root = tk.Tk()
+    root.withdraw()
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.config = LauncherConfig(recent_projects=[str(tricky)])
+    app.root = root
+    app._recent_project_paths = [str(tricky.resolve())]
+    app.recent_list = type(
+        "L",
+        (),
+        {"curselection": lambda self: (0,), "get": lambda self, i: f"{tricky}  [minimal]"},
+    )()
+
+    activated: dict[str, str] = {}
+
+    def fake_add_recent(project_root: Path) -> None:
+        activated["path"] = str(project_root)
+
+    app.config.add_recent_project = fake_add_recent  # type: ignore[method-assign]
+    app._show_dashboard = lambda: None  # type: ignore[method-assign]
+
+    import hive_planner.launcher.app as app_mod
+
+    original_info = app_mod.messagebox.showinfo
+    app_mod.messagebox.showinfo = lambda *a, **k: None
+    try:
+        app._on_select_recent()
+    finally:
+        app_mod.messagebox.showinfo = original_info
+    root.destroy()
+
+    assert activated["path"] == str(tricky.resolve())
+
+
 def test_load_config_normalizes_project_paths(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     project = tmp_path / "my-app"
     project.mkdir()

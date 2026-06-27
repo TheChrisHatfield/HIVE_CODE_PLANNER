@@ -290,9 +290,11 @@ class HivePlannerApp:
         card_title(recent_card, "Recent projects")
         self.recent_list = tk.Listbox(recent_card, height=8, font=FONT, bg=COLORS["card"], fg=COLORS["fg"], relief="flat")
         self.recent_list.pack(fill="x", padx=12, pady=(0, 8))
+        self._recent_project_paths: list[str] = []
         for path in self.config.recent_projects:
             summary = summarize_project(Path(path))
             label = path if not summary.bootstrap_profile else f"{path}  [{summary.bootstrap_profile}]"
+            self._recent_project_paths.append(path)
             self.recent_list.insert("end", label)
         btn_row2 = tk.Frame(recent_card, bg=COLORS["card"])
         btn_row2.pack(fill="x", padx=12, pady=(0, 12))
@@ -482,9 +484,7 @@ class HivePlannerApp:
         if not selection:
             messagebox.showwarning("No selection", "Pick a recent project.")
             return
-        path = self.recent_list.get(selection[0])
-        if "  [" in path:
-            path = path.split("  [", 1)[0]
+        path = self._recent_project_paths[selection[0]]
         summary = summarize_project(Path(path))
         if not summary.ok:
             messagebox.showerror("Invalid project", summary.detail)
