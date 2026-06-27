@@ -173,7 +173,15 @@ def ensure_handoff_rosetta_navigation(
 
 
 def agents_has_rosetta_section(text: str) -> bool:
-    return re.search(rf"^{re.escape(AGENTS_ROSETTA_HEADING)}", text, re.MULTILINE) is not None
+    match = re.search(
+        rf"^{re.escape(AGENTS_ROSETTA_HEADING)}[^\n]*\n(.*?)(?=^## |\Z)",
+        text,
+        re.MULTILINE | re.DOTALL,
+    )
+    if not match:
+        return False
+    body = match.group(1)
+    return bool(body.strip()) and "planning.rosetta" in body
 
 
 def agents_missing_rosetta_section(text: str) -> bool:

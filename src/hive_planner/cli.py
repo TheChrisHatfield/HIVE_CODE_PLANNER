@@ -425,6 +425,10 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Wrote CL candidates: {result.candidates_path}")
         for warning in result.warnings:
             print(f"Warning: {warning}", file=sys.stderr)
+        if not result.ok:
+            from hive_planner.cartridge_promote import HANDOFF_INCOMPLETE_MSG
+
+            print(HANDOFF_INCOMPLETE_MSG, file=sys.stderr)
         print(json.dumps(result.to_dict(), indent=2))
         return 0 if result.ok else 1
 

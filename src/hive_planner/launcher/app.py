@@ -1516,6 +1516,12 @@ class HivePlannerApp:
                     "Tip: re-open Load cartridge, enable Overwrite existing cartridge files, then try again.",
                 )
             self._log_cartridge_promote(result.get("promote"))
+            promote = result.get("promote") or {}
+            if promote and promote.get("ok") is False:
+                self._append_log(
+                    self.home_log,
+                    "Cartridge load incomplete — files saved but promotion/handoff needs review (see above).",
+                )
             return
 
         mode = result.get("mode")

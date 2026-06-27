@@ -115,3 +115,5 @@ def test_agents_missing_rosetta_requires_section_heading() -> None:
     assert agents_has_rosetta_section(bullet_only) is False
     with_heading = "# AGENTS\n\n## Planning Rosetta Stone\n\n- hook `planning.rosetta`\n"
     assert agents_missing_rosetta_section(with_heading) is False
+    heading_only = "# AGENTS\n\n## Planning Rosetta Stone\n\nReplace with real anchor text.\n"
+    assert agents_missing_rosetta_section(heading_only) is True
