@@ -30,13 +30,31 @@ def test_config_roundtrip(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> No
     assert loaded.recent_projects == [str(tmp_path / "proj-a")]
 
 
-def test_add_recent_project_dedupes(tmp_path: Path) -> None:
+def test_add_recent_project_dedupes_and_stores_profile(tmp_path: Path) -> None:
     a = tmp_path / "a"
     b = tmp_path / "b"
+    a.mkdir()
+    b.mkdir()
+    (b / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    (b / "pyproject.toml").write_text("[project]\nname='b'\n", encoding="utf-8")
     cfg = LauncherConfig(recent_projects=[str(a), str(b)])
     cfg.add_recent_project(b)
     assert cfg.recent_projects[0] == str(b.resolve())
     assert len(cfg.recent_projects) == 2
+    assert cfg.project_profiles[str(b.resolve())] == "full"
+
+
+def test_summarize_includes_profile(tmp_path: Path) -> None:
+    project = tmp_path / "demo"
+    project.mkdir()
+    (project / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    from hive_planner.project_profile import write_project_profile
+
+    write_project_profile(project, profile="minimal", project_name="Demo")
+    summary = summarize_project(project)
+    assert summary.ok is True
+    assert summary.bootstrap_profile == "minimal"
+    assert summary.project_name == "Demo"
 
 
 def test_summarize_non_hive_project(tmp_path: Path) -> None:

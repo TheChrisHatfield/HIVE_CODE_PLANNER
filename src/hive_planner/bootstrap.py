@@ -703,3 +703,19 @@ def _write_bootstrap_tree(
             force=force,
             written=written,
         )
+
+    from hive_planner.project_profile import write_project_profile
+
+    try:
+        import importlib.metadata
+
+        hive_version = importlib.metadata.version("hive-planner")
+    except Exception:
+        hive_version = None
+    meta_path = write_project_profile(
+        target,
+        profile=profile,
+        project_name=project_name,
+        hive_planner_version=hive_version,
+    )
+    written.append(meta_path.relative_to(target).as_posix())

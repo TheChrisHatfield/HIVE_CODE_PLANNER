@@ -26,6 +26,7 @@ class LauncherConfig:
     theme: str = "light"
     active_project: str = ""
     recent_projects: list[str] = field(default_factory=list)
+    project_profiles: dict[str, str] = field(default_factory=dict)
 
     def normalized_hive_root(self) -> Path:
         raw = self.hive_planner_root.strip()
@@ -34,10 +35,15 @@ class LauncherConfig:
         return default_hive_root().resolve()
 
     def add_recent_project(self, project_root: Path) -> None:
+        from hive_planner.project_profile import resolve_project_profile
+
         value = str(project_root.resolve())
         self.recent_projects = [value] + [p for p in self.recent_projects if p != value]
         self.recent_projects = self.recent_projects[:8]
         self.active_project = value
+        meta = resolve_project_profile(project_root)
+        if meta:
+            self.project_profiles[value] = meta.bootstrap_profile
 
 
 def config_path() -> Path:
@@ -64,6 +70,11 @@ def load_config() -> LauncherConfig:
         theme=str(data.get("theme") or "light"),
         active_project=str(data.get("active_project") or ""),
         recent_projects=[str(p) for p in data.get("recent_projects", [])],
+        project_profiles={
+            str(k): str(v)
+            for k, v in (data.get("project_profiles") or {}).items()
+            if str(v) in ("minimal", "full")
+        },
     )
 
 

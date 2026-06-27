@@ -192,7 +192,9 @@ class HivePlannerApp:
         header.pack(fill="x", padx=16, pady=(16, 8))
         tk.Label(header, text="Hive Planner", font=FONT_TITLE, bg=COLORS["bg"], fg=COLORS["fg"]).pack(side="left")
         proj = self.config.active_project or "(no project selected)"
-        tk.Label(header, text=f"Active: {proj}", font=FONT_SUBTITLE, bg=COLORS["bg"], fg=COLORS["muted"]).pack(
+        profile_label = self._active_profile_label()
+        header_detail = f"Active: {proj}" if not profile_label else f"Active: {proj}  ·  profile: {profile_label}"
+        tk.Label(header, text=header_detail, font=FONT_SUBTITLE, bg=COLORS["bg"], fg=COLORS["muted"]).pack(
             side="right", padx=8
         )
 
@@ -217,8 +219,8 @@ class HivePlannerApp:
         row.pack(fill="x", padx=12, pady=(0, 12))
         for title, value in [
             ("Hive", self.setup.hive_version or "not installed"),
+            ("Profile", self._active_profile_label()),
             ("Feature", self._active_feature_label()),
-            ("Recent", str(len(self.config.recent_projects))),
         ]:
             cell = tk.Frame(row, bg=COLORS["secondary"], padx=12, pady=10)
             cell.pack(side="left", fill="x", expand=True, padx=4)
@@ -289,7 +291,9 @@ class HivePlannerApp:
         self.recent_list = tk.Listbox(recent_card, height=8, font=FONT, bg=COLORS["card"], fg=COLORS["fg"], relief="flat")
         self.recent_list.pack(fill="x", padx=12, pady=(0, 8))
         for path in self.config.recent_projects:
-            self.recent_list.insert("end", path)
+            summary = summarize_project(Path(path))
+            label = path if not summary.bootstrap_profile else f"{path}  [{summary.bootstrap_profile}]"
+            self.recent_list.insert("end", label)
         btn_row2 = tk.Frame(recent_card, bg=COLORS["card"])
         btn_row2.pack(fill="x", padx=12, pady=(0, 12))
         secondary_button(btn_row2, "Set as active", self._on_select_recent)
@@ -362,6 +366,15 @@ class HivePlannerApp:
             return "—"
         summary = summarize_project(Path(self.config.active_project))
         return summary.active_feature or "—"
+
+    def _active_profile_label(self) -> str:
+        if not self.config.active_project:
+            return "—"
+        summary = summarize_project(Path(self.config.active_project))
+        if summary.bootstrap_profile:
+            return summary.bootstrap_profile
+        cached = self.config.project_profiles.get(self.config.active_project)
+        return cached or "—"
 
     def _append_log(self, widget: scrolledtext.ScrolledText, text: str) -> None:
         widget.configure(state="normal")
@@ -470,6 +483,8 @@ class HivePlannerApp:
             messagebox.showwarning("No selection", "Pick a recent project.")
             return
         path = self.recent_list.get(selection[0])
+        if "  [" in path:
+            path = path.split("  [", 1)[0]
         summary = summarize_project(Path(path))
         if not summary.ok:
             messagebox.showerror("Invalid project", summary.detail)

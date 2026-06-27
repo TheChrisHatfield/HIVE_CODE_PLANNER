@@ -13,6 +13,7 @@ from hive_planner.ci_handoff import run_ci_check
 from hive_planner.config import RepoPaths, is_repo_root
 from hive_planner.launcher.config import LauncherConfig
 from hive_planner.map_sync import sync_impact_maps
+from hive_planner.project_profile import resolve_project_profile
 from hive_planner.spec_drift import parse_active_feature
 
 
@@ -53,6 +54,7 @@ class ProjectSummary:
     ok: bool
     project_name: str
     active_feature: str | None
+    bootstrap_profile: str | None = None
     detail: str = ""
 
     def to_dict(self) -> dict:
@@ -61,6 +63,7 @@ class ProjectSummary:
             "ok": self.ok,
             "project_name": self.project_name,
             "active_feature": self.active_feature,
+            "bootstrap_profile": self.bootstrap_profile,
             "detail": self.detail,
         }
 
@@ -124,12 +127,17 @@ def run_install(config: LauncherConfig, *, extras: str = "dev") -> InstallResult
 def summarize_project(project_root: Path) -> ProjectSummary:
     root = project_root.resolve()
     if not root.is_dir():
-        return ProjectSummary(str(root), False, root.name, None, "Directory not found")
+        return ProjectSummary(str(root), False, root.name, None, None, "Directory not found")
     paths = RepoPaths(root=root)
     if not is_repo_root(root) and not (root / "START_HERE.md").is_file():
-        return ProjectSummary(str(root), False, root.name, None, "Not a Hive project (missing START_HERE.md)")
+        return ProjectSummary(
+            str(root), False, root.name, None, None, "Not a Hive project (missing START_HERE.md)"
+        )
     feature = parse_active_feature(paths)
-    return ProjectSummary(str(root), True, root.name, feature, "ok")
+    meta = resolve_project_profile(root)
+    profile = meta.bootstrap_profile if meta else None
+    name = meta.project_name if meta else root.name
+    return ProjectSummary(str(root), True, name, feature, profile, "ok")
 
 
 def run_project_ci_check(project_root: Path) -> dict:

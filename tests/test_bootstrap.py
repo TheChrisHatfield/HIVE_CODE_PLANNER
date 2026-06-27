@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
 
@@ -35,6 +36,9 @@ def test_init_creates_detectable_repo_root(tmp_path: Path) -> None:
     assert (target / ".cursor" / "rules" / "architecture.mdc").exists()
     assert result.project_name == "Demo Project"
     assert "START_HERE.md" in result.files_written
+    assert ".hive/project.json" in result.files_written
+    meta = json.loads((target / ".hive" / "project.json").read_text(encoding="utf-8"))
+    assert meta["bootstrap_profile"] == "minimal"
 
 
 def test_init_rejects_non_empty_target(tmp_path: Path) -> None:
