@@ -305,7 +305,9 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"Wrote CL candidates: {promote.candidates_path}")
             print(f"Promotion spec-drift ok: {promote.ok}")
             print(json.dumps(payload, indent=2))
-            return 0 if promote.ok else 1
+            from hive_planner.cartridge_promote import promote_cli_exit_code
+
+            return promote_cli_exit_code(promote)
         return 0
 
     if args.command == "status":
@@ -393,8 +395,9 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"Wrote CL candidates: {promote.candidates_path}")
             print(f"Promotion spec-drift ok: {promote.ok}")
         print(json.dumps(payload, indent=2))
-        promote_ok = payload.get("promote", {}).get("ok", True)
-        return 0 if promote_ok else 1
+        from hive_planner.cartridge_promote import promote_cli_exit_code
+
+        return promote_cli_exit_code(payload.get("promote"))
 
     if args.command == "cartridge-promote":
         from hive_planner.cartridge_promote import promote_cartridge_drafts
