@@ -5,7 +5,7 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, scrolledtext, ttk
 
-from hive_planner.launcher.config import LauncherConfig, load_config, save_config
+from hive_planner.launcher.config import LauncherConfig, load_config, normalize_project_path, save_config
 from hive_planner.launcher.service import (
     discover_python_installations,
     format_python_scan_report,
@@ -1020,7 +1020,7 @@ class HivePlannerApp:
             messagebox.showerror("Delete profile", detail)
             return
         self.config = load_config()
-        normalized = str(path.resolve())
+        normalized = normalize_project_path(path)
         self.config.project_profiles.pop(normalized, None)
         save_config(self.config)
         messagebox.showinfo("Profile deleted", detail)

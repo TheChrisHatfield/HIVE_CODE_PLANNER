@@ -525,6 +525,20 @@ def test_delete_project_profile_removes_metadata(tmp_path: Path) -> None:
     assert "No Hive profile" in msg2
 
 
+def test_delete_profile_clears_normalized_profile_cache(tmp_path: Path) -> None:
+    from hive_planner.launcher.config import normalize_project_path
+
+    project = tmp_path / "demo"
+    project.mkdir()
+    normalized = str(project.resolve())
+    cfg = LauncherConfig(
+        recent_projects=[normalized],
+        project_profiles={normalized: "full"},
+    )
+    cfg.project_profiles.pop(normalize_project_path(project), None)
+    assert normalized not in cfg.project_profiles
+
+
 def test_recent_label_uses_stored_profile_not_inferred(tmp_path: Path) -> None:
     from hive_planner.launcher.app import format_recent_project_label
     from hive_planner.project_profile import delete_project_profile, read_project_profile, write_project_profile
