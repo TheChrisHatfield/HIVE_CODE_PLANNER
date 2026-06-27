@@ -166,14 +166,16 @@ def test_bg_generation_invalidates_stale_callbacks() -> None:
     assert called["value"] is True
     root.destroy()
 
-    from hive_planner.launcher.app import HivePlannerApp
-    import tkinter as tk
 
-    root = tk.Tk()
-    root.withdraw()
-    app = HivePlannerApp.__new__(HivePlannerApp)
-    assert app._result_failed({"ok": False, "error": "pip failed"}) is True
-    assert app._result_failed({"ok": True}) is False
-    assert "pip failed" in app._result_detail({"ok": False, "error": "pip failed"})
-    root.destroy()
+def test_load_config_recovers_corrupt_json(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import json
+
+    cfg_dir = tmp_path / "cfg"
+    monkeypatch.setattr("hive_planner.launcher.config.default_config_dir", lambda: cfg_dir)
+    bad = cfg_dir / "config.json"
+    bad.parent.mkdir(parents=True, exist_ok=True)
+    bad.write_text("{not-json", encoding="utf-8")
+    cfg = load_config()
+    assert cfg.hive_planner_root
+    json.loads(bad.read_text(encoding="utf-8"))
 

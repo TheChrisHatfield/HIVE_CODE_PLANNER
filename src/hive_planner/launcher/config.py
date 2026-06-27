@@ -53,7 +53,9 @@ def load_config() -> LauncherConfig:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        return LauncherConfig(hive_planner_root=str(default_hive_root().resolve()))
+        cfg = LauncherConfig(hive_planner_root=str(default_hive_root().resolve()))
+        save_config(cfg)
+        return cfg
     return LauncherConfig(
         onboarding_complete=bool(data.get("onboarding_complete", False)),
         hive_planner_root=str(data.get("hive_planner_root") or default_hive_root().resolve()),
