@@ -769,6 +769,22 @@ def test_run_cartridge_import_folder_fails_when_all_files_exist(tmp_path: Path) 
     assert result["skipped"] == ["holistic.md"]
 
 
+def test_run_cartridge_import_folder_overwrites_existing_when_requested(tmp_path: Path) -> None:
+    project = _minimal_hive_project(tmp_path / "proj")
+    external = tmp_path / "external-cartridge"
+    external.mkdir()
+    (external / "holistic.md").write_text("# External\n", encoding="utf-8")
+    existing = project / "cartridge" / "holistic.md"
+    existing.parent.mkdir(parents=True, exist_ok=True)
+    existing.write_text("# Existing\n", encoding="utf-8")
+
+    result = run_cartridge_import_folder(project, external, overwrite=True)
+
+    assert result["ok"] is True
+    assert result["written"] == ["holistic.md"]
+    assert existing.read_text(encoding="utf-8") == "# External\n"
+
+
 def test_resolve_cartridge_import_root_prefers_nested_folder(tmp_path: Path) -> None:
     bundle = tmp_path / "bundle"
     nested = bundle / "cartridge"

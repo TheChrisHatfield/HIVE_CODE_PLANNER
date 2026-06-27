@@ -1115,6 +1115,26 @@ class HivePlannerApp:
         )
         force_cb.pack(anchor="w")
 
+        overwrite_var = tk.BooleanVar(value=False)
+        overwrite_row = tk.Frame(dialog, bg=COLORS["bg"])
+        overwrite_row.pack(fill="x", padx=16, pady=(0, 4))
+        overwrite_cb = tk.Checkbutton(
+            overwrite_row,
+            text="Overwrite existing cartridge files in the project",
+            variable=overwrite_var,
+            bg=COLORS["bg"],
+            fg=COLORS["fg"],
+            activebackground=COLORS["bg"],
+            activeforeground=COLORS["fg"],
+            selectcolor=COLORS["card"],
+            anchor="w",
+            font=FONT,
+            wraplength=470,
+            justify="left",
+            state="disabled",
+        )
+        overwrite_cb.pack(anchor="w")
+
         def sync_promote_controls(*_args: object) -> None:
             if not handoff_unified:
                 force_cb.configure(state="disabled")
@@ -1128,6 +1148,16 @@ class HivePlannerApp:
 
         promote_var.trace_add("write", sync_promote_controls)
         sync_promote_controls()
+
+        def sync_import_controls(*_args: object) -> None:
+            if mode_var.get() == "import":
+                overwrite_cb.configure(state="normal")
+            else:
+                overwrite_cb.configure(state="disabled")
+                overwrite_var.set(False)
+
+        mode_var.trace_add("write", sync_import_controls)
+        sync_import_controls()
 
         selection_var = tk.StringVar(value="(none selected)")
         tk.Label(
@@ -1228,6 +1258,7 @@ class HivePlannerApp:
             do_promote = promote_var.get() and handoff_unified
             do_feature = feature
             do_force = force_promote_var.get()
+            do_overwrite = overwrite_var.get() if mode == "import" else False
 
             dialog.destroy()
             if mode == "sources":
@@ -1263,6 +1294,7 @@ class HivePlannerApp:
                     lambda: run_cartridge_import_folder(
                         root,
                         selected_folder,
+                        overwrite=do_overwrite,
                         feature=do_feature,
                         promote=do_promote,
                         force_promote=do_force,
