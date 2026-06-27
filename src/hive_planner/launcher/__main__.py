@@ -24,26 +24,53 @@ def _console_python() -> str:
     return str(exe)
 
 
-def ensure_installed() -> None:
+def _package_installed() -> bool:
     try:
         import importlib.metadata
 
         importlib.metadata.version("hive-planner")
-        return
+        return True
+    except importlib.metadata.PackageNotFoundError:
+        return False
+
+
+def _show_startup_error(message: str, detail: str = "") -> None:
+    text = message if not detail else f"{message}\n\n{detail.strip()[:800]}"
+    try:
+        import tkinter as tk
+        from tkinter import messagebox
+
+        root = tk.Tk()
+        root.withdraw()
+        messagebox.showerror("Hive Planner", text)
+        root.destroy()
     except Exception:
         pass
+    raise SystemExit(1)
+
+
+def ensure_installed() -> None:
+    if _package_installed():
+        return
 
     root = _repo_root()
     if not (root / "pyproject.toml").is_file():
+        _show_startup_error("Hive planner source not found.", str(root))
         return
 
-    subprocess.run(
+    proc = subprocess.run(
         [_console_python(), "-m", "pip", "install", "-e", ".[dev]"],
         cwd=root,
         capture_output=True,
         text=True,
         check=False,
     )
+    if _package_installed():
+        return
+
+    output = ((proc.stderr or "") + (proc.stdout or "")).strip()
+    tail = output.splitlines()[-1] if output else f"pip exited with code {proc.returncode}"
+    _show_startup_error("Could not install hive-planner.", tail)
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -27,6 +27,7 @@ from hive_planner.launcher.theme import (
     primary_button,
     secondary_button,
 )
+from hive_planner.launcher import console_win
 
 
 class HivePlannerApp:
@@ -312,6 +313,23 @@ class HivePlannerApp:
         primary_button(btn_row, "Save settings", self._on_save_settings)
         secondary_button(btn_row, "Install / update Hive", self._on_install)
         secondary_button(btn_row, "Reset onboarding", self._on_reset_onboarding)
+        if console_win.console_available():
+            self.console_btn = tk.Button(
+                btn_row,
+                text="Show console",
+                command=self._on_toggle_console,
+                font=FONT,
+                bg=COLORS["secondary"],
+                fg=COLORS["fg"],
+                activebackground=COLORS["border"],
+                relief="flat",
+                padx=12,
+                pady=8,
+                cursor="hand2",
+            )
+            self.console_btn.pack(side="left", padx=(0, 8), pady=4)
+            if console_win.is_console_visible():
+                self.console_btn.config(text="Hide console")
 
         tip = card(parent)
         card_title(tip, "Pro tip")
@@ -474,6 +492,22 @@ class HivePlannerApp:
         save_config(self.config)
         self._wizard_step = 0
         self._show_onboarding()
+
+    def _on_toggle_console(self) -> None:
+        if not console_win.console_available():
+            messagebox.showinfo("Console", "Console toggle is only available on Windows.")
+            return
+        if console_win.is_console_visible():
+            console_win.hide_console()
+            if hasattr(self, "console_btn"):
+                self.console_btn.config(text="Show console")
+            return
+        if console_win.show_console():
+            if hasattr(self, "console_btn"):
+                self.console_btn.config(text="Hide console")
+            print("Hive Planner — log output will appear here when running installs or checks.")
+        else:
+            messagebox.showerror("Console", "Could not open debug console.")
 
 
 def run_app() -> None:

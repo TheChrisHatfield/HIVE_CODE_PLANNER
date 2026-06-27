@@ -203,6 +203,25 @@ def test_console_python_pyw_branch(monkeypatch: pytest.MonkeyPatch) -> None:
     assert main_mod._console_python() == r"C:\Tools\py.exe"
 
 
+def test_ensure_installed_exits_when_pip_fails(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from hive_planner.launcher import __main__ as main_mod
+
+    repo = tmp_path / "hive"
+    repo.mkdir()
+    (repo / "pyproject.toml").write_text("[project]\nname='hive-planner'\n", encoding="utf-8")
+    monkeypatch.setattr(main_mod, "_repo_root", lambda: repo)
+    monkeypatch.setattr(main_mod, "_package_installed", lambda: False)
+    monkeypatch.setattr(
+        main_mod.subprocess,
+        "run",
+        lambda *a, **k: type("R", (), {"returncode": 1, "stdout": "", "stderr": "pip boom"})(),
+    )
+    monkeypatch.setattr(main_mod, "_show_startup_error", lambda msg, detail="": (_ for _ in ()).throw(SystemExit(1)))
+
+    with pytest.raises(SystemExit):
+        main_mod.ensure_installed()
+
+
 def test_console_visible_tracks_attachment_not_parent_console(monkeypatch: pytest.MonkeyPatch) -> None:
     from hive_planner.launcher import console_win as cw
 
