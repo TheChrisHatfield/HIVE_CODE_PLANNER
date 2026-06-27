@@ -412,6 +412,33 @@ def init_project(
 
     target.mkdir(parents=True, exist_ok=True)
 
+    try:
+        _write_bootstrap_tree(
+            source_paths,
+            target,
+            project_name=project_name,
+            force=force,
+            written=written,
+            warnings=warnings,
+        )
+    except OSError as exc:
+        raise BootstrapError(f"Failed to write bootstrap files: {exc}") from exc
+
+    if not is_repo_root(target):
+        raise BootstrapError("Bootstrap incomplete — missing START_HERE.md or planning rosetta")
+
+    return BootstrapResult(target=target, project_name=project_name, files_written=sorted(set(written)), warnings=warnings)
+
+
+def _write_bootstrap_tree(
+    source_paths: RepoPaths,
+    target: Path,
+    *,
+    project_name: str,
+    force: bool,
+    written: list[str],
+    warnings: list[str],
+) -> None:
     templates: list[tuple[str, str]] = [
         ("START_HERE.md", _start_here(project_name)),
         ("AGENTS.md", _agents_md(project_name, target)),
@@ -458,8 +485,3 @@ def init_project(
         _copy_file(rules / rule_name, target, f".cursor/rules/{rule_name}", force=force, written=written)
         if not (target / ".cursor/rules" / rule_name).exists():
             warnings.append(f"Missing rule template {rule_name} — not copied")
-
-    if not is_repo_root(target):
-        raise BootstrapError("Bootstrap incomplete — missing START_HERE.md or planning rosetta")
-
-    return BootstrapResult(target=target, project_name=project_name, files_written=sorted(written), warnings=warnings)

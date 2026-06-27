@@ -71,6 +71,16 @@ def test_init_rejects_hive_source_root(tmp_path: Path) -> None:
         init_project(source, source.root, force=True)
 
 
+def test_init_wraps_write_failures_as_bootstrap_error(tmp_path: Path) -> None:
+    source = _hive_source(tmp_path)
+    target = tmp_path / "blocked"
+    target.mkdir()
+    (target / "docs").write_text("not a directory", encoding="utf-8")
+
+    with pytest.raises(BootstrapError, match="Failed to write bootstrap files"):
+        init_project(source, target)
+
+
 def test_init_force_rewrites_scaffold(tmp_path: Path) -> None:
     source = _hive_source(tmp_path)
     target = tmp_path / "forced"
