@@ -21,7 +21,7 @@ from hive_planner.emitter import emit_cartridge
 from hive_planner.launcher.config import LauncherConfig
 from hive_planner.map_sync import sync_impact_maps
 from hive_planner.pipeline import ingest
-from hive_planner.project_profile import resolve_project_profile
+from hive_planner.project_profile import read_project_profile
 from hive_planner.spec_drift import parse_active_feature, repair_agents_active_feature
 
 
@@ -393,7 +393,7 @@ def summarize_project(project_root: Path) -> ProjectSummary:
             str(root), False, root.name, None, None, "Not a Hive project (missing START_HERE.md)"
         )
     feature = parse_active_feature(paths)
-    meta = resolve_project_profile(root)
+    meta = read_project_profile(root)
     profile = meta.bootstrap_profile if meta else None
     name = meta.project_name if meta else root.name
     return ProjectSummary(str(root), True, name, feature, profile, "ok")

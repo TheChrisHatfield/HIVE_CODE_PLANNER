@@ -2,6 +2,7 @@ from __future__ import annotations
 
 """VoiceFlow-inspired palette (borrowed from KOKORO tts_overlay_unified.py)."""
 
+import sys
 import tkinter as tk
 from tkinter import ttk
 
@@ -27,8 +28,6 @@ FONT_SUBTITLE = ("Segoe UI", 9)
 
 def bind_mousewheel(widget: tk.Misc, *, target: tk.Misc | None = None) -> None:
     """Scroll *target* (default *widget*) with the mouse wheel while the pointer is over *widget*."""
-    import sys
-
     scroll_target = target or widget
 
     def on_wheel(event) -> None:
@@ -67,6 +66,94 @@ def bind_mousewheel(widget: tk.Misc, *, target: tk.Misc | None = None) -> None:
     widget.bind("<Destroy>", on_destroy, add="+")
 
 
+class HoverTooltip:
+    """Small delayed popup shown while the pointer rests over a widget."""
+
+    def __init__(self, widget: tk.Misc, text: str, *, delay_ms: int = 450) -> None:
+        self.widget = widget
+        self.text = text
+        self.delay_ms = delay_ms
+        self.tipwindow: tk.Toplevel | None = None
+        self.after_id: str | None = None
+        widget.bind("<Enter>", self._schedule, add="+")
+        widget.bind("<Leave>", self._hide, add="+")
+        widget.bind("<ButtonPress>", self._hide, add="+")
+        widget.bind("<Destroy>", self._destroy, add="+")
+
+    def _schedule(self, _event=None) -> None:
+        self._cancel_schedule()
+        self.after_id = self.widget.after(self.delay_ms, self._show)
+
+    def _cancel_schedule(self) -> None:
+        if self.after_id is not None:
+            self.widget.after_cancel(self.after_id)
+            self.after_id = None
+
+    def _show(self) -> None:
+        self.after_id = None
+        if self.tipwindow or not self.text.strip():
+            return
+        try:
+            if not self.widget.winfo_exists():
+                return
+        except tk.TclError:
+            return
+        try:
+            x = self.widget.winfo_rootx() + 12
+            y = self.widget.winfo_rooty() + self.widget.winfo_height() + 6
+            tip = tk.Toplevel(self.widget)
+        except tk.TclError:
+            return
+        tip.wm_overrideredirect(True)
+        tip.wm_attributes("-topmost", True)
+        frame = tk.Frame(
+            tip,
+            bg=COLORS["fg"],
+            highlightbackground=COLORS["border"],
+            highlightthickness=1,
+        )
+        frame.pack()
+        tk.Label(
+            frame,
+            text=self.text,
+            justify="left",
+            bg=COLORS["fg"],
+            fg=COLORS["card"],
+            font=FONT_SUBTITLE,
+            wraplength=320,
+            padx=8,
+            pady=6,
+        ).pack()
+        tip.update_idletasks()
+        screen_w = tip.winfo_screenwidth()
+        if x + tip.winfo_width() > screen_w - 8:
+            x = max(8, screen_w - tip.winfo_width() - 8)
+        tip.wm_geometry(f"+{x}+{y}")
+        self.tipwindow = tip
+
+    def _hide(self, _event=None) -> None:
+        self._cancel_schedule()
+        if self.tipwindow is not None:
+            self.tipwindow.destroy()
+            self.tipwindow = None
+
+    def _destroy(self, _event=None) -> None:
+        self._cancel_schedule()
+        self._hide()
+
+
+def attach_hover_tooltip(widget: tk.Misc, text: str, *, delay_ms: int = 450) -> HoverTooltip:
+    return HoverTooltip(widget, text, delay_ms=delay_ms)
+
+
+def attach_combobox_tooltip(combobox: ttk.Combobox, text: str, *, delay_ms: int = 450) -> None:
+    """Bind tooltip text to a combobox and its inner entry (Windows/clam often misses the outer widget)."""
+    attach_hover_tooltip(combobox, text, delay_ms=delay_ms)
+    combobox.update_idletasks()
+    for child in combobox.winfo_children():
+        attach_hover_tooltip(child, text, delay_ms=delay_ms)
+
+
 def apply_ttk_style(root: tk.Misc) -> None:
     style = ttk.Style(root)
     try:
@@ -100,8 +187,8 @@ def card_title(parent, text: str) -> None:
     ).pack(fill="x", padx=12, pady=(12, 6))
 
 
-def primary_button(parent, text: str, command) -> None:
-    tk.Button(
+def primary_button(parent, text: str, command, *, tooltip: str | None = None) -> tk.Button:
+    button = tk.Button(
         parent,
         text=text,
         command=command,
@@ -114,11 +201,15 @@ def primary_button(parent, text: str, command) -> None:
         padx=14,
         pady=8,
         cursor="hand2",
-    ).pack(side="left", padx=(0, 8), pady=4)
+    )
+    button.pack(side="left", padx=(0, 8), pady=4)
+    if tooltip:
+        attach_hover_tooltip(button, tooltip)
+    return button
 
 
-def secondary_button(parent, text: str, command) -> None:
-    tk.Button(
+def secondary_button(parent, text: str, command, *, tooltip: str | None = None) -> tk.Button:
+    button = tk.Button(
         parent,
         text=text,
         command=command,
@@ -130,4 +221,8 @@ def secondary_button(parent, text: str, command) -> None:
         padx=12,
         pady=8,
         cursor="hand2",
-    ).pack(side="left", padx=(0, 8), pady=4)
+    )
+    button.pack(side="left", padx=(0, 8), pady=4)
+    if tooltip:
+        attach_hover_tooltip(button, tooltip)
+    return button

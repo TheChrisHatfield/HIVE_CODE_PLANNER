@@ -1502,13 +1502,18 @@ def test_summarize_includes_profile(tmp_path: Path) -> None:
     project = tmp_path / "demo"
     project.mkdir()
     (project / "START_HERE.md").write_text("# start\n", encoding="utf-8")
-    from hive_planner.project_profile import write_project_profile
+    from hive_planner.project_profile import delete_project_profile, write_project_profile
 
     write_project_profile(project, profile="minimal", project_name="Demo")
     summary = summarize_project(project)
     assert summary.ok is True
     assert summary.bootstrap_profile == "minimal"
     assert summary.project_name == "Demo"
+
+    delete_project_profile(project)
+    summary = summarize_project(project)
+    assert summary.ok is True
+    assert summary.bootstrap_profile is None
 
 
 def test_summarize_non_hive_project(tmp_path: Path) -> None:
@@ -1964,4 +1969,59 @@ def test_console_available_on_windows_only() -> None:
     from hive_planner.launcher import console_win
 
     assert console_win.console_available() == (sys.platform == "win32")
+
+
+def test_attach_hover_tooltip_binds_widget_events() -> None:
+    import tkinter as tk
+
+    from hive_planner.launcher.theme import attach_hover_tooltip
+
+    root = tk.Tk()
+    root.withdraw()
+    button = tk.Button(root, text="Save settings")
+    tip = attach_hover_tooltip(button, "Write settings to config.")
+    assert tip.text == "Write settings to config."
+    assert button.bind("<Enter>")
+    assert button.bind("<Leave>")
+    root.destroy()
+
+
+def test_primary_button_accepts_tooltip() -> None:
+    import tkinter as tk
+
+    from hive_planner.launcher.theme import primary_button
+
+    root = tk.Tk()
+    root.withdraw()
+    frame = tk.Frame(root)
+    button = primary_button(frame, "Save settings", lambda: None, tooltip="Save paths and defaults.")
+    assert button.cget("text") == "Save settings"
+    assert button.bind("<Enter>")
+    root.destroy()
+
+
+def test_hover_tooltip_show_ignores_destroyed_widget() -> None:
+    import tkinter as tk
+
+    from hive_planner.launcher.theme import HoverTooltip
+
+    root = tk.Tk()
+    root.withdraw()
+    button = tk.Button(root, text="Save settings")
+    tip = HoverTooltip(button, "Help", delay_ms=0)
+    button.destroy()
+    tip._show()
+    assert tip.tipwindow is None
+    root.destroy()
+
+
+def test_note_stale_bg_result_queues_home_log_message() -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app._pending_home_log = []
+    app._note_stale_bg_result({"ok": False, "mode": "import", "error": "emit failed"})
+    assert len(app._pending_home_log) == 1
+    assert "emit failed" in app._pending_home_log[0]
+    assert "dashboard refresh" in app._pending_home_log[0]
 

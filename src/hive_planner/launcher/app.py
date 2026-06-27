@@ -40,6 +40,8 @@ from hive_planner.launcher.theme import (
     FONT_SUBTITLE,
     FONT_TITLE,
     apply_ttk_style,
+    attach_hover_tooltip,
+    attach_combobox_tooltip,
     card,
     card_title,
     primary_button,
@@ -108,6 +110,7 @@ class HivePlannerApp:
         self._wizard_step = 0
         self._bg_generation = 0
         self._python_scan_active = False
+        self._pending_home_log: list[str] = []
 
         root.title("Hive Planner")
         root.geometry("920x680")
@@ -145,6 +148,8 @@ class HivePlannerApp:
                             self._hide_python_scan_progress()
                         except tk.TclError:
                             pass
+                    else:
+                        self._note_stale_bg_result(result)
                     return
                 try:
                     on_done(result)
@@ -327,7 +332,34 @@ class HivePlannerApp:
         canvas.bind("<Configure>", _sync_width)
         return inner, canvas
 
-    _PAGE_WHEEL_SKIP = (tk.Listbox, tk.Text)
+    _PAGE_WHEEL_SKIP = (tk.Listbox, tk.Text, scrolledtext.ScrolledText, tk.Scrollbar)
+
+    def _note_stale_bg_result(self, result: object) -> None:
+        if isinstance(result, dict):
+            err = result.get("error")
+            mode = result.get("mode")
+            if err:
+                message = f"Background task finished after dashboard refresh: {err}"
+            elif mode:
+                message = (
+                    f"Background task ({mode}) finished after dashboard refresh — "
+                    "check project files or run the action again."
+                )
+            else:
+                message = "Background task finished after dashboard refresh."
+        else:
+            message = f"Background task finished after dashboard refresh: {result}"
+        self._pending_home_log.append(message)
+
+    def _flush_pending_home_log(self) -> None:
+        if not self._pending_home_log or not hasattr(self, "home_log"):
+            return
+        try:
+            for line in self._pending_home_log:
+                self._append_log(self.home_log, line)
+        except tk.TclError:
+            return
+        self._pending_home_log.clear()
 
     def _bind_page_wheel(self, parent: tk.Misc, canvas: tk.Canvas) -> None:
         bind_mousewheel(canvas, target=canvas)
@@ -417,6 +449,7 @@ class HivePlannerApp:
         self.ci_list.pack(fill="x", padx=12, pady=(0, 12))
         bind_mousewheel(self.ci_list)
         self._bind_page_wheel(body, canvas)
+        self._flush_pending_home_log()
 
     def _build_projects_tab(self, parent: tk.Frame) -> None:
         top_row = tk.Frame(parent, bg=COLORS["bg"])
@@ -555,20 +588,75 @@ class HivePlannerApp:
         self.cfg_python = tk.StringVar(value=self.config.python_executable)
         self.cfg_cursor = tk.StringVar(value=self.config.cursor_executable)
         self.cfg_profile = tk.StringVar(value=self.config.default_profile)
-        self._field(form, "Hive planner root", self.cfg_hive, browse=True)
-        self._field(form, "Python command", self.cfg_python, scan_python=True)
-        self._field(form, "Cursor executable", self.cfg_cursor, browse_exe=True)
+        self._field(
+            form,
+            "Hive planner root",
+            self.cfg_hive,
+            browse=True,
+            tooltip="Folder containing this Hive Planner checkout (pyproject.toml, src/hive_planner).",
+            browse_tooltip="Pick the Hive Planner repo folder on disk.",
+        )
+        self._field(
+            form,
+            "Python command",
+            self.cfg_python,
+            scan_python=True,
+            tooltip="Command used to run Hive (for example py -3.11 or a full python.exe path).",
+            scan_tooltip="Search this PC for Python 3.11+ installations.",
+        )
+        self._field(
+            form,
+            "Cursor executable",
+            self.cfg_cursor,
+            browse_exe=True,
+            tooltip="Path to Cursor.exe for Open in Cursor. Leave blank to auto-detect.",
+            browse_tooltip="Browse to Cursor.exe if auto-detect fails.",
+        )
         profile_row = tk.Frame(form, bg=COLORS["card"])
         profile_row.pack(fill="x", padx=12, pady=4)
-        tk.Label(profile_row, text="Default profile", width=14, anchor="w", bg=COLORS["card"], fg=COLORS["fg"], font=FONT).pack(side="left")
-        ttk.Combobox(profile_row, textvariable=self.cfg_profile, values=["full", "minimal"], state="readonly", width=28).pack(
-            side="left", fill="x", expand=True
+        profile_label = tk.Label(
+            profile_row,
+            text="Default profile",
+            width=14,
+            anchor="w",
+            bg=COLORS["card"],
+            fg=COLORS["fg"],
+            font=FONT,
         )
+        profile_label.pack(side="left")
+        attach_hover_tooltip(
+            profile_label,
+            "Bootstrap profile for new projects: full adds Spec Kit scaffolding; minimal is lighter.",
+        )
+        profile_combo = ttk.Combobox(
+            profile_row,
+            textvariable=self.cfg_profile,
+            values=["full", "minimal"],
+            state="readonly",
+            width=28,
+        )
+        profile_combo.pack(side="left", fill="x", expand=True)
+        attach_combobox_tooltip(profile_combo, "Used when creating or bootstrapping a new linked project.")
         btn_row = tk.Frame(form, bg=COLORS["card"])
         btn_row.pack(fill="x", padx=12, pady=(8, 12))
-        primary_button(btn_row, "Save settings", self._on_save_settings)
-        secondary_button(btn_row, "Install / update Hive", self._on_install)
-        secondary_button(btn_row, "Reset onboarding", self._on_reset_onboarding)
+        primary_button(
+            btn_row,
+            "Save settings",
+            self._on_save_settings,
+            tooltip="Write these paths and defaults to your Hive Planner config file.",
+        )
+        secondary_button(
+            btn_row,
+            "Install / update Hive",
+            self._on_install,
+            tooltip="Install or refresh the hive_planner Python package from the repo root above.",
+        )
+        secondary_button(
+            btn_row,
+            "Reset onboarding",
+            self._on_reset_onboarding,
+            tooltip="Show the first-time setup wizard again. Your links and settings are kept.",
+        )
         if console_win.console_available():
             self.console_btn = tk.Button(
                 btn_row,
@@ -584,6 +672,10 @@ class HivePlannerApp:
                 cursor="hand2",
             )
             self.console_btn.pack(side="left", padx=(0, 8), pady=4)
+            attach_hover_tooltip(
+                self.console_btn,
+                "Show or hide the debug console window for launcher output.",
+            )
             if console_win.is_console_visible():
                 self.console_btn.config(text="Hide console")
 
@@ -608,18 +700,41 @@ class HivePlannerApp:
         browse: bool = False,
         browse_exe: bool = False,
         scan_python: bool = False,
+        tooltip: str | None = None,
+        browse_tooltip: str | None = None,
+        scan_tooltip: str | None = None,
     ) -> None:
         row = tk.Frame(parent, bg=COLORS["card"])
         row.pack(fill="x", padx=12, pady=4)
-        tk.Label(row, text=label, width=14, anchor="w", bg=COLORS["card"], fg=COLORS["fg"], font=FONT).pack(side="left")
+        label_widget = tk.Label(row, text=label, width=14, anchor="w", bg=COLORS["card"], fg=COLORS["fg"], font=FONT)
+        label_widget.pack(side="left")
+        if tooltip:
+            attach_hover_tooltip(label_widget, tooltip)
         entry = tk.Entry(row, textvariable=variable, font=FONT, bg=COLORS["card"], fg=COLORS["fg"], relief="solid", bd=1)
         entry.pack(side="left", fill="x", expand=True)
+        if tooltip:
+            attach_hover_tooltip(entry, tooltip)
         if browse:
-            secondary_button(row, "Browse…", lambda: self._browse_into(variable))
+            secondary_button(
+                row,
+                "Browse…",
+                lambda: self._browse_into(variable),
+                tooltip=browse_tooltip or "Choose a folder.",
+            )
         if browse_exe:
-            secondary_button(row, "Browse…", lambda: self._browse_exe_into(variable))
+            secondary_button(
+                row,
+                "Browse…",
+                lambda: self._browse_exe_into(variable),
+                tooltip=browse_tooltip or "Choose an executable file.",
+            )
         if scan_python:
-            secondary_button(row, "Scan…", lambda: self._on_scan_python(variable))
+            secondary_button(
+                row,
+                "Scan…",
+                lambda: self._on_scan_python(variable),
+                tooltip=scan_tooltip or "Search for Python installations.",
+            )
 
     def _browse_exe_into(self, variable: tk.StringVar) -> None:
         path = filedialog.askopenfilename(
@@ -1027,11 +1142,35 @@ class HivePlannerApp:
         dialog.configure(bg=COLORS["bg"])
         dialog.transient(self.root)
         dialog.grab_set()
-        dialog.geometry("520x440")
-        dialog.minsize(480, 420)
+        dialog.geometry("520x520")
+        dialog.minsize(480, 460)
+
+        action_row = tk.Frame(dialog, bg=COLORS["bg"])
+        action_row.pack(side="bottom", fill="x", padx=16, pady=(8, 16))
+
+        body_host = tk.Frame(dialog, bg=COLORS["bg"])
+        body_host.pack(fill="both", expand=True)
+        canvas = tk.Canvas(body_host, bg=COLORS["bg"], highlightthickness=0)
+        scrollbar = ttk.Scrollbar(body_host, orient="vertical", command=canvas.yview)
+        canvas.configure(yscrollcommand=scrollbar.set)
+        scrollbar.pack(side="right", fill="y")
+        canvas.pack(side="left", fill="both", expand=True)
+        body = tk.Frame(canvas, bg=COLORS["bg"])
+        body_window = canvas.create_window((0, 0), window=body, anchor="nw")
+
+        def _sync_body_scroll(_event=None) -> None:
+            canvas.configure(scrollregion=canvas.bbox("all"))
+
+        def _sync_body_width(event) -> None:
+            canvas.itemconfig(body_window, width=event.width)
+
+        body.bind("<Configure>", _sync_body_scroll)
+        canvas.bind("<Configure>", _sync_body_width)
+        bind_mousewheel(canvas, target=canvas)
+        bind_mousewheel(body, target=canvas)
 
         tk.Label(
-            dialog,
+            body,
             text="Add reference docs, translate research into draft cartridge files, or import an existing cartridge folder.",
             wraplength=480,
             justify="left",
@@ -1047,7 +1186,7 @@ class HivePlannerApp:
             ("import", "Import cartridge folder — copy cartridge markdown and manifest into the project"),
         ):
             tk.Radiobutton(
-                dialog,
+                body,
                 text=label,
                 variable=mode_var,
                 value=value,
@@ -1062,7 +1201,7 @@ class HivePlannerApp:
                 wraplength=470,
             ).pack(anchor="w", padx=16, pady=2)
 
-        feature_row = tk.Frame(dialog, bg=COLORS["bg"])
+        feature_row = tk.Frame(body, bg=COLORS["bg"])
         feature_row.pack(fill="x", padx=16, pady=(12, 4))
         tk.Label(feature_row, text="Feature id", width=12, anchor="w", bg=COLORS["bg"], fg=COLORS["fg"], font=FONT).pack(
             side="left"
@@ -1075,7 +1214,7 @@ class HivePlannerApp:
         handoff_unified = handoff_status.mode == "unified"
         promote_var = tk.BooleanVar(value=handoff_unified)
         force_promote_var = tk.BooleanVar(value=False)
-        promote_row = tk.Frame(dialog, bg=COLORS["bg"])
+        promote_row = tk.Frame(body, bg=COLORS["bg"])
         promote_row.pack(fill="x", padx=16, pady=(0, 4))
         promote_cb = tk.Checkbutton(
             promote_row,
@@ -1096,7 +1235,7 @@ class HivePlannerApp:
         if not handoff_unified:
             promote_var.set(False)
 
-        force_row = tk.Frame(dialog, bg=COLORS["bg"])
+        force_row = tk.Frame(body, bg=COLORS["bg"])
         force_row.pack(fill="x", padx=16, pady=(0, 4))
         force_cb = tk.Checkbutton(
             force_row,
@@ -1116,7 +1255,7 @@ class HivePlannerApp:
         force_cb.pack(anchor="w")
 
         overwrite_var = tk.BooleanVar(value=False)
-        overwrite_row = tk.Frame(dialog, bg=COLORS["bg"])
+        overwrite_row = tk.Frame(body, bg=COLORS["bg"])
         overwrite_row.pack(fill="x", padx=16, pady=(0, 4))
         overwrite_cb = tk.Checkbutton(
             overwrite_row,
@@ -1161,7 +1300,7 @@ class HivePlannerApp:
 
         selection_var = tk.StringVar(value="(none selected)")
         tk.Label(
-            dialog,
+            body,
             textvariable=selection_var,
             bg=COLORS["bg"],
             fg=COLORS["muted"],
@@ -1224,14 +1363,15 @@ class HivePlannerApp:
             else:
                 selection_var.set(f"{len(selected_files)} files selected")
 
-        browse_row = tk.Frame(dialog, bg=COLORS["bg"])
-        browse_row.pack(fill="x", padx=16, pady=(4, 8))
+        browse_row = tk.Frame(body, bg=COLORS["bg"])
+        browse_row.pack(fill="x", padx=16, pady=(4, 16))
         secondary_button(browse_row, "Browse…", browse)
 
         def run_load() -> None:
             mode = mode_var.get()
             feature = feature_var.get().strip()
-            needs_feature = mode in ("sources", "translate") or (mode == "import" and promote_var.get())
+            will_promote = promote_var.get() and handoff_unified
+            needs_feature = mode in ("sources", "translate") or (mode == "import" and will_promote)
             if needs_feature:
                 if not feature:
                     messagebox.showwarning(
@@ -1255,8 +1395,8 @@ class HivePlannerApp:
                 messagebox.showwarning("Nothing selected", "Choose a research markdown file first.", parent=dialog)
                 return
 
-            do_promote = promote_var.get() and handoff_unified
-            do_feature = feature
+            do_promote = will_promote
+            do_feature = feature if needs_feature else None
             do_force = force_promote_var.get()
             do_overwrite = overwrite_var.get() if mode == "import" else False
 
@@ -1302,9 +1442,12 @@ class HivePlannerApp:
                     self._cartridge_load_done,
                 )
 
-        action_row = tk.Frame(dialog, bg=COLORS["bg"])
-        action_row.pack(fill="x", padx=16, pady=(8, 16))
-        primary_button(action_row, "Load", run_load)
+        primary_button(
+            action_row,
+            "Load cartridge",
+            run_load,
+            tooltip="Run the selected load mode on the linked project.",
+        )
         secondary_button(action_row, "Cancel", dialog.destroy)
 
     def _cartridge_load_done(self, result: dict) -> None:
@@ -1332,6 +1475,11 @@ class HivePlannerApp:
                 self._append_log(
                     self.home_log,
                     "Cartridge load incomplete — partial work saved; see errors above.",
+                )
+            elif result.get("mode") == "import" and result.get("skipped") and "already exist" in str(result.get("error", "")):
+                self._append_log(
+                    self.home_log,
+                    "Tip: re-open Load cartridge, enable Overwrite existing cartridge files, then try again.",
                 )
             self._log_cartridge_promote(result.get("promote"))
             return
