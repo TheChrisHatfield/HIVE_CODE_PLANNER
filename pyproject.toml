@@ -21,6 +21,7 @@ embeddings = ["sentence-transformers>=3.0"]
 
 [project.scripts]
 hive-planner = "hive_planner.cli:main"
+hive-planner-ui = "hive_planner.launcher.__main__:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
