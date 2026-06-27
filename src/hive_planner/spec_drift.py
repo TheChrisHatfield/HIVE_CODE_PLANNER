@@ -11,6 +11,13 @@ FEATURE_RE = re.compile(r"\*\*([a-z0-9][a-z0-9-]*)\*\*")
 
 PLACEHOLDER_FEATURES = frozenset({"none", "tbd", "placeholder"})
 
+BOOTSTRAP_DEFAULT_FEATURE = "example-feature"
+
+ACTIVE_FEATURE_SECTION_RE = re.compile(
+    r"(^## Active feature[^\n]*\n)(.*?)(?=^## |\Z)",
+    re.MULTILINE | re.DOTALL,
+)
+
 BEHAVIORAL_PATTERNS = (
     re.compile(r"\bmust\b", re.IGNORECASE),
     re.compile(r"\bshould always\b", re.IGNORECASE),
@@ -108,6 +115,60 @@ def parse_active_feature(paths: RepoPaths) -> str | None:
                 active_body = body
                 break
     return parse_feature_from_active_body(active_body)
+
+
+@dataclass
+class AgentsRepairResult:
+    repaired: bool
+    feature: str | None = None
+    detail: str = ""
+
+
+def bootstrap_active_feature_body(feature: str = BOOTSTRAP_DEFAULT_FEATURE, *, unified: bool = False) -> str:
+    if unified:
+        return (
+            f"**{feature}** — unified Spec Kit + Continual Learning scaffold; "
+            "replace when real work begins."
+        )
+    return f"**{feature}** — starter scaffold from bootstrap; replace when you begin real work."
+
+
+def infer_repairable_active_feature(paths: RepoPaths) -> str | None:
+    from hive_planner.project_profile import resolve_project_integrations
+
+    if not resolve_project_integrations(paths.root).spec_kit_enabled:
+        return None
+    if parse_active_feature(paths):
+        return None
+    handoff = check_spec_handoff(paths, BOOTSTRAP_DEFAULT_FEATURE)
+    if handoff.ok:
+        return BOOTSTRAP_DEFAULT_FEATURE
+    return None
+
+
+def repair_agents_active_feature(paths: RepoPaths, feature: str | None = None) -> AgentsRepairResult:
+    target = feature or infer_repairable_active_feature(paths)
+    if not target:
+        return AgentsRepairResult(False, detail="no repair needed")
+    agents_path = paths.root / "AGENTS.md"
+    if not agents_path.is_file():
+        return AgentsRepairResult(False, detail="AGENTS.md missing")
+    text = agents_path.read_text(encoding="utf-8", errors="replace")
+    match = ACTIVE_FEATURE_SECTION_RE.search(text)
+    if not match:
+        return AgentsRepairResult(False, detail="Active feature section not found")
+    from hive_planner.agent_handoff import AGENT_HANDOFF_UNIFIED, resolve_agent_handoff_mode
+
+    unified = resolve_agent_handoff_mode(paths.root) == AGENT_HANDOFF_UNIFIED
+    new_body = bootstrap_active_feature_body(target, unified=unified)
+    if match.group(2).strip() == new_body:
+        return AgentsRepairResult(False, feature=target, detail="already correct")
+    updated = text[: match.start(2)] + f"\n{new_body}\n" + text[match.end(2) :]
+    try:
+        agents_path.write_text(updated, encoding="utf-8", newline="\n")
+    except OSError as exc:
+        return AgentsRepairResult(False, feature=target, detail=str(exc))
+    return AgentsRepairResult(True, feature=target, detail=f"set Active feature to {target}")
 
 
 def _normalize_for_match(text: str) -> str:

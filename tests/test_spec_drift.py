@@ -8,10 +8,13 @@ from hive_planner.agents_memory import AgentsMemoryError, propose_agents_memory
 from hive_planner.ci_handoff import run_ci_check
 from hive_planner.config import RepoPaths
 from hive_planner.spec_drift import (
+    ACTIVE_FEATURE_SECTION_RE,
+    BOOTSTRAP_DEFAULT_FEATURE,
     check_memory_spec_drift,
     check_spec_handoff,
     classify_bullet,
     parse_active_feature,
+    repair_agents_active_feature,
 )
 
 
@@ -206,3 +209,34 @@ def test_parse_active_feature_rejects_placeholder_none(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     (paths.root / "AGENTS.md").write_text(_minimal_agents("none"), encoding="utf-8")
     assert parse_active_feature(paths) is None
+
+
+def test_repair_agents_active_feature_fixes_legacy_none(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    (paths.root / "AGENTS.md").write_text(_minimal_agents("none"), encoding="utf-8")
+    _write_full_handoff(paths, BOOTSTRAP_DEFAULT_FEATURE)
+    result = repair_agents_active_feature(paths)
+    assert result.repaired is True
+    assert result.feature == BOOTSTRAP_DEFAULT_FEATURE
+    assert parse_active_feature(paths) == BOOTSTRAP_DEFAULT_FEATURE
+
+
+def test_repair_agents_active_feature_uses_unified_body(tmp_path: Path) -> None:
+    from hive_planner.agent_handoff import apply_agent_handoff_mode, AGENT_HANDOFF_UNIFIED
+    from hive_planner.project_profile import write_project_profile
+
+    paths = RepoPaths(root=tmp_path)
+    (paths.root / "AGENTS.md").write_text(_minimal_agents("none"), encoding="utf-8")
+    _write_full_handoff(paths, BOOTSTRAP_DEFAULT_FEATURE)
+    write_project_profile(paths.root, profile="minimal", project_name="demo", agent_handoff_mode=AGENT_HANDOFF_UNIFIED)
+    result = repair_agents_active_feature(paths)
+    assert result.repaired is True
+    body = ACTIVE_FEATURE_SECTION_RE.search((paths.root / "AGENTS.md").read_text(encoding="utf-8")).group(2)
+    assert "unified Spec Kit + Continual Learning" in body
+
+
+def test_repair_agents_active_feature_skips_when_handoff_missing(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    (paths.root / "AGENTS.md").write_text(_minimal_agents("none"), encoding="utf-8")
+    result = repair_agents_active_feature(paths)
+    assert result.repaired is False
