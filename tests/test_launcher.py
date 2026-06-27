@@ -465,6 +465,39 @@ def test_console_visible_tracks_attachment_not_parent_console(monkeypatch: pytes
     cw._console_attached = False
 
 
+def test_toggle_console_keeps_show_label_for_parent_terminal(monkeypatch: pytest.MonkeyPatch) -> None:
+    from hive_planner.launcher import console_win as cw
+    from hive_planner.launcher.app import HivePlannerApp
+
+    cw._console_attached = False
+    monkeypatch.setattr(cw, "console_available", lambda: True)
+
+    class FakeKernel:
+        @staticmethod
+        def GetConsoleWindow():
+            return 1
+
+    import ctypes
+
+    monkeypatch.setattr(ctypes, "windll", type("W", (), {"kernel32": FakeKernel})())
+
+    class FakeBtn:
+        text = "Show console"
+
+        def cget(self, key: str) -> str:
+            return self.text
+
+        def config(self, **kwargs) -> None:
+            if "text" in kwargs:
+                self.text = kwargs["text"]
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.console_btn = FakeBtn()
+    app._on_toggle_console()
+    assert app.console_btn.text == "Show console"
+    cw._console_attached = False
+
+
 def test_console_available_on_windows_only() -> None:
     import sys
 

@@ -581,7 +581,7 @@ class HivePlannerApp:
                 self.console_btn.config(text="Show console")
             return
         if console_win.show_console():
-            if hasattr(self, "console_btn"):
+            if console_win.is_console_visible() and hasattr(self, "console_btn"):
                 self.console_btn.config(text="Hide console")
             print("Hive Planner — log output will appear here when running installs or checks.")
         else:
