@@ -526,6 +526,7 @@ def test_delete_project_profile_removes_metadata(tmp_path: Path) -> None:
 
 
 def test_recent_label_uses_stored_profile_not_inferred(tmp_path: Path) -> None:
+    from hive_planner.launcher.app import format_recent_project_label
     from hive_planner.project_profile import delete_project_profile, read_project_profile, write_project_profile
 
     project = tmp_path / "demo"
