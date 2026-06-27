@@ -200,3 +200,9 @@ def test_parse_active_feature(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     (paths.root / "AGENTS.md").write_text(_minimal_agents("git-handoff-ci-v1"), encoding="utf-8")
     assert parse_active_feature(paths) == "git-handoff-ci-v1"
+
+
+def test_parse_active_feature_rejects_placeholder_none(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    (paths.root / "AGENTS.md").write_text(_minimal_agents("none"), encoding="utf-8")
+    assert parse_active_feature(paths) is None

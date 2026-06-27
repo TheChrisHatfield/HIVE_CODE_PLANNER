@@ -9,6 +9,8 @@ from hive_planner.config import RepoPaths
 
 FEATURE_RE = re.compile(r"\*\*([a-z0-9][a-z0-9-]*)\*\*")
 
+PLACEHOLDER_FEATURES = frozenset({"none", "tbd", "placeholder"})
+
 BEHAVIORAL_PATTERNS = (
     re.compile(r"\bmust\b", re.IGNORECASE),
     re.compile(r"\bshould always\b", re.IGNORECASE),
@@ -96,7 +98,12 @@ def parse_active_feature(paths: RepoPaths) -> str | None:
                 active_body = body
                 break
     match = FEATURE_RE.search(active_body)
-    return match.group(1) if match else None
+    if not match:
+        return None
+    feature = match.group(1)
+    if feature.lower() in PLACEHOLDER_FEATURES:
+        return None
+    return feature
 
 
 def _normalize_for_match(text: str) -> str:

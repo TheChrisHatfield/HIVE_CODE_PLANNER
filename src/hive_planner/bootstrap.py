@@ -129,7 +129,7 @@ See [`START_HERE.md`](START_HERE.md).
 
 ## Active feature
 
-**None** — replace with your first feature (see `docs/specs/example-feature/`).
+None — set to your first feature id (see `docs/specs/example-feature/`).
 
 ## Durable Workspace Facts
 
