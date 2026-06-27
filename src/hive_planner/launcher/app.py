@@ -452,6 +452,10 @@ class HivePlannerApp:
             messagebox.showwarning("No selection", "Pick a recent project.")
             return
         path = self.recent_list.get(selection[0])
+        summary = summarize_project(Path(path))
+        if not summary.ok:
+            messagebox.showerror("Invalid project", summary.detail)
+            return
         self.config.add_recent_project(Path(path))
         save_config(self.config)
         messagebox.showinfo("Active project", path)

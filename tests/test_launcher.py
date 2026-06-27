@@ -81,6 +81,39 @@ def test_python_command_preserves_quoted_paths() -> None:
     assert _python_command(cfg2) == ["py", "-3.11"]
 
 
+def test_select_recent_rejects_missing_project(tmp_path: Path) -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+    import tkinter as tk
+
+    missing = tmp_path / "gone"
+    root = tk.Tk()
+    root.withdraw()
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.config = LauncherConfig(recent_projects=[str(missing)])
+    app.root = root
+
+    class Box:
+        calls: list[tuple[str, str]] = []
+
+    def showerror(title, message):
+        Box.calls.append((title, message))
+
+    app.recent_list = type("L", (), {"curselection": lambda self: (0,), "get": lambda self, i: str(missing)})()
+    import hive_planner.launcher.app as app_mod
+
+    original = app_mod.messagebox.showerror
+    app_mod.messagebox.showerror = showerror
+    try:
+        app._on_select_recent()
+    finally:
+        app_mod.messagebox.showerror = original
+    root.destroy()
+
+    assert Box.calls
+    assert "Directory not found" in Box.calls[0][1]
+    assert app.config.active_project == ""
+
+
 def test_ci_check_report_is_not_bg_error() -> None:
     from hive_planner.launcher.app import HivePlannerApp
 
