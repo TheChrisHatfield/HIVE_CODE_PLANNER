@@ -328,6 +328,32 @@ def promote_cartridge_drafts(
     return result
 
 
+def promote_wrote_layers(promotions: dict[str, str]) -> bool:
+    skip_keys = {"status"}
+    return any(
+        key not in skip_keys and (str(status).startswith("written") or status == "updated")
+        for key, status in promotions.items()
+    )
+
+
+def promote_nothing_written_guidance(promote: CartridgePromoteResult | dict) -> str | None:
+    data = promote.to_dict() if isinstance(promote, CartridgePromoteResult) else promote
+    promotions = data.get("promotions") or {}
+    if promotions.get("status") == "skipped (agent handoff off)":
+        return None
+    if promote_wrote_layers(promotions):
+        return None
+    feature = str(data.get("feature") or "your-feature-id")
+    return (
+        f"No cartridge layers were promoted for feature '{feature}'. "
+        "Promote looks for draft files (starting with <!-- DRAFT: -->) at "
+        f"cartridge/holistic.md, macro.md, micro/{feature}.md, "
+        f"specs/{feature}.specseed.md, and optionally memory.md. "
+        "Import with Promote now adapts custom filenames into that layout first; "
+        "set Feature id or add layer_map / features to manifest.json to steer mapping."
+    )
+
+
 def promote_cli_exit_code(promote: CartridgePromoteResult | dict | None) -> int:
     """Return process exit code after an optional promote step."""
     if promote is None:

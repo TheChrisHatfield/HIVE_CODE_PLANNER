@@ -46,6 +46,8 @@ from hive_planner.launcher.service import (
     run_cartridge_import_folder,
     run_cartridge_load_sources,
     run_cartridge_translate,
+    cartridge_load_needs_feature,
+    cartridge_load_will_promote,
     summarize_project,
 )
 
@@ -1356,20 +1358,33 @@ def test_update_recent_scrollbar_hides_when_list_is_short() -> None:
 
 
 def test_bind_mousewheel_scrolls_on_enter_and_unbinds_on_destroy() -> None:
-    from hive_planner.launcher.theme import bind_mousewheel
+    from hive_planner.launcher.theme import _dispatch_wheel, bind_mousewheel, reset_mousewheel_state_for_tests
 
+    reset_mousewheel_state_for_tests()
     handlers: dict = {}
     scrolled: list[int] = []
+    next_id = 1
 
     class FakeWidget:
+        def __init__(self) -> None:
+            nonlocal next_id
+            self.widget_id = next_id
+            next_id += 1
+
+        def winfo_id(self) -> int:
+            return self.widget_id
+
+        def winfo_toplevel(self) -> FakeWidget:
+            return self
+
+        def winfo_exists(self) -> bool:
+            return True
+
         def bind(self, seq, func, add=None) -> None:
             handlers[seq] = func
 
-        def bind_all(self, seq, func) -> None:
-            handlers["<MouseWheel>"] = func
-
-        def unbind_all(self, seq) -> None:
-            handlers.pop("<MouseWheel>", None)
+        def bind_all(self, seq, func, add=None) -> None:
+            return None
 
         def yview_scroll(self, amount, _what) -> None:
             scrolled.append(amount)
@@ -1378,15 +1393,15 @@ def test_bind_mousewheel_scrolls_on_enter_and_unbinds_on_destroy() -> None:
     bind_mousewheel(widget, target=widget)
 
     handlers["<Enter>"](None)
-    handlers["<MouseWheel>"](type("E", (), {"delta": 120})())
+    _dispatch_wheel(type("E", (), {"delta": 120})())
     assert scrolled == [-1]
 
     handlers["<Leave>"](None)
-    assert "<MouseWheel>" not in handlers
+    assert scrolled == [-1]
 
     handlers["<Enter>"](None)
     handlers["<Destroy>"](None)
-    assert "<MouseWheel>" not in handlers
+    reset_mousewheel_state_for_tests()
 
 
 def test_format_recent_project_label_uses_folder_name_only() -> None:
@@ -2024,4 +2039,73 @@ def test_note_stale_bg_result_queues_home_log_message() -> None:
     assert len(app._pending_home_log) == 1
     assert "emit failed" in app._pending_home_log[0]
     assert "dashboard refresh" in app._pending_home_log[0]
+
+
+def test_load_config_reads_default_agent_handoff(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from hive_planner.launcher.config import config_path, load_config, save_config
+
+    cfg_dir = tmp_path / "cfg"
+    cfg_dir.mkdir()
+    monkeypatch.setattr("hive_planner.launcher.config.default_config_dir", lambda: cfg_dir)
+    monkeypatch.setattr("hive_planner.launcher.service.auto_complete_onboarding_if_ready", lambda _cfg: False)
+
+    save_config(
+        LauncherConfig(
+            hive_planner_root=str(tmp_path),
+            default_agent_handoff="off",
+            onboarding_complete=True,
+        )
+    )
+    loaded = load_config()
+    assert loaded.default_agent_handoff == "off"
+
+
+def test_cartridge_load_feature_requirements() -> None:
+    assert cartridge_load_will_promote(promote_checked=True, handoff_unified=True) is True
+    assert cartridge_load_will_promote(promote_checked=True, handoff_unified=False) is False
+    assert cartridge_load_needs_feature("sources", will_promote=False) is True
+    assert cartridge_load_needs_feature("import", will_promote=True) is False
+    assert cartridge_load_needs_feature("import", will_promote=False) is False
+
+
+def test_mousewheel_stack_uses_latest_binding() -> None:
+    from hive_planner.launcher.theme import _resolve_wheel_target, _wheel_bindings, _wheel_stack, reset_mousewheel_state_for_tests
+
+    reset_mousewheel_state_for_tests()
+
+    class FakeTarget:
+        def winfo_exists(self) -> bool:
+            return True
+
+    outer = FakeTarget()
+    inner = FakeTarget()
+    _wheel_bindings[1] = outer
+    _wheel_bindings[2] = inner
+    _wheel_stack.extend([1, 2])
+    assert _resolve_wheel_target() is inner
+    _wheel_stack.pop()
+    assert _resolve_wheel_target() is outer
+    reset_mousewheel_state_for_tests()
+
+
+def test_wheel_handlers_install_once() -> None:
+    import sys
+
+    import hive_planner.launcher.theme as theme
+
+    theme.reset_mousewheel_state_for_tests()
+    bind_calls: list[str] = []
+
+    class FakeRoot:
+        def bind_all(self, seq, func, add=None) -> None:
+            bind_calls.append(seq)
+
+    root_a = FakeRoot()
+    root_b = FakeRoot()
+    theme._ensure_wheel_handlers(root_a)
+    theme._ensure_wheel_handlers(root_b)
+    assert theme._wheel_handlers_installed is True
+    expected = 1 if sys.platform == "win32" else 2
+    assert len(bind_calls) == expected
+    theme.reset_mousewheel_state_for_tests()
 

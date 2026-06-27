@@ -76,6 +76,7 @@ class LauncherConfig:
     python_executable: str = "py -3.11"
     cursor_executable: str = ""
     default_profile: str = "full"
+    default_agent_handoff: str = "unified"
     theme: str = "light"
     active_project: str = ""
     recent_projects: list[str] = field(default_factory=list)
@@ -161,6 +162,7 @@ def config_path() -> Path:
 
 
 def load_config() -> LauncherConfig:
+    from hive_planner.agent_handoff import normalize_agent_handoff_mode
     from hive_planner.launcher.service import auto_complete_onboarding_if_ready
 
     path = config_path()
@@ -190,6 +192,10 @@ def load_config() -> LauncherConfig:
         python_executable=str(data.get("python_executable") or "py -3.11"),
         cursor_executable=str(data.get("cursor_executable") or ""),
         default_profile=str(data.get("default_profile") or "full"),
+        default_agent_handoff=normalize_agent_handoff_mode(
+            data.get("default_agent_handoff"),
+            default="unified",
+        ),
         theme=str(data.get("theme") or "light"),
         active_project=active,
         recent_projects=recent,

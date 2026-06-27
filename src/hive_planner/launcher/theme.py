@@ -25,41 +25,94 @@ FONT_BOLD = ("Segoe UI", 10, "bold")
 FONT_TITLE = ("Segoe UI", 18, "bold")
 FONT_SUBTITLE = ("Segoe UI", 9)
 
+_wheel_bindings: dict[int, tk.Misc] = {}
+_wheel_stack: list[int] = []
+_wheel_handlers_installed = False
 
-def bind_mousewheel(widget: tk.Misc, *, target: tk.Misc | None = None) -> None:
-    """Scroll *target* (default *widget*) with the mouse wheel while the pointer is over *widget*."""
-    scroll_target = target or widget
 
-    def on_wheel(event) -> None:
-        if hasattr(scroll_target, "yview_scroll"):
-            scroll_target.yview_scroll(int(-1 * (event.delta / 120)), "units")
-
-    def on_wheel_up(_event) -> None:
-        if hasattr(scroll_target, "yview_scroll"):
-            scroll_target.yview_scroll(-1, "units")
-
-    def on_wheel_down(_event) -> None:
-        if hasattr(scroll_target, "yview_scroll"):
-            scroll_target.yview_scroll(1, "units")
-
-    if sys.platform == "win32":
-        wheel_bind = lambda: widget.bind_all("<MouseWheel>", on_wheel)
-        wheel_unbind = lambda: widget.unbind_all("<MouseWheel>")
-    else:
-        wheel_bind = lambda: (widget.bind_all("<Button-4>", on_wheel_up), widget.bind_all("<Button-5>", on_wheel_down))
-        wheel_unbind = lambda: (widget.unbind_all("<Button-4>"), widget.unbind_all("<Button-5>"))
-
-    def on_enter(_event=None) -> None:
-        wheel_bind()
-
-    def on_leave(_event=None) -> None:
-        wheel_unbind()
-
-    def on_destroy(_event=None) -> None:
+def _resolve_wheel_target() -> tk.Misc | None:
+    while _wheel_stack:
+        widget_id = _wheel_stack[-1]
+        target = _wheel_bindings.get(widget_id)
+        if target is None:
+            _wheel_stack.pop()
+            continue
         try:
-            wheel_unbind()
+            if target.winfo_exists():
+                return target
         except tk.TclError:
             pass
+        _wheel_bindings.pop(widget_id, None)
+        _wheel_stack.pop()
+    return None
+
+
+def _dispatch_wheel(event) -> str | None:
+    target = _resolve_wheel_target()
+    if target is not None and hasattr(target, "yview_scroll"):
+        target.yview_scroll(int(-1 * (event.delta / 120)), "units")
+    return None
+
+
+def _dispatch_wheel_up(_event) -> str | None:
+    target = _resolve_wheel_target()
+    if target is not None and hasattr(target, "yview_scroll"):
+        target.yview_scroll(-1, "units")
+    return None
+
+
+def _dispatch_wheel_down(_event) -> str | None:
+    target = _resolve_wheel_target()
+    if target is not None and hasattr(target, "yview_scroll"):
+        target.yview_scroll(1, "units")
+    return None
+
+
+def _ensure_wheel_handlers(root: tk.Misc) -> None:
+    global _wheel_handlers_installed
+    if _wheel_handlers_installed:
+        return
+    _wheel_handlers_installed = True
+    if sys.platform == "win32":
+        root.bind_all("<MouseWheel>", _dispatch_wheel, add="+")
+    else:
+        root.bind_all("<Button-4>", _dispatch_wheel_up, add="+")
+        root.bind_all("<Button-5>", _dispatch_wheel_down, add="+")
+
+
+def reset_mousewheel_state_for_tests() -> None:
+    global _wheel_handlers_installed
+    _wheel_bindings.clear()
+    _wheel_stack.clear()
+    _wheel_handlers_installed = False
+
+
+def bind_mousewheel(widget: tk.Misc, *, target: tk.Misc | None = None) -> None:
+    """Scroll *target* while the pointer is over *widget* (nested binds use the latest enter)."""
+    scroll_target = target or widget
+
+    def on_enter(_event=None) -> None:
+        widget_id = widget.winfo_id()
+        _wheel_bindings[widget_id] = scroll_target
+        if widget_id in _wheel_stack:
+            _wheel_stack.remove(widget_id)
+        _wheel_stack.append(widget_id)
+        _ensure_wheel_handlers(widget.winfo_toplevel())
+
+    def on_leave(_event=None) -> None:
+        widget_id = widget.winfo_id()
+        if _wheel_stack and _wheel_stack[-1] == widget_id:
+            _wheel_stack.pop()
+        elif widget_id in _wheel_stack:
+            _wheel_stack.remove(widget_id)
+
+    def on_destroy(_event=None) -> None:
+        widget_id = widget.winfo_id()
+        _wheel_bindings.pop(widget_id, None)
+        if _wheel_stack and _wheel_stack[-1] == widget_id:
+            _wheel_stack.pop()
+        elif widget_id in _wheel_stack:
+            _wheel_stack.remove(widget_id)
 
     widget.bind("<Enter>", on_enter, add="+")
     widget.bind("<Leave>", on_leave, add="+")

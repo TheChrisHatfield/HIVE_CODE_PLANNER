@@ -22,6 +22,8 @@ from hive_planner.launcher.service import (
     run_cartridge_import_folder,
     run_cartridge_load_sources,
     run_cartridge_translate,
+    cartridge_load_needs_feature,
+    cartridge_load_will_promote,
     run_deploy_agent_handoff,
     run_install,
     run_project_ci_check,
@@ -485,7 +487,7 @@ class HivePlannerApp:
         self.new_target = tk.StringVar()
         self.new_profile = tk.StringVar(value=self.config.default_profile)
         self.new_git = tk.BooleanVar(value=True)
-        self.new_agent_handoff = tk.StringVar(value="unified")
+        self.new_agent_handoff = tk.StringVar(value=self.config.default_agent_handoff)
         self._field(form, "Project name", self.new_name)
         self._field(form, "Target folder", self.new_target, browse=True)
         profile_row = tk.Frame(form, bg=COLORS["card"])
@@ -588,6 +590,7 @@ class HivePlannerApp:
         self.cfg_python = tk.StringVar(value=self.config.python_executable)
         self.cfg_cursor = tk.StringVar(value=self.config.cursor_executable)
         self.cfg_profile = tk.StringVar(value=self.config.default_profile)
+        self.cfg_agent_handoff = tk.StringVar(value=self.config.default_agent_handoff)
         self._field(
             form,
             "Hive planner root",
@@ -637,6 +640,34 @@ class HivePlannerApp:
         )
         profile_combo.pack(side="left", fill="x", expand=True)
         attach_combobox_tooltip(profile_combo, "Used when creating or bootstrapping a new linked project.")
+        handoff_row = tk.Frame(form, bg=COLORS["card"])
+        handoff_row.pack(fill="x", padx=12, pady=4)
+        handoff_label = tk.Label(
+            handoff_row,
+            text="Default handoff",
+            width=14,
+            anchor="w",
+            bg=COLORS["card"],
+            fg=COLORS["fg"],
+            font=FONT,
+        )
+        handoff_label.pack(side="left")
+        attach_hover_tooltip(
+            handoff_label,
+            "Unified deploys Spec Kit + Continual Learning together; off skips agent handoff scaffolding.",
+        )
+        handoff_combo = ttk.Combobox(
+            handoff_row,
+            textvariable=self.cfg_agent_handoff,
+            values=["unified", "off"],
+            state="readonly",
+            width=28,
+        )
+        handoff_combo.pack(side="left", fill="x", expand=True)
+        attach_combobox_tooltip(
+            handoff_combo,
+            "Default for New project and when bootstrapping a linked workspace.",
+        )
         btn_row = tk.Frame(form, bg=COLORS["card"])
         btn_row.pack(fill="x", padx=12, pady=(8, 12))
         primary_button(
@@ -1370,8 +1401,11 @@ class HivePlannerApp:
         def run_load() -> None:
             mode = mode_var.get()
             feature = feature_var.get().strip()
-            will_promote = promote_var.get() and handoff_unified
-            needs_feature = mode in ("sources", "translate") or (mode == "import" and will_promote)
+            will_promote = cartridge_load_will_promote(
+                promote_checked=promote_var.get(),
+                handoff_unified=handoff_unified,
+            )
+            needs_feature = cartridge_load_needs_feature(mode, will_promote=will_promote)
             if needs_feature:
                 if not feature:
                     messagebox.showwarning(
@@ -1396,7 +1430,7 @@ class HivePlannerApp:
                 return
 
             do_promote = will_promote
-            do_feature = feature if needs_feature else None
+            do_feature = feature.strip() if feature.strip() else None
             do_force = force_promote_var.get()
             do_overwrite = overwrite_var.get() if mode == "import" else False
 
@@ -1510,6 +1544,19 @@ class HivePlannerApp:
                 self._append_log(self.home_log, f"  wrote: cartridge/{rel}")
             for rel in result.get("skipped", []):
                 self._append_log(self.home_log, f"  skipped (exists): cartridge/{rel}")
+            adapt = result.get("adapt")
+            if adapt and adapt.get("adapted"):
+                self._append_log(
+                    self.home_log,
+                    f"Adapted custom files to standard layout (feature: {adapt.get('feature')}).",
+                )
+                for rel in adapt.get("adapted", []):
+                    self._append_log(self.home_log, f"  layer file: cartridge/{rel}")
+                for src, dst in sorted((adapt.get("mappings") or {}).items()):
+                    if src != dst:
+                        self._append_log(self.home_log, f"  mapped: {src} -> cartridge/{dst}")
+            if result.get("feature"):
+                self._append_log(self.home_log, f"  using feature id: {result['feature']}")
         self._log_cartridge_promote(result.get("promote"))
         for warning in result.get("warnings", []):
             self._append_log(self.home_log, f"Warning: {warning}")
@@ -1517,7 +1564,11 @@ class HivePlannerApp:
     def _log_cartridge_promote(self, promote: dict | None) -> None:
         if not promote:
             return
+        from hive_planner.cartridge_promote import promote_nothing_written_guidance
+
         self._append_log(self.home_log, "Promotion / symbiotic handoff:")
+        if promote.get("feature"):
+            self._append_log(self.home_log, f"  feature: {promote['feature']}")
         for layer, status in sorted(promote.get("promotions", {}).items()):
             self._append_log(self.home_log, f"  {layer}: {status}")
         if promote.get("candidates_path"):
@@ -1543,6 +1594,9 @@ class HivePlannerApp:
             self._append_log(self.home_log, f"  spec-drift: {mark}")
         for warning in promote.get("warnings", []):
             self._append_log(self.home_log, f"  Warning: {warning}")
+        guidance = promote_nothing_written_guidance(promote)
+        if guidance:
+            self._append_log(self.home_log, f"  Note: {guidance}")
         if promote.get("ok") is False:
             self._append_log(self.home_log, "Promotion/spec-drift needs review before handoff.")
 
@@ -1809,7 +1863,7 @@ class HivePlannerApp:
             profile=cfg.default_profile,
             git_init=False,
             force=force,
-            agent_handoff="unified",
+            agent_handoff=cfg.default_agent_handoff,
         )
         if not result.get("ok"):
             messagebox.showerror("Setup failed", result.get("error", "Could not create Hive project."))
@@ -1820,7 +1874,8 @@ class HivePlannerApp:
         if notify:
             messagebox.showinfo(
                 "Hive project ready",
-                f"Created planning files in:\n{bootstrap_target}\n\nProfile: {cfg.default_profile}",
+                f"Created planning files in:\n{bootstrap_target}\n\n"
+                f"Profile: {cfg.default_profile}\nHandoff: {cfg.default_agent_handoff}",
             )
         self._show_dashboard()
         return True
@@ -1855,7 +1910,9 @@ class HivePlannerApp:
         name = self.new_name.get().strip() or None
         profile = self.new_profile.get().strip() or "full"
         git_init = self.new_git.get()
-        agent_handoff = self.new_agent_handoff.get().strip() or "unified"
+        from hive_planner.agent_handoff import normalize_agent_handoff_mode
+
+        agent_handoff = normalize_agent_handoff_mode(self.new_agent_handoff.get(), default="unified")
         cfg = load_config()
 
         def work():
@@ -1968,8 +2025,15 @@ class HivePlannerApp:
         self.config.python_executable = self.cfg_python.get().strip() or "py -3.11"
         self.config.cursor_executable = self.cfg_cursor.get().strip()
         self.config.default_profile = self.cfg_profile.get().strip() or "full"
+        from hive_planner.agent_handoff import normalize_agent_handoff_mode
+
+        self.config.default_agent_handoff = normalize_agent_handoff_mode(
+            self.cfg_agent_handoff.get(),
+            default="unified",
+        )
         save_config(self.config)
         self.setup = get_setup_status(self.config)
+        self._show_dashboard()
         messagebox.showinfo("Saved", "Settings updated.")
 
     def _on_reset_onboarding(self) -> None:

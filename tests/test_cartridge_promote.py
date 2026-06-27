@@ -151,6 +151,22 @@ def test_promote_skips_non_draft_cartridge(tmp_path: Path) -> None:
     assert target.read_text(encoding="utf-8") == "# Existing truth\n"
 
 
+def test_promote_nothing_written_guidance_for_import_style_cartridge(tmp_path: Path) -> None:
+    from hive_planner.cartridge_promote import promote_nothing_written_guidance
+
+    project = _unified_project(tmp_path / "proj")
+    paths = RepoPaths(root=project)
+    (paths.cartridge / "HIVE_DEV_V1.md").write_text("# Imported content\n", encoding="utf-8")
+
+    result = promote_cartridge_drafts(paths, "example-feature")
+    guidance = promote_nothing_written_guidance(result)
+
+    assert guidance is not None
+    assert "example-feature" in guidance
+    assert "DRAFT" in guidance
+    assert "Import with Promote now adapts" in guidance
+
+
 def test_promote_does_not_warn_for_autosync_cartridge_layers(tmp_path: Path) -> None:
     from hive_planner.delta_emit import AUTO_SYNC_PREFIX
 

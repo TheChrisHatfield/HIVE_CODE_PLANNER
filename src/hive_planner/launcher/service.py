@@ -929,6 +929,16 @@ def _merge_cartridge_promote(payload: dict, promote_result: dict | None) -> dict
     return payload
 
 
+def cartridge_load_will_promote(*, promote_checked: bool, handoff_unified: bool) -> bool:
+    return promote_checked and handoff_unified
+
+
+def cartridge_load_needs_feature(mode: str, *, will_promote: bool) -> bool:
+    if mode in ("sources", "translate"):
+        return True
+    return False
+
+
 def _run_cartridge_promote(project_root: Path, feature: str, *, promote: bool, force: bool = False) -> dict | None:
     if not promote:
         return None
@@ -1082,30 +1092,50 @@ def run_cartridge_import_folder(
         "written": written,
         "skipped": skipped,
     }
-    if promote and feature:
+    manifest = None
+    manifest_path = paths.cartridge / "manifest.json"
+    if manifest_path.is_file():
         try:
-            validate_feature_id(feature.strip())
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            manifest = None
+
+    if promote:
+        from hive_planner.cartridge_adapt import (
+            adapt_cartridge_for_promote,
+            import_needs_cartridge_adapt,
+            infer_feature_id,
+        )
+
+        try:
+            resolved_feature = infer_feature_id(
+                requested=feature,
+                imported_rels=written,
+                manifest=manifest,
+            )
+            if import_needs_cartridge_adapt(paths, written):
+                adapt = adapt_cartridge_for_promote(
+                    paths,
+                    resolved_feature,
+                    overwrite=overwrite,
+                    source_rels=written,
+                )
+                payload["adapt"] = adapt.to_dict()
+                payload.setdefault("warnings", []).extend(adapt.warnings)
+            payload["feature"] = resolved_feature
             payload = _merge_cartridge_promote(
                 payload,
-                _run_cartridge_promote(target, feature, promote=promote, force=force_promote),
+                _run_cartridge_promote(target, resolved_feature, promote=promote, force=force_promote),
             )
         except ValueError as exc:
             msg = str(exc)
             payload.setdefault("warnings", []).append(msg)
             payload["promote"] = {
                 "ok": False,
-                "feature": feature.strip(),
+                "feature": feature,
                 "promotions": {},
                 "warnings": [msg],
             }
-    elif promote and not feature:
-        payload.setdefault("warnings", []).append("Promotion skipped — set feature id for import mode.")
-        payload["promote"] = {
-            "ok": False,
-            "feature": None,
-            "promotions": {},
-            "warnings": ["Promotion skipped — set feature id for import mode."],
-        }
     return payload
 
 
