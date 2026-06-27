@@ -1188,11 +1188,15 @@ class HivePlannerApp:
         secondary_button(action_row, "Cancel", dialog.destroy)
 
     def _cartridge_load_done(self, result: dict) -> None:
-        if self._is_bg_error(result):
-            self._append_log(self.home_log, self._result_detail(result))
+        if not isinstance(result, dict):
+            self._append_log(self.home_log, str(result))
             return
-        if not result.get("ok"):
+        if result.get("ok") is False:
             self._append_log(self.home_log, self._result_detail(result))
+            for rel in result.get("copied", []):
+                self._append_log(self.home_log, f"  copied: {rel}")
+            for rel in result.get("skipped", []):
+                self._append_log(self.home_log, f"  skipped (exists): cartridge/{rel}")
             for warning in result.get("warnings", []):
                 self._append_log(self.home_log, f"Warning: {warning}")
             return

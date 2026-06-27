@@ -781,6 +781,26 @@ def test_run_cartridge_load_sources_rejects_invalid_feature(tmp_path: Path) -> N
     assert "Invalid feature" in result["error"]
 
 
+def test_run_cartridge_load_sources_preserves_copied_on_emit_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project = _minimal_hive_project(tmp_path / "proj")
+    source = tmp_path / "notes.md"
+    source.write_text("# Research\n\nSubsystem workflow for cartridge testing.\n", encoding="utf-8")
+
+    def fail_emit(*_args, **_kwargs):
+        raise ValueError("emit failed")
+
+    monkeypatch.setattr("hive_planner.launcher.service.emit_cartridge", fail_emit)
+
+    result = run_cartridge_load_sources(project, [source], "my-feature")
+
+    assert result["ok"] is False
+    assert "emit failed" in result["error"]
+    assert result["copied"] == ["context-library/sources/imported/notes.md"]
+    assert (project / "context-library" / "sources" / "imported" / "notes.md").is_file()
+
+
 def test_load_user_guide_reads_scripts_readme(tmp_path: Path) -> None:
     from hive_planner.launcher.user_guide import load_user_guide, user_guide_path
 
