@@ -81,6 +81,15 @@ def test_python_command_preserves_quoted_paths() -> None:
     assert _python_command(cfg2) == ["py", "-3.11"]
 
 
+def test_ci_check_report_is_not_bg_error() -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    report = {"ok": False, "steps": [{"name": "pytest", "ok": False, "detail": "1 failed"}]}
+    assert app._is_bg_error(report) is False
+    assert app._is_bg_error({"ok": False, "error": "boom"}) is True
+
+
 def test_install_result_failure_dict() -> None:
     from hive_planner.launcher.app import HivePlannerApp
     import tkinter as tk

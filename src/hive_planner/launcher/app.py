@@ -354,6 +354,10 @@ class HivePlannerApp:
     def _on_install(self) -> None:
         self._run_bg(lambda: run_install(load_config()), self._install_done)
 
+    def _is_bg_error(self, result) -> bool:
+        """True only for _run_bg exception wrappers, not ci-check/map-sync payloads."""
+        return isinstance(result, dict) and bool(result.get("error"))
+
     def _result_failed(self, result) -> bool:
         if isinstance(result, dict):
             return result.get("ok") is False or bool(result.get("error"))
@@ -385,7 +389,7 @@ class HivePlannerApp:
         self._run_bg(lambda: run_project_ci_check(Path(root)), self._ci_check_done)
 
     def _ci_check_done(self, report: dict) -> None:
-        if self._result_failed(report):
+        if self._is_bg_error(report):
             self._append_log(self.home_log, self._result_detail(report))
             return
         self.ci_list.delete(0, "end")
