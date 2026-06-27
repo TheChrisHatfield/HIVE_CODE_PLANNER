@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
-from hive_planner.launcher.config import LauncherConfig, load_config, save_config
+from hive_planner.launcher.config import LauncherConfig, load_config, normalize_project_path, save_config
 from hive_planner.launcher.service import (
     _python_command,
     get_setup_status,
@@ -42,6 +42,26 @@ def test_add_recent_project_dedupes_and_stores_profile(tmp_path: Path) -> None:
     assert cfg.recent_projects[0] == str(b.resolve())
     assert len(cfg.recent_projects) == 2
     assert cfg.project_profiles[str(b.resolve())] == "full"
+
+
+def test_load_config_normalizes_project_paths(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    project = tmp_path / "my-app"
+    project.mkdir()
+    cfg_dir = tmp_path / "cfg"
+    monkeypatch.setattr("hive_planner.launcher.config.default_config_dir", lambda: cfg_dir)
+    raw = str(project).replace("\\", "/") + "/"
+    save_config(
+        LauncherConfig(
+            active_project=raw,
+            recent_projects=[raw],
+            project_profiles={raw: "minimal"},
+        )
+    )
+    loaded = load_config()
+    expected = str(project.resolve())
+    assert loaded.active_project == expected
+    assert loaded.recent_projects == [expected]
+    assert loaded.project_profiles.get(expected) == "minimal"
 
 
 def test_summarize_includes_profile(tmp_path: Path) -> None:

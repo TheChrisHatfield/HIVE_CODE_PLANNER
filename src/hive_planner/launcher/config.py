@@ -17,6 +17,13 @@ def default_hive_root() -> Path:
     return Path(__file__).resolve().parents[3]
 
 
+def normalize_project_path(path: str | Path) -> str:
+    raw = str(path).strip()
+    if not raw:
+        return ""
+    return str(Path(raw).resolve())
+
+
 @dataclass
 class LauncherConfig:
     onboarding_complete: bool = False
@@ -37,13 +44,26 @@ class LauncherConfig:
     def add_recent_project(self, project_root: Path) -> None:
         from hive_planner.project_profile import resolve_project_profile
 
-        value = str(project_root.resolve())
+        value = normalize_project_path(project_root)
+        if not value:
+            return
         self.recent_projects = [value] + [p for p in self.recent_projects if p != value]
         self.recent_projects = self.recent_projects[:8]
         self.active_project = value
-        meta = resolve_project_profile(project_root)
+        meta = resolve_project_profile(Path(value))
         if meta:
             self.project_profiles[value] = meta.bootstrap_profile
+        self.project_profiles = {
+            p: self.project_profiles[p]
+            for p in self.recent_projects
+            if p in self.project_profiles
+        }
+        for recent in self.recent_projects:
+            if recent in self.project_profiles:
+                continue
+            inferred = resolve_project_profile(Path(recent))
+            if inferred:
+                self.project_profiles[recent] = inferred.bootstrap_profile
 
 
 def config_path() -> Path:
@@ -62,19 +82,23 @@ def load_config() -> LauncherConfig:
         cfg = LauncherConfig(hive_planner_root=str(default_hive_root().resolve()))
         save_config(cfg)
         return cfg
+    active = normalize_project_path(data.get("active_project") or "")
+    recent = [normalize_project_path(p) for p in data.get("recent_projects", []) if str(p).strip()]
+    profiles_raw = data.get("project_profiles") or {}
+    profiles = {
+        normalize_project_path(k): str(v)
+        for k, v in profiles_raw.items()
+        if str(v) in ("minimal", "full") and str(k).strip()
+    }
     return LauncherConfig(
         onboarding_complete=bool(data.get("onboarding_complete", False)),
         hive_planner_root=str(data.get("hive_planner_root") or default_hive_root().resolve()),
         python_executable=str(data.get("python_executable") or "py -3.11"),
         default_profile=str(data.get("default_profile") or "full"),
         theme=str(data.get("theme") or "light"),
-        active_project=str(data.get("active_project") or ""),
-        recent_projects=[str(p) for p in data.get("recent_projects", [])],
-        project_profiles={
-            str(k): str(v)
-            for k, v in (data.get("project_profiles") or {}).items()
-            if str(v) in ("minimal", "full")
-        },
+        active_project=active,
+        recent_projects=recent,
+        project_profiles=profiles,
     )
 
 
