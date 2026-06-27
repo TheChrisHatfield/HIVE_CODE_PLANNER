@@ -1231,15 +1231,27 @@ class HivePlannerApp:
         if not isinstance(result, dict):
             self._append_log(self.home_log, str(result))
             return
+
+        worked = bool(
+            result.get("files_written")
+            or result.get("copied")
+            or result.get("written")
+            or result.get("outputs")
+        )
+
         if result.get("ok") is False:
-            self._append_log(self.home_log, self._result_detail(result))
+            if result.get("error"):
+                self._append_log(self.home_log, self._result_detail(result))
             for rel in result.get("copied", []):
                 self._append_log(self.home_log, f"  copied: {rel}")
             for rel in result.get("skipped", []):
                 self._append_log(self.home_log, f"  skipped (exists): cartridge/{rel}")
             for warning in result.get("warnings", []):
                 self._append_log(self.home_log, f"Warning: {warning}")
-            return
+            if not worked:
+                self._log_cartridge_promote(result.get("promote"))
+                return
+
         mode = result.get("mode")
         if mode == "sources":
             self._append_log(
@@ -1266,29 +1278,32 @@ class HivePlannerApp:
                 self._append_log(self.home_log, f"  wrote: cartridge/{rel}")
             for rel in result.get("skipped", []):
                 self._append_log(self.home_log, f"  skipped (exists): cartridge/{rel}")
-        promote = result.get("promote")
-        if promote:
-            self._append_log(self.home_log, "Promotion / symbiotic handoff:")
-            for layer, status in sorted(promote.get("promotions", {}).items()):
-                self._append_log(self.home_log, f"  {layer}: {status}")
-            if promote.get("candidates_path"):
-                self._append_log(
-                    self.home_log,
-                    f"  CL candidates (review, then agents-propose): {promote['candidates_path']}",
-                )
-            repair = promote.get("agents_repair")
-            if repair:
-                self._append_log(self.home_log, f"  AGENTS.md repair: {repair.get('detail')}")
-            drift = promote.get("spec_drift")
-            if drift is not None:
-                mark = "ok" if drift.get("ok") else "review needed"
-                self._append_log(self.home_log, f"  spec-drift: {mark}")
-            for warning in promote.get("warnings", []):
-                self._append_log(self.home_log, f"  Warning: {warning}")
-            if promote.get("ok") is False and result.get("ok"):
-                self._append_log(self.home_log, "Cartridge loaded; promotion/spec-drift needs review.")
+        self._log_cartridge_promote(result.get("promote"))
         for warning in result.get("warnings", []):
             self._append_log(self.home_log, f"Warning: {warning}")
+
+    def _log_cartridge_promote(self, promote: dict | None) -> None:
+        if not promote:
+            return
+        self._append_log(self.home_log, "Promotion / symbiotic handoff:")
+        for layer, status in sorted(promote.get("promotions", {}).items()):
+            self._append_log(self.home_log, f"  {layer}: {status}")
+        if promote.get("candidates_path"):
+            self._append_log(
+                self.home_log,
+                f"  CL candidates (review, then agents-propose): {promote['candidates_path']}",
+            )
+        repair = promote.get("agents_repair")
+        if repair:
+            self._append_log(self.home_log, f"  AGENTS.md repair: {repair.get('detail')}")
+        drift = promote.get("spec_drift")
+        if drift is not None:
+            mark = "ok" if drift.get("ok") else "review needed"
+            self._append_log(self.home_log, f"  spec-drift: {mark}")
+        for warning in promote.get("warnings", []):
+            self._append_log(self.home_log, f"  Warning: {warning}")
+        if promote.get("ok") is False:
+            self._append_log(self.home_log, "Promotion/spec-drift needs review before handoff.")
 
     def _deploy_handoff_done(self, result: dict) -> None:
         if self._is_bg_error(result):

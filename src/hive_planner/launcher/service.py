@@ -926,8 +926,6 @@ def _merge_cartridge_promote(payload: dict, promote_result: dict | None) -> dict
     if not promote_result:
         return payload
     payload["promote"] = promote_result
-    if promote_result.get("ok") is False:
-        payload["ok"] = False
     return payload
 
 

@@ -801,6 +801,19 @@ def test_run_cartridge_load_sources_preserves_copied_on_emit_failure(
     assert (project / "context-library" / "sources" / "imported" / "notes.md").is_file()
 
 
+def test_merge_cartridge_promote_keeps_load_ok_when_spec_drift_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from hive_planner.launcher.service import _merge_cartridge_promote
+
+    payload = {"ok": True, "mode": "translate", "files_written": ["micro/x.md"]}
+    promote = {"ok": False, "promotions": {"micro": "written"}, "spec_drift": {"ok": False}}
+    merged = _merge_cartridge_promote(payload, promote)
+
+    assert merged["ok"] is True
+    assert merged["promote"]["ok"] is False
+
+
 def test_load_user_guide_reads_scripts_readme(tmp_path: Path) -> None:
     from hive_planner.launcher.user_guide import load_user_guide, user_guide_path
 
