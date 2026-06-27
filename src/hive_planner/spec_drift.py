@@ -171,6 +171,25 @@ def repair_agents_active_feature(paths: RepoPaths, feature: str | None = None) -
     return AgentsRepairResult(True, feature=target, detail=f"set Active feature to {target}")
 
 
+def repair_agents_rosetta_section(paths: RepoPaths) -> AgentsRepairResult:
+    from hive_planner.rosetta_nav import agents_missing_rosetta_section, inject_agents_rosetta_section
+
+    agents_path = paths.root / "AGENTS.md"
+    if not agents_path.is_file():
+        return AgentsRepairResult(False, detail="AGENTS.md missing")
+    text = agents_path.read_text(encoding="utf-8", errors="replace")
+    if not agents_missing_rosetta_section(text):
+        return AgentsRepairResult(False, detail="Rosetta section already present")
+    updated = inject_agents_rosetta_section(text)
+    if updated == text:
+        return AgentsRepairResult(False, detail="no Rosetta section change")
+    try:
+        agents_path.write_text(updated, encoding="utf-8", newline="\n")
+    except OSError as exc:
+        return AgentsRepairResult(False, detail=str(exc))
+    return AgentsRepairResult(True, detail="added Planning Rosetta Stone section to AGENTS.md")
+
+
 def _normalize_for_match(text: str) -> str:
     cleaned = re.sub(r"^[-*]\s+", "", text.strip())
     cleaned = re.sub(r"\*\*([^*]+)\*\*", r"\1", cleaned)

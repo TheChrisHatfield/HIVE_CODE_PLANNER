@@ -1588,6 +1588,15 @@ class HivePlannerApp:
         repair = promote.get("agents_repair")
         if repair:
             self._append_log(self.home_log, f"  AGENTS.md repair: {repair.get('detail')}")
+        rosetta = promote.get("rosetta_repair")
+        if rosetta:
+            self._append_log(self.home_log, f"  Rosetta navigation: {rosetta.get('detail')}")
+            for rel in rosetta.get("patched") or []:
+                self._append_log(self.home_log, f"    patched: {rel}")
+        self._append_log(
+            self.home_log,
+            "  Agent startup: load docs/planning-rosetta-stone.md (hook planning.rosetta) before spec/delta",
+        )
         drift = promote.get("spec_drift")
         if drift is not None:
             mark = "ok" if drift.get("ok") else "review needed"

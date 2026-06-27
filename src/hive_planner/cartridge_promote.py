@@ -21,6 +21,13 @@ from hive_planner.spec_drift import (
     check_spec_handoff,
     classify_bullet,
     repair_agents_active_feature,
+    repair_agents_rosetta_section,
+)
+from hive_planner.rosetta_nav import (
+    ensure_handoff_rosetta_navigation,
+    plan_navigation_block,
+    spec_navigation_block,
+    tasks_navigation_block,
 )
 
 PROMOTED_BANNER = "<!-- PROMOTED: from cartridge — review before handoff -->"
@@ -32,6 +39,7 @@ class CartridgePromoteResult:
     promotions: dict[str, str] = field(default_factory=dict)
     candidates_path: str | None = None
     agents_repair: dict | None = None
+    rosetta_repair: dict | None = None
     handoff: dict | None = None
     spec_drift: dict | None = None
     warnings: list[str] = field(default_factory=list)
@@ -44,6 +52,7 @@ class CartridgePromoteResult:
             "promotions": self.promotions,
             "candidates_path": self.candidates_path,
             "agents_repair": self.agents_repair,
+            "rosetta_repair": self.rosetta_repair,
             "handoff": self.handoff,
             "spec_drift": self.spec_drift,
             "warnings": self.warnings,
@@ -178,6 +187,8 @@ def _ensure_spec_scaffold(paths: RepoPaths, feature: str) -> dict[str, str]:
                     "**Hook:** `spec.flow`",
                     "**Spec:** [spec.md](./spec.md)",
                     "",
+                    plan_navigation_block(feature),
+                    "",
                     "## Approach",
                     "",
                     "Derived from cartridge promotion — review and expand.",
@@ -196,6 +207,8 @@ def _ensure_spec_scaffold(paths: RepoPaths, feature: str) -> dict[str, str]:
                     f"# Tasks: {feature}",
                     "",
                     "**Hook:** `spec.flow`",
+                    "",
+                    tasks_navigation_block(feature),
                     "",
                     "- [ ] Review promoted spec and delta micro brief",
                     "- [ ] Run `py -3.11 -m hive_planner ci-check`",
@@ -287,6 +300,8 @@ def promote_cartridge_drafts(
                     "**Hook:** `spec.flow`",
                     f"**Delta:** [{feature}.md](../../delta/20_micro/{feature}.md)",
                     "",
+                    spec_navigation_block(feature),
+                    "",
                     "## What",
                     "",
                     "Promoted from cartridge micro draft — review and expand.",
@@ -308,10 +323,32 @@ def promote_cartridge_drafts(
     if promoted_primary:
         result.promotions.update(_ensure_spec_scaffold(paths, feature))
 
+    rosetta_details: list[str] = []
+    patched_files: list[str] = []
     if repair_agents:
         repair = repair_agents_active_feature(paths, feature)
         if repair.repaired:
             result.agents_repair = {"feature": repair.feature, "detail": repair.detail}
+        rosetta = repair_agents_rosetta_section(paths)
+        if rosetta.repaired:
+            rosetta_details.append(rosetta.detail)
+
+    promoted_layers = {
+        name
+        for name, status in result.promotions.items()
+        if name not in {"status", "spec", "plan", "tasks", "memory_candidates"}
+        and (str(status).startswith("written") or status == "updated")
+    }
+    if result.promotions.get("spec", "").startswith("written") or result.promotions.get("spec") == "updated":
+        promoted_layers.add("micro")
+    patched_files = ensure_handoff_rosetta_navigation(paths, feature, promoted_layers=promoted_layers)
+    if patched_files:
+        rosetta_details.append(f"patched navigation in {len(patched_files)} handoff file(s)")
+    if rosetta_details or patched_files:
+        result.rosetta_repair = {
+            "detail": "; ".join(rosetta_details) if rosetta_details else "navigation updated",
+            "patched": patched_files,
+        }
 
     if run_spec_drift:
         handoff = check_spec_handoff(paths, feature)

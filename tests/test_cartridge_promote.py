@@ -36,6 +36,11 @@ def _unified_project(root: Path) -> Path:
             [
                 "# AGENTS.md",
                 "",
+                "## Planning Rosetta Stone (required anchor)",
+                "",
+                "- **Hook ID:** `planning.rosetta`",
+                "- **File:** `docs/planning-rosetta-stone.md`",
+                "",
                 "## Active feature",
                 "",
                 "**None** — set when Spec Kit work begins.",
@@ -68,6 +73,9 @@ def test_promote_micro_and_spec_scaffold_from_draft(tmp_path: Path) -> None:
     assert (project / "docs" / "specs" / feature / "spec.md").is_file()
     assert (project / "docs" / "specs" / feature / "plan.md").is_file()
     assert (project / "docs" / "specs" / feature / "tasks.md").is_file()
+    spec_text = (project / "docs" / "specs" / feature / "spec.md").read_text(encoding="utf-8")
+    assert "Agent navigation (Rosetta Stone)" in spec_text
+    assert "planning.rosetta" in spec_text
     assert result.handoff is not None
     assert result.handoff["ok"] is True
 
@@ -134,6 +142,41 @@ def test_promote_skips_when_spec_kit_disabled(tmp_path: Path) -> None:
     assert not (project / "docs" / "delta" / "20_micro" / "x-feature.md").exists()
 
 
+def test_promote_patches_existing_spec_with_rosetta_navigation(tmp_path: Path) -> None:
+    project = _unified_project(tmp_path / "proj")
+    feature = "hive-dev-v1"
+    paths = RepoPaths(root=project)
+    spec_dir = project / "docs" / "specs" / feature
+    spec_dir.mkdir(parents=True)
+    (spec_dir / "spec.md").write_text(
+        "\n".join(
+            [
+                "# Spec: hive-dev-v1",
+                "",
+                "**Hook:** `spec.flow`",
+                "",
+                "## Requirements",
+                "",
+                "- GPU limit",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    micro = paths.cartridge / "micro" / f"{feature}.md"
+    micro.parent.mkdir(parents=True, exist_ok=True)
+    micro.write_text(f"{DRAFT_BANNER}\n\n# Micro\n\n- acceptance\n", encoding="utf-8")
+
+    result = promote_cartridge_drafts(paths, feature)
+
+    spec_text = (spec_dir / "spec.md").read_text(encoding="utf-8")
+    assert "Agent navigation (Rosetta Stone)" in spec_text
+    assert result.rosetta_repair is not None
+    assert "patched navigation" in result.rosetta_repair["detail"] or "Planning Rosetta Stone" in (
+        result.rosetta_repair.get("detail") or ""
+    )
+
+
 def test_promote_skips_non_draft_cartridge(tmp_path: Path) -> None:
     project = _unified_project(tmp_path / "proj")
     feature = "locked"
@@ -149,6 +192,7 @@ def test_promote_skips_non_draft_cartridge(tmp_path: Path) -> None:
 
     assert result.promotions["micro"] == "skipped (not draft)"
     assert target.read_text(encoding="utf-8") == "# Existing truth\n"
+    assert result.rosetta_repair is None
 
 
 def test_promote_nothing_written_guidance_for_import_style_cartridge(tmp_path: Path) -> None:
