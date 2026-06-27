@@ -490,6 +490,22 @@ def test_remove_recent_project_updates_active_and_profiles(tmp_path: Path) -> No
     assert cfg.remove_recent_project(tmp_path / "missing") is False
 
 
+def test_remove_recent_project_matches_normalized_path(tmp_path: Path) -> None:
+    project = tmp_path / "demo"
+    project.mkdir()
+    resolved = str(project.resolve())
+    cfg = LauncherConfig(
+        active_project=resolved,
+        recent_projects=[resolved.replace("\\", "/") if "\\" in resolved else f"{resolved}/"],
+        project_profiles={resolved: "full"},
+    )
+    if cfg.recent_projects[0] == resolved:
+        cfg.recent_projects = [f"{resolved}\\"]  # trailing separator variant on Windows
+    assert cfg.remove_recent_project(project) is True
+    assert cfg.recent_projects == []
+    assert cfg.active_project == ""
+
+
 def test_delete_project_profile_removes_metadata(tmp_path: Path) -> None:
     from hive_planner.project_profile import delete_project_profile, project_meta_path, write_project_profile
 

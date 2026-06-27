@@ -95,21 +95,39 @@ class LauncherConfig:
             if inferred:
                 self.project_profiles[recent] = inferred.bootstrap_profile
 
+    def remove_recent_project(self, project_root: Path | str) -> bool:
+        value = normalize_project_path(project_root)
+        if not value:
+            return False
+        match = next((p for p in self.recent_projects if normalize_project_path(p) == value), None)
+        if match is None:
+            return False
+        self.recent_projects = [p for p in self.recent_projects if normalize_project_path(p) != value]
+        self.project_profiles.pop(match, None)
+        self.project_profiles.pop(value, None)
+        if normalize_project_path(self.active_project) == value:
+            self.active_project = ""
+        return True
+
 
 def config_path() -> Path:
     return default_config_dir() / "config.json"
 
 
 def load_config() -> LauncherConfig:
+    from hive_planner.launcher.service import auto_complete_onboarding_if_ready
+
     path = config_path()
     if not path.is_file():
         cfg = LauncherConfig(hive_planner_root=str(default_hive_root().resolve()))
+        auto_complete_onboarding_if_ready(cfg)
         save_config(cfg)
         return cfg
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         cfg = LauncherConfig(hive_planner_root=str(default_hive_root().resolve()))
+        auto_complete_onboarding_if_ready(cfg)
         save_config(cfg)
         return cfg
     active = normalize_project_path(data.get("active_project") or "")
@@ -131,6 +149,8 @@ def load_config() -> LauncherConfig:
         project_profiles=profiles,
     )
     if prune_stale_projects(cfg):
+        save_config(cfg)
+    elif auto_complete_onboarding_if_ready(cfg):
         save_config(cfg)
     return cfg
 
