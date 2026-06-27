@@ -22,4 +22,6 @@
 - Full pytest: 136/136 PASS
 - ci-check: 5/5 PASS
 - impact-sync-maps: call_graph.py added to project-map
+- Bug hunt: import symbol paths, call-site reason priority, skip graph for non-src targets
+- Full pytest post-hunt: 138/138 PASS
 ```
