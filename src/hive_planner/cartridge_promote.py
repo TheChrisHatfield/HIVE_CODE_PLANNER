@@ -221,7 +221,11 @@ def promote_cartridge_drafts(
     result = CartridgePromoteResult(feature=feature)
     integrations = resolve_project_integrations(paths.root)
     if not integrations.spec_kit_enabled:
-        result.warnings.append("Spec Kit disabled — skipping spec/delta promotion and spec-drift")
+        result.ok = False
+        result.promotions["status"] = "skipped (agent handoff off)"
+        result.warnings.append(
+            "Agent handoff off — enable unified handoff (Deploy agent handoff) before promoting cartridge drafts."
+        )
         return result
 
     layers = {

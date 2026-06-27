@@ -1087,7 +1087,7 @@ def run_cartridge_import_folder(
             validate_feature_id(feature.strip())
             payload = _merge_cartridge_promote(
                 payload,
-                _run_cartridge_promote(target, feature, promote=True, force=force_promote),
+                _run_cartridge_promote(target, feature, promote=promote, force=force_promote),
             )
         except ValueError as exc:
             payload["warnings"] = [str(exc)]

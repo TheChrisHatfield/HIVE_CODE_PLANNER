@@ -44,6 +44,16 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Write cartridge/rules/<feature>.mdc.seed from Delta macro/micro (never writes .cursor/rules/)",
     )
+    emit_parser.add_argument(
+        "--promote",
+        action="store_true",
+        help="After emit, run cartridge promote + spec-drift (spec-drift/handoff when no drafts to merge)",
+    )
+    emit_parser.add_argument(
+        "--force-promote",
+        action="store_true",
+        help="With --promote, overwrite existing non-bootstrap Delta/spec targets",
+    )
     sub.add_parser("status", help="Show ingest/index/cartridge status")
 
     impact_parser = sub.add_parser("impact", help="Generate change-impact packet (hook: change.impact)")
@@ -281,6 +291,21 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Warning: {warning}")
         for name, path in outputs.items():
             print(f"Wrote {name}: {path.relative_to(root)}")
+        payload = {"outputs": {name: str(path.relative_to(root)) for name, path in outputs.items()}}
+        if args.promote:
+            from hive_planner.cartridge_promote import promote_cartridge_drafts
+
+            promote = promote_cartridge_drafts(
+                paths,
+                args.feature,
+                force=args.force_promote,
+            )
+            payload["promote"] = promote.to_dict()
+            if promote.candidates_path:
+                print(f"Wrote CL candidates: {promote.candidates_path}")
+            print(f"Promotion spec-drift ok: {promote.ok}")
+            print(json.dumps(payload, indent=2))
+            return 0 if promote.ok else 1
         return 0
 
     if args.command == "status":

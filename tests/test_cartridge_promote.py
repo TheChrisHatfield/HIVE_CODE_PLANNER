@@ -112,7 +112,9 @@ def test_promote_skips_when_spec_kit_disabled(tmp_path: Path) -> None:
 
     result = promote_cartridge_drafts(paths, "x-feature")
 
-    assert "Spec Kit disabled" in result.warnings[0]
+    assert "Agent handoff off" in result.warnings[0]
+    assert result.ok is False
+    assert result.promotions.get("status") == "skipped (agent handoff off)"
     assert not (project / "docs" / "delta" / "20_micro" / "x-feature.md").exists()
 
 

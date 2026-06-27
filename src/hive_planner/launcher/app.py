@@ -690,8 +690,6 @@ class HivePlannerApp:
     def _active_handoff_label(self) -> str:
         if not self.config.active_project:
             return "—"
-        from hive_planner.agent_handoff import validate_unified_handoff
-
         root, _repair = prepare_linked_project_root(Path(self.config.active_project), repair_agents=False)
         if not root:
             return "—"
@@ -1036,8 +1034,8 @@ class HivePlannerApp:
         dialog.configure(bg=COLORS["bg"])
         dialog.transient(self.root)
         dialog.grab_set()
-        dialog.geometry("520x400")
-        dialog.minsize(480, 380)
+        dialog.geometry("520x440")
+        dialog.minsize(480, 420)
 
         tk.Label(
             dialog,
@@ -1081,10 +1079,12 @@ class HivePlannerApp:
         feature_entry.pack(side="left", fill="x", expand=True)
 
         handoff_status = validate_unified_handoff(root)
-        promote_var = tk.BooleanVar(value=handoff_status.mode == "unified")
+        handoff_unified = handoff_status.mode == "unified"
+        promote_var = tk.BooleanVar(value=handoff_unified)
+        force_promote_var = tk.BooleanVar(value=False)
         promote_row = tk.Frame(dialog, bg=COLORS["bg"])
         promote_row.pack(fill="x", padx=16, pady=(0, 4))
-        tk.Checkbutton(
+        promote_cb = tk.Checkbutton(
             promote_row,
             text="Promote drafts to Delta/Spec Kit, stage CL candidates, and run spec-drift (unified handoff)",
             variable=promote_var,
@@ -1097,7 +1097,44 @@ class HivePlannerApp:
             font=FONT,
             wraplength=470,
             justify="left",
-        ).pack(anchor="w")
+            state="normal" if handoff_unified else "disabled",
+        )
+        promote_cb.pack(anchor="w")
+        if not handoff_unified:
+            promote_var.set(False)
+
+        force_row = tk.Frame(dialog, bg=COLORS["bg"])
+        force_row.pack(fill="x", padx=16, pady=(0, 4))
+        force_cb = tk.Checkbutton(
+            force_row,
+            text="Force promote — overwrite existing Delta/spec files (review carefully)",
+            variable=force_promote_var,
+            bg=COLORS["bg"],
+            fg=COLORS["fg"],
+            activebackground=COLORS["bg"],
+            activeforeground=COLORS["fg"],
+            selectcolor=COLORS["card"],
+            anchor="w",
+            font=FONT,
+            wraplength=470,
+            justify="left",
+            state="disabled",
+        )
+        force_cb.pack(anchor="w")
+
+        def sync_promote_controls(*_args: object) -> None:
+            if not handoff_unified:
+                force_cb.configure(state="disabled")
+                force_promote_var.set(False)
+                return
+            if promote_var.get():
+                force_cb.configure(state="normal")
+            else:
+                force_cb.configure(state="disabled")
+                force_promote_var.set(False)
+
+        promote_var.trace_add("write", sync_promote_controls)
+        sync_promote_controls()
 
         selection_var = tk.StringVar(value="(none selected)")
         tk.Label(
@@ -1171,7 +1208,15 @@ class HivePlannerApp:
         def run_load() -> None:
             mode = mode_var.get()
             feature = feature_var.get().strip()
-            if mode in ("sources", "translate"):
+            needs_feature = mode in ("sources", "translate") or (mode == "import" and promote_var.get())
+            if needs_feature:
+                if not feature:
+                    messagebox.showwarning(
+                        "Feature required",
+                        "Enter a feature id for this load mode.",
+                        parent=dialog,
+                    )
+                    return
                 try:
                     validate_feature_id(feature)
                 except ValueError as exc:
@@ -1187,8 +1232,9 @@ class HivePlannerApp:
                 messagebox.showwarning("Nothing selected", "Choose a research markdown file first.", parent=dialog)
                 return
 
-            do_promote = promote_var.get()
+            do_promote = promote_var.get() and handoff_unified
             do_feature = feature
+            do_force = force_promote_var.get()
 
             dialog.destroy()
             if mode == "sources":
@@ -1198,7 +1244,11 @@ class HivePlannerApp:
                 )
                 self._run_bg(
                     lambda: run_cartridge_load_sources(
-                        root, selected_files, do_feature, promote=do_promote
+                        root,
+                        selected_files,
+                        do_feature,
+                        promote=do_promote,
+                        force_promote=do_force,
                     ),
                     self._cartridge_load_done,
                 )
@@ -1206,7 +1256,11 @@ class HivePlannerApp:
                 self._append_log(self.home_log, f"Translating research into draft cartridge for '{feature}'…")
                 self._run_bg(
                     lambda: run_cartridge_translate(
-                        root, selected_files[0], do_feature, promote=do_promote
+                        root,
+                        selected_files[0],
+                        do_feature,
+                        promote=do_promote,
+                        force_promote=do_force,
                     ),
                     self._cartridge_load_done,
                 )
@@ -1218,6 +1272,7 @@ class HivePlannerApp:
                         selected_folder,
                         feature=do_feature,
                         promote=do_promote,
+                        force_promote=do_force,
                     ),
                     self._cartridge_load_done,
                 )
@@ -1292,6 +1347,15 @@ class HivePlannerApp:
             self._append_log(
                 self.home_log,
                 f"  CL candidates (review, then agents-propose): {promote['candidates_path']}",
+            )
+            self._append_log(
+                self.home_log,
+                f"  Next: py -3.11 -m hive_planner agents-propose --candidates {promote['candidates_path']}",
+            )
+        if promote.get("ok") is False and promote.get("promotions", {}).get("status") == "skipped (agent handoff off)":
+            self._append_log(
+                self.home_log,
+                "  Enable unified handoff (Deploy agent handoff) to promote cartridge drafts.",
             )
         repair = promote.get("agents_repair")
         if repair:
