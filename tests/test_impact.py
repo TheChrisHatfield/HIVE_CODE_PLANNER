@@ -226,6 +226,87 @@ def test_roadmap_complete_hooks_for_feature(tmp_path: Path) -> None:
     assert "workflow.tools" in packet.hook_ids
 
 
+def _setup_call_graph_fixture(paths: RepoPaths) -> tuple[Path, Path]:
+    pkg = paths.root / "src" / "hive_planner"
+    pkg.mkdir(parents=True, exist_ok=True)
+    target = pkg / "target_module.py"
+    caller = pkg / "caller_module.py"
+    target.write_text(
+        "\n".join(
+            [
+                "def fix_me() -> int:",
+                "    return 1",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    caller.write_text(
+        "\n".join(
+            [
+                "from hive_planner.target_module import fix_me",
+                "",
+                "def run() -> int:",
+                "    return fix_me()",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    return target, caller
+
+
+def test_bugfix_mode_includes_callers_and_medium_risk(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    _setup_feature_spec(paths, "change-impact-v3")
+    target, caller = _setup_call_graph_fixture(paths)
+
+    packet = build_impact_packet(
+        paths,
+        "change-impact-v3",
+        [target],
+        mode="bugfix",
+    )
+    secondary_paths = [t.path for t in packet.secondary]
+    assert "src/hive_planner/caller_module.py" in secondary_paths
+    assert packet.risk_score == "medium"
+    assert "change.bugfix_mode" in packet.hook_ids
+    assert packet.mode == "bugfix"
+    assert any("regression" in v.lower() for v in packet.validations)
+
+
+def test_default_mode_skips_call_graph_without_deep(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    _setup_feature_spec(paths, "change-impact-v3")
+    target, _ = _setup_call_graph_fixture(paths)
+
+    packet = build_impact_packet(paths, "change-impact-v3", [target])
+    secondary_paths = [t.path for t in packet.secondary]
+    assert "src/hive_planner/caller_module.py" not in secondary_paths
+
+
+def test_deep_flag_includes_call_graph_in_default_mode(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    _setup_feature_spec(paths, "change-impact-v3")
+    target, _ = _setup_call_graph_fixture(paths)
+
+    packet = build_impact_packet(paths, "change-impact-v3", [target], deep=True)
+    secondary_paths = [t.path for t in packet.secondary]
+    assert "src/hive_planner/caller_module.py" in secondary_paths
+    assert packet.risk_score == "low"
+
+
+def test_invalid_impact_mode_errors(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    _setup_feature_spec(paths, "change-impact-v3")
+    src = paths.root / "src" / "hive_planner" / "x.py"
+    src.parent.mkdir(parents=True, exist_ok=True)
+    src.write_text("x = 1\n", encoding="utf-8")
+
+    with pytest.raises(ImpactError, match="Unknown impact mode"):
+        build_impact_packet(paths, "change-impact-v3", [src], mode="feature")
+
+
 def test_impact_cli_writes_packet(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     _setup_feature_spec(paths, "cartridge-compiler-v2")

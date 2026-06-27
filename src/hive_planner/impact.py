@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from hive_planner.config import RepoPaths
+from hive_planner.call_graph import build_package_graph, secondary_call_targets
 
 
 class ImpactError(Exception):
@@ -29,6 +30,7 @@ class ImpactPacket:
     tertiary: list[ImpactTarget] = field(default_factory=list)
     risk_score: str = "low"
     validations: list[str] = field(default_factory=list)
+    mode: str = "default"
     created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
     def to_dict(self) -> dict:
@@ -114,13 +116,26 @@ def _classify_path(repo_path: str) -> tuple[str, str]:
     return "secondary", "Repo artifact connected to change scope"
 
 
-def build_impact_packet(paths: RepoPaths, feature: str, files: list[Path]) -> ImpactPacket:
+def build_impact_packet(
+    paths: RepoPaths,
+    feature: str,
+    files: list[Path],
+    *,
+    mode: str = "default",
+    deep: bool = False,
+) -> ImpactPacket:
+    if mode not in {"default", "bugfix"}:
+        raise ImpactError(f"Unknown impact mode '{mode}' — use default or bugfix")
+
     spec_dir = _feature_spec_dir(paths, feature)
     if not spec_dir.exists():
         raise ImpactError(f"Unknown feature '{feature}' — missing {spec_dir.relative_to(paths.root)}")
 
     if not files:
         raise ImpactError("At least one --files path is required")
+
+    use_graph = mode == "bugfix" or deep
+    graph = build_package_graph(paths) if use_graph else None
 
     test_map = _parse_test_map(paths)
     packet_id = f"chg_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}_{feature}"
@@ -129,7 +144,10 @@ def build_impact_packet(paths: RepoPaths, feature: str, files: list[Path]) -> Im
         packet_id=packet_id,
         feature=feature,
         hook_ids=_hook_ids_for_feature(feature),
+        mode=mode,
     )
+    if mode == "bugfix" and "change.bugfix_mode" not in packet.hook_ids:
+        packet.hook_ids.append("change.bugfix_mode")
 
     repo_paths: list[str] = []
     for file_path in files:
@@ -161,6 +179,25 @@ def build_impact_packet(paths: RepoPaths, feature: str, files: list[Path]) -> Im
                         reason=f"Mapped test for {repo_path}",
                     )
                 )
+            if graph and repo_path.startswith("src/"):
+                for caller_path, reason in secondary_call_targets(graph, repo_path):
+                    if caller_path in seen_targets:
+                        continue
+                    seen_targets.add(caller_path)
+                    packet.secondary.append(
+                        ImpactTarget(path=caller_path, level="secondary", reason=reason)
+                    )
+                    for test_path in _tests_for_src_path(caller_path, test_map):
+                        if test_path in seen_tests:
+                            continue
+                        seen_tests.add(test_path)
+                        packet.secondary.append(
+                            ImpactTarget(
+                                path=test_path,
+                                level="secondary",
+                                reason=f"Mapped regression test for caller {caller_path}",
+                            )
+                        )
         elif level == "secondary":
             packet.secondary.append(target)
         else:
@@ -169,11 +206,22 @@ def build_impact_packet(paths: RepoPaths, feature: str, files: list[Path]) -> Im
     packet.validations = ["Run mapped pytest targets", "Re-run hive_planner ingest/emit if compiler paths changed"]
     if packet.tertiary:
         packet.validations.append("Review Delta/spec docs for consistency")
-    if src_count > 1:
+    if use_graph:
+        packet.validations.append("Review call-graph secondary targets before editing")
+    if mode == "bugfix":
+        packet.validations.extend(
+            [
+                "Identify failing symptom and causal chain before patching",
+                "Run mapped regression tests for primary and caller modules",
+                "Avoid overfitting fix to one symptom — check secondary call sites",
+            ]
+        )
+        packet.risk_score = "medium"
+    if src_count > 1 and packet.risk_score == "low":
         packet.risk_score = "medium"
     if packet.tertiary and src_count:
         packet.risk_score = "medium-high"
-    elif packet.tertiary:
+    elif packet.tertiary and mode != "bugfix":
         packet.risk_score = "medium"
 
     return packet
@@ -212,6 +260,7 @@ def load_latest_impact_packet(paths: RepoPaths, feature: str | None = None) -> t
                 tertiary=[ImpactTarget(**t) for t in data.get("tertiary", [])],
                 risk_score=data.get("risk_score", "low"),
                 validations=list(data.get("validations", [])),
+                mode=data.get("mode", "default"),
                 created_at=data.get("created_at", ""),
             )
             return packet, None

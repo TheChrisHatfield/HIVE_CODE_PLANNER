@@ -54,6 +54,17 @@ def main(argv: list[str] | None = None) -> int:
         required=True,
         help="Repo-relative or absolute paths targeted for edit",
     )
+    impact_parser.add_argument(
+        "--mode",
+        choices=["default", "bugfix"],
+        default="default",
+        help="Impact analysis mode (bugfix widens call-graph targets and sets medium risk)",
+    )
+    impact_parser.add_argument(
+        "--deep",
+        action="store_true",
+        help="Include import/call-graph secondary targets (also enabled by --mode bugfix)",
+    )
 
     sync_maps = sub.add_parser(
         "impact-sync-maps",
@@ -182,7 +193,13 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "impact":
         file_paths = [Path(f) for f in args.files]
         try:
-            packet = build_impact_packet(paths, args.feature, file_paths)
+            packet = build_impact_packet(
+                paths,
+                args.feature,
+                file_paths,
+                mode=args.mode,
+                deep=args.deep,
+            )
             out_path = write_impact_packet(paths, packet)
         except ImpactError as exc:
             print(f"Error: {exc}", file=sys.stderr)
