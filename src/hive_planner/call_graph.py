@@ -146,14 +146,7 @@ def build_package_graph(paths: RepoPaths) -> PackageGraph:
 
 
 def secondary_call_targets(graph: PackageGraph, primary_repo_path: str) -> list[tuple[str, str]]:
-    results: list[tuple[str, str]] = []
-    seen: set[str] = set()
-
-    for importer in sorted(graph.imported_by.get(primary_repo_path, set())):
-        if importer == primary_repo_path or importer in seen:
-            continue
-        seen.add(importer)
-        results.append((importer, f"Imports {primary_repo_path} (dependency impact)"))
+    reasons: dict[str, str] = {}
 
     prefix = f"{primary_repo_path}::"
     for def_key, caller_files in graph.callers.items():
@@ -161,9 +154,13 @@ def secondary_call_targets(graph: PackageGraph, primary_repo_path: str) -> list[
             continue
         symbol = def_key.split("::", 1)[1]
         for caller in sorted(caller_files):
-            if caller == primary_repo_path or caller in seen:
+            if caller == primary_repo_path:
                 continue
-            seen.add(caller)
-            results.append((caller, f"Call site for {symbol} in {primary_repo_path}"))
+            reasons[caller] = f"Call site for {symbol} in {primary_repo_path}"
 
-    return results
+    for importer in sorted(graph.imported_by.get(primary_repo_path, set())):
+        if importer == primary_repo_path or importer in reasons:
+            continue
+        reasons[importer] = f"Imports {primary_repo_path} (dependency impact)"
+
+    return sorted(reasons.items())

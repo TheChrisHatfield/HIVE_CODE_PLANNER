@@ -328,6 +328,12 @@ def test_call_graph_from_import_maps_callers_to_module_not_nested_path(tmp_path:
     bogus_key = "src/hive_planner/target_module/build_impact_packet.py::build_impact_packet"
     assert bogus_key not in graph.callers
 
+    from hive_planner.call_graph import secondary_call_targets
+
+    caller_path, reason = secondary_call_targets(graph, "src/hive_planner/target_module.py")[0]
+    assert caller_path == "src/hive_planner/caller_module.py"
+    assert reason.startswith("Call site for")
+
 
 def test_impact_cli_writes_packet(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
