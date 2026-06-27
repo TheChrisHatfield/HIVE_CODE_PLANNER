@@ -179,3 +179,34 @@ def test_load_config_recovers_corrupt_json(tmp_path: Path, monkeypatch: pytest.M
     assert cfg.hive_planner_root
     json.loads(bad.read_text(encoding="utf-8"))
 
+
+def test_console_python_pyw_branch(monkeypatch: pytest.MonkeyPatch) -> None:
+    from hive_planner.launcher import __main__ as main_mod
+
+    class PyExe:
+        def is_file(self) -> bool:
+            return True
+
+        def __str__(self) -> str:
+            return r"C:\Tools\py.exe"
+
+    class FakeExe:
+        name = "pyw.exe"
+
+        def with_name(self, child: str):
+            if child == "py.exe":
+                return PyExe()
+            return self
+
+    monkeypatch.setattr(main_mod.sys, "executable", r"C:\Tools\pyw.exe")
+    monkeypatch.setattr(main_mod, "Path", lambda _p: FakeExe())
+    assert main_mod._console_python() == r"C:\Tools\py.exe"
+
+
+def test_console_available_on_windows_only() -> None:
+    import sys
+
+    from hive_planner.launcher import console_win
+
+    assert console_win.console_available() == (sys.platform == "win32")
+
