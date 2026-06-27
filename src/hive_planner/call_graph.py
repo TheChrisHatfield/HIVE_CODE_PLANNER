@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import ast
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from hive_planner.config import RepoPaths
-from hive_planner.map_sync import import_module_to_src_path
 
 
 @dataclass
@@ -27,31 +27,39 @@ def _collect_definitions(tree: ast.Module) -> set[str]:
     return names
 
 
-def _collect_import_maps(tree: ast.Module) -> tuple[set[str], dict[str, str]]:
+def _resolve_module_src(paths: RepoPaths, module: str) -> str | None:
+    if not module.startswith("hive_planner"):
+        return None
+    parts = module.split(".")
+    direct = paths.root / "src" / Path(*parts).with_suffix(".py")
+    if direct.is_file():
+        return direct.relative_to(paths.root).as_posix()
+    package_init = paths.root / "src" / Path(*parts) / "__init__.py"
+    if package_init.is_file():
+        return package_init.relative_to(paths.root).as_posix()
+    return None
+
+
+def _collect_import_maps(paths: RepoPaths, tree: ast.Module) -> tuple[set[str], dict[str, str]]:
     imported_paths: set[str] = set()
     name_to_def_key: dict[str, str] = {}
 
     for node in tree.body:
         if isinstance(node, ast.ImportFrom) and node.module and node.module.startswith("hive_planner"):
-            module_src = import_module_to_src_path(node.module)
+            module_src = _resolve_module_src(paths, node.module)
             if module_src:
                 imported_paths.add(module_src)
             for alias in node.names:
                 if alias.name == "*":
                     continue
                 local = alias.asname or alias.name
-                symbol_module = f"{node.module}.{alias.name}"
-                symbol_src = import_module_to_src_path(symbol_module)
-                if symbol_src:
-                    imported_paths.add(symbol_src)
-                    name_to_def_key[local] = f"{symbol_src}::{alias.name}"
-                elif module_src:
+                if module_src:
                     name_to_def_key[local] = f"{module_src}::{alias.name}"
         elif isinstance(node, ast.Import):
             for alias in node.names:
                 if not alias.name.startswith("hive_planner"):
                     continue
-                module_src = import_module_to_src_path(alias.name)
+                module_src = _resolve_module_src(paths, alias.name)
                 if module_src:
                     imported_paths.add(module_src)
                     local = alias.asname or alias.name.split(".")[-1]
@@ -111,7 +119,7 @@ def build_package_graph(paths: RepoPaths) -> PackageGraph:
         if not isinstance(tree, ast.Module):
             continue
         local_defs = _collect_definitions(tree)
-        imported_paths, name_to_def_key = _collect_import_maps(tree)
+        imported_paths, name_to_def_key = _collect_import_maps(paths, tree)
         graph.definitions[repo_path] = local_defs
         graph.imports[repo_path] = imported_paths
         parsed[repo_path] = (tree, local_defs, name_to_def_key)

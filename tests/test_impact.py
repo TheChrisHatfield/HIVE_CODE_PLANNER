@@ -307,6 +307,28 @@ def test_invalid_impact_mode_errors(tmp_path: Path) -> None:
         build_impact_packet(paths, "change-impact-v3", [src], mode="feature")
 
 
+def test_call_graph_from_import_maps_callers_to_module_not_nested_path(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    pkg = paths.root / "src" / "hive_planner"
+    pkg.mkdir(parents=True, exist_ok=True)
+    target = pkg / "target_module.py"
+    caller = pkg / "caller_module.py"
+    target.write_text("def build_impact_packet() -> None:\n    pass\n", encoding="utf-8")
+    caller.write_text(
+        "from hive_planner.target_module import build_impact_packet\n\n"
+        "def main() -> None:\n    build_impact_packet()\n",
+        encoding="utf-8",
+    )
+
+    from hive_planner.call_graph import build_package_graph
+
+    graph = build_package_graph(paths)
+    def_key = "src/hive_planner/target_module.py::build_impact_packet"
+    assert graph.callers.get(def_key) == {"src/hive_planner/caller_module.py"}
+    bogus_key = "src/hive_planner/target_module/build_impact_packet.py::build_impact_packet"
+    assert bogus_key not in graph.callers
+
+
 def test_impact_cli_writes_packet(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     _setup_feature_spec(paths, "cartridge-compiler-v2")
