@@ -93,6 +93,18 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("roadmap-status", help="Validate Stage roadmap artifacts (hook: workflow.tools)")
 
+    init_parser = sub.add_parser(
+        "init",
+        help="Bootstrap a new Hive project profile (hook: workflow.project_bootstrap)",
+    )
+    init_parser.add_argument("--target", required=True, type=Path, help="Directory for the new project root")
+    init_parser.add_argument("--name", default=None, help="Project display name (default: target folder name)")
+    init_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Scaffold into a non-empty or partially initialized directory",
+    )
+
     translate_parser = sub.add_parser("translate", help="Rule-based cartridge draft translation")
     translate_parser.add_argument("--input", required=True, type=Path, help="Research markdown input file")
     translate_parser.add_argument("--feature", required=True, help="Feature name for micro/spec outputs")
@@ -155,6 +167,25 @@ def main(argv: list[str] | None = None) -> int:
             "Use --root or run from the Hive Code Planner directory.",
             file=sys.stderr,
         )
+
+    if args.command == "init":
+        from hive_planner.bootstrap import BootstrapError, init_project
+
+        try:
+            result = init_project(paths, args.target, name=args.name, force=args.force)
+        except BootstrapError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        except OSError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        print(f"Hive source: {root}")
+        print(f"Bootstrapped: {result.target}")
+        print(f"Project: {result.project_name}")
+        for warning in result.warnings:
+            print(f"Warning: {warning}")
+        print(json.dumps(result.to_dict(), indent=2))
+        return 0
 
     if args.command == "ingest":
         report = ingest(paths, embed=args.embed)
