@@ -150,9 +150,11 @@ def _write_memory_candidates(paths: RepoPaths, feature: str, bullets: list[str])
         "# operational",
         "",
     ]
-    lines.extend(f"- {b}" for b in operational or ["(none classified)"])
+    lines.extend(f"- {b}" for b in operational)
     lines.extend(["", "# behavioral", ""])
-    lines.extend(f"- {b}" for b in behavioral or ["(none classified)"])
+    lines.extend(f"- {b}" for b in behavioral)
+    if not operational and not behavioral:
+        return None
     lines.append("")
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text("\n".join(lines), encoding="utf-8")
@@ -324,3 +326,13 @@ def promote_cartridge_drafts(
         result.ok = drift.ok and handoff.ok
 
     return result
+
+
+def promote_cli_exit_code(promote: CartridgePromoteResult | dict | None) -> int:
+    """Return process exit code after an optional promote step."""
+    if promote is None:
+        return 0
+    data = promote.to_dict() if isinstance(promote, CartridgePromoteResult) else promote
+    if data.get("promotions", {}).get("status") == "skipped (agent handoff off)":
+        return 0
+    return 0 if data.get("ok", True) else 1

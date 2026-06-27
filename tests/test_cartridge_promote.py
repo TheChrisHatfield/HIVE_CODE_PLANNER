@@ -99,6 +99,22 @@ def test_promote_memory_writes_classified_candidates(tmp_path: Path) -> None:
     assert "ci-check" in text
     assert "# behavioral" in text
     assert "404" in text
+    assert "(none classified)" not in text
+
+
+def test_promote_memory_skips_empty_candidate_sections(tmp_path: Path) -> None:
+    project = _unified_project(tmp_path / "proj")
+    feature = "empty-mem"
+    paths = RepoPaths(root=project)
+    (paths.cartridge / "memory.md").write_text(
+        f"{DRAFT_BANNER}\n\n# Memory\n\n",
+        encoding="utf-8",
+    )
+
+    result = promote_cartridge_drafts(paths, feature)
+
+    assert result.promotions["memory_candidates"] == "skipped (no bullets)"
+    assert result.candidates_path is None
 
 
 def test_promote_skips_when_spec_kit_disabled(tmp_path: Path) -> None:
@@ -151,3 +167,22 @@ def test_promote_does_not_warn_for_autosync_cartridge_layers(tmp_path: Path) -> 
     assert result.promotions["holistic"] == "skipped (not draft)"
     assert not any("holistic:" in w for w in result.warnings)
     assert not any("macro:" in w for w in result.warnings)
+
+
+def test_promote_cli_exit_code_handoff_off_is_success(tmp_path: Path) -> None:
+    from hive_planner.cartridge_promote import promote_cli_exit_code
+
+    project = tmp_path / "plain"
+    project.mkdir()
+    (project / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    result = promote_cartridge_drafts(RepoPaths(root=project), "my-feature")
+
+    assert promote_cli_exit_code(result) == 0
+    assert promote_cli_exit_code(result.to_dict()) == 0
+
+
+def test_promote_cli_exit_code_spec_drift_failure(tmp_path: Path) -> None:
+    from hive_planner.cartridge_promote import promote_cli_exit_code
+
+    payload = {"ok": False, "promotions": {"micro": "written"}}
+    assert promote_cli_exit_code(payload) == 1
