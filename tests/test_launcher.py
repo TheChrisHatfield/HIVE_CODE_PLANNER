@@ -9,7 +9,15 @@ import sys
 import pytest
 
 from hive_planner.config import RepoPaths
-from hive_planner.launcher.config import LauncherConfig, linked_project_exists, load_config, normalize_project_path, prune_stale_projects, save_config
+from hive_planner.launcher.config import (
+    LauncherConfig,
+    clear_project_profile_cache,
+    linked_project_exists,
+    load_config,
+    normalize_project_path,
+    prune_stale_projects,
+    save_config,
+)
 from hive_planner.launcher.service import (
     PythonInstallation,
     _hidden_subprocess_kwargs,
@@ -1008,17 +1016,52 @@ def test_config_roundtrip(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> No
 
 
 def test_add_recent_project_dedupes_and_stores_profile(tmp_path: Path) -> None:
+    from hive_planner.project_profile import write_project_profile
+
     a = tmp_path / "a"
     b = tmp_path / "b"
     a.mkdir()
     b.mkdir()
-    (b / "START_HERE.md").write_text("# start\n", encoding="utf-8")
-    (b / "pyproject.toml").write_text("[project]\nname='b'\n", encoding="utf-8")
+    write_project_profile(b, profile="full", project_name="B")
     cfg = LauncherConfig(recent_projects=[str(a), str(b)])
     cfg.add_recent_project(b)
     assert cfg.recent_projects[0] == str(b.resolve())
     assert len(cfg.recent_projects) == 2
     assert cfg.project_profiles[str(b.resolve())] == "full"
+
+
+def test_add_recent_project_does_not_cache_inferred_profile_without_metadata(tmp_path: Path) -> None:
+    project = tmp_path / "demo"
+    project.mkdir()
+    (project / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    (project / "pyproject.toml").write_text("[project]\nname='demo'\n", encoding="utf-8")
+
+    cfg = LauncherConfig()
+    cfg.add_recent_project(project)
+
+    assert cfg.active_project == str(project.resolve())
+    assert str(project.resolve()) not in cfg.project_profiles
+
+
+def test_add_recent_project_after_delete_profile_does_not_recache(tmp_path: Path) -> None:
+    from hive_planner.project_profile import delete_project_profile, write_project_profile
+
+    project = tmp_path / "demo"
+    project.mkdir()
+    (project / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    (project / "pyproject.toml").write_text("[project]\nname='demo'\n", encoding="utf-8")
+    write_project_profile(project, profile="minimal", project_name="Demo")
+
+    cfg = LauncherConfig(recent_projects=[str(project.resolve())])
+    cfg.add_recent_project(project)
+    assert cfg.project_profiles[str(project.resolve())] == "minimal"
+
+    delete_project_profile(project)
+    clear_project_profile_cache(cfg, project)
+    assert str(project.resolve()) not in cfg.project_profiles
+
+    cfg.add_recent_project(project)
+    assert str(project.resolve()) not in cfg.project_profiles
 
 
 def test_remove_recent_project_updates_active_and_profiles(tmp_path: Path) -> None:
@@ -1146,17 +1189,39 @@ def test_delete_project_profile_removes_metadata(tmp_path: Path) -> None:
 
 
 def test_delete_profile_clears_normalized_profile_cache(tmp_path: Path) -> None:
-    from hive_planner.launcher.config import normalize_project_path
+    from hive_planner.launcher.config import clear_project_profile_cache, normalize_project_path
 
     project = tmp_path / "demo"
     project.mkdir()
     normalized = str(project.resolve())
+    raw = str(project)
     cfg = LauncherConfig(
         recent_projects=[normalized],
-        project_profiles={normalized: "full"},
+        project_profiles={normalized: "full", raw: "full"},
     )
-    cfg.project_profiles.pop(normalize_project_path(project), None)
+    clear_project_profile_cache(cfg, project)
     assert normalized not in cfg.project_profiles
+    assert raw not in cfg.project_profiles
+
+
+def test_linked_workspace_label_ignores_stale_profile_cache(tmp_path: Path) -> None:
+    from hive_planner.launcher.app import format_linked_workspace_label
+    from hive_planner.project_profile import delete_project_profile, read_project_profile, write_project_profile
+
+    project = tmp_path / "demo"
+    project.mkdir()
+    write_project_profile(project, profile="full", project_name="Demo")
+    path = str(project.resolve())
+
+    stored = read_project_profile(project)
+    assert stored is not None
+    assert "[full]" in format_linked_workspace_label(path, stored.bootstrap_profile)
+
+    delete_project_profile(project)
+    stored = read_project_profile(project)
+    profile = stored.bootstrap_profile if stored else None
+    assert profile is None
+    assert "[full]" not in format_linked_workspace_label(path, profile)
 
 
 def test_recent_label_uses_stored_profile_not_inferred(tmp_path: Path) -> None:

@@ -88,7 +88,7 @@ class LauncherConfig:
         return default_hive_root().resolve()
 
     def add_recent_project(self, project_root: Path) -> None:
-        from hive_planner.project_profile import resolve_project_profile
+        from hive_planner.project_profile import read_project_profile
 
         value = normalize_project_path(project_root)
         if not value:
@@ -110,7 +110,7 @@ class LauncherConfig:
             primary = workspace_primary_folder(profile_root)
             if primary:
                 profile_root = primary
-        meta = resolve_project_profile(profile_root)
+        meta = read_project_profile(profile_root)
         if meta:
             self.project_profiles[value] = meta.bootstrap_profile
         self.project_profiles = {
@@ -128,9 +128,9 @@ class LauncherConfig:
                 primary = workspace_primary_folder(root)
                 if primary:
                     root = primary
-            inferred = resolve_project_profile(root)
-            if inferred:
-                self.project_profiles[recent] = inferred.bootstrap_profile
+            stored = read_project_profile(root)
+            if stored:
+                self.project_profiles[recent] = stored.bootstrap_profile
 
     def remove_recent_project(self, project_root: Path | str) -> bool:
         value = normalize_project_path(project_root)
@@ -140,11 +140,20 @@ class LauncherConfig:
         if match is None:
             return False
         self.recent_projects = [p for p in self.recent_projects if normalize_project_path(p) != value]
-        self.project_profiles.pop(match, None)
-        self.project_profiles.pop(value, None)
+        clear_project_profile_cache(self, project_root)
         if normalize_project_path(self.active_project) == value:
             self.active_project = ""
         return True
+
+
+def clear_project_profile_cache(config: LauncherConfig, project_root: Path | str) -> None:
+    """Remove cached bootstrap profile labels for every key matching this link."""
+    value = normalize_project_path(project_root)
+    if not value:
+        return
+    stale = [key for key in config.project_profiles if normalize_project_path(key) == value]
+    for key in stale:
+        config.project_profiles.pop(key, None)
 
 
 def config_path() -> Path:

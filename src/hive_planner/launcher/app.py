@@ -646,10 +646,7 @@ class HivePlannerApp:
         for path in self.config.recent_projects:
             hive_root = resolve_linked_project_root(Path(path))
             stored = read_project_profile(hive_root) if hive_root else None
-            cached = self.config.project_profiles.get(path) or self.config.project_profiles.get(
-                normalize_project_path(path)
-            )
-            profile = stored.bootstrap_profile if stored else cached
+            profile = stored.bootstrap_profile if stored else None
             is_active = bool(active_norm and normalize_project_path(path) == active_norm)
             label = format_linked_workspace_label(
                 path,
@@ -715,11 +712,7 @@ class HivePlannerApp:
         stored = read_project_profile(root)
         if stored:
             return stored.bootstrap_profile
-        cached = self.config.project_profiles.get(self.config.active_project)
-        if cached:
-            return cached
-        normalized = normalize_project_path(self.config.active_project)
-        return self.config.project_profiles.get(normalized) or ""
+        return ""
 
     def _append_log(self, widget: scrolledtext.ScrolledText, text: str) -> None:
         widget.configure(state="normal")
@@ -1779,8 +1772,9 @@ class HivePlannerApp:
             messagebox.showerror("Delete profile", detail)
             return
         self.config = load_config()
-        normalized = normalize_project_path(path)
-        self.config.project_profiles.pop(normalized, None)
+        from hive_planner.launcher.config import clear_project_profile_cache
+
+        clear_project_profile_cache(self.config, path)
         save_config(self.config)
         messagebox.showinfo("Profile deleted", detail)
         self._show_dashboard()
