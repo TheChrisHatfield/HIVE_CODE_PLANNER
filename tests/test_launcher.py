@@ -681,6 +681,30 @@ def test_remove_recent_project_matches_normalized_path(tmp_path: Path) -> None:
     assert cfg.active_project == ""
 
 
+def test_set_active_on_missing_link_keeps_local_entry(tmp_path: Path) -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    missing = tmp_path / "gone"
+    resolved = str(missing.resolve())
+    cfg = LauncherConfig(recent_projects=[resolved], active_project="")
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.config = cfg
+    app._recent_project_paths = [resolved]
+    app.recent_list = type("L", (), {"curselection": lambda self: (0,)})()
+
+    import hive_planner.launcher.app as app_mod
+
+    original_err = app_mod.messagebox.showerror
+    app_mod.messagebox.showerror = lambda *a, **k: None
+    try:
+        assert app._link_workspace(missing, notify=False) is False
+    finally:
+        app_mod.messagebox.showerror = original_err
+
+    assert app.config.recent_projects == [resolved]
+
+
 def test_delete_profile_resolves_code_workspace_link_to_project_root(tmp_path: Path) -> None:
     from hive_planner.launcher.app import HivePlannerApp
     from hive_planner.project_profile import project_meta_path, write_project_profile

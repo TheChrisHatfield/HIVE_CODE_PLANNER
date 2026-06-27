@@ -1081,7 +1081,6 @@ class HivePlannerApp:
         if not workspace.exists:
             messagebox.showerror("Workspace not found", f"Path does not exist:\n{workspace.path}")
             if hasattr(self, "recent_list") and callable(getattr(self.recent_list, "delete", None)):
-                self.config = load_config()
                 self._populate_recent_list()
             return False
 
