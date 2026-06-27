@@ -170,6 +170,7 @@ def test_select_recent_rejects_missing_project(tmp_path: Path) -> None:
     app = HivePlannerApp.__new__(HivePlannerApp)
     app.config = LauncherConfig(recent_projects=[str(missing)])
     app.root = root
+    app._recent_project_paths = [str(missing)]
 
     class Box:
         calls: list[tuple[str, str]] = []

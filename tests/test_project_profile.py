@@ -45,6 +45,20 @@ def test_resolve_returns_none_for_non_hive_dir(tmp_path: Path) -> None:
     assert resolve_project_profile(tmp_path / "empty") is None
 
 
+def test_read_tolerates_invalid_schema_version(tmp_path: Path) -> None:
+    project = tmp_path / "demo"
+    meta = project / ".hive"
+    meta.mkdir(parents=True)
+    (meta / "project.json").write_text(
+        '{"bootstrap_profile":"minimal","project_name":"Demo","schema_version":"bad"}\n',
+        encoding="utf-8",
+    )
+    profile = read_project_profile(project)
+    assert profile is not None
+    assert profile.bootstrap_profile == "minimal"
+    assert profile.schema_version == 1
+
+
 def test_write_rejects_unknown_profile(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="Unknown bootstrap profile"):
         write_project_profile(tmp_path, profile="enterprise", project_name="X")

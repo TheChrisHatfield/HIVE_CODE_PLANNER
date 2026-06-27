@@ -46,10 +46,14 @@ def read_project_profile(project_root: Path) -> ProjectProfile | None:
     if profile not in BOOTSTRAP_PROFILES:
         return None
     name = str(data.get("project_name") or project_root.name).strip() or project_root.name
+    try:
+        schema_version = int(data.get("schema_version") or SCHEMA_VERSION)
+    except (TypeError, ValueError):
+        schema_version = SCHEMA_VERSION
     return ProjectProfile(
         bootstrap_profile=profile,
         project_name=name,
-        schema_version=int(data.get("schema_version") or SCHEMA_VERSION),
+        schema_version=schema_version,
         hive_planner_version=(str(data["hive_planner_version"]) if data.get("hive_planner_version") else None),
         created_at=(str(data["created_at"]) if data.get("created_at") else None),
     )
