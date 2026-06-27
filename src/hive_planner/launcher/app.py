@@ -1570,7 +1570,7 @@ class HivePlannerApp:
     def _log_cartridge_promote(self, promote: dict | None) -> None:
         if not promote:
             return
-        from hive_planner.cartridge_promote import promote_nothing_written_guidance
+        from hive_planner.cartridge_promote import promote_nothing_written_guidance, promote_wrote_layers
 
         self._append_log(self.home_log, "Promotion / symbiotic handoff:")
         if promote.get("feature"):
@@ -1599,10 +1599,11 @@ class HivePlannerApp:
             self._append_log(self.home_log, f"  Rosetta navigation: {rosetta.get('detail')}")
             for rel in rosetta.get("patched") or []:
                 self._append_log(self.home_log, f"    patched: {rel}")
-        self._append_log(
-            self.home_log,
-            "  Agent startup: load docs/planning-rosetta-stone.md (hook planning.rosetta) before spec/delta",
-        )
+        if promote_wrote_layers(promote.get("promotions", {})) or rosetta:
+            self._append_log(
+                self.home_log,
+                "  Agent startup: load docs/planning-rosetta-stone.md (hook planning.rosetta) before spec/delta",
+            )
         drift = promote.get("spec_drift")
         if drift is not None:
             mark = "ok" if drift.get("ok") else "review needed"

@@ -877,6 +877,46 @@ def test_cartridge_load_done_warns_when_promote_fails_on_success() -> None:
     assert "promotion/handoff needs review" in joined
 
 
+def test_log_cartridge_promote_omits_startup_when_nothing_promoted() -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.home_log = type("L", (), {"configure": lambda *a, **k: None})()
+    lines: list[str] = []
+    app._append_log = lambda _w, text: lines.append(text)  # type: ignore[method-assign]
+
+    app._log_cartridge_promote(
+        {
+            "ok": False,
+            "feature": "example-feature",
+            "promotions": {"holistic": "skipped (not draft)", "macro": "skipped (not draft)"},
+        }
+    )
+
+    joined = "\n".join(lines)
+    assert "Agent startup" not in joined
+
+
+def test_log_cartridge_promote_includes_startup_when_layers_written() -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.home_log = type("L", (), {"configure": lambda *a, **k: None})()
+    lines: list[str] = []
+    app._append_log = lambda _w, text: lines.append(text)  # type: ignore[method-assign]
+
+    app._log_cartridge_promote(
+        {
+            "ok": True,
+            "feature": "hive-dev-v1",
+            "promotions": {"macro": "updated", "micro": "written"},
+        }
+    )
+
+    joined = "\n".join(lines)
+    assert "Agent startup: load docs/planning-rosetta-stone.md" in joined
+
+
 def test_merge_cartridge_promote_keeps_load_ok_when_spec_drift_fails(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
