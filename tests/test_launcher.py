@@ -145,17 +145,13 @@ def test_add_recent_project_dedupes_and_stores_profile(tmp_path: Path) -> None:
 
 def test_recent_selection_uses_path_index_not_label_parse(tmp_path: Path) -> None:
     from hive_planner.launcher.app import HivePlannerApp
-    import tkinter as tk
 
     tricky = tmp_path / "weird  [full]-name"
     tricky.mkdir()
     (tricky / "START_HERE.md").write_text("# start\n", encoding="utf-8")
 
-    root = tk.Tk()
-    root.withdraw()
     app = HivePlannerApp.__new__(HivePlannerApp)
     app.config = LauncherConfig(recent_projects=[str(tricky)])
-    app.root = root
     app._recent_project_paths = [str(tricky.resolve())]
     app.recent_list = type(
         "L",
@@ -185,7 +181,6 @@ def test_recent_selection_uses_path_index_not_label_parse(tmp_path: Path) -> Non
         app_mod.messagebox.showinfo = original_info
         app_mod.load_config = original_load
         app_mod.save_config = original_save
-    root.destroy()
 
     assert activated["path"] == str(tricky.resolve())
 
@@ -297,6 +292,27 @@ def test_select_recent_rejects_missing_project(tmp_path: Path) -> None:
     assert Box.calls
     assert "Directory not found" in Box.calls[0][1]
     assert app.config.active_project == ""
+
+
+def test_ci_check_done_clears_stale_steps_on_error() -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.home_log = type("L", (), {"configure": lambda *a, **k: None})()
+    app.ci_list = type(
+        "L",
+        (),
+        {
+            "items": ["old"],
+            "delete": lambda self, a, b: setattr(self, "items", []),
+            "insert": lambda self, *a, **k: None,
+        },
+    )()
+    lines: list[str] = []
+    app._append_log = lambda _w, text: lines.append(text)  # type: ignore[method-assign]
+    app._ci_check_done({"ok": False, "error": "Not a Hive project (missing START_HERE.md)"})
+    assert app.ci_list.items == []
+    assert "START_HERE" in lines[0]
 
 
 def test_ci_check_report_is_not_bg_error() -> None:

@@ -441,6 +441,7 @@ class HivePlannerApp:
 
     def _ci_check_done(self, report: dict) -> None:
         if self._is_bg_error(report):
+            self.ci_list.delete(0, "end")
             self._append_log(self.home_log, self._result_detail(report))
             return
         self.ci_list.delete(0, "end")
