@@ -206,6 +206,31 @@ def repair_agents_rosetta_section(paths: RepoPaths) -> AgentsRepairResult:
     return AgentsRepairResult(True, detail="added Planning Rosetta Stone section to AGENTS.md")
 
 
+def repair_handoff_rosetta_navigation(paths: RepoPaths) -> dict:
+    """Patch AGENTS + handoff files with Rosetta navigation when artifacts already exist."""
+    from hive_planner.rosetta_nav import DEPLOY_HANDOFF_NAV_LAYERS, ensure_handoff_rosetta_navigation
+
+    details: list[str] = []
+    agents = repair_agents_rosetta_section(paths)
+    if agents.repaired:
+        details.append(agents.detail)
+    feature = parse_active_feature(paths)
+    if not feature and handoff_artifacts_present(paths, BOOTSTRAP_DEFAULT_FEATURE):
+        feature = BOOTSTRAP_DEFAULT_FEATURE
+    patched: list[str] = []
+    if feature and handoff_artifacts_present(paths, feature):
+        patched = ensure_handoff_rosetta_navigation(
+            paths,
+            feature,
+            promoted_layers=set(DEPLOY_HANDOFF_NAV_LAYERS),
+        )
+        if patched:
+            details.append(f"patched navigation in {len(patched)} handoff file(s)")
+    if not details and not patched:
+        return {}
+    return {"detail": "; ".join(details), "patched": patched}
+
+
 def _normalize_for_match(text: str) -> str:
     cleaned = re.sub(r"^[-*]\s+", "", text.strip())
     cleaned = re.sub(r"\*\*([^*]+)\*\*", r"\1", cleaned)

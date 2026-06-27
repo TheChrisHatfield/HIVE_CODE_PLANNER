@@ -624,7 +624,7 @@ def resolve_linked_project_root(path: Path) -> Path | None:
 
 def prepare_linked_project_root(path: Path, *, repair_agents: bool = True):
     from hive_planner.project_profile import resolve_project_integrations
-    from hive_planner.spec_drift import AgentsRepairResult, repair_agents_active_feature
+    from hive_planner.spec_drift import AgentsRepairResult, repair_agents_active_feature, repair_handoff_rosetta_navigation
 
     root = resolve_linked_project_root(path)
     if not root:
@@ -635,7 +635,9 @@ def prepare_linked_project_root(path: Path, *, repair_agents: bool = True):
         return root, None
     if not (root / "START_HERE.md").is_file() and not is_repo_root(root):
         return root, None
-    repair = repair_agents_active_feature(RepoPaths(root=root))
+    paths = RepoPaths(root=root)
+    repair_handoff_rosetta_navigation(paths)
+    repair = repair_agents_active_feature(paths)
     if repair.repaired:
         return root, repair
     return root, None
@@ -818,9 +820,14 @@ def run_project_ci_check(project_root: Path) -> dict:
     if not summary.ok:
         return {"ok": False, "error": summary.detail}
     paths = RepoPaths(root=target)
+    from hive_planner.spec_drift import repair_handoff_rosetta_navigation
+
+    rosetta_repair = repair_handoff_rosetta_navigation(paths)
     repair = repair_agents_active_feature(paths)
     report = run_ci_check(paths, check_roadmap=is_hive_planner_source_repo(target))
     payload = report.to_dict()
+    if rosetta_repair:
+        payload["rosetta_repair"] = rosetta_repair
     if repair.repaired:
         payload["repair"] = {"feature": repair.feature, "detail": repair.detail}
     hints = ci_check_hints(target, report)

@@ -717,6 +717,42 @@ def test_run_project_ci_check_repairs_legacy_active_feature(tmp_path: Path) -> N
     assert handoff["ok"] is True
 
 
+def test_run_project_ci_check_patches_legacy_handoff_navigation(tmp_path: Path) -> None:
+    project = tmp_path / "legacy-nav"
+    project.mkdir()
+    (project / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    feature = "example-feature"
+    (project / "AGENTS.md").write_text(
+        "\n".join(
+            [
+                "# AGENTS.md",
+                "",
+                "## Active feature",
+                "",
+                "**None** — set when Spec Kit work begins.",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    spec_dir = project / "docs" / "specs" / feature
+    spec_dir.mkdir(parents=True)
+    (spec_dir / "spec.md").write_text("# Spec\n", encoding="utf-8")
+    (spec_dir / "plan.md").write_text("# Plan\n", encoding="utf-8")
+    (spec_dir / "tasks.md").write_text("# Tasks\n", encoding="utf-8")
+    micro = project / "docs" / "delta" / "20_micro"
+    micro.mkdir(parents=True)
+    (micro / f"{feature}.md").write_text("# Micro\n", encoding="utf-8")
+
+    result = run_project_ci_check(project)
+
+    spec_text = (spec_dir / "spec.md").read_text(encoding="utf-8")
+    assert "Agent navigation (Rosetta Stone)" in spec_text
+    assert result.get("rosetta_repair")
+    handoff = next(s for s in result["steps"] if s["name"] == "handoff-artifacts")
+    assert handoff["ok"] is True
+
+
 def test_run_project_map_sync_rejects_invalid_project(tmp_path: Path) -> None:
     result = run_project_map_sync(tmp_path)
     assert result["ok"] is False
