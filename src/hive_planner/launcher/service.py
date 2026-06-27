@@ -343,7 +343,7 @@ def run_install(config: LauncherConfig, *, extras: str = "dev") -> InstallResult
         return InstallResult(False, f"Hive root not found: {hive_root}")
     cmd = _python_command(config) + ["-m", "pip", "install", "-e", f".[{extras}]"]
     try:
-        proc = subprocess.run(
+        proc = _run_hidden(
             cmd,
             cwd=hive_root,
             capture_output=True,

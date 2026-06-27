@@ -19,6 +19,7 @@ from hive_planner.launcher.service import (
     get_setup_status,
     open_in_cursor,
     probe_python_command,
+    run_install,
     run_project_ci_check,
     run_project_init,
     run_project_map_sync,
@@ -270,6 +271,26 @@ def test_map_sync_done_formats_success() -> None:
     )
     root.destroy()
     assert lines == ["Impact maps synced: 1 added, 1 updated."]
+
+
+def test_run_install_uses_hidden_subprocess(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    hive_root = tmp_path / "hive"
+    hive_root.mkdir()
+    (hive_root / "pyproject.toml").write_text("[project]\nname='hive-planner'\n", encoding="utf-8")
+    captured: dict = {}
+
+    def fake_run(*args, **kwargs):
+        captured.update(kwargs)
+        return type("R", (), {"returncode": 0, "stdout": "ok", "stderr": ""})()
+
+    monkeypatch.setattr("hive_planner.launcher.service.subprocess.run", fake_run)
+    monkeypatch.setattr("hive_planner.launcher.service.sys.platform", "win32")
+    monkeypatch.setattr("hive_planner.launcher.service.importlib.metadata.version", lambda _name: "1.2.0")
+
+    cfg = LauncherConfig(hive_planner_root=str(hive_root), python_executable="py -3.11")
+    result = run_install(cfg)
+    assert result.ok is True
+    assert captured.get("creationflags") == subprocess.CREATE_NO_WINDOW
 
 
 def test_config_roundtrip(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
