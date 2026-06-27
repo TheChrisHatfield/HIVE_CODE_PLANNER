@@ -335,6 +335,20 @@ def test_call_graph_from_import_maps_callers_to_module_not_nested_path(tmp_path:
     assert reason.startswith("Call site for")
 
 
+def test_bugfix_skips_call_graph_for_non_src_targets(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    _setup_feature_spec(paths, "change-impact-v3")
+    delta = paths.root / "docs" / "delta" / "10_macro.md"
+    delta.parent.mkdir(parents=True, exist_ok=True)
+    delta.write_text("# macro\n", encoding="utf-8")
+
+    packet = build_impact_packet(paths, "change-impact-v3", [delta], mode="bugfix")
+    assert packet.mode == "bugfix"
+    assert packet.risk_score == "medium"
+    assert not any(t.path.startswith("src/") for t in packet.secondary)
+    assert not any("call-graph" in v.lower() for v in packet.validations)
+
+
 def test_impact_cli_writes_packet(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     _setup_feature_spec(paths, "cartridge-compiler-v2")

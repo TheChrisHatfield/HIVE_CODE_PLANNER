@@ -134,11 +134,17 @@ def build_impact_packet(
     if not files:
         raise ImpactError("At least one --files path is required")
 
-    use_graph = mode == "bugfix" or deep
-    graph = build_package_graph(paths) if use_graph else None
-
     test_map = _parse_test_map(paths)
     packet_id = f"chg_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}_{feature}"
+
+    repo_paths: list[str] = []
+    for file_path in files:
+        repo_path = _normalize_repo_path(paths, file_path)
+        if repo_path not in repo_paths:
+            repo_paths.append(repo_path)
+
+    use_graph = (mode == "bugfix" or deep) and any(p.startswith("src/") for p in repo_paths)
+    graph = build_package_graph(paths) if use_graph else None
 
     packet = ImpactPacket(
         packet_id=packet_id,
@@ -148,12 +154,6 @@ def build_impact_packet(
     )
     if mode == "bugfix" and "change.bugfix_mode" not in packet.hook_ids:
         packet.hook_ids.append("change.bugfix_mode")
-
-    repo_paths: list[str] = []
-    for file_path in files:
-        repo_path = _normalize_repo_path(paths, file_path)
-        if repo_path not in repo_paths:
-            repo_paths.append(repo_path)
 
     src_count = 0
     seen_tests: set[str] = set()
