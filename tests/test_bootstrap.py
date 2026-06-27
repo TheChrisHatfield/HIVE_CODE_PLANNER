@@ -78,7 +78,7 @@ def test_init_wraps_write_failures_as_bootstrap_error(tmp_path: Path) -> None:
     (target / "docs").write_text("not a directory", encoding="utf-8")
 
     with pytest.raises(BootstrapError, match="Failed to write bootstrap files"):
-        init_project(source, target)
+        init_project(source, target, force=True)
 
 
 def test_init_force_rewrites_scaffold(tmp_path: Path) -> None:
