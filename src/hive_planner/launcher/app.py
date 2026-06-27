@@ -456,7 +456,21 @@ class HivePlannerApp:
             messagebox.showwarning("No project", "Select a recent project first.")
             return
         self._append_log(self.home_log, "Syncing impact maps…")
-        self._run_bg(lambda: run_project_map_sync(Path(root)), lambda r: self._append_log(self.home_log, str(r)))
+        self._run_bg(lambda: run_project_map_sync(Path(root)), self._map_sync_done)
+
+    def _map_sync_done(self, result: dict) -> None:
+        if self._is_bg_error(result):
+            self._append_log(self.home_log, self._result_detail(result))
+            return
+        if result.get("ok") is False:
+            self._append_log(self.home_log, self._result_detail(result))
+            return
+        added = len(result.get("project_added", [])) + len(result.get("test_added", []))
+        updated = len(result.get("project_updated", [])) + len(result.get("test_updated", []))
+        if added or updated:
+            self._append_log(self.home_log, f"Impact maps synced: {added} added, {updated} updated.")
+        else:
+            self._append_log(self.home_log, "Impact maps already up to date.")
 
     def _on_explore(self) -> None:
         root = self.config.active_project

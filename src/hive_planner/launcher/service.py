@@ -142,15 +142,24 @@ def summarize_project(project_root: Path) -> ProjectSummary:
 
 
 def run_project_ci_check(project_root: Path) -> dict:
-    paths = RepoPaths(root=project_root.resolve())
+    target = project_root.resolve()
+    summary = summarize_project(target)
+    if not summary.ok:
+        return {"ok": False, "error": summary.detail}
+    paths = RepoPaths(root=target)
     report = run_ci_check(paths)
     return report.to_dict()
 
 
 def run_project_map_sync(project_root: Path, *, dry_run: bool = False) -> dict:
-    paths = RepoPaths(root=project_root.resolve())
+    target = project_root.resolve()
+    summary = summarize_project(target)
+    if not summary.ok:
+        return {"ok": False, "error": summary.detail}
+    paths = RepoPaths(root=target)
     report = sync_impact_maps(paths, dry_run=dry_run)
     return {
+        "ok": True,
         "dry_run": dry_run,
         "project_added": sorted(report.project_added),
         "test_added": sorted(report.test_added),

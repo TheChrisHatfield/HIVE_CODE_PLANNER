@@ -10,7 +10,9 @@ from hive_planner.launcher.service import (
     _python_command,
     get_setup_status,
     open_in_cursor,
+    run_project_ci_check,
     run_project_init,
+    run_project_map_sync,
     summarize_project,
 )
 
@@ -72,6 +74,41 @@ def test_load_config_prunes_missing_recent_projects(tmp_path: Path, monkeypatch:
     assert loaded.active_project == ""
     assert str(gone.resolve()) not in loaded.project_profiles
     assert loaded.project_profiles[str(alive.resolve())] == "minimal"
+
+
+def test_run_project_ci_check_rejects_invalid_project(tmp_path: Path) -> None:
+    result = run_project_ci_check(tmp_path)
+    assert result["ok"] is False
+    assert "START_HERE" in result["error"]
+
+
+def test_run_project_map_sync_rejects_invalid_project(tmp_path: Path) -> None:
+    result = run_project_map_sync(tmp_path)
+    assert result["ok"] is False
+    assert "START_HERE" in result["error"]
+
+
+def test_map_sync_done_formats_success() -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+    import tkinter as tk
+
+    root = tk.Tk()
+    root.withdraw()
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.home_log = type("L", (), {"configure": lambda *a, **k: None})()
+    lines: list[str] = []
+    app._append_log = lambda _w, text: lines.append(text)  # type: ignore[method-assign]
+    app._map_sync_done(
+        {
+            "ok": True,
+            "project_added": ["a"],
+            "test_added": [],
+            "project_updated": ["b"],
+            "test_updated": [],
+        }
+    )
+    root.destroy()
+    assert lines == ["Impact maps synced: 1 added, 1 updated."]
 
 
 def test_config_roundtrip(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
