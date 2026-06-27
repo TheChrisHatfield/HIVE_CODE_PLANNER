@@ -137,5 +137,15 @@ def load_config() -> LauncherConfig:
 
 def save_config(config: LauncherConfig) -> None:
     path = config_path()
+    old_python: str | None = None
+    if path.is_file():
+        try:
+            old_python = str(json.loads(path.read_text(encoding="utf-8")).get("python_executable") or "")
+        except (OSError, json.JSONDecodeError):
+            old_python = None
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(asdict(config), indent=2), encoding="utf-8")
+    if old_python is not None and old_python != config.python_executable:
+        from hive_planner.launcher.service import clear_python_probe_cache
+
+        clear_python_probe_cache()

@@ -26,7 +26,6 @@ from hive_planner.launcher.service import (
     run_project_map_sync,
     summarize_project,
 )
-import subprocess
 
 
 def test_version_supported() -> None:
@@ -231,6 +230,25 @@ def test_open_in_cursor_errors_when_cursor_missing(tmp_path: Path, monkeypatch: 
     result = open_in_cursor(project)
     assert result["ok"] is False
     assert "Cursor not found" in result["error"]
+
+
+def test_save_config_clears_probe_cache_when_python_changes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg_dir = tmp_path / "cfg"
+    monkeypatch.setattr("hive_planner.launcher.config.default_config_dir", lambda: cfg_dir)
+    cleared: list[bool] = []
+    monkeypatch.setattr(
+        "hive_planner.launcher.service.clear_python_probe_cache",
+        lambda: cleared.append(True),
+    )
+
+    save_config(LauncherConfig(python_executable="py -3.11"))
+    save_config(LauncherConfig(python_executable="py -3.11", hive_planner_root=str(tmp_path)))
+    assert cleared == []
+
+    save_config(LauncherConfig(python_executable="py -3.12"))
+    assert cleared == [True]
 
 
 def test_load_config_prunes_missing_recent_projects(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
