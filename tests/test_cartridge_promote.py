@@ -82,6 +82,30 @@ def test_promote_micro_and_spec_scaffold_from_draft(tmp_path: Path) -> None:
     assert result.handoff["ok"] is True
 
 
+def test_promote_appends_wiring_audit_to_existing_tasks(tmp_path: Path) -> None:
+    project = _unified_project(tmp_path / "proj")
+    feature = "legacy-feature"
+    paths = RepoPaths(root=project)
+    spec_dir = project / "docs" / "specs" / feature
+    spec_dir.mkdir(parents=True, exist_ok=True)
+    (spec_dir / "tasks.md").write_text(
+        "# Tasks: legacy-feature\n\n- [ ] Old task without audit\n",
+        encoding="utf-8",
+    )
+    micro = paths.cartridge / "micro" / f"{feature}.md"
+    micro.parent.mkdir(parents=True, exist_ok=True)
+    micro.write_text(
+        f"{DRAFT_BANNER}\n\n# Micro Brief: {feature}\n\n- Acceptance criteria: emit works.\n",
+        encoding="utf-8",
+    )
+
+    result = promote_cartridge_drafts(paths, feature)
+
+    tasks_text = (spec_dir / "tasks.md").read_text(encoding="utf-8")
+    assert "Integration wiring audit" in tasks_text
+    assert result.promotions.get("tasks") == "updated (wiring audit)"
+
+
 def test_promote_memory_writes_classified_candidates(tmp_path: Path) -> None:
     project = _unified_project(tmp_path / "proj")
     feature = "mem-feature"

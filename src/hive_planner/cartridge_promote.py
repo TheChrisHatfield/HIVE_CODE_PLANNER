@@ -34,6 +34,32 @@ PROMOTED_BANNER = "<!-- PROMOTED: from cartridge — review before handoff -->"
 HANDOFF_INCOMPLETE_MSG = (
     "Handoff incomplete — files saved but promotion/spec-drift needs review (see promote output above)."
 )
+TASKS_WIRING_AUDIT_HEADING = "## After each implementation task — Integration wiring audit (required)"
+
+
+def _tasks_wiring_audit_block() -> str:
+    return "\n".join(
+        [
+            TASKS_WIRING_AUDIT_HEADING,
+            "",
+            "- [ ] Traced caller → handler → core (no layer break)",
+            "- [ ] No false success when a sub-step failed or was skipped",
+            "- [ ] Integration-level validation evidence attached",
+            "- [ ] See `.cursor/rules/integration-wiring-audit.mdc`",
+            "",
+        ]
+    )
+
+
+def _append_tasks_wiring_audit_if_missing(tasks_path: Path) -> bool:
+    if not tasks_path.is_file():
+        return False
+    text = tasks_path.read_text(encoding="utf-8", errors="replace")
+    if TASKS_WIRING_AUDIT_HEADING in text or "Integration wiring audit" in text:
+        return False
+    updated = text.rstrip() + "\n\n" + _tasks_wiring_audit_block()
+    tasks_path.write_text(updated, encoding="utf-8")
+    return True
 
 
 @dataclass
@@ -216,18 +242,15 @@ def _ensure_spec_scaffold(paths: RepoPaths, feature: str) -> dict[str, str]:
                     "- [ ] Review promoted spec and delta micro brief",
                     "- [ ] Run `py -3.11 -m hive_planner ci-check`",
                     "",
-                    "## After each implementation task — Integration wiring audit (required)",
-                    "",
-                    "- [ ] Traced caller → handler → core (no layer break)",
-                    "- [ ] No false success when a sub-step failed or was skipped",
-                    "- [ ] Integration-level validation evidence attached",
-                    "- [ ] See `.cursor/rules/integration-wiring-audit.mdc`",
+                    _tasks_wiring_audit_block().rstrip(),
                     "",
                 ]
             ),
             encoding="utf-8",
         )
         results["tasks"] = "written"
+    elif _append_tasks_wiring_audit_if_missing(tasks_path):
+        results["tasks"] = "updated (wiring audit)"
     return results
 
 
