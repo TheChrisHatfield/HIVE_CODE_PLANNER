@@ -1206,7 +1206,24 @@ def run_project_init(
     except OSError as exc:
         return {"ok": False, "error": str(exc)}
     payload = result.to_dict()
-    payload["ok"] = True
+    from hive_planner.agent_handoff import AGENT_HANDOFF_UNIFIED, resolve_agent_handoff_mode, validate_unified_handoff
+
+    target = target.resolve()
+    mode = resolve_agent_handoff_mode(target)
+    if mode == AGENT_HANDOFF_UNIFIED:
+        handoff = validate_unified_handoff(target)
+        payload["ok"] = handoff.complete
+        if not handoff.complete:
+            payload["error"] = f"Unified handoff incomplete — missing: {', '.join(handoff.missing)}"
+            payload["handoff"] = {
+                "mode": handoff.mode,
+                "complete": handoff.complete,
+                "missing": handoff.missing,
+                "spec_kit_enabled": handoff.spec_kit_enabled,
+                "continual_learning_enabled": handoff.continual_learning_enabled,
+            }
+    else:
+        payload["ok"] = True
     return payload
 
 

@@ -1792,6 +1792,42 @@ def test_run_project_init_minimal(tmp_path: Path) -> None:
     assert (target / "START_HERE.md").is_file()
 
 
+def test_run_project_init_reports_incomplete_unified_handoff(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from hive_planner import agent_handoff
+
+    hive_root = _hive_planner_source(tmp_path)
+    target = tmp_path / "broken-init"
+    cfg = LauncherConfig(hive_planner_root=str(hive_root))
+
+    def _incomplete(_root: Path):
+        from hive_planner.agent_handoff import AgentHandoffStatus
+
+        return AgentHandoffStatus(
+            mode="unified",
+            spec_kit_enabled=True,
+            continual_learning_enabled=True,
+            complete=False,
+            missing=["docs/cl-spec-integration.md"],
+        )
+
+    monkeypatch.setattr(agent_handoff, "validate_unified_handoff", _incomplete)
+    with patch("hive_planner.bootstrap.subprocess.run"):
+        result = run_project_init(
+            cfg,
+            target=target,
+            name="Broken",
+            profile="minimal",
+            git_init=False,
+            force=False,
+            agent_handoff="unified",
+        )
+
+    assert result["ok"] is False
+    assert "Unified handoff incomplete" in result.get("error", "")
+
+
 def test_python_command_preserves_quoted_paths() -> None:
     cfg = LauncherConfig(python_executable=r'"C:\Program Files\Python311\python.exe"')
     assert _python_command(cfg) == [r"C:\Program Files\Python311\python.exe"]
