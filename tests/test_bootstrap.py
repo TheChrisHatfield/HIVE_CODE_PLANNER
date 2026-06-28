@@ -23,6 +23,44 @@ def _hive_source(tmp_path: Path) -> RepoPaths:
     return RepoPaths(root=root)
 
 
+def test_cli_init_exits_nonzero_when_unified_handoff_incomplete(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from hive_planner import agent_handoff
+    from hive_planner.cli import main
+
+    source = _hive_source(tmp_path)
+    (source.root / "docs").mkdir(exist_ok=True)
+    (source.root / "docs" / "cl-spec-integration.md").write_text("# CL\n", encoding="utf-8")
+    target = tmp_path / "cli-init-project"
+
+    def _incomplete(_root: Path):
+        from hive_planner.agent_handoff import AgentHandoffStatus
+
+        return AgentHandoffStatus(
+            mode="unified",
+            spec_kit_enabled=True,
+            continual_learning_enabled=True,
+            complete=False,
+            missing=[".cursor/rules/integration-wiring-audit.mdc"],
+        )
+
+    monkeypatch.setattr(agent_handoff, "validate_unified_handoff", _incomplete)
+    code = main(
+        [
+            "--root",
+            str(source.root),
+            "init",
+            "--target",
+            str(target),
+            "--agent-handoff",
+            "unified",
+        ]
+    )
+
+    assert code == 1
+
+
 def test_init_creates_detectable_repo_root(tmp_path: Path) -> None:
     source = _hive_source(tmp_path)
     target = tmp_path / "new-project"

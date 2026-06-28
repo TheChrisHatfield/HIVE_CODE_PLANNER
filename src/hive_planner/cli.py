@@ -258,8 +258,23 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Project: {result.project_name}")
         for warning in result.warnings:
             print(f"Warning: {warning}")
-        print(json.dumps(result.to_dict(), indent=2))
-        return 0
+        from hive_planner.agent_handoff import AGENT_HANDOFF_UNIFIED, resolve_agent_handoff_mode, validate_unified_handoff
+
+        payload = result.to_dict()
+        mode = resolve_agent_handoff_mode(result.target)
+        handoff_ok = True
+        if mode == AGENT_HANDOFF_UNIFIED:
+            handoff = validate_unified_handoff(result.target)
+            handoff_ok = handoff.complete
+            payload["handoff_ok"] = handoff_ok
+            if not handoff_ok:
+                payload["handoff_missing"] = handoff.missing
+                print(
+                    f"Error: Unified handoff incomplete — missing: {', '.join(handoff.missing)}",
+                    file=sys.stderr,
+                )
+        print(json.dumps(payload, indent=2))
+        return 0 if handoff_ok else 1
 
     if args.command == "ingest":
         report = ingest(paths, embed=args.embed)
