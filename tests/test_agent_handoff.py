@@ -59,8 +59,23 @@ def test_deploy_unified_agent_handoff_to_existing_project(tmp_path: Path) -> Non
     status = validate_unified_handoff(target)
     assert status.mode == AGENT_HANDOFF_UNIFIED
     assert status.complete is True
+    assert status.missing == []
+    assert (target / ".cursor" / "rules" / "integration-wiring-audit.mdc").is_file()
+    assert (target / "docs" / "cl-spec-integration.md").is_file()
     meta = json.loads((target / ".hive" / "project.json").read_text(encoding="utf-8"))
     assert meta["agent_handoff_mode"] == "unified"
+
+
+def test_validate_unified_handoff_flags_missing_integration_rules(tmp_path: Path) -> None:
+    source = _hive_source(tmp_path)
+    target = tmp_path / "partial-unified"
+    init_project(source, target, agent_handoff="unified")
+    (target / ".cursor" / "rules" / "integration-wiring-audit.mdc").unlink()
+
+    status = validate_unified_handoff(target)
+
+    assert status.complete is False
+    assert ".cursor/rules/integration-wiring-audit.mdc" in status.missing
 
 
 def test_apply_agent_handoff_mode_infers_full_bootstrap_profile(tmp_path: Path) -> None:
