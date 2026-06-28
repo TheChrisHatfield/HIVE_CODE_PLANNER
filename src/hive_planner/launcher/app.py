@@ -1062,8 +1062,11 @@ class HivePlannerApp:
         secondary_button(actions, "Close", dialog.destroy)
 
     def _is_bg_error(self, result) -> bool:
-        """True only for _run_bg exception wrappers, not ci-check/map-sync payloads."""
-        return isinstance(result, dict) and bool(result.get("error"))
+        """True only for _run_bg bare exception wrappers, not structured failure payloads."""
+        if not isinstance(result, dict) or not result.get("error"):
+            return False
+        structured_keys = ("files_written", "handoff", "steps", "warnings", "mode", "promote")
+        return not any(key in result for key in structured_keys)
 
     def _result_failed(self, result) -> bool:
         if isinstance(result, dict):
@@ -1627,7 +1630,27 @@ class HivePlannerApp:
             self._append_log(self.home_log, self._result_detail(result))
             return
         if not result.get("ok"):
-            self._append_log(self.home_log, self._result_detail(result))
+            if result.get("error"):
+                self._append_log(self.home_log, self._result_detail(result))
+            count = len(result.get("files_written", []))
+            if count:
+                self._append_log(
+                    self.home_log,
+                    f"Partial deploy — {count} file(s) written; unified handoff still incomplete.",
+                )
+            repair = result.get("repair")
+            if repair:
+                self._append_log(self.home_log, f"Repaired AGENTS.md — {repair.get('detail', 'updated')}.")
+            rosetta = result.get("rosetta_repair")
+            if rosetta:
+                self._append_log(self.home_log, f"  Rosetta navigation: {rosetta.get('detail')}")
+                for rel in rosetta.get("patched") or []:
+                    self._append_log(self.home_log, f"    patched: {rel}")
+            handoff = result.get("handoff") or {}
+            for rel in handoff.get("missing") or []:
+                self._append_log(self.home_log, f"  missing: {rel}")
+            for warning in result.get("warnings", []):
+                self._append_log(self.home_log, f"Warning: {warning}")
             return
         count = len(result.get("files_written", []))
         self._append_log(

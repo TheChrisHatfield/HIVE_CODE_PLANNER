@@ -1076,6 +1076,34 @@ def test_run_deploy_agent_handoff_reports_incomplete_when_validation_fails(
     assert result["handoff"]["missing"] == [".cursor/rules/integration-wiring-audit.mdc"]
 
 
+def test_deploy_handoff_done_logs_partial_work_when_validation_fails() -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.home_log = type("L", (), {"configure": lambda *a, **k: None})()
+    lines: list[str] = []
+    app._append_log = lambda _w, text: lines.append(text)  # type: ignore[method-assign]
+    app._show_dashboard = lambda: None  # type: ignore[method-assign]
+
+    app._deploy_handoff_done(
+        {
+            "ok": False,
+            "error": "Unified handoff incomplete — missing: docs/cl-spec-integration.md",
+            "files_written": ["docs/cl-spec-integration.md", ".cursor/rules/cl-spec-integration.mdc"],
+            "warnings": ["template warning"],
+            "handoff": {"missing": ["docs/cl-spec-integration.md"]},
+            "rosetta_repair": {"detail": "patched navigation in 2 handoff file(s)", "patched": ["docs/specs/example-feature/spec.md"]},
+        }
+    )
+
+    joined = "\n".join(lines)
+    assert "Partial deploy" in joined
+    assert "missing: docs/cl-spec-integration.md" in joined
+    assert "template warning" in joined
+    assert "Rosetta navigation" in joined
+    assert "Agent handoff deployed" not in joined
+
+
 def test_run_cartridge_import_invalid_feature_promote_reports_error(tmp_path: Path) -> None:
     project = _minimal_hive_project(tmp_path / "proj")
     external = tmp_path / "external-cartridge"
