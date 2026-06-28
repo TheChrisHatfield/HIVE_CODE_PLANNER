@@ -837,6 +837,7 @@ def run_project_ci_check(project_root: Path) -> dict:
 
 
 def run_deploy_agent_handoff(project_root: Path, *, hive_planner_root: Path, force: bool = False) -> dict:
+    from hive_planner.agent_handoff import validate_unified_handoff
     from hive_planner.bootstrap import BootstrapError, deploy_agent_handoff_scaffold
     from hive_planner.rosetta_nav import DEPLOY_HANDOFF_NAV_LAYERS, ensure_handoff_rosetta_navigation
     from hive_planner.spec_drift import BOOTSTRAP_DEFAULT_FEATURE, repair_agents_active_feature, repair_agents_rosetta_section
@@ -858,12 +859,22 @@ def run_deploy_agent_handoff(project_root: Path, *, hive_planner_root: Path, for
         BOOTSTRAP_DEFAULT_FEATURE,
         promoted_layers=set(DEPLOY_HANDOFF_NAV_LAYERS),
     )
+    handoff = validate_unified_handoff(target)
     payload = {
-        "ok": True,
+        "ok": handoff.complete,
         "files_written": written,
         "warnings": warnings,
         "agent_handoff_mode": "unified",
     }
+    if not handoff.complete:
+        payload["error"] = f"Unified handoff incomplete — missing: {', '.join(handoff.missing)}"
+        payload["handoff"] = {
+            "mode": handoff.mode,
+            "complete": handoff.complete,
+            "missing": handoff.missing,
+            "spec_kit_enabled": handoff.spec_kit_enabled,
+            "continual_learning_enabled": handoff.continual_learning_enabled,
+        }
     if repair.repaired:
         payload["repair"] = {"feature": repair.feature, "detail": repair.detail}
     rosetta_details: list[str] = []

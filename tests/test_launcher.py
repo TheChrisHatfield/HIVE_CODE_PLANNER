@@ -99,6 +99,7 @@ from hive_planner.launcher.service import (
     run_cartridge_import_folder,
     run_cartridge_load_sources,
     run_cartridge_translate,
+    run_deploy_agent_handoff,
     cartridge_load_needs_feature,
     cartridge_load_will_promote,
     summarize_project,
@@ -1020,6 +1021,59 @@ def test_merge_cartridge_promote_keeps_load_ok_when_spec_drift_fails(
 
     assert merged["ok"] is True
     assert merged["promote"]["ok"] is False
+
+
+def _hive_planner_source(tmp_path: Path) -> Path:
+    root = tmp_path / "hive-planner"
+    kit = root / "starter-kit"
+    rules = root / ".cursor" / "rules"
+    rules.mkdir(parents=True)
+    kit.mkdir(parents=True)
+    (rules / "architecture.mdc").write_text("# Architecture\n", encoding="utf-8")
+    (rules / "task-execution.mdc").write_text("# Task Execution\n", encoding="utf-8")
+    (rules / "validation.mdc").write_text("# Validation\n", encoding="utf-8")
+    (kit / "spec-kit-agent-integration.md").write_text("# Spec Kit\n", encoding="utf-8")
+    (root / "docs").mkdir(parents=True)
+    (root / "docs" / "cl-spec-integration.md").write_text("# CL\n", encoding="utf-8")
+    return root
+
+
+def test_run_deploy_agent_handoff_ok_when_unified_complete(tmp_path: Path) -> None:
+    hive_root = _hive_planner_source(tmp_path)
+    project = _minimal_hive_project(tmp_path / "proj")
+
+    result = run_deploy_agent_handoff(project, hive_planner_root=hive_root, force=True)
+
+    assert result["ok"] is True
+    assert result.get("error") is None
+    assert (project / "spec-kit-agent-integration.md").is_file()
+
+
+def test_run_deploy_agent_handoff_reports_incomplete_when_validation_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from hive_planner import agent_handoff
+
+    hive_root = _hive_planner_source(tmp_path)
+    project = _minimal_hive_project(tmp_path / "proj")
+
+    def _incomplete(_root: Path):
+        from hive_planner.agent_handoff import AgentHandoffStatus
+
+        return AgentHandoffStatus(
+            mode="unified",
+            spec_kit_enabled=True,
+            continual_learning_enabled=True,
+            complete=False,
+            missing=[".cursor/rules/integration-wiring-audit.mdc"],
+        )
+
+    monkeypatch.setattr(agent_handoff, "validate_unified_handoff", _incomplete)
+    result = run_deploy_agent_handoff(project, hive_planner_root=hive_root, force=True)
+
+    assert result["ok"] is False
+    assert "Unified handoff incomplete" in result.get("error", "")
+    assert result["handoff"]["missing"] == [".cursor/rules/integration-wiring-audit.mdc"]
 
 
 def test_run_cartridge_import_invalid_feature_promote_reports_error(tmp_path: Path) -> None:
