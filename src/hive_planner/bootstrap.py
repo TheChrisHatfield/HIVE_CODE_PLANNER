@@ -929,6 +929,13 @@ def deploy_agent_handoff_scaffold(
         spec_kit=True,
         continual_learning=True,
     )
+    from hive_planner.cartridge_promote import _append_tasks_wiring_audit_if_missing
+
+    example_tasks = target / "docs" / "specs" / "example-feature" / "tasks.md"
+    if _append_tasks_wiring_audit_if_missing(example_tasks):
+        rel = "docs/specs/example-feature/tasks.md"
+        if rel not in written:
+            written.append(rel)
     existing = read_project_profile(target)
     apply_agent_handoff_mode(
         target,

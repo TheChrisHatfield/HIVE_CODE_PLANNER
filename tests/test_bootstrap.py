@@ -140,6 +140,26 @@ def test_deploy_agent_handoff_warns_when_spec_kit_doc_missing(tmp_path: Path, mo
     assert not (target / "spec-kit-agent-integration.md").is_file()
 
 
+def test_deploy_agent_handoff_appends_wiring_audit_to_legacy_tasks(tmp_path: Path) -> None:
+    from hive_planner.bootstrap import deploy_agent_handoff_scaffold
+
+    source = _hive_source(tmp_path)
+    (source.root / "docs").mkdir(exist_ok=True)
+    (source.root / "docs" / "cl-spec-integration.md").write_text("# CL\n", encoding="utf-8")
+    target = tmp_path / "legacy-project"
+    target.mkdir()
+    (target / "START_HERE.md").write_text("# Start\n", encoding="utf-8")
+    tasks = target / "docs" / "specs" / "example-feature" / "tasks.md"
+    tasks.parent.mkdir(parents=True)
+    tasks.write_text("# Tasks\n\n- [ ] Legacy task without audit\n", encoding="utf-8")
+
+    deploy_agent_handoff_scaffold(source, target, force=False)
+
+    text = tasks.read_text(encoding="utf-8")
+    assert "Integration wiring audit" in text
+    assert "Legacy task without audit" in text
+
+
 def test_init_unified_uses_packaged_spec_kit_when_starter_kit_empty(tmp_path: Path) -> None:
     source = _hive_source(tmp_path)
     (source.root / "starter-kit" / "spec-kit-agent-integration.md").unlink()
