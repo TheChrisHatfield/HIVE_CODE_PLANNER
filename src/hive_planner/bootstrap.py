@@ -880,6 +880,16 @@ def _write_bootstrap_tree(
         agent_handoff_mode=AGENT_HANDOFF_UNIFIED if (spec_kit and continual_learning) else AGENT_HANDOFF_OFF,
     )
     written.append(meta_path.relative_to(target).as_posix())
+    if spec_kit and continual_learning:
+        from hive_planner.vendor_sync import write_unified_vendor_pins
+
+        write_unified_vendor_pins(
+            source_paths.root,
+            target,
+            force=force,
+            written=written,
+            warnings=warnings,
+        )
 
 
 def deploy_agent_handoff_scaffold(
@@ -943,4 +953,13 @@ def deploy_agent_handoff_scaffold(
         hive_planner_version=existing.hive_planner_version if existing else None,
     )
     written.append(".hive/project.json")
+    from hive_planner.vendor_sync import write_unified_vendor_pins
+
+    write_unified_vendor_pins(
+        source_paths.root,
+        target,
+        force=force,
+        written=written,
+        warnings=warnings,
+    )
     return sorted(set(written)), warnings

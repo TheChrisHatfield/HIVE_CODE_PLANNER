@@ -101,6 +101,26 @@ def main(argv: list[str] | None = None) -> int:
         help="Do not fail when impact maps are out of sync",
     )
 
+    vendor_sync = sub.add_parser(
+        "vendor-sync",
+        help="Check or apply unified upstream vendor pins (Stage 9)",
+    )
+    vendor_sync.add_argument(
+        "--check",
+        action="store_true",
+        help="Validate vendor/manifest.json schema and report pin status (default)",
+    )
+    vendor_sync.add_argument(
+        "--apply",
+        action="store_true",
+        help="Import pinned upstream trees from vendor/manifest.json",
+    )
+
+    sub.add_parser(
+        "unified-verify",
+        help="Verify vendor manifest and project .hive/upstream-pins.json (Stage 9)",
+    )
+
     sub.add_parser("roadmap-status", help="Validate Stage roadmap artifacts (hook: workflow.tools)")
 
     init_parser = sub.add_parser(
@@ -521,6 +541,33 @@ def main(argv: list[str] | None = None) -> int:
             print("Spec actions:", file=sys.stderr)
             for action in report.spec_actions:
                 print(f"  - {action}", file=sys.stderr)
+        return 0 if report.ok else 1
+
+    if args.command == "vendor-sync":
+        from hive_planner.vendor_sync import VendorSyncError, vendor_sync_apply, vendor_sync_check
+
+        try:
+            if args.apply:
+                report = vendor_sync_apply(root)
+            else:
+                report = vendor_sync_check(root)
+        except VendorSyncError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        print(f"Root: {root}")
+        print(json.dumps(report.to_dict(), indent=2))
+        return 0 if report.ok else 1
+
+    if args.command == "unified-verify":
+        from hive_planner.vendor_sync import VendorSyncError, unified_verify
+
+        try:
+            report = unified_verify(paths)
+        except VendorSyncError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        print(f"Root: {root}")
+        print(json.dumps(report.to_dict(), indent=2))
         return 0 if report.ok else 1
 
     return 1

@@ -13,6 +13,16 @@ from hive_planner.roadmap_status import validate_roadmap
 from hive_planner.spec_drift import check_memory_spec_drift, check_spec_handoff
 
 
+def _is_hive_planner_source(paths: RepoPaths) -> bool:
+    pyproject = paths.root / "pyproject.toml"
+    if not pyproject.is_file():
+        return False
+    try:
+        return 'name = "hive-planner"' in pyproject.read_text(encoding="utf-8")
+    except OSError:
+        return False
+
+
 @dataclass
 class CiStepResult:
     name: str
@@ -78,6 +88,15 @@ def run_ci_check(
             report.steps.append(CiStepResult("agent-handoff-profile", profile.complete, detail))
         else:
             report.steps.append(CiStepResult("agent-handoff-profile", True, "legacy spec kit only"))
+
+    from hive_planner.vendor_sync import ci_unified_vendor_step
+
+    hive_source = _is_hive_planner_source(paths)
+    if hive_source or integrations.agent_handoff_mode == AGENT_HANDOFF_UNIFIED:
+        vendor_ok, vendor_detail = ci_unified_vendor_step(paths, hive_source=hive_source)
+        report.steps.append(CiStepResult("unified-vendor", vendor_ok, vendor_detail))
+    else:
+        report.steps.append(CiStepResult("unified-vendor", True, "skipped (not unified / not hive source)"))
 
     if check_map_drift:
         map_report = sync_impact_maps(paths, dry_run=True)

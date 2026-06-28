@@ -10,17 +10,18 @@
 - [x] `docs/unified-handoff-upstream-forks.md`
 - [x] `docs/delta/STAGE_ROADMAP.md` Stage 9 section
 
-## Task 2 — Vendor manifest skeleton
+## Task 2 — Vendor manifest skeleton ✅
 
-- [ ] Add `vendor/README.md` and `vendor/manifest.json` (template pins)
-- [ ] Document submodule vs fork workflow in upstream forks guide
-- [ ] CI: fail if manifest missing required keys
+- [x] Add `vendor/README.md` and `vendor/manifest.json` (template pins)
+- [x] Document submodule vs fork workflow in upstream forks guide
+- [x] CI: `unified-vendor` step validates manifest schema (hive source)
 
-## Task 3 — Upstream vendor sync
+## Task 3 — Upstream vendor sync ✅
 
-- [ ] Script or submodule: pin `github/spec-kit` at stable ref
-- [ ] Script or subtree: pin `cursor/plugins/continual-learning` at stable ref
-- [ ] Record SHAs in `vendor/manifest.json` after first import
+- [x] Script or submodule: pin `github/spec-kit` at stable ref (`b7e67f55`)
+- [x] Script or subtree: pin `cursor/plugins/continual-learning` at stable ref (`0452e08`)
+- [x] Record SHAs in `vendor/manifest.json` after first import
+- [x] `vendor-sync --apply` imports via git sparse checkout
 
 ## Task 4 — Hive Spec Kit patches
 
@@ -38,22 +39,22 @@
 
 ## Task 6 — Bootstrap deploy wiring
 
-- [ ] `vendor_sync.py` — copy plugin + spec-kit overlay to target
-- [ ] `init --agent-handoff unified` invokes vendor deploy
-- [ ] `deploy_agent_handoff_scaffold` invokes vendor deploy
-- [ ] Write `.hive/upstream-pins.json` on bootstrap
+- [x] `vendor_sync.py` — manifest load, verify, project pins snapshot
+- [x] `init --agent-handoff unified` writes `.hive/upstream-pins.json`
+- [x] `deploy_agent_handoff_scaffold` writes `.hive/upstream-pins.json`
+- [ ] Copy vendored plugin + spec-kit overlay to target (Task 3+)
 
 ## Task 7 — CLI and optional extra
 
-- [ ] `pyproject.toml` `[unified]` optional extra + package-data for vendor templates
-- [ ] `hive_planner vendor-sync` / `unified-verify` commands
+- [x] `pyproject.toml` `[unified]` optional extra + `vendor_templates` package-data
+- [x] `hive_planner vendor-sync` / `unified-verify` commands
 - [ ] Launcher help text for unified vendor path
 
 ## Task 8 — Tests and CI
 
-- [ ] `tests/test_unified_handoff.py`
-- [ ] Optional `ci-check` step `unified-vendor`
-- [ ] Bootstrap tests assert vendor artifacts when unified
+- [x] `tests/test_unified_handoff.py`
+- [x] Optional `ci-check` step `unified-vendor`
+- [x] Bootstrap tests assert upstream pins when unified (see test_unified_handoff)
 
 ## Task 9 — Docs closure
 
@@ -69,7 +70,7 @@
 
 ## Active task
 
-**Task 2** — Vendor manifest skeleton (next implementation slice).
+**Task 4** — Hive Spec Kit patches (wiring audit template, Rosetta nav, feature-id docs).
 
 ## Validation log
 
@@ -77,4 +78,8 @@
 2026-06-26 — Stage 9 spec drafted (Task 1)
 - unified-handoff-v2 spec/plan/tasks + upstream forks guide
 - STAGE_ROADMAP Stage 9 planned (ROADMAP_FEATURES unchanged at 20/20)
+
+2026-06-26 — Stage 9 Task 3 upstream import
+- vendor-sync --apply imports spec-kit + continual-learning at pinned SHAs
+- vendor/spec-kit @ b7e67f55, vendor/cursor-plugins/continual-learning @ 0452e08
 ```

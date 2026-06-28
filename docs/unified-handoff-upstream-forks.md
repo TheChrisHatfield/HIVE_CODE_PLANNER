@@ -1,7 +1,7 @@
 <!--
 meta:hook_id: integration.unified_handoff
 meta:purpose: Vendor pins and Hive patch list for Spec Kit + Continual Learning
-meta:status: planned
+meta:status: active
 -->
 
 # Unified Handoff — Upstream Forks
@@ -57,14 +57,23 @@ Create `vendor/manifest.json` when Task 2 lands:
 
 Bootstrapped projects receive a snapshot at `.hive/upstream-pins.json`.
 
-## Sync workflow (planned CLI)
+## Sync workflow
 
 ```powershell
-# From Hive repo root (after vendor-sync command exists)
 py -3.11 -m hive_planner vendor-sync --check
 py -3.11 -m hive_planner vendor-sync --apply
 py -3.11 -m hive_planner unified-verify
 ```
+
+### Submodule vs fork (recommended)
+
+| Approach | When to use | Notes |
+|----------|-------------|-------|
+| **Org fork + submodule** | Production Hive deploy | Pin `ref` in `vendor/manifest.json`; CI `unified-vendor` validates schema |
+| **Git subtree** | Single-repo consumers | Import `continual-learning/` subtree only |
+| **Package template only** | Bootstrapped app projects | Bootstrap copies `.hive/upstream-pins.json`; no `vendor/` in target |
+
+Hive source CI runs `unified-vendor` when `vendor/manifest.json` exists (`TBD` refs warn until Task 3 import).
 
 Manual interim workflow:
 

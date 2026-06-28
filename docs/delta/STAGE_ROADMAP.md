@@ -5,7 +5,7 @@
 Hive Code Planner compiler roadmap (Stages 1–6) is **complete** as of v1.0.0.  
 **Stage 7** (CL/spec integration, memory v2, rule seeds, impact v3, bootstrap) is **complete** as of v1.1.0.  
 **Stage 8** (starter-kit v2 full profile, security hardening) is **complete** as of v1.2.0.  
-**Stage 9** (unified upstream forks — Spec Kit + Continual Learning vendored deploy) is **planned** — spec drafted 2026-06-26.
+**Stage 9** (unified upstream forks — Spec Kit + Continual Learning vendored deploy) is **in progress** — Task 3 import complete 2026-06-26.
 
 **Post-v1.0.0 bug audit:** 2026-06-21 — stage-by-stage audit complete; 103/103 pytest, ci-check 5/5.
 
@@ -35,7 +35,7 @@ Hive Code Planner compiler roadmap (Stages 1–6) is **complete** as of v1.0.0.
 | 7F | roadmap-complete-v2 | ✅ |
 | 8A | starter-kit-v2 | ✅ |
 | 8B | roadmap-complete-v3 | ✅ |
-| 9A | unified-handoff-v2 | 📋 planned |
+| 9A | unified-handoff-v2 | 🚧 in progress |
 | 9B | roadmap-complete-v4 | 📋 planned |
 
 ### Stage 9 — Unified upstream forks
@@ -44,7 +44,7 @@ Vendored, pinned forks of [github/spec-kit](https://github.com/github/spec-kit) 
 
 - **Spec:** [specs/unified-handoff-v2/spec.md](../specs/unified-handoff-v2/spec.md)
 - **Operator guide:** [unified-handoff-upstream-forks.md](../unified-handoff-upstream-forks.md)
-- **Active task:** Task 2 — vendor manifest skeleton (`docs/specs/unified-handoff-v2/tasks.md`)
+- **Active task:** Task 4 — Hive Spec Kit patches (`docs/specs/unified-handoff-v2/tasks.md`)
 
 `ROADMAP_FEATURES` remains at 20 features until Stage 9 implementation closes via `roadmap-complete-v4`.
 
