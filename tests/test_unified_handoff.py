@@ -256,6 +256,20 @@ def test_write_project_pins_refreshes_when_manifest_changes(tmp_path: Path) -> N
     assert data["spec_kit"]["hive_patch_rev"] == "2"
 
 
+def test_ci_unified_vendor_requires_pins_for_unified_projects(tmp_path: Path) -> None:
+    from hive_planner.project_profile import write_project_profile
+    from hive_planner.vendor_sync import ci_unified_vendor_step
+
+    project = tmp_path / "unified-project"
+    project.mkdir()
+    write_project_profile(project, profile="minimal", project_name="unified-project", agent_handoff_mode="unified")
+
+    ok, detail = ci_unified_vendor_step(RepoPaths(root=project), hive_source=False, require_pins=True)
+
+    assert ok is False
+    assert "missing .hive/upstream-pins.json" in detail
+
+
 def test_ci_unified_vendor_accepts_bootstrapped_pins_without_vendor_manifest(tmp_path: Path) -> None:
     from hive_planner.vendor_sync import ci_unified_vendor_step
 

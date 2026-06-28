@@ -92,8 +92,13 @@ def run_ci_check(
     from hive_planner.vendor_sync import ci_unified_vendor_step
 
     hive_source = _is_hive_planner_source(paths)
+    require_pins = not hive_source and integrations.agent_handoff_mode == AGENT_HANDOFF_UNIFIED
     if hive_source or integrations.agent_handoff_mode == AGENT_HANDOFF_UNIFIED:
-        vendor_ok, vendor_detail = ci_unified_vendor_step(paths, hive_source=hive_source)
+        vendor_ok, vendor_detail = ci_unified_vendor_step(
+            paths,
+            hive_source=hive_source,
+            require_pins=require_pins,
+        )
         report.steps.append(CiStepResult("unified-vendor", vendor_ok, vendor_detail))
     else:
         report.steps.append(CiStepResult("unified-vendor", True, "skipped (not unified / not hive source)"))

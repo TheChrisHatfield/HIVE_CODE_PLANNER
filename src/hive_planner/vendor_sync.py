@@ -470,7 +470,12 @@ def write_unified_vendor_pins(
             written.append(rel)
 
 
-def ci_unified_vendor_step(paths: RepoPaths, *, hive_source: bool) -> tuple[bool, str]:
+def ci_unified_vendor_step(
+    paths: RepoPaths,
+    *,
+    hive_source: bool,
+    require_pins: bool = False,
+) -> tuple[bool, str]:
     root = paths.root.resolve()
     if hive_source:
         report = check_vendor_manifest(root)
@@ -486,6 +491,8 @@ def ci_unified_vendor_step(paths: RepoPaths, *, hive_source: bool) -> tuple[bool
 
     pins = read_project_pins(root)
     if pins is None:
+        if require_pins:
+            return False, "missing .hive/upstream-pins.json (required for unified handoff)"
         return True, "skipped (no .hive/upstream-pins.json)"
     local_manifest = root / "vendor" / "manifest.json"
     if local_manifest.is_file():
