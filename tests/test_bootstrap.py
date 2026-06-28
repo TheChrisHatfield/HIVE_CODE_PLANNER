@@ -83,6 +83,19 @@ def test_deploy_agent_handoff_copies_wiring_audit_rules(tmp_path: Path) -> None:
     assert "Integration wiring audit" in tasks
 
 
+def test_init_unified_copies_cl_spec_doc_without_hive_source_docs(tmp_path: Path) -> None:
+    source = _hive_source(tmp_path)
+    target = tmp_path / "pip-style-project"
+
+    init_project(source, target, agent_handoff="unified")
+
+    cl_doc = target / "docs" / "cl-spec-integration.md"
+    assert cl_doc.is_file()
+    text = cl_doc.read_text(encoding="utf-8")
+    assert "Integration wiring audit" in text
+    assert "Durable Workspace Facts" in text
+
+
 def test_init_agent_handoff_off_skips_unified_artifacts(tmp_path: Path) -> None:
     source = _hive_source(tmp_path)
     target = tmp_path / "planning-only"

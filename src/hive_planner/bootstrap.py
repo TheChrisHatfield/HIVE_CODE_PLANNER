@@ -46,6 +46,33 @@ def _starter_kit_dir(source_root: Path) -> Path:
     return Path(__file__).resolve().parent / "bootstrap_templates"
 
 
+def _cl_spec_integration_doc_path(source_root: Path) -> Path | None:
+    primary = source_root / "docs" / "cl-spec-integration.md"
+    if primary.is_file():
+        return primary
+    packaged = Path(__file__).resolve().parent / "bootstrap_templates" / "cl-spec-integration.md"
+    if packaged.is_file():
+        return packaged
+    return None
+
+
+def _copy_cl_spec_integration_doc(
+    source_paths: RepoPaths,
+    target: Path,
+    *,
+    force: bool,
+    written: list[str],
+    warnings: list[str],
+) -> None:
+    source = _cl_spec_integration_doc_path(source_paths.root)
+    if source is None:
+        warnings.append("Missing docs/cl-spec-integration.md — not copied")
+        return
+    _copy_file(source, target, "docs/cl-spec-integration.md", force=force, written=written)
+    if not (target / "docs" / "cl-spec-integration.md").is_file():
+        warnings.append("Missing docs/cl-spec-integration.md — not copied")
+
+
 def _rules_dir(source_root: Path) -> Path:
     rules = source_root / ".cursor" / "rules"
     if rules.is_dir():
@@ -787,11 +814,13 @@ def _write_bootstrap_tree(
     if continual_learning:
         templates.append(("docs/proposals/candidates-template.md", _candidates_template()))
     if spec_kit and continual_learning:
-        cl_doc = source_paths.root / "docs" / "cl-spec-integration.md"
-        if cl_doc.is_file():
-            _copy_file(cl_doc, target, "docs/cl-spec-integration.md", force=force, written=written)
-        else:
-            warnings.append("Missing docs/cl-spec-integration.md in Hive source — skipped copy")
+        _copy_cl_spec_integration_doc(
+            source_paths,
+            target,
+            force=force,
+            written=written,
+            warnings=warnings,
+        )
     for rel, content in templates:
         _write_text(target, rel, content, force=force, written=written)
 
@@ -881,11 +910,13 @@ def deploy_agent_handoff_scaffold(
         _write_text(target, rel, content, force=force, written=written)
     kit = _starter_kit_dir(source_paths.root)
     _copy_file(kit / "spec-kit-agent-integration.md", target, "spec-kit-agent-integration.md", force=force, written=written)
-    cl_doc = source_paths.root / "docs" / "cl-spec-integration.md"
-    if cl_doc.is_file():
-        _copy_file(cl_doc, target, "docs/cl-spec-integration.md", force=force, written=written)
-    else:
-        warnings.append("Missing docs/cl-spec-integration.md in Hive source — skipped copy")
+    _copy_cl_spec_integration_doc(
+        source_paths,
+        target,
+        force=force,
+        written=written,
+        warnings=warnings,
+    )
     _copy_bootstrap_rules(
         source_paths,
         target,
