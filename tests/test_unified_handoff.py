@@ -174,6 +174,28 @@ def test_init_unified_writes_upstream_pins(tmp_path: Path) -> None:
     assert data.get("schema") == MANIFEST_SCHEMA
 
 
+def test_write_project_pins_refreshes_when_manifest_changes(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    initial = {
+        "schema": MANIFEST_SCHEMA,
+        "spec_kit": {"upstream": "u", "path": "p", "ref": "oldsha", "hive_patch_rev": "1"},
+        "continual_learning": {"upstream": "u", "path": "p", "ref": "oldsha2", "hive_patch_rev": "1"},
+    }
+    updated = {
+        "schema": MANIFEST_SCHEMA,
+        "spec_kit": {"upstream": "u", "path": "p", "ref": "newsha", "hive_patch_rev": "2"},
+        "continual_learning": {"upstream": "u", "path": "p", "ref": "newsha2", "hive_patch_rev": "2"},
+    }
+    write_project_pins(project, initial)
+    write_project_pins(project, updated)
+
+    data = json.loads((project / ".hive" / "upstream-pins.json").read_text(encoding="utf-8"))
+
+    assert data["spec_kit"]["ref"] == "newsha"
+    assert data["spec_kit"]["hive_patch_rev"] == "2"
+
+
 def test_ci_unified_vendor_accepts_bootstrapped_pins_without_vendor_manifest(tmp_path: Path) -> None:
     from hive_planner.vendor_sync import ci_unified_vendor_step
 

@@ -207,7 +207,9 @@ def check_vendor_manifest(repo_root: Path) -> VendorManifestReport:
 def write_project_pins(target: Path, manifest: dict, *, force: bool = False) -> Path:
     dest = target.resolve() / PROJECT_PINS_REL
     if dest.exists() and not force:
-        return dest
+        existing = read_project_pins(target)
+        if existing is not None and project_pins_match(manifest, existing):
+            return dest
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     return dest
