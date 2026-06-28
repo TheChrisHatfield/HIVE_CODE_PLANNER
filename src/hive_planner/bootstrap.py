@@ -911,6 +911,8 @@ def deploy_agent_handoff_scaffold(
         _write_text(target, rel, content, force=force, written=written)
     kit = _starter_kit_dir(source_paths.root)
     _copy_file(kit / "spec-kit-agent-integration.md", target, "spec-kit-agent-integration.md", force=force, written=written)
+    if not (target / "spec-kit-agent-integration.md").is_file():
+        warnings.append("Missing starter-kit/spec-kit-agent-integration.md — not copied")
     _copy_cl_spec_integration_doc(
         source_paths,
         target,

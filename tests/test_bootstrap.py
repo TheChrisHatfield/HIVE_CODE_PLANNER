@@ -121,6 +121,25 @@ def test_deploy_agent_handoff_copies_wiring_audit_rules(tmp_path: Path) -> None:
     assert "Integration wiring audit" in tasks
 
 
+def test_deploy_agent_handoff_warns_when_spec_kit_doc_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from hive_planner.bootstrap import deploy_agent_handoff_scaffold
+
+    source = _hive_source(tmp_path)
+    (source.root / "docs").mkdir(exist_ok=True)
+    (source.root / "docs" / "cl-spec-integration.md").write_text("# CL\n", encoding="utf-8")
+    target = tmp_path / "existing-project"
+    target.mkdir()
+    (target / "START_HERE.md").write_text("# Start\n", encoding="utf-8")
+    empty_kit = tmp_path / "empty-kit"
+    empty_kit.mkdir()
+    monkeypatch.setattr("hive_planner.bootstrap._starter_kit_dir", lambda _root: empty_kit)
+
+    _written, warnings = deploy_agent_handoff_scaffold(source, target, force=True)
+
+    assert any("spec-kit-agent-integration.md" in w for w in warnings)
+    assert not (target / "spec-kit-agent-integration.md").is_file()
+
+
 def test_init_unified_uses_packaged_spec_kit_when_starter_kit_empty(tmp_path: Path) -> None:
     source = _hive_source(tmp_path)
     (source.root / "starter-kit" / "spec-kit-agent-integration.md").unlink()
