@@ -216,6 +216,13 @@ def _ensure_spec_scaffold(paths: RepoPaths, feature: str) -> dict[str, str]:
                     "- [ ] Review promoted spec and delta micro brief",
                     "- [ ] Run `py -3.11 -m hive_planner ci-check`",
                     "",
+                    "## After each implementation task — Integration wiring audit (required)",
+                    "",
+                    "- [ ] Traced caller → handler → core (no layer break)",
+                    "- [ ] No false success when a sub-step failed or was skipped",
+                    "- [ ] Integration-level validation evidence attached",
+                    "- [ ] See `.cursor/rules/integration-wiring-audit.mdc`",
+                    "",
                 ]
             ),
             encoding="utf-8",

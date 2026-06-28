@@ -73,6 +73,8 @@ def test_promote_micro_and_spec_scaffold_from_draft(tmp_path: Path) -> None:
     assert (project / "docs" / "specs" / feature / "spec.md").is_file()
     assert (project / "docs" / "specs" / feature / "plan.md").is_file()
     assert (project / "docs" / "specs" / feature / "tasks.md").is_file()
+    tasks_text = (project / "docs" / "specs" / feature / "tasks.md").read_text(encoding="utf-8")
+    assert "Integration wiring audit" in tasks_text
     spec_text = (project / "docs" / "specs" / feature / "spec.md").read_text(encoding="utf-8")
     assert "Agent navigation (Rosetta Stone)" in spec_text
     assert "planning.rosetta" in spec_text
