@@ -65,6 +65,24 @@ def test_deploy_agent_handoff_scaffold_includes_rosetta_navigation(tmp_path: Pat
     assert "Agent navigation (Rosetta Stone)" in spec_text
 
 
+def test_deploy_agent_handoff_copies_wiring_audit_rules(tmp_path: Path) -> None:
+    from hive_planner.bootstrap import deploy_agent_handoff_scaffold
+
+    source = _hive_source(tmp_path)
+    (source.root / "docs").mkdir(exist_ok=True)
+    (source.root / "docs" / "cl-spec-integration.md").write_text("# CL\n", encoding="utf-8")
+    target = tmp_path / "existing-project"
+    target.mkdir()
+    (target / "START_HERE.md").write_text("# Start\n", encoding="utf-8")
+
+    deploy_agent_handoff_scaffold(source, target, force=True)
+
+    assert (target / ".cursor" / "rules" / "integration-wiring-audit.mdc").is_file()
+    assert (target / ".cursor" / "rules" / "cl-spec-integration.mdc").is_file()
+    tasks = (target / "docs" / "specs" / "example-feature" / "tasks.md").read_text(encoding="utf-8")
+    assert "Integration wiring audit" in tasks
+
+
 def test_init_agent_handoff_off_skips_unified_artifacts(tmp_path: Path) -> None:
     source = _hive_source(tmp_path)
     target = tmp_path / "planning-only"
@@ -87,6 +105,8 @@ def test_init_with_spec_kit_writes_starter_artifacts(tmp_path: Path) -> None:
     assert meta["agent_handoff_mode"] == "unified"
     assert (target / "docs" / "specs" / "example-feature" / "spec.md").exists()
     assert (target / "spec-kit-agent-integration.md").exists()
+    assert (target / ".cursor" / "rules" / "integration-wiring-audit.mdc").is_file()
+    assert (target / ".cursor" / "rules" / "cl-spec-integration.mdc").is_file()
 
 
 def test_init_unified_includes_continual_learning_template(tmp_path: Path) -> None:

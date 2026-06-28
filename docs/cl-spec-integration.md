@@ -25,8 +25,9 @@ Connect Continual Learning memory promotion with Spec Kit behavioral truth so ag
 
 1. **Behavioral changes** update `docs/specs/<feature>/spec.md` first, then `plan.md` / `tasks.md` if needed.
 2. **Operational learnings** may be proposed to `## Durable Workspace Facts` in `AGENTS.md`.
-3. Continual Learning candidates tagged `# behavioral` or matching behavioral heuristics are **rejected** by `agents-propose`.
-4. Run `spec-drift-check` before merging memory proposals or ending a session.
+3. Complete the **Integration wiring audit** (`.cursor/rules/integration-wiring-audit.mdc`) on validated changes **before** memory promotion.
+4. Continual Learning candidates tagged `# behavioral` or matching behavioral heuristics are **rejected** by `agents-propose`.
+5. Run `spec-drift-check` before merging memory proposals or ending a session (when project tooling provides it).
 
 ## Candidate file format
 

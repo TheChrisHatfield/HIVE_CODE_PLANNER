@@ -33,7 +33,8 @@ Operational sequence:
 4. Run plan generation with architectural preferences.
 5. Run tasks generation to create narrow executable units.
 6. In Cursor, implement one micro task at a time with rules attached.
-7. Use continual learning only after validated changes.
+6b. **Integration wiring audit** (required before checking off each task) — see `.cursor/rules/integration-wiring-audit.mdc`.
+7. Use continual learning only after validated changes and the wiring audit passes.
 
 ## Continual Learning candidate format
 
@@ -60,7 +61,7 @@ Each feature prompt should include:
 - Micro task scope
 - Constraints and invariants
 - Acceptance criteria
-- Validation requirements
+- Validation requirements (include integration wiring audit per `.cursor/rules/integration-wiring-audit.mdc`)
 - Known risks or open questions
 
 ## Spec flow rules

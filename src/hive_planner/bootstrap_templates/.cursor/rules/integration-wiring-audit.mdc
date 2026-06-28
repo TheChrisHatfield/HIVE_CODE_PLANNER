@@ -1,0 +1,51 @@
+---
+description: Integration wiring audit after implementation (Spec Kit default gate)
+alwaysApply: true
+---
+
+# Integration Wiring Audit
+
+**Hook:** `change.validation`, `spec.flow`, `integration.wiring_audit`
+
+Default validation for Spec Kit implementation and before Continual Learning promotion.
+
+## Before deep work
+
+1. Load this repo's **context entry** (README, AGENTS.md, docs index, architecture doc — use what exists).
+2. Load the **active spec / plan / tasks** when present; state assumptions when not.
+
+## After generating or changing behavior (required before task complete)
+
+Run this audit **before** marking a Spec Kit task done or promoting memory bullets.
+
+### Failure classes to hunt
+
+| Class | Question |
+|-------|------------|
+| **Navigation skipped** | Did we load entry/context docs before diving into local files only? |
+| **Scaffold ≠ implementation** | Do labels, hooks, UI, or docs exist without a code path that executes the behavior? |
+| **Layer break** | Trace UI/event → handler → domain → persistence (or CLI → service → core). Is every link called? |
+| **False success** | Does top-level success (`ok`, logs, "done") hide a failed or skipped sub-step? |
+| **Dead config** | Do flags/settings exist but nothing reads them, or defaults hide the feature? |
+| **Test theater** | Do tests only assert strings/mocks, not the integrated path? |
+
+### Audit steps
+
+1. **Trace** each new user-visible outcome end-to-end (grep/read call sites).
+2. **Match** success reporting to real prerequisites (partial failure must not read as full success).
+3. **Verify** config/feature flags have matching read sites and enabled paths.
+4. **Prove** with integration-level evidence: repo test command, targeted test, or scripted call — not helper-only unit tests alone.
+
+## Continual Learning gate (default)
+
+Before `agents-propose`, CL export, or edits to durable memory (`AGENTS.md`, etc.):
+
+- Complete this audit on the change just validated.
+- Do **not** promote operational bullets for commands, paths, or workflows that are not wired.
+- Behavioral requirements belong in the active **spec**, not durable memory.
+
+## Completion output
+
+Include a short **Wiring audit** summary: chain traced, gaps found/fixed, how validated.
+
+Do not mark Spec Kit tasks complete or promote memory until this audit passes.

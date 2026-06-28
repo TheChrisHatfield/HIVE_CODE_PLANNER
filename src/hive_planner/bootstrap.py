@@ -50,7 +50,45 @@ def _rules_dir(source_root: Path) -> Path:
     rules = source_root / ".cursor" / "rules"
     if rules.is_dir():
         return rules
-    return _starter_kit_dir(source_root) / ".cursor" / "rules"
+    return Path(__file__).resolve().parent / "bootstrap_templates" / ".cursor" / "rules"
+
+
+_BASE_BOOTSTRAP_RULES = ("architecture.mdc", "task-execution.mdc", "validation.mdc")
+_SPEC_KIT_BOOTSTRAP_RULES = ("integration-wiring-audit.mdc",)
+_UNIFIED_HANDOFF_BOOTSTRAP_RULES = ("cl-spec-integration.mdc",)
+
+
+def _bootstrap_rule_names(*, spec_kit: bool, continual_learning: bool) -> tuple[str, ...]:
+    names = list(_BASE_BOOTSTRAP_RULES)
+    if spec_kit:
+        names.extend(_SPEC_KIT_BOOTSTRAP_RULES)
+    if spec_kit and continual_learning:
+        names.extend(_UNIFIED_HANDOFF_BOOTSTRAP_RULES)
+    return tuple(names)
+
+
+def _rule_template_path(source_paths: RepoPaths, rule_name: str) -> Path:
+    primary = _rules_dir(source_paths.root) / rule_name
+    if primary.is_file():
+        return primary
+    return Path(__file__).resolve().parent / "bootstrap_templates" / ".cursor" / "rules" / rule_name
+
+
+def _copy_bootstrap_rules(
+    source_paths: RepoPaths,
+    target: Path,
+    *,
+    force: bool,
+    written: list[str],
+    warnings: list[str],
+    spec_kit: bool,
+    continual_learning: bool,
+) -> None:
+    for rule_name in _bootstrap_rule_names(spec_kit=spec_kit, continual_learning=continual_learning):
+        source = _rule_template_path(source_paths, rule_name)
+        _copy_file(source, target, f".cursor/rules/{rule_name}", force=force, written=written)
+        if not (target / ".cursor/rules" / rule_name).exists():
+            warnings.append(f"Missing rule template {rule_name} — not copied")
 
 
 def _write_text(target: Path, rel: str, content: str, *, force: bool, written: list[str]) -> None:
@@ -348,6 +386,13 @@ def _example_tasks() -> str:
 - [ ] Update holistic/macro docs
 - [ ] Rename `example-feature` to your feature id
 - [ ] Set active feature in `AGENTS.md`
+
+## After each implementation task — Integration wiring audit (required)
+
+- [ ] Traced caller → handler → core (no layer break)
+- [ ] No false success when a sub-step failed or was skipped
+- [ ] Integration-level validation evidence attached
+- [ ] See `.cursor/rules/integration-wiring-audit.mdc`
 
 ## Active task
 
@@ -769,11 +814,15 @@ def _write_bootstrap_tree(
         if not (target / "spec-kit-agent-integration.md").exists():
             warnings.append("Missing starter-kit/spec-kit-agent-integration.md — skipped copy")
 
-    rules = _rules_dir(source_paths.root)
-    for rule_name in ("architecture.mdc", "task-execution.mdc", "validation.mdc"):
-        _copy_file(rules / rule_name, target, f".cursor/rules/{rule_name}", force=force, written=written)
-        if not (target / ".cursor/rules" / rule_name).exists():
-            warnings.append(f"Missing rule template {rule_name} — not copied")
+    _copy_bootstrap_rules(
+        source_paths,
+        target,
+        force=force,
+        written=written,
+        warnings=warnings,
+        spec_kit=spec_kit,
+        continual_learning=continual_learning,
+    )
 
     if profile == "full":
         _write_full_profile(
@@ -837,6 +886,15 @@ def deploy_agent_handoff_scaffold(
         _copy_file(cl_doc, target, "docs/cl-spec-integration.md", force=force, written=written)
     else:
         warnings.append("Missing docs/cl-spec-integration.md in Hive source — skipped copy")
+    _copy_bootstrap_rules(
+        source_paths,
+        target,
+        force=force,
+        written=written,
+        warnings=warnings,
+        spec_kit=True,
+        continual_learning=True,
+    )
     existing = read_project_profile(target)
     apply_agent_handoff_mode(
         target,
