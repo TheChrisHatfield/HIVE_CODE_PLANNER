@@ -244,24 +244,45 @@ def project_pins_match(manifest: dict, project_pins: dict) -> bool:
 
 def unified_verify(paths: RepoPaths) -> UnifiedVerifyReport:
     root = paths.root.resolve()
-    manifest_report = check_vendor_manifest(root)
-    issues = list(manifest_report.issues)
+    local_manifest = root / "vendor" / "manifest.json"
     pins_path = root / PROJECT_PINS_REL
     pins_match: bool | None = None
-    if pins_path.is_file():
+    issues: list[str] = []
+
+    if local_manifest.is_file():
+        manifest_report = check_vendor_manifest(root)
+        issues = list(manifest_report.issues)
+        if pins_path.is_file():
+            project_pins = read_project_pins(root)
+            if project_pins is None:
+                issues.append("project pins file is unreadable")
+                pins_match = False
+            else:
+                source_manifest = load_manifest(local_manifest)
+                pins_match = project_pins_match(source_manifest, project_pins)
+                if not pins_match:
+                    issues.append("project .hive/upstream-pins.json drift from source manifest")
+        ok = manifest_report.ok and (pins_match is not False)
+    elif pins_path.is_file():
         project_pins = read_project_pins(root)
         if project_pins is None:
-            issues.append("project pins file is unreadable")
+            manifest_report = VendorManifestReport(
+                ok=False,
+                manifest_path=PROJECT_PINS_REL,
+                issues=["project pins file is unreadable"],
+            )
             pins_match = False
+            issues = list(manifest_report.issues)
         else:
-            try:
-                source_manifest = load_manifest(resolve_manifest_path(root))
-            except VendorSyncError:
-                source_manifest = load_manifest(packaged_manifest_path())
-            pins_match = project_pins_match(source_manifest, project_pins)
-            if not pins_match:
-                issues.append("project .hive/upstream-pins.json drift from source manifest")
-    ok = manifest_report.ok and (pins_match is not False)
+            manifest_report = validate_project_pins(project_pins)
+            pins_match = manifest_report.ok
+            issues = list(manifest_report.issues)
+        ok = pins_match is True
+    else:
+        manifest_report = check_vendor_manifest(root)
+        issues = list(manifest_report.issues)
+        ok = manifest_report.ok
+
     return UnifiedVerifyReport(
         ok=ok,
         manifest=manifest_report,

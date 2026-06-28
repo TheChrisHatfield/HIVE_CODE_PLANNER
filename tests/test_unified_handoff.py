@@ -124,6 +124,33 @@ def test_project_pins_match_compares_ref_and_patch_rev() -> None:
     assert project_pins_match(manifest, pins) is False
 
 
+def test_unified_verify_bootstrapped_project_without_vendor_manifest(tmp_path: Path) -> None:
+    repo = tmp_path / "project"
+    repo.mkdir()
+    pins = {
+        "schema": MANIFEST_SCHEMA,
+        "updated": "2026-06-26",
+        "spec_kit": {
+            "upstream": "https://github.com/github/spec-kit",
+            "path": "vendor/spec-kit",
+            "ref": "b7e67f55bf7a937aaa57dbe0a8198774e285de3a",
+            "hive_patch_rev": "1",
+        },
+        "continual_learning": {
+            "upstream": "https://github.com/cursor/plugins",
+            "path": "vendor/cursor-plugins/continual-learning",
+            "ref": "0452e08a314c03621ec5ac1324f1ad1dd824f1a4",
+            "hive_patch_rev": "1",
+        },
+    }
+    write_project_pins(repo, pins)
+
+    report = unified_verify(RepoPaths(root=repo))
+
+    assert report.pins_match is True
+    assert report.ok is True
+
+
 def test_unified_verify_with_project_pins(tmp_path: Path) -> None:
     repo = tmp_path / "project"
     repo.mkdir()
