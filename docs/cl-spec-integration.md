@@ -61,5 +61,6 @@ py -3.11 -m hive_planner agents-ingest --from path/to/cl-export.txt
 ## Related
 
 - [context-handoff-and-automation.md](./context-handoff-and-automation.md)
+- [unified-handoff-upstream-forks.md](./unified-handoff-upstream-forks.md) — Stage 9 vendored Spec Kit + CL forks (planned)
 - [../starter-kit/spec-kit-agent-integration.md](../starter-kit/spec-kit-agent-integration.md)
 - Hook `spec.flow` in [planning-rosetta-stone.md](./planning-rosetta-stone.md)
