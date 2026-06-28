@@ -1980,7 +1980,20 @@ class HivePlannerApp:
 
     def _create_done(self, result: dict) -> None:
         if not result.get("ok"):
-            messagebox.showerror("Create failed", result.get("error", "Unknown error"))
+            detail = result.get("error", "Unknown error")
+            if result.get("target") and result.get("files_written"):
+                detail = (
+                    f"{detail}\n\nPartial bootstrap — {len(result['files_written'])} file(s) written to:\n"
+                    f"{result['target']}"
+                )
+            messagebox.showerror("Create failed", detail)
+            if hasattr(self, "home_log"):
+                self._append_log(self.home_log, detail)
+                for warning in result.get("warnings", []):
+                    self._append_log(self.home_log, f"Warning: {warning}")
+                handoff = result.get("handoff") or {}
+                for rel in handoff.get("missing") or []:
+                    self._append_log(self.home_log, f"  missing: {rel}")
             return
         self.config = load_config()
         self.config.add_recent_project(Path(result["target"]))

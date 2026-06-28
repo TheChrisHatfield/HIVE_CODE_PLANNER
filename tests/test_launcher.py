@@ -1104,6 +1104,45 @@ def test_deploy_handoff_done_logs_partial_work_when_validation_fails() -> None:
     assert "Agent handoff deployed" not in joined
 
 
+def test_create_done_shows_partial_bootstrap_when_handoff_incomplete() -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.home_log = type("L", (), {"configure": lambda *a, **k: None})()
+    lines: list[str] = []
+    app._append_log = lambda _w, text: lines.append(text)  # type: ignore[method-assign]
+
+    class Box:
+        calls: list[tuple[str, str]] = []
+
+    def showerror(title, message):
+        Box.calls.append((title, message))
+
+    import hive_planner.launcher.app as app_mod
+
+    original = app_mod.messagebox.showerror
+    app_mod.messagebox.showerror = showerror
+    try:
+        app._create_done(
+            {
+                "ok": False,
+                "error": "Unified handoff incomplete — missing: docs/cl-spec-integration.md",
+                "target": "C:/demo-app",
+                "files_written": ["START_HERE.md", "AGENTS.md"],
+                "warnings": ["template warning"],
+                "handoff": {"missing": ["docs/cl-spec-integration.md"]},
+            }
+        )
+    finally:
+        app_mod.messagebox.showerror = original
+
+    assert Box.calls
+    assert "Partial bootstrap" in Box.calls[0][1]
+    joined = "\n".join(lines)
+    assert "missing: docs/cl-spec-integration.md" in joined
+    assert "template warning" in joined
+
+
 def test_run_cartridge_import_invalid_feature_promote_reports_error(tmp_path: Path) -> None:
     project = _minimal_hive_project(tmp_path / "proj")
     external = tmp_path / "external-cartridge"
