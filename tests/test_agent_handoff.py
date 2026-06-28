@@ -66,6 +66,18 @@ def test_deploy_unified_agent_handoff_to_existing_project(tmp_path: Path) -> Non
     assert meta["agent_handoff_mode"] == "unified"
 
 
+def test_validate_unified_handoff_flags_missing_upstream_pins(tmp_path: Path) -> None:
+    source = _hive_source(tmp_path)
+    target = tmp_path / "no-pins"
+    init_project(source, target, agent_handoff="unified")
+    (target / ".hive" / "upstream-pins.json").unlink()
+
+    status = validate_unified_handoff(target)
+
+    assert status.complete is False
+    assert ".hive/upstream-pins.json" in status.missing
+
+
 def test_validate_unified_handoff_flags_missing_integration_rules(tmp_path: Path) -> None:
     source = _hive_source(tmp_path)
     target = tmp_path / "partial-unified"
