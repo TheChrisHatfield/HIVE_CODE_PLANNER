@@ -83,6 +83,16 @@ def test_deploy_agent_handoff_copies_wiring_audit_rules(tmp_path: Path) -> None:
     assert "Integration wiring audit" in tasks
 
 
+def test_init_unified_uses_packaged_spec_kit_when_starter_kit_empty(tmp_path: Path) -> None:
+    source = _hive_source(tmp_path)
+    (source.root / "starter-kit" / "spec-kit-agent-integration.md").unlink()
+    target = tmp_path / "empty-kit-project"
+
+    init_project(source, target, agent_handoff="unified")
+
+    assert (target / "spec-kit-agent-integration.md").is_file()
+
+
 def test_init_unified_copies_cl_spec_doc_without_hive_source_docs(tmp_path: Path) -> None:
     source = _hive_source(tmp_path)
     target = tmp_path / "pip-style-project"

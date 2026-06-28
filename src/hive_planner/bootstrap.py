@@ -40,10 +40,11 @@ class BootstrapResult:
 
 
 def _starter_kit_dir(source_root: Path) -> Path:
+    packaged = Path(__file__).resolve().parent / "bootstrap_templates"
     kit = source_root / "starter-kit"
-    if kit.is_dir():
+    if kit.is_dir() and (kit / "spec-kit-agent-integration.md").is_file():
         return kit
-    return Path(__file__).resolve().parent / "bootstrap_templates"
+    return packaged
 
 
 def _cl_spec_integration_doc_path(source_root: Path) -> Path | None:
