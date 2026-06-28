@@ -293,7 +293,10 @@ def unified_verify(paths: RepoPaths) -> UnifiedVerifyReport:
 
 
 def vendor_sync_check(repo_root: Path) -> VendorManifestReport:
-    return check_vendor_manifest(repo_root)
+    report = check_vendor_manifest(repo_root)
+    if report.issues:
+        report.ok = False
+    return report
 
 
 def _run_git(args: list[str], *, cwd: Path | None = None) -> None:

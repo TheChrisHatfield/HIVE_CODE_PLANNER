@@ -77,6 +77,39 @@ def test_check_vendor_manifest_rejects_invalid_schema(tmp_path: Path) -> None:
     assert report.ok is False
 
 
+def test_vendor_sync_check_fails_when_pinned_vendor_paths_missing(tmp_path: Path) -> None:
+    repo = tmp_path / "hive"
+    manifest_dir = repo / "vendor"
+    manifest_dir.mkdir(parents=True)
+    (manifest_dir / "manifest.json").write_text(
+        json.dumps(
+            {
+                "schema": MANIFEST_SCHEMA,
+                "spec_kit": {
+                    "upstream": "https://github.com/github/spec-kit",
+                    "path": "vendor/spec-kit",
+                    "ref": "abc123",
+                    "hive_patch_rev": "1",
+                },
+                "continual_learning": {
+                    "upstream": "https://github.com/cursor/plugins",
+                    "path": "vendor/cursor-plugins/continual-learning",
+                    "ref": "def456",
+                    "hive_patch_rev": "1",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    from hive_planner.vendor_sync import vendor_sync_check
+
+    report = vendor_sync_check(repo)
+
+    assert report.ok is False
+    assert any("vendor path missing" in issue for issue in report.issues)
+
+
 def test_vendor_sync_apply_fails_on_unpinned_refs(tmp_path: Path) -> None:
     repo = tmp_path / "hive"
     manifest_dir = repo / "vendor"
