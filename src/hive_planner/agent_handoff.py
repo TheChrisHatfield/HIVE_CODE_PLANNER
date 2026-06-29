@@ -175,12 +175,26 @@ def _plugin_tree_present(plugin_root: Path) -> bool:
     )
 
 
+def _is_hive_planner_source(root: Path) -> bool:
+    pyproject = root / "pyproject.toml"
+    if not pyproject.is_file():
+        return False
+    try:
+        text = pyproject.read_text(encoding="utf-8")
+    except OSError:
+        return False
+    return 'name = "hive-planner"' in text
+
+
 def scan_legacy_deployment(project_root: Path) -> LegacyDeploymentReport:
     """Detect pre-unified or marketplace-only handoff artifacts in a Hive project."""
     from hive_planner.project_profile import infer_spec_kit_enabled, read_project_profile
     from hive_planner.vendor_sync import CL_OVERLAY_REL, PROJECT_PINS_REL, SPEC_KIT_OVERLAY_REL
 
     root = project_root.resolve()
+    if _is_hive_planner_source(root):
+        return LegacyDeploymentReport(findings=[])
+
     findings: list[LegacyDeploymentFinding] = []
 
     marketplace_cl = root / MARKETPLACE_CL_REL

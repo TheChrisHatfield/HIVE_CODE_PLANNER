@@ -186,6 +186,21 @@ def test_scan_legacy_deployment_detects_starter_kit_without_pins(tmp_path: Path)
     assert "starter_kit_only_layout" in codes
 
 
+def test_scan_legacy_deployment_skips_hive_planner_source_repo(tmp_path: Path) -> None:
+    repo = tmp_path / "hive-planner"
+    repo.mkdir()
+    (repo / "pyproject.toml").write_text('[project]\nname = "hive-planner"\n', encoding="utf-8")
+    (repo / "START_HERE.md").write_text("# Hive\n", encoding="utf-8")
+    specs = repo / "docs" / "specs" / "example"
+    specs.mkdir(parents=True)
+    (specs / "spec.md").write_text("# Spec\n", encoding="utf-8")
+
+    report = scan_legacy_deployment(repo)
+
+    assert report.ok is True
+    assert report.findings == []
+
+
 def test_scan_legacy_deployment_clean_unified_project(tmp_path: Path) -> None:
     source = _hive_source(tmp_path)
     target = tmp_path / "unified-clean"
