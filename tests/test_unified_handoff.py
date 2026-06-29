@@ -297,6 +297,70 @@ def test_ci_unified_vendor_requires_pins_for_unified_projects(tmp_path: Path) ->
     assert "missing .hive/upstream-pins.json" in detail
 
 
+def test_deploy_spec_kit_overlay_refreshes_when_patch_rev_changes(tmp_path: Path) -> None:
+    from hive_planner.vendor_sync import deploy_spec_kit_overlay, packaged_spec_kit_overlay_path
+
+    source = tmp_path / "hive"
+    source.mkdir()
+    vendor = source / "vendor"
+    vendor.mkdir()
+    (vendor / "manifest.json").write_text(
+        json.dumps(
+            {
+                "schema": MANIFEST_SCHEMA,
+                "spec_kit": {
+                    "upstream": "u",
+                    "path": "p",
+                    "ref": "abc",
+                    "hive_patch_rev": "1",
+                },
+                "continual_learning": {
+                    "upstream": "u",
+                    "path": "p",
+                    "ref": "def",
+                    "hive_patch_rev": "1",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    project = tmp_path / "project"
+    project.mkdir()
+    overlay_src = packaged_spec_kit_overlay_path()
+    tasks_src = overlay_src / "templates" / "tasks-template.md"
+    original = tasks_src.read_text(encoding="utf-8")
+
+    deploy_spec_kit_overlay(source, project)
+    tasks_dest = project / ".hive" / "spec-kit" / "templates" / "tasks-template.md"
+    assert tasks_dest.is_file()
+    tasks_dest.write_text("# stale overlay\n", encoding="utf-8")
+
+    (vendor / "manifest.json").write_text(
+        json.dumps(
+            {
+                "schema": MANIFEST_SCHEMA,
+                "spec_kit": {
+                    "upstream": "u",
+                    "path": "p",
+                    "ref": "abc",
+                    "hive_patch_rev": "2",
+                },
+                "continual_learning": {
+                    "upstream": "u",
+                    "path": "p",
+                    "ref": "def",
+                    "hive_patch_rev": "1",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    deploy_spec_kit_overlay(source, project)
+
+    assert "Integration wiring audit" in tasks_dest.read_text(encoding="utf-8")
+    assert (project / ".hive" / "spec-kit" / ".hive-overlay-rev").read_text(encoding="utf-8").strip() == "2"
+
+
 def test_ci_unified_vendor_accepts_bootstrapped_pins_without_vendor_manifest(tmp_path: Path) -> None:
     from hive_planner.vendor_sync import ci_unified_vendor_step, load_manifest, packaged_manifest_path
 

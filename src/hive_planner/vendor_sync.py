@@ -15,6 +15,7 @@ from hive_planner.config import RepoPaths
 MANIFEST_SCHEMA = "hive-upstream-pins/v1"
 PROJECT_PINS_REL = ".hive/upstream-pins.json"
 SPEC_KIT_OVERLAY_REL = ".hive/spec-kit"
+SPEC_KIT_OVERLAY_REV_FILE = ".hive-overlay-rev"
 COMPONENT_KEYS = ("spec_kit", "continual_learning")
 COMPONENT_REQUIRED_FIELDS = frozenset({"upstream", "path", "ref", "hive_patch_rev"})
 
@@ -489,6 +490,31 @@ def write_unified_vendor_pins(
             written.append(rel)
 
 
+def _spec_kit_patch_rev(manifest: dict) -> str:
+    block = manifest.get("spec_kit")
+    if isinstance(block, dict):
+        return str(block.get("hive_patch_rev", "")).strip()
+    return ""
+
+
+def _read_overlay_patch_rev(target: Path) -> str | None:
+    marker = target / SPEC_KIT_OVERLAY_REL / SPEC_KIT_OVERLAY_REV_FILE
+    if not marker.is_file():
+        return None
+    try:
+        return marker.read_text(encoding="utf-8").strip() or None
+    except OSError:
+        return None
+
+
+def _write_overlay_patch_rev(target: Path, patch_rev: str) -> None:
+    if not patch_rev:
+        return
+    marker = target / SPEC_KIT_OVERLAY_REL / SPEC_KIT_OVERLAY_REV_FILE
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    marker.write_text(patch_rev + "\n", encoding="utf-8")
+
+
 def deploy_spec_kit_overlay(
     source_root: Path,
     target: Path,
@@ -503,14 +529,26 @@ def deploy_spec_kit_overlay(
         if warnings is not None:
             warnings.append(str(exc))
         return
+    manifest: dict | None = None
+    patch_rev = ""
+    try:
+        manifest = load_manifest(resolve_manifest_path(source_root))
+        patch_rev = _spec_kit_patch_rev(manifest)
+    except VendorSyncError:
+        pass
     target = target.resolve()
     dest_root = target / SPEC_KIT_OVERLAY_REL
+    overlay_force = force
+    if not overlay_force and patch_rev:
+        deployed_rev = _read_overlay_patch_rev(target)
+        if deployed_rev != patch_rev:
+            overlay_force = True
     for src in sorted(overlay_root.rglob("*")):
         if not src.is_file():
             continue
         rel = src.relative_to(overlay_root)
         dest = dest_root / rel
-        if dest.exists() and not force:
+        if dest.exists() and not overlay_force:
             continue
         dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src, dest)
@@ -518,6 +556,12 @@ def deploy_spec_kit_overlay(
             rel_dest = dest.relative_to(target).as_posix()
             if rel_dest not in written:
                 written.append(rel_dest)
+    if patch_rev:
+        _write_overlay_patch_rev(target, patch_rev)
+        if written is not None:
+            rel_marker = f"{SPEC_KIT_OVERLAY_REL}/{SPEC_KIT_OVERLAY_REV_FILE}"
+            if rel_marker not in written:
+                written.append(rel_marker)
 
 
 def deploy_unified_vendor_artifacts(
