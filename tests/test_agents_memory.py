@@ -291,6 +291,21 @@ r
     assert updated.index("## Delta model") < facts_idx
 
 
+def test_parse_candidates_skips_task_checkbox_lines(tmp_path: Path) -> None:
+    from hive_planner.agents_memory import _parse_candidates
+
+    text = "\n".join(
+        [
+            "# operational",
+            "- Run ci-check before handoff.",
+            "- [ ] Traced caller end-to-end",
+            "- [x] Integration-level validation evidence attached",
+        ]
+    )
+    parsed = _parse_candidates(text)
+    assert parsed == ["Run ci-check before handoff."]
+
+
 def test_normalize_candidates_requires_bullets() -> None:
     with pytest.raises(AgentsMemoryError, match="No candidate bullets"):
         normalize_candidates_text("user: hello\nassistant: hi\n")

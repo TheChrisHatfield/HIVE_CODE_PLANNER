@@ -37,6 +37,8 @@ TRANSCRIPT_NOISE = (
     re.compile(r"^\[\d{4}-\d{2}-\d{2}", re.IGNORECASE),
 )
 
+CHECKBOX_BULLET_RE = re.compile(r"^\[[ xX]\]\s*")
+
 
 class AgentsMemoryError(Exception):
     """AGENTS.md lint or proposal failed."""
@@ -250,7 +252,10 @@ def _parse_candidates(text: str) -> list[str]:
         if not stripped or stripped.startswith("#"):
             continue
         if stripped.startswith("- "):
-            candidates.append(stripped[2:].strip())
+            bullet = stripped[2:].strip()
+            if CHECKBOX_BULLET_RE.match(bullet):
+                continue
+            candidates.append(bullet)
         else:
             candidates.append(stripped)
     return [c for c in candidates if c]
