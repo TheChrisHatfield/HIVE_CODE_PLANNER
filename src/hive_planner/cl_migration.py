@@ -1,4 +1,4 @@
-"""Migrate marketplace Continual Learning data to Hive vendored CL."""
+﻿"""Migrate marketplace Continual Learning data to Hive vendored CL."""
 
 from __future__ import annotations
 
@@ -218,12 +218,7 @@ def migrate_marketplace_cl(
                 report.warnings.append(f"AGENTS.md lint failed after merge — rolled back: {'; '.join(errors)}")
 
     if marketplace_plugin_tree_present(root):
-        if not cursor_runtime:
-            report.warnings.append(
-                f"Cursor plugin tree at {MARKETPLACE_CL_REL}/ detected but cl_runtime is {runtime!r} — "
-                "remove manually or run: py -3.11 -m hive_planner cl-runtime set cursor"
-            )
-        elif marketplace_cl_installed(root):
+        if marketplace_cl_installed(root):
             if remove_marketplace_plugin:
                 report.actions.append(f"Remove marketplace plugin at {MARKETPLACE_CL_REL}/")
                 if not dry_run:
@@ -235,11 +230,21 @@ def migrate_marketplace_cl(
                             report.agents_updated = False
                         report.ok = False
                         report.warnings.append(str(exc))
-            else:
+            elif cursor_runtime:
                 report.warnings.append(
                     f"Marketplace plugin still present at {MARKETPLACE_CL_REL}/ — "
                     "disable in Cursor or re-run with --remove-marketplace-plugin."
                 )
+            else:
+                report.warnings.append(
+                    f"Cursor plugin tree still present at {MARKETPLACE_CL_REL}/ — "
+                    "re-run with --remove-marketplace-plugin or remove manually."
+                )
+        elif not cursor_runtime:
+            report.warnings.append(
+                f"Cursor plugin tree at {MARKETPLACE_CL_REL}/ detected but cl_runtime is {runtime!r} — "
+                "remove manually or re-run with --remove-marketplace-plugin."
+            )
         else:
             plugin_name = _plugin_name(root / MARKETPLACE_CL_REL)
             report.warnings.append(
@@ -295,6 +300,14 @@ def ci_cl_install_step(project_root: Path) -> tuple[bool, str]:
             )
         if "learned_workspace_facts" in findings:
             return False, findings["learned_workspace_facts"].detail + " — run: py -3.11 -m hive_planner cl-migrate"
+        if marketplace_cl_installed(root):
+            cmd = "py -3.11 -m hive_planner cl-migrate"
+            if hive_cl_installed(root):
+                cmd += " --remove-marketplace-plugin"
+            return (
+                False,
+                f"Marketplace Continual Learning plugin present on headless runtime ({runtime!r}) — run: {cmd}",
+            )
         return True, f"continual learning runtime={runtime} (headless — no Cursor plugin required)"
     if "dual_cl_install" in findings:
         return False, findings["dual_cl_install"].detail + " — run: py -3.11 -m hive_planner cl-migrate --remove-marketplace-plugin"
