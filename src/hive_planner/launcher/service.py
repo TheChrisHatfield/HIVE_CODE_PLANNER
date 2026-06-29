@@ -895,10 +895,15 @@ def ci_check_hints(root: Path, report) -> list[str]:
             hints.extend(unified_vendor_repair_hints(missing=vendor_missing or [".hive/upstream-pins.json"]))
     if "cl-install" in failed:
         from hive_planner.agent_handoff import scan_legacy_deployment
+        from hive_planner.cl_migration import hive_cl_installed, marketplace_cl_installed
 
         findings = {item.code: item for item in scan_legacy_deployment(root).findings}
         migrate_cmd = "py -3.11 -m hive_planner cl-migrate"
-        if "dual_cl_install" in findings or "marketplace_cl_only" in findings:
+        if (
+            "dual_cl_install" in findings
+            or "marketplace_cl_only" in findings
+            or (marketplace_cl_installed(root) and hive_cl_installed(root))
+        ):
             migrate_cmd += " --remove-marketplace-plugin"
         hints.append(
             "Migrate marketplace Continual Learning: Home → Migrate marketplace CL, or "

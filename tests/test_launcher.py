@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import json
 from pathlib import Path
@@ -386,7 +386,7 @@ def test_prepare_linked_project_root_repairs_legacy_agents(tmp_path: Path) -> No
     project.mkdir()
     (project / "START_HERE.md").write_text("# start\n", encoding="utf-8")
     (project / "AGENTS.md").write_text(
-        _legacy_agents_with_rosetta("None — pending."),
+        _legacy_agents_with_rosetta("None â€” pending."),
         encoding="utf-8",
     )
     feature = "example-feature"
@@ -411,7 +411,7 @@ def test_summarize_linked_project_auto_repairs_workspace_link(tmp_path: Path) ->
     (profile / "START_HERE.md").write_text("# profile\n", encoding="utf-8")
     (profile / "pyproject.toml").write_text("[project]\nname = 'demo'\n", encoding="utf-8")
     (profile / "AGENTS.md").write_text(
-        _legacy_agents_with_rosetta("None — pending."),
+        _legacy_agents_with_rosetta("None â€” pending."),
         encoding="utf-8",
     )
     feature = "example-feature"
@@ -697,7 +697,7 @@ def test_run_project_ci_check_repairs_legacy_active_feature(tmp_path: Path) -> N
                 "",
                 "## Active feature",
                 "",
-                "**None** — set when Spec Kit work begins.",
+                "**None** â€” set when Spec Kit work begins.",
                 "",
                 "## Durable Workspace Facts",
                 "",
@@ -730,7 +730,7 @@ def test_run_project_ci_check_patches_legacy_handoff_navigation(tmp_path: Path) 
                 "",
                 "## Active feature",
                 "",
-                "**None** — set when Spec Kit work begins.",
+                "**None** â€” set when Spec Kit work begins.",
                 "",
             ]
         ),
@@ -1088,7 +1088,7 @@ def test_deploy_handoff_done_logs_partial_work_when_validation_fails() -> None:
     app._deploy_handoff_done(
         {
             "ok": False,
-            "error": "Unified handoff incomplete — missing: docs/cl-spec-integration.md",
+            "error": "Unified handoff incomplete â€” missing: docs/cl-spec-integration.md",
             "files_written": ["docs/cl-spec-integration.md", ".cursor/rules/cl-spec-integration.mdc"],
             "warnings": ["template warning"],
             "handoff": {"missing": ["docs/cl-spec-integration.md"]},
@@ -1126,7 +1126,7 @@ def test_create_done_shows_partial_bootstrap_when_handoff_incomplete() -> None:
         app._create_done(
             {
                 "ok": False,
-                "error": "Unified handoff incomplete — missing: docs/cl-spec-integration.md",
+                "error": "Unified handoff incomplete â€” missing: docs/cl-spec-integration.md",
                 "target": "C:/demo-app",
                 "files_written": ["START_HERE.md", "AGENTS.md"],
                 "warnings": ["template warning"],
@@ -1268,7 +1268,7 @@ def test_load_user_guide_falls_back_when_readme_not_utf8(tmp_path: Path, monkeyp
 
     text = load_user_guide(cfg)
 
-    assert "Hive Planner — quick help" in text
+    assert "Hive Planner â€” quick help" in text
     assert "unified-verify" in text
 
 
@@ -1290,7 +1290,7 @@ def test_load_user_guide_falls_back_when_readme_unreadable(tmp_path: Path, monke
 
     text = load_user_guide(cfg)
 
-    assert "Hive Planner — quick help" in text
+    assert "Hive Planner â€” quick help" in text
     assert "unified-verify" in text
     assert text.count("## Unified vendor path") == 0
 
@@ -1496,6 +1496,35 @@ def test_ci_check_hints_cl_install_dual_uses_remove_flag(tmp_path: Path) -> None
     _write_plugin(project, CL_OVERLAY_REL, "hive-continual-learning")
 
     failed = CiCheckReport(steps=[CiStepResult("cl-install", False, "dual install")])
+    hints = ci_check_hints(project, failed)
+    assert any("--remove-marketplace-plugin" in hint for hint in hints)
+
+
+
+def test_ci_check_hints_cl_install_headless_dual_uses_remove_flag(tmp_path: Path) -> None:
+    from hive_planner.agent_handoff import AGENT_HANDOFF_UNIFIED, MARKETPLACE_CL_REL
+    from hive_planner.ci_handoff import CiCheckReport, CiStepResult
+    from hive_planner.cl_runtime import CL_RUNTIME_HEADLESS, deploy_headless_cl_artifacts
+    from hive_planner.launcher.service import ci_check_hints
+    from hive_planner.project_profile import write_project_profile
+    from hive_planner.vendor_sync import CL_OVERLAY_REL
+    from tests.test_cl_migration import _write_plugin
+
+    project = tmp_path / "headless-dual-hints"
+    project.mkdir()
+    (project / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    write_project_profile(
+        project,
+        profile="minimal",
+        project_name="headless-dual-hints",
+        agent_handoff_mode=AGENT_HANDOFF_UNIFIED,
+        cl_runtime=CL_RUNTIME_HEADLESS,
+    )
+    deploy_headless_cl_artifacts(project, CL_RUNTIME_HEADLESS, force=True)
+    _write_plugin(project, MARKETPLACE_CL_REL, "continual-learning")
+    _write_plugin(project, CL_OVERLAY_REL, "hive-continual-learning")
+
+    failed = CiCheckReport(steps=[CiStepResult("cl-install", False, "marketplace on headless")])
     hints = ci_check_hints(project, failed)
     assert any("--remove-marketplace-plugin" in hint for hint in hints)
 
@@ -2329,7 +2358,7 @@ def test_format_recent_project_label_uses_folder_name_only() -> None:
     path = r"F:\DRIVE DOWNLOADS\HIVE CODE\My Project"
     assert format_recent_project_label(path) == "My Project"
     assert format_recent_project_label(path, "full") == "My Project  [full]"
-    assert format_recent_project_label(path, "full", active=True) == "My Project  [full]  ← active"
+    assert format_recent_project_label(path, "full", active=True) == "My Project  [full]  â† active"
     assert (
         format_recent_project_label(r"F:\HIVE CODE\hive-code.code-workspace")
         == "hive-code (Workspace)"
@@ -2344,7 +2373,7 @@ def test_format_recent_project_label_uses_folder_name_only() -> None:
         has_git=False,
         entry_kind="workspace",
     )
-    assert format_workspace_picker_label(ws) == "hive-code (Workspace)  ·  F:\\HIVE CODE"
+    assert format_workspace_picker_label(ws) == "hive-code (Workspace)  Â·  F:\\HIVE CODE"
 
 
 def test_recent_selection_uses_path_index_not_label_parse(tmp_path: Path) -> None:
@@ -2675,7 +2704,7 @@ def test_ci_check_report_is_not_bg_error() -> None:
         {
             "ok": False,
             "error": "Wiring audit required",
-            "hints": ["Home → Record wiring audit"],
+            "hints": ["Home â†’ Record wiring audit"],
         }
     ) is False
     assert app._is_bg_error(
@@ -2830,7 +2859,7 @@ def test_console_visible_tracks_attachment_not_parent_console(monkeypatch: pytes
         type("W", (), {"kernel32": FakeKernel, "user32": FakeUser})(),
     )
     assert cw.is_console_visible() is False
-    # Parent console present (e.g. dev launch) — visible but not app-owned.
+    # Parent console present (e.g. dev launch) â€” visible but not app-owned.
     assert cw.show_console() is True
     assert cw.is_console_visible() is False
     assert cw.hide_console() is False
