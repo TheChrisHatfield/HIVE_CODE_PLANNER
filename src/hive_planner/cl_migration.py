@@ -286,6 +286,13 @@ def ci_cl_install_step(project_root: Path) -> tuple[bool, str]:
     runtime = resolve_cl_runtime(project_root)
     findings = {item.code: item for item in scan_legacy_deployment(project_root).findings}
     if not requires_cursor_plugin(runtime):
+        from hive_planner.cl_runtime import HEADLESS_CL_WORKFLOW_REL
+
+        if not (project_root.resolve() / HEADLESS_CL_WORKFLOW_REL).is_file():
+            return (
+                False,
+                f"missing {HEADLESS_CL_WORKFLOW_REL} — deploy agent handoff with --cl-runtime {runtime}",
+            )
         if "learned_workspace_facts" in findings:
             return False, findings["learned_workspace_facts"].detail + " — run: py -3.11 -m hive_planner cl-migrate"
         return True, f"continual learning runtime={runtime} (headless — no Cursor plugin required)"

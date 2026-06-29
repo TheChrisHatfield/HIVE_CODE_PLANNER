@@ -66,6 +66,27 @@ def test_unified_handoff_artifacts_runtime_aware(tmp_path: Path) -> None:
     assert requires_cursor_plugin(resolve_cl_runtime(project)) is False
 
 
+def test_ci_cl_install_headless_requires_workflow_artifact(tmp_path: Path) -> None:
+    from hive_planner.agent_handoff import AGENT_HANDOFF_UNIFIED
+    from hive_planner.cl_runtime import CL_RUNTIME_HEADLESS
+    from hive_planner.project_profile import write_project_profile
+
+    project = tmp_path / "headless-no-workflow"
+    project.mkdir()
+    (project / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    write_project_profile(
+        project,
+        profile="minimal",
+        project_name="headless-no-workflow",
+        agent_handoff_mode=AGENT_HANDOFF_UNIFIED,
+        cl_runtime=CL_RUNTIME_HEADLESS,
+    )
+
+    ok, detail = ci_cl_install_step(project)
+    assert ok is False
+    assert "continual-learning/WORKFLOW.md" in detail
+
+
 def test_ci_cl_install_headless_skips_cursor_plugin_checks(tmp_path: Path) -> None:
     from hive_planner.vendor_sync import CL_OVERLAY_REL
 
