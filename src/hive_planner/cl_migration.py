@@ -213,6 +213,9 @@ def migrate_marketplace_cl(
     elif "## Learned Workspace Facts" not in merged_text:
         report.actions.append("No marketplace plugin directory detected")
 
+    if marketplace_cl_installed(root) and not dry_run:
+        report.ok = False
+
     if not dry_run and report.ok:
         from hive_planner.project_profile import set_project_cl_source
 
