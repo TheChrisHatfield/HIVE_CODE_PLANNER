@@ -195,27 +195,45 @@ def scan_legacy_deployment(project_root: Path) -> LegacyDeploymentReport:
 
     findings: list[LegacyDeploymentFinding] = []
 
+    from hive_planner.cl_runtime import requires_cursor_plugin, resolve_cl_runtime
+
+    runtime = resolve_cl_runtime(root)
+    cursor_runtime = requires_cursor_plugin(runtime)
+
     marketplace_cl = root / MARKETPLACE_CL_REL
     hive_cl = root / CL_OVERLAY_REL
     marketplace_installed = _plugin_tree_present(marketplace_cl)
     hive_installed = _plugin_tree_present(hive_cl)
 
-    if marketplace_installed and hive_installed:
-        findings.append(
-            LegacyDeploymentFinding(
-                code="dual_cl_install",
-                severity="warn",
-                detail="Both marketplace continual-learning and hive-continual-learning plugins are present.",
-                repair="Home → Migrate marketplace CL (merge data + remove marketplace plugin).",
+    if cursor_runtime:
+        if marketplace_installed and hive_installed:
+            findings.append(
+                LegacyDeploymentFinding(
+                    code="dual_cl_install",
+                    severity="warn",
+                    detail="Both marketplace continual-learning and hive-continual-learning plugins are present.",
+                    repair="Home → Migrate marketplace CL (merge data + remove marketplace plugin).",
+                )
             )
-        )
-    elif marketplace_installed:
+        elif marketplace_installed:
+            findings.append(
+                LegacyDeploymentFinding(
+                    code="marketplace_cl_only",
+                    severity="warn",
+                    detail=f"Marketplace Continual Learning plugin found at {MARKETPLACE_CL_REL}/.",
+                    repair="Home → Deploy agent handoff (installs vendored hive-continual-learning).",
+                )
+            )
+    elif marketplace_installed or hive_installed:
         findings.append(
             LegacyDeploymentFinding(
-                code="marketplace_cl_only",
-                severity="warn",
-                detail=f"Marketplace Continual Learning plugin found at {MARKETPLACE_CL_REL}/.",
-                repair="Home → Deploy agent handoff (installs vendored hive-continual-learning).",
+                code="stale_cursor_cl_on_headless",
+                severity="info",
+                detail=(
+                    f"Cursor CL plugin tree still present ({MARKETPLACE_CL_REL}/ or {CL_OVERLAY_REL}/) "
+                    f"but cl_runtime is {runtime!r}."
+                ),
+                repair="Remove stale Cursor plugin directories or run: py -3.11 -m hive_planner cl-runtime set cursor",
             )
         )
 

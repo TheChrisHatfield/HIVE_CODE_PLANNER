@@ -143,6 +143,34 @@ def test_apply_agent_handoff_mode_infers_full_bootstrap_profile(tmp_path: Path) 
     assert meta.bootstrap_profile == "full"
 
 
+def test_scan_legacy_headless_reports_stale_cursor_plugins_not_dual_install(tmp_path: Path) -> None:
+    from hive_planner.agent_handoff import AGENT_HANDOFF_UNIFIED, MARKETPLACE_CL_REL, scan_legacy_deployment
+    from hive_planner.cl_runtime import CL_RUNTIME_HEADLESS
+    from hive_planner.project_profile import write_project_profile
+    from hive_planner.vendor_sync import CL_OVERLAY_REL
+    from tests.test_cl_migration import _write_plugin
+
+    project = tmp_path / "headless-stale"
+    project.mkdir()
+    (project / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    write_project_profile(
+        project,
+        profile="minimal",
+        project_name="headless-stale",
+        agent_handoff_mode=AGENT_HANDOFF_UNIFIED,
+        cl_runtime=CL_RUNTIME_HEADLESS,
+    )
+    _write_plugin(project, MARKETPLACE_CL_REL, "continual-learning")
+    _write_plugin(project, CL_OVERLAY_REL, "hive-continual-learning")
+
+    report = scan_legacy_deployment(project)
+    codes = {item.code for item in report.findings}
+
+    assert "dual_cl_install" not in codes
+    assert "marketplace_cl_only" not in codes
+    assert "stale_cursor_cl_on_headless" in codes
+
+
 def test_scan_legacy_deployment_detects_marketplace_cl(tmp_path: Path) -> None:
     project = tmp_path / "legacy-cl"
     project.mkdir()
