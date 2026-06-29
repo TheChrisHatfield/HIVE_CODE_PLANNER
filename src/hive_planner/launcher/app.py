@@ -1100,7 +1100,21 @@ class HivePlannerApp:
         """True only for _run_bg bare exception wrappers, not structured failure payloads."""
         if not isinstance(result, dict) or not result.get("error"):
             return False
-        structured_keys = ("files_written", "handoff", "steps", "warnings", "mode", "promote")
+        structured_keys = (
+            "files_written",
+            "handoff",
+            "steps",
+            "warnings",
+            "mode",
+            "promote",
+            "recorded",
+            "check",
+            "skipped",
+            "hints",
+            "proposal_path",
+            "accepted",
+            "rejected",
+        )
         return not any(key in result for key in structured_keys)
 
     def _result_failed(self, result) -> bool:

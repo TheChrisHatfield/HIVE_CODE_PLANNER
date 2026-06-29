@@ -2371,6 +2371,21 @@ def test_ci_check_report_is_not_bg_error() -> None:
     report = {"ok": False, "steps": [{"name": "pytest", "ok": False, "detail": "1 failed"}]}
     assert app._is_bg_error(report) is False
     assert app._is_bg_error({"ok": False, "error": "boom"}) is True
+    assert app._is_bg_error(
+        {
+            "ok": False,
+            "error": "Wiring audit required",
+            "hints": ["Home → Record wiring audit"],
+        }
+    ) is False
+    assert app._is_bg_error(
+        {
+            "ok": False,
+            "error": "checklist incomplete",
+            "recorded": ".hive/wiring-audit.json",
+            "hints": ["review tasks.md"],
+        }
+    ) is False
 
 
 def test_install_result_failure_dict() -> None:
