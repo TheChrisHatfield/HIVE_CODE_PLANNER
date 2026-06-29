@@ -258,8 +258,16 @@ def _parse_candidates(text: str) -> list[str]:
             if CHECKBOX_BULLET_RE.match(bullet):
                 continue
             candidates.append(bullet)
-        else:
-            candidates.append(stripped)
+        elif stripped.startswith("* "):
+            bullet = stripped[2:].strip()
+            if CHECKBOX_BULLET_RE.match(bullet):
+                continue
+            candidates.append(bullet)
+        elif stripped.startswith("• "):
+            bullet = stripped[2:].strip()
+            if CHECKBOX_BULLET_RE.match(bullet):
+                continue
+            candidates.append(bullet)
     return [c for c in candidates if c]
 
 

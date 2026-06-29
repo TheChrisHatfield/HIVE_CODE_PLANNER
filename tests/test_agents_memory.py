@@ -328,6 +328,24 @@ def test_parse_candidates_skips_task_checkbox_lines(tmp_path: Path) -> None:
     assert parsed == ["Run ci-check before handoff."]
 
 
+def test_parse_candidates_ignores_prose_lines() -> None:
+    from hive_planner.agents_memory import _parse_candidates
+
+    text = "\n".join(
+        [
+            "# Cartridge memory candidates — feature-x",
+            "",
+            "Review before `agents-propose`. Behavioral lines belong in spec.md, not AGENTS.md.",
+            "",
+            "# operational",
+            "",
+            "- Run ci-check before handoff.",
+        ]
+    )
+    parsed = _parse_candidates(text)
+    assert parsed == ["Run ci-check before handoff."]
+
+
 def test_normalize_candidates_requires_bullets() -> None:
     with pytest.raises(AgentsMemoryError, match="No candidate bullets"):
         normalize_candidates_text("user: hello\nassistant: hi\n")
