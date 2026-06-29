@@ -203,6 +203,11 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Guarded v2 apply — merge operational candidates into Durable Workspace Facts only",
     )
+    agents_propose.add_argument(
+        "--skip-wiring-audit",
+        action="store_true",
+        help="Skip Integration wiring audit gate (unified handoff only)",
+    )
 
     agents_apply = sub.add_parser(
         "agents-apply",
@@ -210,6 +215,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     agents_apply.add_argument("--candidates", required=True, type=Path, help="Candidate bullets file")
     agents_apply.add_argument("--path", type=Path, default=None, help="AGENTS.md path (default: repo root)")
+    agents_apply.add_argument(
+        "--skip-wiring-audit",
+        action="store_true",
+        help="Skip Integration wiring audit gate (unified handoff only)",
+    )
 
     agents_ingest = sub.add_parser(
         "agents-ingest",
@@ -239,6 +249,22 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Do not scan existing Durable Workspace Facts in AGENTS.md",
     )
+
+    wiring_audit = sub.add_parser(
+        "wiring-audit",
+        help="Record or verify Integration wiring audit attestation (hook: integration.wiring_audit)",
+    )
+    wiring_audit_sub = wiring_audit.add_subparsers(dest="wiring_audit_command", required=True)
+    wiring_record = wiring_audit_sub.add_parser("record", help="Record wiring audit attestation after validation")
+    wiring_record.add_argument("--feature", default=None, help="Feature id (default: active from AGENTS.md)")
+    wiring_record.add_argument(
+        "--evidence",
+        required=True,
+        help="Integration-level validation command or result (required)",
+    )
+    wiring_record.add_argument("--summary", default="", help="Optional short audit summary")
+    wiring_check = wiring_audit_sub.add_parser("check", help="Verify wiring audit attestation is current")
+    wiring_check.add_argument("--feature", default=None, help="Feature id (default: active from AGENTS.md)")
 
     args = parser.parse_args(argv)
     root, auto_detected = resolve_root(args.root)
@@ -484,6 +510,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.candidates,
                 agents_path=args.path,
                 apply=args.apply,
+                skip_wiring_audit=args.skip_wiring_audit,
             )
         except AgentsMemoryError as exc:
             print(f"Error: {exc}", file=sys.stderr)
@@ -504,6 +531,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.candidates,
                 agents_path=args.path,
                 apply=True,
+                skip_wiring_audit=args.skip_wiring_audit,
             )
         except AgentsMemoryError as exc:
             print(f"Error: {exc}", file=sys.stderr)
@@ -541,6 +569,29 @@ def main(argv: list[str] | None = None) -> int:
             print("Spec actions:", file=sys.stderr)
             for action in report.spec_actions:
                 print(f"  - {action}", file=sys.stderr)
+        return 0 if report.ok else 1
+
+    if args.command == "wiring-audit":
+        from hive_planner.wiring_audit import WiringAuditError, check_wiring_audit, record_wiring_audit
+
+        if args.wiring_audit_command == "record":
+            try:
+                out_path = record_wiring_audit(
+                    paths,
+                    feature=args.feature,
+                    evidence=args.evidence,
+                    summary=args.summary,
+                )
+            except WiringAuditError as exc:
+                print(f"Error: {exc}", file=sys.stderr)
+                return 1
+            print(f"Root: {root}")
+            print(f"Recorded wiring audit: {out_path.relative_to(root)}")
+            return 0
+
+        report = check_wiring_audit(paths, feature=args.feature)
+        print(f"Root: {root}")
+        print(json.dumps(report.to_dict(), indent=2))
         return 0 if report.ok else 1
 
     if args.command == "vendor-sync":

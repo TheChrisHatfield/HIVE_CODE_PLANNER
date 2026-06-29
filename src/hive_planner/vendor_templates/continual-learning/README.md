@@ -35,7 +35,9 @@ See upstream defaults in hook config. Optional env overrides:
 
 ### Hive overrides (CL-5)
 
-- `HIVE_WIRING_AUDIT=1` — enforce wiring audit gate before memory promotion
+- `HIVE_WIRING_AUDIT=1` — enforce wiring audit gate before memory promotion (default on for unified handoff)
+- `hive_planner wiring-audit record --evidence "<command>"` — record attestation after audit
+- `hive_planner wiring-audit check` — verify attestation matches active feature and tasks checklist
 - `HIVE_SPEC_DRIFT_CHECK=1` — remind to run `spec-drift-check` before AGENTS.md merge
 
 ## Output format in AGENTS.md (Hive)

@@ -25,7 +25,8 @@ BEHAVIORAL_PATTERNS = (
     re.compile(r"\bAPI\b"),
     re.compile(r"\bbehavior\b", re.IGNORECASE),
     re.compile(r"\breturns?\b", re.IGNORECASE),
-    re.compile(r"\bvalidates?\b", re.IGNORECASE),
+    re.compile(r"\b(?:must|shall|required to)\s+validate\b", re.IGNORECASE),
+    re.compile(r"\bvalidates?\s+(?:all|each|request|payload|schema|input|token)\b", re.IGNORECASE),
     re.compile(r"\brequired to\b", re.IGNORECASE),
     re.compile(r"\bshall\b", re.IGNORECASE),
     re.compile(r"\brequirement\b", re.IGNORECASE),
@@ -44,7 +45,16 @@ OPERATIONAL_PATTERNS = (
     re.compile(r"pytest", re.IGNORECASE),
     re.compile(r"ci-check", re.IGNORECASE),
     re.compile(r"roadmap-status", re.IGNORECASE),
+    re.compile(r"docs/specs/", re.IGNORECASE),
+    re.compile(r"docs/delta/", re.IGNORECASE),
+    re.compile(r"\.hive/", re.IGNORECASE),
+    re.compile(r"wiring-audit", re.IGNORECASE),
+    re.compile(r"agents-propose", re.IGNORECASE),
+    re.compile(r"before handoff", re.IGNORECASE),
 )
+
+CLASSIFICATION_MARGIN = 2
+AMBIGUOUS_TAG_HINT = "append `# operational` or `# behavioral` tag"
 
 TAG_BEHAVIORAL = re.compile(r"(?:^|\s)#\s*behavioral\s*$", re.IGNORECASE)
 TAG_OPERATIONAL = re.compile(r"(?:^|\s)#\s*operational\s*$", re.IGNORECASE)
@@ -77,6 +87,7 @@ class SpecDriftReport:
     feature: str | None
     operational: list[str] = field(default_factory=list)
     behavioral: list[str] = field(default_factory=list)
+    ambiguous: list[str] = field(default_factory=list)
     drift_items: list[str] = field(default_factory=list)
     spec_actions: list[str] = field(default_factory=list)
     handoff: SpecHandoffReport | None = None
@@ -87,6 +98,7 @@ class SpecDriftReport:
             "feature": self.feature,
             "operational": self.operational,
             "behavioral": self.behavioral,
+            "ambiguous": self.ambiguous,
             "drift_items": self.drift_items,
             "spec_actions": self.spec_actions,
             "handoff": self.handoff.to_dict() if self.handoff else None,
@@ -252,8 +264,13 @@ def classify_bullet(text: str) -> ClassifiedBullet:
         return ClassifiedBullet(stripped, "behavioral", "behavioral keyword match")
     if operational_hits and behavioral_hits == 0:
         return ClassifiedBullet(stripped, "operational", "operational keyword match")
-    if behavioral_hits > operational_hits:
-        return ClassifiedBullet(stripped, "behavioral", "behavioral keyword match")
+    if behavioral_hits and operational_hits:
+        margin = behavioral_hits - operational_hits
+        mixed = f"mixed signals ({behavioral_hits} behavioral, {operational_hits} operational)"
+        if abs(margin) >= CLASSIFICATION_MARGIN:
+            kind = "behavioral" if margin > 0 else "operational"
+            return ClassifiedBullet(stripped, kind, mixed)
+        return ClassifiedBullet(stripped, "ambiguous", f"{mixed} — {AMBIGUOUS_TAG_HINT}")
     return ClassifiedBullet(stripped, "operational", "default operational")
 
 
@@ -368,13 +385,22 @@ def check_memory_spec_drift(
 
     operational: list[str] = []
     behavioral: list[str] = []
+    ambiguous: list[str] = []
     drift_items: list[str] = []
     seen_drift: set[str] = set()
     seen_operational: set[str] = set()
     seen_behavioral: set[str] = set()
+    seen_ambiguous: set[str] = set()
 
     def _check_bullet(bullet: str, *, from_agents: bool) -> None:
         classified = classify_bullet(bullet)
+        if classified.kind == "ambiguous":
+            key = _normalize_for_match(bullet)
+            if key not in seen_ambiguous:
+                seen_ambiguous.add(key)
+                ambiguous.append(bullet)
+                spec_actions.append(f"Classification ambiguous — {AMBIGUOUS_TAG_HINT}: {bullet[:80]}")
+            return
         if classified.kind == "operational":
             key = _normalize_for_match(bullet)
             if key not in seen_operational:
@@ -403,12 +429,18 @@ def check_memory_spec_drift(
     for bullet in _dedupe_bullets(agent_bullets):
         _check_bullet(bullet, from_agents=True)
 
-    ok = not drift_items and handoff.ok and not any("Candidates file not found" in a for a in spec_actions)
+    ok = (
+        not drift_items
+        and not ambiguous
+        and handoff.ok
+        and not any("Candidates file not found" in a for a in spec_actions)
+    )
     return SpecDriftReport(
         ok=ok,
         feature=active,
         operational=operational,
         behavioral=behavioral,
+        ambiguous=ambiguous,
         drift_items=drift_items,
         spec_actions=spec_actions,
         handoff=handoff,

@@ -64,6 +64,7 @@ def run_ci_check(
     if not spec_kit:
         report.steps.append(CiStepResult("handoff-artifacts", True, "skipped (agent handoff off)"))
         report.steps.append(CiStepResult("spec-drift", True, "skipped (agent handoff off)"))
+        report.steps.append(CiStepResult("wiring-audit", True, "skipped (agent handoff off)"))
         report.steps.append(CiStepResult("agent-handoff-profile", True, "skipped (agent handoff off)"))
     else:
         handoff = check_spec_handoff(paths)
@@ -77,10 +78,21 @@ def run_ci_check(
         if drift.drift_items:
             detail = f"{len(drift.drift_items)} behavioral bullet(s) not reflected in spec"
             report.steps.append(CiStepResult("spec-drift", False, detail))
+        elif drift.ambiguous:
+            detail = f"{len(drift.ambiguous)} ambiguous bullet(s) need # operational or # behavioral tag"
+            report.steps.append(CiStepResult("spec-drift", False, detail))
         elif not drift.handoff or not drift.handoff.ok:
             report.steps.append(CiStepResult("spec-drift", False, "incomplete spec handoff"))
         else:
             report.steps.append(CiStepResult("spec-drift", True, "ok"))
+
+        from hive_planner.wiring_audit import check_wiring_audit, wiring_audit_enforced
+
+        if wiring_audit_enforced(paths):
+            wiring = check_wiring_audit(paths)
+            report.steps.append(CiStepResult("wiring-audit", wiring.ok, wiring.detail))
+        else:
+            report.steps.append(CiStepResult("wiring-audit", True, "skipped (wiring audit not enforced)"))
 
         profile = validate_unified_handoff(paths.root)
         if profile.mode == AGENT_HANDOFF_UNIFIED:

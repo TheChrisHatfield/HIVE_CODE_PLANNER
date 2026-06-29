@@ -93,6 +93,18 @@ def test_classify_respects_tags() -> None:
     assert classify_bullet("Anything # behavioral").kind == "behavioral"
 
 
+def test_classify_mixed_signals_without_tag_is_ambiguous() -> None:
+    result = classify_bullet("Run ci-check before handoff; API must return 404 when disabled.")
+    assert result.kind == "ambiguous"
+
+
+def test_classify_strong_behavioral_beats_weak_operational() -> None:
+    result = classify_bullet(
+        "Run ci-check; API must validate payloads and returns 404 when schema version mismatches."
+    )
+    assert result.kind == "behavioral"
+
+
 def test_classify_ignores_tag_words_in_prose() -> None:
     result = classify_bullet("See planning.rosetta docs; not a # behavioral tag in prose here")
     assert result.kind == "operational"
@@ -215,6 +227,16 @@ def test_ci_check_includes_spec_drift_step(tmp_path: Path) -> None:
     assert "spec-drift" in names
     drift = next(s for s in report.steps if s.name == "spec-drift")
     assert drift.ok
+
+
+def test_propose_rejects_ambiguous_candidate(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    (paths.root / "AGENTS.md").write_text(_minimal_agents("my-feature"), encoding="utf-8")
+    _write_full_handoff(paths, "my-feature")
+    candidates = paths.root / "candidates.md"
+    candidates.write_text("- Run ci-check before handoff; API must return 404 when disabled.\n", encoding="utf-8")
+    with pytest.raises(AgentsMemoryError, match="All candidate"):
+        propose_agents_memory(paths, candidates)
 
 
 def test_propose_rejects_behavioral_candidate(tmp_path: Path) -> None:
