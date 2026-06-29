@@ -939,9 +939,11 @@ def run_wiring_audit_record(project_root: Path, evidence: str) -> dict:
     summary = summarize_project(project_root)
     if not summary.ok:
         return {"ok": False, "error": summary.detail}
-    from hive_planner.wiring_audit import WiringAuditError, check_wiring_audit, record_wiring_audit
+    from hive_planner.wiring_audit import WiringAuditError, check_wiring_audit, record_wiring_audit, wiring_audit_enforced
 
     paths = RepoPaths(root=project_root.resolve())
+    if not wiring_audit_enforced(paths):
+        return {"ok": True, "skipped": True, "detail": "wiring audit not enforced for this project"}
     try:
         out_path = record_wiring_audit(paths, evidence=evidence)
     except WiringAuditError as exc:

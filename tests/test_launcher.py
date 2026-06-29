@@ -1484,6 +1484,30 @@ def test_wiring_audit_status_label_and_record(tmp_path: Path) -> None:
     assert wiring_audit_status_label(project) == "ok"
 
 
+def test_run_wiring_audit_record_skipped_when_not_enforced(tmp_path: Path) -> None:
+    from hive_planner.launcher.service import run_wiring_audit_record
+
+    project = tmp_path / "plain-app"
+    project.mkdir()
+    (project / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    (project / "AGENTS.md").write_text(
+        "\n".join(
+            [
+                "# AGENTS.md",
+                "",
+                "## Active feature",
+                "",
+                "**my-feature**",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    result = run_wiring_audit_record(project, "pytest -q")
+    assert result.get("skipped") is True
+    assert not (project / ".hive" / "wiring-audit.json").exists()
+
+
 def test_find_staged_candidates_picks_newest(tmp_path: Path) -> None:
     from hive_planner.launcher.service import find_staged_candidates
 

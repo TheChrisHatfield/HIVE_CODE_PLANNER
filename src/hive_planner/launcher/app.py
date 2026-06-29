@@ -1249,6 +1249,9 @@ class HivePlannerApp:
         if self._is_bg_error(result):
             self._append_log(self.home_log, self._result_detail(result))
             return
+        if result.get("skipped"):
+            self._append_log(self.home_log, result.get("detail", "Wiring audit not enforced."))
+            return
         if result.get("recorded"):
             self._append_log(self.home_log, f"Wrote {result['recorded']}")
         if result.get("ok"):
