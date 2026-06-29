@@ -1190,7 +1190,7 @@ class HivePlannerApp:
             messagebox.showwarning("No project", "Link a workspace first (Projects tab).")
             return
         self._append_log(self.home_log, "Running ci-check…")
-        self._run_bg(lambda: run_project_ci_check(root), self._ci_check_done)
+        self._run_bg(lambda r=root: run_project_ci_check(r), self._ci_check_done)
 
     def _ci_check_done(self, report: dict) -> None:
         if self._is_bg_error(report):
@@ -1219,7 +1219,7 @@ class HivePlannerApp:
             messagebox.showwarning("No project", "Link a workspace first (Projects tab).")
             return
         self._append_log(self.home_log, "Checking wiring audit attestation…")
-        self._run_bg(lambda: run_wiring_audit_check(root), self._wiring_audit_check_done)
+        self._run_bg(lambda r=root: run_wiring_audit_check(r), self._wiring_audit_check_done)
 
     def _wiring_audit_check_done(self, result: dict) -> None:
         if self._is_bg_error(result):
@@ -1275,7 +1275,7 @@ class HivePlannerApp:
             dialog.destroy()
             self._append_log(self.home_log, f"Recording wiring audit (evidence: {evidence})…")
             self._run_bg(
-                lambda: run_wiring_audit_record(root, evidence),
+                lambda r=root, e=evidence: run_wiring_audit_record(r, e),
                 self._wiring_audit_record_done,
             )
 
@@ -1493,7 +1493,7 @@ class HivePlannerApp:
             messagebox.showwarning("No project", "Link a workspace first.")
             return
         self._append_log(self.home_log, "Syncing impact maps…")
-        self._run_bg(lambda: run_project_map_sync(root), self._map_sync_done)
+        self._run_bg(lambda r=root: run_project_map_sync(r), self._map_sync_done)
 
     def _map_sync_done(self, result: dict) -> None:
         if self._is_bg_error(result):
@@ -1516,10 +1516,11 @@ class HivePlannerApp:
             return
         cfg = load_config()
         self._append_log(self.home_log, "Deploying unified agent handoff (Spec Kit + Continual Learning)…")
+        hive_root = cfg.normalized_hive_root()
         self._run_bg(
-            lambda: run_deploy_agent_handoff(
-                root,
-                hive_planner_root=cfg.normalized_hive_root(),
+            lambda r=root, h=hive_root: run_deploy_agent_handoff(
+                r,
+                hive_planner_root=h,
                 force=False,
             ),
             self._deploy_handoff_done,

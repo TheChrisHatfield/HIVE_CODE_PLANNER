@@ -1028,7 +1028,7 @@ def run_agents_memory_propose(project_root: Path, candidates_path: Path, *, appl
 
     summary = summarize_project(project_root)
     if not summary.ok:
-        return {"ok": False, "error": summary.detail}
+        return {"ok": False, "error": summary.detail, "detail": summary.detail}
     paths = RepoPaths(root=project_root.resolve())
     candidate_file = candidates_path if candidates_path.is_absolute() else paths.root / candidates_path
     if not candidate_file.is_file():

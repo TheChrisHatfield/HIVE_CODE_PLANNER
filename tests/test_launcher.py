@@ -1649,6 +1649,14 @@ def test_run_agents_memory_propose_rejects_outside_root_candidates(tmp_path: Pat
     assert result.get("hints")
 
 
+def test_run_agents_memory_propose_includes_detail_when_not_hive_project(tmp_path: Path) -> None:
+    from hive_planner.launcher.service import run_agents_memory_propose
+
+    result = run_agents_memory_propose(tmp_path / "missing", Path("candidates.md"))
+    assert result["ok"] is False
+    assert result.get("detail") == result.get("error")
+
+
 def test_memory_candidates_picker_dir_falls_back_to_project_root(tmp_path: Path) -> None:
     from hive_planner.launcher.service import memory_candidates_picker_dir
 
