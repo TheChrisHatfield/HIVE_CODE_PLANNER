@@ -613,6 +613,24 @@ def test_ci_unified_vendor_fails_when_spec_kit_overlay_missing(tmp_path: Path) -
     assert "spec-kit overlay missing" in detail
 
 
+def test_ci_unified_vendor_uses_project_pins_for_stale_cl_overlay(tmp_path: Path) -> None:
+    from hive_planner.vendor_sync import ci_unified_vendor_step, load_manifest, packaged_manifest_path
+
+    project = tmp_path / "unified-project"
+    vendor = project / "vendor"
+    vendor.mkdir(parents=True)
+    manifest = load_manifest(packaged_manifest_path())
+    (vendor / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    write_project_pins(project, manifest)
+    _deploy_unified_overlays(_hive_repo_root(), project)
+    (project / ".cursor" / "plugins" / "hive-continual-learning" / ".hive-overlay-rev").write_text("0\n", encoding="utf-8")
+
+    ok, detail = ci_unified_vendor_step(RepoPaths(root=project), hive_source=False)
+
+    assert ok is False
+    assert "continual-learning overlay stale" in detail
+
+
 def test_ci_unified_vendor_accepts_bootstrapped_pins_without_vendor_manifest(tmp_path: Path) -> None:
     from hive_planner.vendor_sync import ci_unified_vendor_step, load_manifest, packaged_manifest_path
 

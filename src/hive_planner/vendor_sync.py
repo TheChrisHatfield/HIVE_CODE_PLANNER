@@ -821,7 +821,7 @@ def ci_unified_vendor_step(
         source_manifest = load_manifest(local_manifest)
         if not project_pins_match(source_manifest, pins):
             return False, "project pins drift from source manifest"
-        overlay_issues = _verify_unified_overlays(root, manifest=source_manifest)
+        overlay_issues = _verify_unified_overlays(root, manifest=pins)
         if overlay_issues:
             return False, "; ".join(overlay_issues)
         return True, "project pins and unified overlays ok"
