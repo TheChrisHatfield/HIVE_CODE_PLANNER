@@ -1268,7 +1268,7 @@ def test_load_user_guide_falls_back_when_readme_not_utf8(tmp_path: Path, monkeyp
 
     text = load_user_guide(cfg)
 
-    assert "Hive Planner â€” quick help" in text
+    assert "Hive Planner \u2014 quick help" in text
     assert "unified-verify" in text
 
 
@@ -1290,7 +1290,7 @@ def test_load_user_guide_falls_back_when_readme_unreadable(tmp_path: Path, monke
 
     text = load_user_guide(cfg)
 
-    assert "Hive Planner â€” quick help" in text
+    assert "Hive Planner \u2014 quick help" in text
     assert "unified-verify" in text
     assert text.count("## Unified vendor path") == 0
 
@@ -2358,7 +2358,7 @@ def test_format_recent_project_label_uses_folder_name_only() -> None:
     path = r"F:\DRIVE DOWNLOADS\HIVE CODE\My Project"
     assert format_recent_project_label(path) == "My Project"
     assert format_recent_project_label(path, "full") == "My Project  [full]"
-    assert format_recent_project_label(path, "full", active=True) == "My Project  [full]  â† active"
+    assert format_recent_project_label(path, "full", active=True) == "My Project  [full]  \u2190 active"
     assert (
         format_recent_project_label(r"F:\HIVE CODE\hive-code.code-workspace")
         == "hive-code (Workspace)"
@@ -2373,7 +2373,7 @@ def test_format_recent_project_label_uses_folder_name_only() -> None:
         has_git=False,
         entry_kind="workspace",
     )
-    assert format_workspace_picker_label(ws) == "hive-code (Workspace)  Â·  F:\\HIVE CODE"
+    assert format_workspace_picker_label(ws) == "hive-code (Workspace)  \u00b7  F:\\HIVE CODE"
 
 
 def test_recent_selection_uses_path_index_not_label_parse(tmp_path: Path) -> None:
