@@ -262,6 +262,28 @@ def project_pins_match(manifest: dict, project_pins: dict) -> bool:
     return _pin_snapshot_for_compare(manifest) == _pin_snapshot_for_compare(project_pins)
 
 
+def _verify_spec_kit_overlay(root: Path, *, manifest: dict | None = None) -> list[str]:
+    issues: list[str] = []
+    overlay_root = root / SPEC_KIT_OVERLAY_REL
+    for rel in (
+        "README.md",
+        "WORKFLOW.md",
+        "templates/spec-template.md",
+        "templates/tasks-template.md",
+    ):
+        if not (overlay_root / rel).is_file():
+            issues.append(f"spec-kit overlay missing: {SPEC_KIT_OVERLAY_REL}/{rel}")
+    if manifest is not None:
+        expected_rev = _spec_kit_patch_rev(manifest)
+        if expected_rev:
+            deployed_rev = _read_overlay_patch_rev(root)
+            if deployed_rev != expected_rev:
+                issues.append(
+                    f"spec-kit overlay stale (deployed rev {deployed_rev!r}, expected {expected_rev!r})"
+                )
+    return issues
+
+
 def unified_verify(paths: RepoPaths) -> UnifiedVerifyReport:
     root = paths.root.resolve()
     local_manifest = root / "vendor" / "manifest.json"
@@ -297,7 +319,15 @@ def unified_verify(paths: RepoPaths) -> UnifiedVerifyReport:
             manifest_report = validate_project_pins(project_pins)
             pins_match = manifest_report.ok
             issues = list(manifest_report.issues)
-        ok = pins_match is True
+            try:
+                packaged = load_manifest(packaged_manifest_path())
+                if pins_match and not project_pins_match(packaged, project_pins):
+                    pins_match = False
+                    issues.append("project .hive/upstream-pins.json drift from hive-planner manifest")
+                issues.extend(_verify_spec_kit_overlay(root, manifest=packaged))
+            except VendorSyncError:
+                issues.extend(_verify_spec_kit_overlay(root))
+        ok = pins_match is True and not issues
     else:
         manifest_report = check_vendor_manifest(root)
         issues = list(manifest_report.issues)

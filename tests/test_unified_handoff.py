@@ -158,30 +158,31 @@ def test_project_pins_match_compares_ref_and_patch_rev() -> None:
 
 
 def test_unified_verify_bootstrapped_project_without_vendor_manifest(tmp_path: Path) -> None:
+    from hive_planner.vendor_sync import deploy_spec_kit_overlay, load_manifest, packaged_manifest_path
+
     repo = tmp_path / "project"
     repo.mkdir()
-    pins = {
-        "schema": MANIFEST_SCHEMA,
-        "updated": "2026-06-26",
-        "spec_kit": {
-            "upstream": "https://github.com/github/spec-kit",
-            "path": "vendor/spec-kit",
-            "ref": "b7e67f55bf7a937aaa57dbe0a8198774e285de3a",
-            "hive_patch_rev": "1",
-        },
-        "continual_learning": {
-            "upstream": "https://github.com/cursor/plugins",
-            "path": "vendor/cursor-plugins/continual-learning",
-            "ref": "0452e08a314c03621ec5ac1324f1ad1dd824f1a4",
-            "hive_patch_rev": "1",
-        },
-    }
+    pins = load_manifest(packaged_manifest_path())
     write_project_pins(repo, pins)
+    deploy_spec_kit_overlay(Path(__file__).resolve().parents[1], repo)
 
     report = unified_verify(RepoPaths(root=repo))
 
     assert report.pins_match is True
     assert report.ok is True
+
+
+def test_unified_verify_fails_when_spec_kit_overlay_missing(tmp_path: Path) -> None:
+    from hive_planner.vendor_sync import load_manifest, packaged_manifest_path
+
+    repo = tmp_path / "project"
+    repo.mkdir()
+    write_project_pins(repo, load_manifest(packaged_manifest_path()))
+
+    report = unified_verify(RepoPaths(root=repo))
+
+    assert report.ok is False
+    assert any("spec-kit overlay missing" in issue for issue in report.issues)
 
 
 def test_unified_verify_with_project_pins(tmp_path: Path) -> None:
