@@ -588,6 +588,11 @@ def deploy_spec_kit_overlay(
     except VendorSyncError:
         pass
     target = target.resolve()
+    target_pins = read_project_pins(target)
+    if target_pins:
+        pins_rev = _spec_kit_patch_rev(target_pins)
+        if pins_rev:
+            patch_rev = pins_rev
     dest_root = target / SPEC_KIT_OVERLAY_REL
     overlay_force = force
     if not overlay_force and patch_rev:
