@@ -831,7 +831,13 @@ def ci_check_hints(root: Path, report) -> list[str]:
     elif "roadmap-artifacts" in failed:
         hints.append("Roadmap failures mean spec/delta/tasks files are missing for planned features in this repo.")
     if "unified-vendor" in failed:
-        hints.extend(unified_vendor_repair_hints(missing=[".hive/upstream-pins.json"]))
+        if is_hive_planner_source_repo(root):
+            hints.append(
+                "Hive source vendor check failed. Run py -3.11 -m hive_planner vendor-sync --check "
+                "and vendor-sync --apply from this repo root — see scripts/README.md § Unified vendor path."
+            )
+        else:
+            hints.extend(unified_vendor_repair_hints(missing=[".hive/upstream-pins.json"]))
     return hints
 
 
