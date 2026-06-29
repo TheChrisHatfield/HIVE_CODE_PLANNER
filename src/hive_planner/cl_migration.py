@@ -249,7 +249,7 @@ def migrate_marketplace_cl(
     elif "## Learned Workspace Facts" not in merged_text and agents_path.is_file():
         report.actions.append("No marketplace plugin directory detected")
 
-    if marketplace_plugin_tree_present(root) and not dry_run:
+    if marketplace_plugin_tree_present(root) and not dry_run and cursor_runtime:
         report.ok = False
     elif not dry_run and report.removed_marketplace_plugin:
         report.ok = True

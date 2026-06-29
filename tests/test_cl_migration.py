@@ -309,6 +309,68 @@ def test_migrate_warns_on_unexpected_marketplace_plugin_name(tmp_path: Path) -> 
     assert not any(action == "No marketplace plugin directory detected" for action in report.actions)
 
 
+def test_migrate_headless_succeeds_despite_cursor_plugin_tree(tmp_path: Path) -> None:
+    from hive_planner.agent_handoff import AGENT_HANDOFF_UNIFIED, MARKETPLACE_CL_REL
+    from hive_planner.cl_runtime import CL_RUNTIME_HEADLESS
+    from hive_planner.project_profile import write_project_profile
+
+    project = tmp_path / "headless-migrate"
+    project.mkdir()
+    (project / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    (project / "AGENTS.md").write_text(
+        "\n".join(
+            [
+                "# AGENTS.md",
+                "",
+                "## Repository root",
+                "",
+                "`root`",
+                "",
+                "## Planning Rosetta Stone",
+                "",
+                "- hook",
+                "",
+                "## Startup read order",
+                "",
+                "1. rosetta",
+                "",
+                "## Delta model",
+                "",
+                "- micro",
+                "",
+                "## Active feature",
+                "",
+                "**feat**",
+                "",
+                "## Learned Workspace Facts",
+                "",
+                "- Prefer py -3.11 for Hive CLI.",
+                "",
+                "## Durable Workspace Facts",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    write_project_profile(
+        project,
+        profile="minimal",
+        project_name="headless-migrate",
+        agent_handoff_mode=AGENT_HANDOFF_UNIFIED,
+        cl_runtime=CL_RUNTIME_HEADLESS,
+    )
+    from tests.test_cl_migration import _write_plugin
+
+    _write_plugin(project, MARKETPLACE_CL_REL, "continual-learning")
+
+    report = migrate_marketplace_cl(RepoPaths(root=project), remove_marketplace_plugin=False)
+
+    assert report.ok is True
+    assert report.merged_bullets == 1
+    assert (project / MARKETPLACE_CL_REL).exists()
+    assert any("cl_runtime is" in warning for warning in report.warnings)
+
+
 def test_migrate_requires_hive_plugin(tmp_path: Path) -> None:
     from hive_planner.agent_handoff import AGENT_HANDOFF_UNIFIED
     from hive_planner.project_profile import write_project_profile
