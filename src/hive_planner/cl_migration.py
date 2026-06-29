@@ -254,13 +254,11 @@ def migrate_marketplace_cl(
     elif not dry_run and report.removed_marketplace_plugin:
         report.ok = True
 
-    if not dry_run and report.ok and cursor_runtime:
+    if not dry_run and report.ok and cursor_runtime and not any("lint failed" in w for w in report.warnings):
         from hive_planner.project_profile import set_project_cl_source
 
         set_project_cl_source(root, CL_SOURCE_VENDORED)
         report.cl_source = CL_SOURCE_VENDORED
-
-    if not dry_run and report.ok:
         _write_migration_record(root, report)
 
     hook_state = root / ".cursor" / "hooks" / "state" / "continual-learning-index.json"

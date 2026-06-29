@@ -204,6 +204,9 @@ def test_migrate_still_removes_marketplace_when_agents_lint_fails(
     assert agents_path.read_text(encoding="utf-8") == _minimal_agents_with_learned()
     assert report.ok is True
     assert any("lint failed" in warning for warning in report.warnings)
+    assert not (project / ".hive" / "cl-migration.json").is_file()
+    meta = json.loads((project / ".hive" / "project.json").read_text(encoding="utf-8"))
+    assert meta.get("cl_source") != "vendored"
 
 
 def test_migrate_rolls_back_agents_when_plugin_removal_fails(
