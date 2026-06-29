@@ -219,6 +219,27 @@ def lint_agents_md(paths: RepoPaths, agents_path: Path | None = None) -> AgentsL
                 )
                 break
 
+        if title.startswith(EDITABLE_SECTION) or title == EDITABLE_SECTION:
+            from hive_planner.spec_drift import classify_bullet
+
+            classified = classify_bullet(bullet)
+            if classified.kind == "ambiguous":
+                report.issues.append(
+                    LintIssue(
+                        "error",
+                        f"Ambiguous bullet classification — append `# operational` or `# behavioral`: {bullet[:80]}",
+                        line=line_no,
+                    )
+                )
+            elif classified.kind == "behavioral":
+                report.issues.append(
+                    LintIssue(
+                        "error",
+                        f"Behavioral bullet in ## {EDITABLE_SECTION} — move to active spec.md: {bullet[:80]}",
+                        line=line_no,
+                    )
+                )
+
     return report
 
 
@@ -265,6 +286,14 @@ def _evaluate_candidates(
 
     for candidate in raw_candidates:
         classified = classify_bullet(candidate)
+        if classified.kind == "ambiguous":
+            rejected.append(
+                (
+                    candidate,
+                    f"Classification ambiguous — append `# operational` or `# behavioral` tag ({classified.reason})",
+                )
+            )
+            continue
         if classified.kind == "behavioral":
             spec_path = f"docs/specs/{feature}/spec.md" if feature else "docs/specs/<feature>/spec.md"
             reason = f"Behavioral content belongs in Spec Kit ({spec_path}), not AGENTS.md"
@@ -421,7 +450,15 @@ def run_agents_memory(
     *,
     agents_path: Path | None = None,
     apply: bool = False,
+    skip_wiring_audit: bool = False,
 ) -> AgentsMemoryResult:
+    from hive_planner.wiring_audit import WiringAuditError, require_wiring_audit_for_memory
+
+    try:
+        require_wiring_audit_for_memory(paths, skip=skip_wiring_audit)
+    except WiringAuditError as exc:
+        raise AgentsMemoryError(str(exc)) from exc
+
     target = _resolve_agents_path(paths, agents_path)
     candidate_file = candidates_path if candidates_path.is_absolute() else paths.root / candidates_path
     if not candidate_file.exists():
@@ -510,6 +547,12 @@ def normalize_candidates_text(text: str) -> str:
                 lines_out.append("")
             lines_out.append(current_tag)
             continue
+        if stripped.startswith("# ambiguous") or stripped.lower() == "# ambiguous":
+            current_tag = "# ambiguous"
+            if lines_out and lines_out[-1] != "":
+                lines_out.append("")
+            lines_out.append(current_tag)
+            continue
         if any(p.search(stripped) for p in TRANSCRIPT_NOISE):
             continue
         if stripped.startswith(("- ", "* ")):
@@ -525,6 +568,16 @@ def normalize_candidates_text(text: str) -> str:
             continue
         if inline_tag:
             current_tag = inline_tag
+        else:
+            from hive_planner.spec_drift import classify_bullet
+
+            classified = classify_bullet(bullet)
+            if classified.kind == "behavioral":
+                current_tag = "# behavioral"
+            elif classified.kind == "ambiguous":
+                current_tag = "# ambiguous"
+            else:
+                current_tag = "# operational"
         _append_tagged_section(lines_out, current_tag)
         lines_out.append(f"- {bullet}")
 

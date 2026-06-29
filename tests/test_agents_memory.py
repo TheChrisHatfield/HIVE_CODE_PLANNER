@@ -169,6 +169,15 @@ def test_apply_preserves_preamble_before_first_section(tmp_path: Path) -> None:
     assert updated.index(preamble) < updated.index("## Repository root")
 
 
+def test_propose_rejects_ambiguous_candidate(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    (paths.root / "AGENTS.md").write_text(_minimal_agents(), encoding="utf-8")
+    candidates = paths.root / "candidates.md"
+    candidates.write_text("- Run ci-check before handoff; API must return 404 when disabled.\n", encoding="utf-8")
+    with pytest.raises(AgentsMemoryError, match="All candidate"):
+        propose_agents_memory(paths, candidates)
+
+
 def test_apply_rejects_behavioral_candidate(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     (paths.root / "AGENTS.md").write_text(_minimal_agents(), encoding="utf-8")
@@ -232,6 +241,18 @@ def test_ingest_normalizes_transcript_export(tmp_path: Path) -> None:
     behavioral_section = text.split("# behavioral", 1)[-1]
     assert "API must return 404" in behavioral_section
     assert "Run ci-check" not in behavioral_section
+
+
+def test_ingest_routes_operational_out_of_behavioral_section(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    source = paths.root / "export.txt"
+    source.write_text("# behavioral\n- Run ci-check before handoff.\n", encoding="utf-8")
+    out = ingest_agents_candidates(paths, source)
+    text = out.read_text(encoding="utf-8")
+    assert "# operational" in text
+    assert "Run ci-check before handoff." in text
+    operational_part = text.split("# operational", 1)[1]
+    assert "Run ci-check before handoff." in operational_part
 
 
 def test_apply_inserts_editable_section_after_active_feature(tmp_path: Path) -> None:
