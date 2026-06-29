@@ -59,9 +59,11 @@ def resolve_agent_handoff_mode(project_root: Path) -> str:
 
 
 def unified_handoff_artifacts(project_root: Path) -> list[str]:
-    root = project_root.resolve()
+    from hive_planner.cl_runtime import continual_learning_artifact_paths, resolve_cl_runtime
+
+    runtime = resolve_cl_runtime(project_root)
     feature = "example-feature"
-    return [
+    base = [
         f"docs/specs/{feature}/spec.md",
         f"docs/specs/{feature}/plan.md",
         f"docs/specs/{feature}/tasks.md",
@@ -76,12 +78,8 @@ def unified_handoff_artifacts(project_root: Path) -> list[str]:
         ".hive/spec-kit/WORKFLOW.md",
         ".hive/spec-kit/templates/spec-template.md",
         ".hive/spec-kit/templates/tasks-template.md",
-        ".cursor/plugins/hive-continual-learning/README.md",
-        ".cursor/plugins/hive-continual-learning/WORKFLOW.md",
-        ".cursor/plugins/hive-continual-learning/agents/agents-memory-updater.md",
-        ".cursor/plugins/hive-continual-learning/skills/continual-learning/SKILL.md",
-        ".cursor/plugins/hive-continual-learning/.cursor-plugin/plugin.json",
     ]
+    return base + list(continual_learning_artifact_paths(runtime))
 
 
 def validate_unified_handoff(project_root: Path) -> AgentHandoffStatus:

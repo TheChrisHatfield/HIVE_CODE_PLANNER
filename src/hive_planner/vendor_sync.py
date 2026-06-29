@@ -333,10 +333,14 @@ def _verify_cl_overlay(root: Path, *, manifest: dict | None = None) -> list[str]
     return issues
 
 
-def _verify_unified_overlays(root: Path, *, manifest: dict | None) -> list[str]:
+def _verify_unified_overlays(root: Path, *, manifest: dict | None, cl_runtime: str | None = None) -> list[str]:
+    from hive_planner.cl_runtime import requires_cursor_plugin, resolve_cl_runtime
+
+    runtime = cl_runtime or resolve_cl_runtime(root)
     issues: list[str] = []
     issues.extend(_verify_spec_kit_overlay(root, manifest=manifest))
-    issues.extend(_verify_cl_overlay(root, manifest=manifest))
+    if requires_cursor_plugin(runtime):
+        issues.extend(_verify_cl_overlay(root, manifest=manifest))
     return issues
 
 
@@ -767,7 +771,17 @@ def deploy_unified_vendor_artifacts(
     force: bool = False,
     written: list[str] | None = None,
     warnings: list[str] | None = None,
+    cl_runtime: str | None = None,
 ) -> None:
+    from hive_planner.cl_runtime import (
+        CL_RUNTIME_CURSOR,
+        deploy_headless_cl_artifacts,
+        normalize_cl_runtime,
+        requires_cursor_plugin,
+        set_project_cl_runtime,
+    )
+
+    runtime = normalize_cl_runtime(cl_runtime or CL_RUNTIME_CURSOR)
     if not write_unified_vendor_pins(
         source_root,
         target,
@@ -783,13 +797,23 @@ def deploy_unified_vendor_artifacts(
         written=written,
         warnings=warnings,
     )
-    deploy_continual_learning_overlay(
-        source_root,
-        target,
-        force=force,
-        written=written,
-        warnings=warnings,
-    )
+    if requires_cursor_plugin(runtime):
+        deploy_continual_learning_overlay(
+            source_root,
+            target,
+            force=force,
+            written=written,
+            warnings=warnings,
+        )
+    else:
+        deploy_headless_cl_artifacts(target, runtime, force=force, written=written)
+        try:
+            set_project_cl_runtime(target, runtime)
+            if written is not None and ".hive/project.json" not in written:
+                written.append(".hive/project.json")
+        except ValueError:
+            if warnings is not None:
+                warnings.append("Could not update .hive/project.json with cl_runtime — bootstrap profile missing")
 
 
 def ci_unified_vendor_step(

@@ -29,6 +29,7 @@ class ProjectProfile:
     spec_kit_enabled: bool | None = None
     continual_learning_enabled: bool | None = None
     cl_source: str | None = None
+    cl_runtime: str | None = None
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -93,6 +94,11 @@ def read_project_profile(project_root: Path) -> ProjectProfile | None:
     cl_source = str(data["cl_source"]).strip().lower() if data.get("cl_source") else None
     if cl_source not in {None, "vendored", "marketplace"}:
         cl_source = None
+    cl_runtime = str(data["cl_runtime"]).strip().lower() if data.get("cl_runtime") else None
+    from hive_planner.cl_runtime import normalize_cl_runtime
+
+    if cl_runtime is not None:
+        cl_runtime = normalize_cl_runtime(cl_runtime)
     return ProjectProfile(
         bootstrap_profile=profile,
         project_name=name,
@@ -103,6 +109,7 @@ def read_project_profile(project_root: Path) -> ProjectProfile | None:
         spec_kit_enabled=spec_kit,
         continual_learning_enabled=continual_learning,
         cl_source=cl_source,
+        cl_runtime=cl_runtime,
     )
 
 
@@ -131,6 +138,7 @@ def write_project_profile(
     spec_kit_enabled: bool | None = None,
     continual_learning_enabled: bool | None = None,
     cl_source: str | None = None,
+    cl_runtime: str | None = None,
 ) -> Path:
     from hive_planner.agent_handoff import AGENT_HANDOFF_OFF, AGENT_HANDOFF_UNIFIED, integrations_from_mode, normalize_agent_handoff_mode
 
@@ -173,6 +181,11 @@ def write_project_profile(
             cl_source
             if cl_source is not None
             else (existing.cl_source if existing else None)
+        ),
+        cl_runtime=(
+            cl_runtime
+            if cl_runtime is not None
+            else (existing.cl_runtime if existing else None)
         ),
     )
     path = project_meta_path(root)

@@ -702,9 +702,12 @@ def init_project(
     agent_handoff: str | None = None,
     spec_kit: bool | None = None,
     continual_learning: bool | None = None,
+    cl_runtime: str | None = None,
 ) -> BootstrapResult:
     from hive_planner.agent_handoff import AGENT_HANDOFF_OFF, AGENT_HANDOFF_UNIFIED, integrations_from_mode, normalize_agent_handoff_mode
+    from hive_planner.cl_runtime import CL_RUNTIME_CURSOR, normalize_cl_runtime
 
+    resolved_cl_runtime = normalize_cl_runtime(cl_runtime or CL_RUNTIME_CURSOR)
     if agent_handoff is not None:
         mode = normalize_agent_handoff_mode(agent_handoff)
         spec_kit_enabled, continual_learning_enabled = integrations_from_mode(mode)
@@ -752,6 +755,7 @@ def init_project(
             warnings=warnings,
             spec_kit=spec_kit_enabled,
             continual_learning=continual_learning_enabled,
+            cl_runtime=resolved_cl_runtime,
         )
     except OSError as exc:
         raise BootstrapError(f"Failed to write bootstrap files: {exc}") from exc
@@ -784,7 +788,12 @@ def _write_bootstrap_tree(
     warnings: list[str],
     spec_kit: bool,
     continual_learning: bool,
+    cl_runtime: str = "cursor",
 ) -> None:
+    from hive_planner.cl_runtime import CL_RUNTIME_CURSOR, normalize_cl_runtime
+    from hive_planner.vendor_sync import deploy_unified_vendor_artifacts
+
+    resolved_cl_runtime = normalize_cl_runtime(cl_runtime or CL_RUNTIME_CURSOR)
     templates: list[tuple[str, str]] = [
         ("START_HERE.md", _start_here(project_name)),
         ("AGENTS.md", _agents_md(project_name, target, spec_kit=spec_kit, continual_learning=continual_learning)),
@@ -878,11 +887,12 @@ def _write_bootstrap_tree(
         project_name=project_name,
         hive_planner_version=hive_version,
         agent_handoff_mode=AGENT_HANDOFF_UNIFIED if (spec_kit and continual_learning) else AGENT_HANDOFF_OFF,
+        cl_runtime=resolved_cl_runtime if (spec_kit and continual_learning) else None,
     )
     written.append(meta_path.relative_to(target).as_posix())
     if spec_kit and continual_learning:
+        from hive_planner.cl_runtime import requires_cursor_plugin
         from hive_planner.project_profile import set_project_cl_source
-        from hive_planner.vendor_sync import deploy_unified_vendor_artifacts
 
         deploy_unified_vendor_artifacts(
             source_paths.root,
@@ -890,9 +900,19 @@ def _write_bootstrap_tree(
             force=force,
             written=written,
             warnings=warnings,
+            cl_runtime=resolved_cl_runtime,
         )
+        if requires_cursor_plugin(resolved_cl_runtime):
+            try:
+                set_project_cl_source(target, "vendored")
+            except ValueError:
+                pass
+        from hive_planner.cl_runtime import set_project_cl_runtime
+
         try:
-            set_project_cl_source(target, "vendored")
+            set_project_cl_runtime(target, resolved_cl_runtime)
+            if ".hive/project.json" not in written:
+                written.append(".hive/project.json")
         except ValueError:
             pass
 
@@ -903,12 +923,15 @@ def deploy_agent_handoff_scaffold(
     *,
     project_name: str | None = None,
     force: bool = False,
+    cl_runtime: str | None = None,
 ) -> tuple[list[str], list[str]]:
     """Deploy unified Spec Kit + Continual Learning artifacts into an existing Hive project."""
     from hive_planner.agent_handoff import AGENT_HANDOFF_UNIFIED, apply_agent_handoff_mode
+    from hive_planner.cl_runtime import CL_RUNTIME_CURSOR, normalize_cl_runtime, requires_cursor_plugin, resolve_cl_runtime
     from hive_planner.project_profile import read_project_profile, resolve_project_profile
 
     target = target.resolve()
+    resolved_cl_runtime = normalize_cl_runtime(cl_runtime or resolve_cl_runtime(target) or CL_RUNTIME_CURSOR)
     if not (target / "START_HERE.md").is_file():
         raise BootstrapError(f"Not a Hive project (missing START_HERE.md): {target}")
     meta = resolve_project_profile(target)
@@ -959,18 +982,25 @@ def deploy_agent_handoff_scaffold(
     )
     from hive_planner.project_profile import set_project_cl_source
 
-    try:
-        set_project_cl_source(target, "vendored")
-    except ValueError:
-        pass
+    if requires_cursor_plugin(resolved_cl_runtime):
+        try:
+            set_project_cl_source(target, "vendored")
+        except ValueError:
+            pass
     written.append(".hive/project.json")
+    from hive_planner.cl_runtime import set_project_cl_runtime
     from hive_planner.vendor_sync import deploy_unified_vendor_artifacts
 
+    try:
+        set_project_cl_runtime(target, resolved_cl_runtime)
+    except ValueError:
+        pass
     deploy_unified_vendor_artifacts(
         source_paths.root,
         target,
         force=force,
         written=written,
         warnings=warnings,
+        cl_runtime=resolved_cl_runtime,
     )
     return sorted(set(written)), warnings

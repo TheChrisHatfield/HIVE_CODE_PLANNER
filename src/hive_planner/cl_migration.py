@@ -177,8 +177,12 @@ def migrate_marketplace_cl(
     """Transfer marketplace CL memory into Hive format and optionally remove marketplace plugin."""
     root = paths.root.resolve()
     report = ClMigrationReport(ok=True, dry_run=dry_run)
+    from hive_planner.cl_runtime import requires_cursor_plugin, resolve_cl_runtime
 
-    if not hive_cl_installed(root):
+    runtime = resolve_cl_runtime(root)
+    cursor_runtime = requires_cursor_plugin(runtime)
+
+    if cursor_runtime and not hive_cl_installed(root):
         report.ok = False
         report.warnings.append(
             "Hive continual-learning plugin missing — run Deploy agent handoff before migrating."
@@ -214,7 +218,12 @@ def migrate_marketplace_cl(
                 report.warnings.append(f"AGENTS.md lint failed after merge — rolled back: {'; '.join(errors)}")
 
     if marketplace_plugin_tree_present(root):
-        if marketplace_cl_installed(root):
+        if not cursor_runtime:
+            report.warnings.append(
+                f"Cursor plugin tree at {MARKETPLACE_CL_REL}/ detected but cl_runtime is {runtime!r} — "
+                "remove manually or run: py -3.11 -m hive_planner cl-runtime set cursor"
+            )
+        elif marketplace_cl_installed(root):
             if remove_marketplace_plugin:
                 report.actions.append(f"Remove marketplace plugin at {MARKETPLACE_CL_REL}/")
                 if not dry_run:
@@ -245,7 +254,7 @@ def migrate_marketplace_cl(
     elif not dry_run and report.removed_marketplace_plugin:
         report.ok = True
 
-    if not dry_run and report.ok:
+    if not dry_run and report.ok and cursor_runtime:
         from hive_planner.project_profile import set_project_cl_source
 
         set_project_cl_source(root, CL_SOURCE_VENDORED)
@@ -269,7 +278,14 @@ def ci_cl_install_step(project_root: Path) -> tuple[bool, str]:
     if integrations.agent_handoff_mode != AGENT_HANDOFF_UNIFIED:
         return True, "skipped (not unified handoff)"
 
+    from hive_planner.cl_runtime import requires_cursor_plugin, resolve_cl_runtime
+
+    runtime = resolve_cl_runtime(project_root)
     findings = {item.code: item for item in scan_legacy_deployment(project_root).findings}
+    if not requires_cursor_plugin(runtime):
+        if "learned_workspace_facts" in findings:
+            return False, findings["learned_workspace_facts"].detail + " — run: py -3.11 -m hive_planner cl-migrate"
+        return True, f"continual learning runtime={runtime} (headless — no Cursor plugin required)"
     if "dual_cl_install" in findings:
         return False, findings["dual_cl_install"].detail + " — run: py -3.11 -m hive_planner cl-migrate --remove-marketplace-plugin"
     if "marketplace_cl_only" in findings:

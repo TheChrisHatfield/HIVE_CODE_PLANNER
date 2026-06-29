@@ -161,6 +161,25 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Deprecated; unified mode always enables both Spec Kit and Continual Learning",
     )
+    init_parser.add_argument(
+        "--cl-runtime",
+        default="cursor",
+        choices=("cursor", "headless", "external"),
+        help="Continual Learning runtime: cursor (plugin) or headless/external (CLI-only memory loop)",
+    )
+
+    cl_runtime_parser = sub.add_parser(
+        "cl-runtime",
+        help="Show or set Continual Learning runtime (Cursor plugin vs IDE-agnostic headless)",
+    )
+    cl_runtime_sub = cl_runtime_parser.add_subparsers(dest="cl_runtime_command", required=True)
+    cl_runtime_show = cl_runtime_sub.add_parser("show", help="Show resolved CL runtime for this project")
+    cl_runtime_set = cl_runtime_sub.add_parser("set", help="Set CL runtime in .hive/project.json")
+    cl_runtime_set.add_argument(
+        "runtime",
+        choices=("cursor", "headless", "external"),
+        help="cursor = Hive vendored Cursor plugin; headless/external = CLI agents-propose path",
+    )
 
     translate_parser = sub.add_parser("translate", help="Rule-based cartridge draft translation")
     translate_parser.add_argument("--input", required=True, type=Path, help="Research markdown input file")
@@ -303,6 +322,7 @@ def main(argv: list[str] | None = None) -> int:
                 profile=args.profile,
                 git_init=args.git_init,
                 agent_handoff=agent_handoff,
+                cl_runtime=args.cl_runtime,
             )
         except BootstrapError as exc:
             print(f"Error: {exc}", file=sys.stderr)
@@ -551,6 +571,24 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Wrote proposal: {result.proposal_path.relative_to(root)}")
         print("Applied accepted bullets to AGENTS.md (guarded v2 apply)")
         print(json.dumps(result.to_dict(), indent=2))
+        return 0
+
+    if args.command == "cl-runtime":
+        from hive_planner.cl_runtime import resolve_cl_runtime, set_project_cl_runtime
+
+        if args.cl_runtime_command == "show":
+            runtime = resolve_cl_runtime(root)
+            print(f"Root: {root}")
+            print(f"cl_runtime: {runtime}")
+            return 0
+        try:
+            set_project_cl_runtime(root, args.runtime)
+        except ValueError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        print(f"Root: {root}")
+        print(f"Set cl_runtime={args.runtime}")
+        print("Re-run Deploy agent handoff (launcher or bootstrap) to refresh CL artifacts.")
         return 0
 
     if args.command == "cl-migrate":
