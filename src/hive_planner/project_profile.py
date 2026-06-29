@@ -212,6 +212,8 @@ def delete_project_profile(project_root: Path) -> tuple[bool, str]:
 
 def set_project_cl_source(project_root: Path, cl_source: str) -> Path:
     """Set continual learning source flag in .hive/project.json."""
+    from hive_planner.agent_handoff import integrations_from_mode, resolve_agent_handoff_mode
+
     normalized = str(cl_source).strip().lower()
     if normalized not in {"vendored", "marketplace"}:
         raise ValueError(f"Unknown cl_source: {cl_source}")
@@ -219,13 +221,24 @@ def set_project_cl_source(project_root: Path, cl_source: str) -> Path:
     existing = resolve_project_profile(root)
     if not existing:
         raise ValueError(f"Not a Hive project: {root}")
+    mode = existing.agent_handoff_mode
+    spec_kit = existing.spec_kit_enabled
+    cl_enabled = existing.continual_learning_enabled
+    if mode is None:
+        mode = resolve_agent_handoff_mode(root)
+    if spec_kit is None or cl_enabled is None:
+        inferred_spec, inferred_cl = integrations_from_mode(mode)
+        if spec_kit is None:
+            spec_kit = inferred_spec
+        if cl_enabled is None:
+            cl_enabled = inferred_cl
     return write_project_profile(
         root,
         profile=existing.bootstrap_profile,
         project_name=existing.project_name,
         hive_planner_version=existing.hive_planner_version,
-        agent_handoff_mode=existing.agent_handoff_mode,
-        spec_kit_enabled=existing.spec_kit_enabled,
-        continual_learning_enabled=existing.continual_learning_enabled,
+        agent_handoff_mode=mode,
+        spec_kit_enabled=spec_kit,
+        continual_learning_enabled=cl_enabled,
         cl_source=normalized,
     )

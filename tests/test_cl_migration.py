@@ -82,6 +82,30 @@ def test_run_cl_migrate_failure_includes_structured_keys(tmp_path: Path) -> None
     assert result.get("warnings") or result.get("hints")
 
 
+
+
+def test_migrate_preserves_inferred_unified_handoff_mode(tmp_path: Path) -> None:
+    project = tmp_path / "inferred"
+    project.mkdir()
+    (project / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    feature = project / "docs" / "specs" / "example-feature"
+    feature.mkdir(parents=True)
+    (feature / "spec.md").write_text("# spec\n", encoding="utf-8")
+    (project / "AGENTS.md").write_text(_minimal_agents_with_learned(), encoding="utf-8")
+    assert not (project / ".hive" / "project.json").is_file()
+    _write_plugin(project, MARKETPLACE_CL_REL, "continual-learning")
+    _write_plugin(project, CL_OVERLAY_REL, "hive-continual-learning")
+
+    report = migrate_marketplace_cl(
+        RepoPaths(root=project),
+        remove_marketplace_plugin=True,
+    )
+
+    assert report.ok is True
+    meta = json.loads((project / ".hive" / "project.json").read_text(encoding="utf-8"))
+    assert meta.get("agent_handoff_mode") == "unified"
+    assert meta.get("cl_source") == "vendored"
+
 def test_migrate_marketplace_cl_merges_and_removes_plugin(tmp_path: Path) -> None:
     from hive_planner.agent_handoff import AGENT_HANDOFF_UNIFIED
     from hive_planner.project_profile import write_project_profile
@@ -368,6 +392,7 @@ def test_migrate_headless_succeeds_despite_cursor_plugin_tree(tmp_path: Path) ->
     assert report.ok is True
     assert report.merged_bullets == 1
     assert (project / MARKETPLACE_CL_REL).exists()
+    assert (project / ".hive" / "cl-migration.json").is_file()
     assert any("cl_runtime is" in warning for warning in report.warnings)
 
 
