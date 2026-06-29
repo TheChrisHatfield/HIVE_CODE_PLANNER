@@ -8,6 +8,26 @@ meta:status: extracted
 
 How Spec Kit connects Perplexity planning output to Cursor implementation.
 
+## Hive unified deploy (Stage 9)
+
+For Hive projects, prefer the **vendored Spec Kit overlay** deployed at `.hive/spec-kit/` — not a separate marketplace or global Spec Kit install.
+
+| Artifact | Path |
+|----------|------|
+| Spec + task templates | `.hive/spec-kit/templates/` |
+| Post-`/tasks` workflow gates | `.hive/spec-kit/WORKFLOW.md` |
+| Feature id alignment | `.hive/spec-kit/README.md` |
+| Pin snapshot | `.hive/upstream-pins.json` |
+
+Bootstrap or refresh:
+
+```powershell
+py -3.11 -m hive_planner init --target <path> --agent-handoff unified
+# or desktop app: Home → Deploy agent handoff
+```
+
+Use templates from `.hive/spec-kit/templates/` when drafting `docs/specs/<feature>/`. Run `spec-drift-check` and complete the wiring audit before Continual Learning promotion. Operator guide: [../docs/unified-handoff-upstream-forks.md](../docs/unified-handoff-upstream-forks.md).
+
 ## Division of labor
 
 | Phase | Tool | Output |

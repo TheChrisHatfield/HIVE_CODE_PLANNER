@@ -39,7 +39,7 @@
 - [x] Optional: export candidates markdown for `agents-propose`
 - [x] Packaged overlay at `vendor_templates/continual-learning/` → `.cursor/plugins/hive-continual-learning/` on bootstrap
 
-## Task 6 — Bootstrap deploy wiring
+## Task 6 — Bootstrap deploy wiring ✅
 
 - [x] `vendor_sync.py` — manifest load, verify, project pins snapshot
 - [x] `init --agent-handoff unified` writes `.hive/upstream-pins.json`
@@ -59,21 +59,21 @@
 - [x] Optional `ci-check` step `unified-vendor`
 - [x] Bootstrap tests assert upstream pins when unified (see test_unified_handoff)
 
-## Task 9 — Docs closure
+## Task 9 — Docs closure ✅
 
-- [ ] Update `docs/project-bootstrap-guide.md`
-- [ ] Update `starter-kit/spec-kit-agent-integration.md`
-- [ ] Cross-link `docs/cl-spec-integration.md` → upstream forks doc
+- [x] Update `docs/project-bootstrap-guide.md`
+- [x] Update `starter-kit/spec-kit-agent-integration.md`
+- [x] Cross-link `docs/cl-spec-integration.md` → upstream forks doc
 
-## Task 10 — Stage 9 roadmap closure (roadmap-complete-v4)
+## Task 10 — Stage 9 roadmap closure (roadmap-complete-v4) ✅
 
-- [ ] Add `roadmap-complete-v4` spec/micro/tasks
-- [ ] Extend `ROADMAP_FEATURES` to include Stage 9 features
-- [ ] Bump hive-planner version (v1.3.0 target)
+- [x] Add `roadmap-complete-v4` spec/micro/tasks
+- [x] Extend `ROADMAP_FEATURES` to include Stage 9 features
+- [x] Bump hive-planner version (v1.3.0 target)
 
 ## Active task
 
-**Task 9** — Docs closure (bootstrap guide, starter-kit integration, cl-spec cross-links).
+**None** — Stage 9 (`unified-handoff-v2`) complete.
 
 ## Validation log
 
@@ -85,4 +85,7 @@
 2026-06-26 — Stage 9 Task 4 Spec Kit patches
 - vendor_templates/spec-kit overlay (SK-1–SK-5); deploy to .hive/spec-kit on unified bootstrap
 - spec_kit hive_patch_rev bumped to 2
+
+2026-06-26 — Stage 9 closure (Tasks 5–10)
+- CL overlay deploy; launcher vendor help; docs closure; roadmap-complete-v4; v1.3.0
 ```

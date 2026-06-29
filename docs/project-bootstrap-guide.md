@@ -36,6 +36,40 @@ The generated workflow expects a GitHub repository variable **`HIVE_PLANNER_PATH
 
 Set it under **Settings → Secrets and variables → Actions → Variables**, then push to enable Hive handoff checks in CI.
 
+## Unified agent handoff (Stage 9)
+
+Bootstrap or deploy **Spec Kit + Continual Learning together** — vendored Hive patches, not separate marketplace installs.
+
+```powershell
+# New project with unified handoff (default in launcher)
+py -3.11 -m hive_planner init --target D:\projects\my-app --name "My App" --agent-handoff unified
+
+# Existing Hive project — deploy overlays only
+py -3.11 -m hive_planner init --target D:\projects\my-app --agent-handoff unified --force
+```
+
+Or use the desktop app: **Home → Deploy agent handoff**.
+
+### What unified handoff adds
+
+| Path | Purpose |
+|------|---------|
+| `.hive/upstream-pins.json` | Pin snapshot (upstream ref + Hive patch rev) |
+| `.hive/spec-kit/` | Spec Kit templates (wiring audit, Rosetta nav, workflow gates) |
+| `.cursor/plugins/hive-continual-learning/` | Continual Learning plugin (wiring audit gate, Durable Workspace Facts) |
+| `docs/cl-spec-integration.md` | Behavioral vs operational contract |
+| `.cursor/rules/integration-wiring-audit.mdc` | Required before CL / `AGENTS.md` promotion |
+
+Verify pins and overlays after upgrade:
+
+```powershell
+cd D:\projects\my-app
+py -3.11 -m hive_planner unified-verify
+py -3.11 -m hive_planner ci-check
+```
+
+Hive source maintainers (this repo): see [unified-handoff-upstream-forks.md](./unified-handoff-upstream-forks.md) and `vendor-sync --check` / `--apply`.
+
 ## What gets created
 
 | Path | Purpose |
@@ -48,6 +82,9 @@ Set it under **Settings → Secrets and variables → Actions → Variables**, t
 | `docs/change-impact/` | Impact policy + maps |
 | `.cursor/rules/` | Architecture, task, validation rules |
 | `context-library/` | Empty ingest scaffold |
+| `.hive/upstream-pins.json` | **unified handoff** — vendor pin snapshot |
+| `.hive/spec-kit/` | **unified handoff** — Hive Spec Kit template overlay |
+| `.cursor/plugins/hive-continual-learning/` | **unified handoff** — Hive CL plugin overlay |
 | `pyproject.toml` | **full profile only** — setuptools + pytest |
 | `src/<package>/` | **full profile only** — importable package stub |
 | `tests/` | **full profile only** — placeholder pytest |
