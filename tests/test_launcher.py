@@ -1665,9 +1665,9 @@ def test_agents_propose_done_prompts_apply_without_name_error(monkeypatch: pytes
         lambda *args, **kwargs: prompted.append(True) or False,
     )
     project = Path("C:/proj")
+    app.config = type("Cfg", (), {"active_project": "C:/proj"})()
     app._active_linked_root = lambda: project
-    app._pending_memory_candidates = Path("C:/proj/docs/proposals/candidates.md")
-    app._pending_memory_project = str(project.resolve())
+    app._set_pending_memory_candidates(project, Path("C:/proj/docs/proposals/candidates.md"))
 
     app._agents_propose_done(
         {
@@ -1681,6 +1681,29 @@ def test_agents_propose_done_prompts_apply_without_name_error(monkeypatch: pytes
 
     assert prompted == [True]
     assert not any("NameError" in line for line in logs)
+
+
+def test_pending_memory_survives_dashboard_when_linked_via_workspace_file(tmp_path: Path) -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+    from hive_planner.launcher.config import LauncherConfig, normalize_project_path
+
+    folder = tmp_path / "app"
+    folder.mkdir()
+    workspace = tmp_path / "app.code-workspace"
+    workspace.write_text('{"folders":[{"path":"app"}]}\n', encoding="utf-8")
+    candidates = folder / "docs" / "proposals" / "candidates.md"
+    candidates.parent.mkdir(parents=True)
+    candidates.write_text("- x\n", encoding="utf-8")
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.config = LauncherConfig(active_project=str(workspace))
+    app._set_pending_memory_candidates(folder, candidates)
+
+    assert app._pending_memory_link == normalize_project_path(workspace)
+    assert app._pending_memory_for_root(folder) == candidates
+
+    active_norm = normalize_project_path(app.config.active_project)
+    assert app._pending_memory_link == active_norm
 
 
 def test_auto_complete_onboarding_when_setup_ready(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

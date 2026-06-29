@@ -122,7 +122,7 @@ class HivePlannerApp:
         self._python_scan_active = False
         self._pending_home_log: list[str] = []
         self._pending_memory_candidates: Path | None = None
-        self._pending_memory_project: str | None = None
+        self._pending_memory_link: str | None = None
 
         root.title("Hive Planner")
         root.geometry("920x680")
@@ -296,9 +296,9 @@ class HivePlannerApp:
             if self.config.active_project
             else ""
         )
-        if self._pending_memory_project and self._pending_memory_project != active_norm:
+        if self._pending_memory_link and self._pending_memory_link != active_norm:
             self._pending_memory_candidates = None
-            self._pending_memory_project = None
+            self._pending_memory_link = None
 
         header = tk.Frame(self.container, bg=COLORS["bg"])
         header.pack(fill="x", padx=16, pady=(16, 8))
@@ -1301,12 +1301,20 @@ class HivePlannerApp:
 
     def _set_pending_memory_candidates(self, root: Path, candidates: Path) -> None:
         self._pending_memory_candidates = candidates
-        self._pending_memory_project = normalize_project_path(str(root))
+        link = self.config.active_project
+        self._pending_memory_link = (
+            normalize_project_path(link) if link else normalize_project_path(str(root))
+        )
 
     def _pending_memory_for_root(self, root: Path) -> Path | None:
         if not self._pending_memory_candidates:
             return None
-        if self._pending_memory_project != normalize_project_path(str(root)):
+        active = (
+            normalize_project_path(self.config.active_project)
+            if self.config.active_project
+            else normalize_project_path(str(root))
+        )
+        if self._pending_memory_link != active:
             return None
         return self._pending_memory_candidates
 
