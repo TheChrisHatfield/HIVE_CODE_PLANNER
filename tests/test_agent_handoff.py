@@ -94,6 +94,18 @@ def test_validate_unified_handoff_flags_stale_cl_overlay_rev(tmp_path: Path) -> 
     assert ".cursor/plugins/hive-continual-learning/.hive-overlay-rev" in status.missing
 
 
+def test_validate_unified_handoff_flags_unreadable_upstream_pins(tmp_path: Path) -> None:
+    source = _hive_source(tmp_path)
+    target = tmp_path / "bad-pins"
+    init_project(source, target, agent_handoff="unified")
+    (target / ".hive" / "upstream-pins.json").write_text("{not-json", encoding="utf-8")
+
+    status = validate_unified_handoff(target)
+
+    assert status.complete is False
+    assert ".hive/upstream-pins.json" in status.missing
+
+
 def test_validate_unified_handoff_flags_missing_upstream_pins(tmp_path: Path) -> None:
     source = _hive_source(tmp_path)
     target = tmp_path / "no-pins"

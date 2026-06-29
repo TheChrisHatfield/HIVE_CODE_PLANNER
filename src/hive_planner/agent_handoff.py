@@ -97,9 +97,13 @@ def validate_unified_handoff(project_root: Path) -> AgentHandoffStatus:
         )
     root = project_root.resolve()
     missing = [rel for rel in unified_handoff_artifacts(root) if not (root / rel).is_file()]
-    from hive_planner.vendor_sync import overlay_issues_as_missing, read_project_pins
+    from hive_planner.vendor_sync import PROJECT_PINS_REL, overlay_issues_as_missing, read_project_pins
 
+    pins_path = root / PROJECT_PINS_REL
     pins = read_project_pins(root)
+    if pins_path.is_file() and pins is None:
+        if PROJECT_PINS_REL not in missing:
+            missing.append(PROJECT_PINS_REL)
     for rel in overlay_issues_as_missing(root, pins):
         if rel not in missing:
             missing.append(rel)
