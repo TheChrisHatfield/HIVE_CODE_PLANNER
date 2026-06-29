@@ -218,7 +218,7 @@ def migrate_marketplace_cl(
                 report.warnings.append(f"AGENTS.md lint failed after merge — rolled back: {'; '.join(errors)}")
 
     if marketplace_plugin_tree_present(root):
-        if marketplace_cl_installed(root):
+        if marketplace_cl_installed(project_root.resolve()):
             if remove_marketplace_plugin:
                 report.actions.append(f"Remove marketplace plugin at {MARKETPLACE_CL_REL}/")
                 if not dry_run:
@@ -300,9 +300,9 @@ def ci_cl_install_step(project_root: Path) -> tuple[bool, str]:
             )
         if "learned_workspace_facts" in findings:
             return False, findings["learned_workspace_facts"].detail + " — run: py -3.11 -m hive_planner cl-migrate"
-        if marketplace_cl_installed(root):
+        if marketplace_cl_installed(project_root.resolve()):
             cmd = "py -3.11 -m hive_planner cl-migrate"
-            if hive_cl_installed(root):
+            if hive_cl_installed(project_root.resolve()):
                 cmd += " --remove-marketplace-plugin"
             return (
                 False,
@@ -315,4 +315,6 @@ def ci_cl_install_step(project_root: Path) -> tuple[bool, str]:
         return False, findings["marketplace_cl_only"].detail + " — run: py -3.11 -m hive_planner cl-migrate"
     if "learned_workspace_facts" in findings:
         return False, findings["learned_workspace_facts"].detail + " — run: py -3.11 -m hive_planner cl-migrate"
+    if not hive_cl_installed(project_root):
+        return False, "Hive continual-learning plugin missing — run Deploy agent handoff"
     return True, "vendored hive-continual-learning (no marketplace conflict)"

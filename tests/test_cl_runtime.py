@@ -190,3 +190,49 @@ def test_init_headless_runtime_skips_cursor_plugin(tmp_path: Path, monkeypatch: 
     meta = read_project_profile(result.target)
     assert meta is not None
     assert meta.cl_runtime == CL_RUNTIME_HEADLESS
+
+def test_ci_cl_install_headless_fails_on_marketplace_plugin(tmp_path: Path) -> None:
+    from hive_planner.agent_handoff import AGENT_HANDOFF_UNIFIED, MARKETPLACE_CL_REL
+    from tests.test_cl_migration import _write_plugin
+
+    project = tmp_path / "headless-marketplace"
+    project.mkdir()
+    (project / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    write_project_profile(
+        project,
+        profile="minimal",
+        project_name="headless-marketplace",
+        agent_handoff_mode=AGENT_HANDOFF_UNIFIED,
+        cl_runtime=CL_RUNTIME_HEADLESS,
+    )
+    deploy_headless_cl_artifacts(project, CL_RUNTIME_HEADLESS, force=True)
+    _write_plugin(project, MARKETPLACE_CL_REL, "continual-learning")
+
+    ok, detail = ci_cl_install_step(project)
+    assert ok is False
+    assert "cl-migrate" in detail
+    assert "--remove-marketplace-plugin" not in detail
+
+
+def test_ci_cl_install_headless_dual_marketplace_uses_remove_flag(tmp_path: Path) -> None:
+    from hive_planner.agent_handoff import AGENT_HANDOFF_UNIFIED, MARKETPLACE_CL_REL
+    from hive_planner.vendor_sync import CL_OVERLAY_REL
+    from tests.test_cl_migration import _write_plugin
+
+    project = tmp_path / "headless-dual"
+    project.mkdir()
+    (project / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    write_project_profile(
+        project,
+        profile="minimal",
+        project_name="headless-dual",
+        agent_handoff_mode=AGENT_HANDOFF_UNIFIED,
+        cl_runtime=CL_RUNTIME_HEADLESS,
+    )
+    deploy_headless_cl_artifacts(project, CL_RUNTIME_HEADLESS, force=True)
+    _write_plugin(project, MARKETPLACE_CL_REL, "continual-learning")
+    _write_plugin(project, CL_OVERLAY_REL, "hive-continual-learning")
+
+    ok, detail = ci_cl_install_step(project)
+    assert ok is False
+    assert "--remove-marketplace-plugin" in detail
