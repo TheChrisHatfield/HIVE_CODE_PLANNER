@@ -986,7 +986,21 @@ def run_agents_memory_propose(project_root: Path, candidates_path: Path, *, appl
     try:
         result = run_agents_memory(paths, candidate_file, apply=apply)
     except AgentsMemoryError as exc:
-        return {"ok": False, "error": str(exc)}
+        msg = str(exc)
+        payload: dict = {"ok": False, "error": msg}
+        lowered = msg.lower()
+        if "all candidate" in lowered:
+            payload["hints"] = [
+                "Add `# operational` or `# behavioral` tags to ambiguous bullets.",
+                "Behavioral bullets belong in the active spec.md, not AGENTS.md.",
+            ]
+        elif "wiring audit" in lowered:
+            payload["hints"] = [
+                'Home → Record wiring audit after validation, or: py -3.11 -m hive_planner wiring-audit record --evidence "pytest … -q"',
+            ]
+        elif "inside project root" in lowered:
+            payload["hints"] = ["Select a candidates file from the linked project docs/proposals folder."]
+        return payload
     return {
         "ok": True,
         "applied": result.applied,
