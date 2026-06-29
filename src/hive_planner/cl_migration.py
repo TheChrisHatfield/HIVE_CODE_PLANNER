@@ -272,4 +272,6 @@ def ci_cl_install_step(project_root: Path) -> tuple[bool, str]:
         return False, findings["dual_cl_install"].detail + " — run: py -3.11 -m hive_planner cl-migrate --remove-marketplace-plugin"
     if "marketplace_cl_only" in findings:
         return False, findings["marketplace_cl_only"].detail + " — run: py -3.11 -m hive_planner cl-migrate"
+    if "learned_workspace_facts" in findings:
+        return False, findings["learned_workspace_facts"].detail + " — run: py -3.11 -m hive_planner cl-migrate"
     return True, "vendored hive-continual-learning (no marketplace conflict)"

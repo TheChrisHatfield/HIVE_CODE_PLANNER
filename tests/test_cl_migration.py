@@ -235,6 +235,25 @@ def test_migrate_without_agents_md_can_still_remove_marketplace_plugin(tmp_path:
     assert any("AGENTS.md not found" in warning for warning in report.warnings)
 
 
+def test_ci_cl_install_step_fails_on_learned_workspace_facts(tmp_path: Path) -> None:
+    from hive_planner.agent_handoff import AGENT_HANDOFF_UNIFIED
+    from hive_planner.project_profile import write_project_profile
+
+    project = tmp_path / "legacy-facts"
+    project.mkdir()
+    (project / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    (project / "AGENTS.md").write_text(_minimal_agents_with_learned(), encoding="utf-8")
+    write_project_profile(
+        project, profile="minimal", project_name="legacy-facts", agent_handoff_mode=AGENT_HANDOFF_UNIFIED
+    )
+    _write_plugin(project, CL_OVERLAY_REL, "hive-continual-learning")
+
+    ok, detail = ci_cl_install_step(project)
+    assert ok is False
+    assert "Learned Workspace Facts" in detail
+    assert "cl-migrate" in detail
+
+
 def test_migrate_warns_on_unexpected_marketplace_plugin_name(tmp_path: Path) -> None:
     from hive_planner.agent_handoff import AGENT_HANDOFF_UNIFIED
     from hive_planner.project_profile import write_project_profile
