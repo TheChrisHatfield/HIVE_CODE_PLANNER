@@ -1665,6 +1665,19 @@ def test_memory_candidates_picker_dir_falls_back_to_project_root(tmp_path: Path)
     assert memory_candidates_picker_dir(project, staged) == str(proposals.resolve())
 
 
+def test_agents_apply_done_refreshes_dashboard_on_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.home_log = object()
+    refreshed: list[bool] = []
+    app._append_log = lambda _widget, _line: None
+    app._show_dashboard = lambda: refreshed.append(True)
+
+    app._agents_apply_done({"ok": False, "error": "Wiring audit required", "hints": ["Record wiring audit"]})
+    assert refreshed == [True]
+
+
 def test_agents_propose_done_prompts_apply_without_name_error(monkeypatch: pytest.MonkeyPatch) -> None:
     from hive_planner.launcher.app import HivePlannerApp
 

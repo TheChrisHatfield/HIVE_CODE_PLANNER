@@ -1386,11 +1386,13 @@ class HivePlannerApp:
     def _agents_apply_done(self, result: dict) -> None:
         if self._is_bg_error(result):
             self._append_log(self.home_log, self._result_detail(result))
+            self._show_dashboard()
             return
         if not result.get("ok"):
             self._append_log(self.home_log, self._result_detail(result))
             for hint in result.get("hints", []):
                 self._append_log(self.home_log, f"Tip: {hint}")
+            self._show_dashboard()
             return
         self._append_log(self.home_log, f"Proposal: {result.get('proposal_path')}")
         accepted = result.get("accepted") or []
@@ -1403,11 +1405,13 @@ class HivePlannerApp:
     def _agents_propose_done(self, result: dict) -> None:
         if self._is_bg_error(result):
             self._append_log(self.home_log, self._result_detail(result))
+            self._show_dashboard()
             return
         if not result.get("ok"):
             self._append_log(self.home_log, self._result_detail(result))
             for hint in result.get("hints", []):
                 self._append_log(self.home_log, f"Tip: {hint}")
+            self._show_dashboard()
             return
         self._append_log(self.home_log, f"Wrote proposal: {result.get('proposal_path')}")
         accepted = result.get("accepted") or []
