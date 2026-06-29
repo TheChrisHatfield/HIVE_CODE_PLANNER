@@ -259,6 +259,8 @@ def migrate_marketplace_cl(
 
         set_project_cl_source(root, CL_SOURCE_VENDORED)
         report.cl_source = CL_SOURCE_VENDORED
+
+    if not dry_run and report.ok:
         _write_migration_record(root, report)
 
     hook_state = root / ".cursor" / "hooks" / "state" / "continual-learning-index.json"
