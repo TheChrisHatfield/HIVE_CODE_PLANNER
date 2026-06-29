@@ -1053,6 +1053,10 @@ def run_cl_migrate(project_root: Path, *, remove_marketplace_plugin: bool = Fals
             "hints": ["Verify the marketplace plugin path before removal."],
         }
     payload = report.to_dict()
+    from hive_planner.cl_runtime import requires_cursor_plugin, resolve_cl_runtime
+
+    runtime = resolve_cl_runtime(project_root)
+    payload["cl_runtime"] = runtime
     if report.ok and any("lint failed" in w for w in report.warnings):
         payload["hints"] = [
             "Marketplace plugin removed; fix AGENTS.md lint issues and re-run migrate to merge Learned Workspace Facts.",
@@ -1062,6 +1066,10 @@ def run_cl_migrate(project_root: Path, *, remove_marketplace_plugin: bool = Fals
         if report.removed_marketplace_plugin:
             payload["hints"] = [
                 "Marketplace plugin removed; fix AGENTS.md lint issues and re-run migrate to merge Learned Workspace Facts.",
+            ]
+        elif not requires_cursor_plugin(runtime):
+            payload["hints"] = [
+                "Headless runtime: fix warnings above, then use agents-propose/agents-apply for memory promotion.",
             ]
         else:
             payload["hints"] = [

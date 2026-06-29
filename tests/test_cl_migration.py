@@ -281,6 +281,41 @@ def test_ci_cl_install_step_fails_on_learned_workspace_facts(tmp_path: Path) -> 
     assert "cl-migrate" in detail
 
 
+def test_run_cl_migrate_includes_cl_runtime_and_headless_hints(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from hive_planner.agent_handoff import AGENT_HANDOFF_UNIFIED
+    from hive_planner.agents_memory import AgentsLintReport, LintIssue
+    from hive_planner.cl_runtime import CL_RUNTIME_HEADLESS
+    from hive_planner.launcher.service import run_cl_migrate
+    from hive_planner.project_profile import write_project_profile
+
+    project = tmp_path / "headless-fail"
+    project.mkdir()
+    (project / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    (project / "AGENTS.md").write_text(_minimal_agents_with_learned(), encoding="utf-8")
+    write_project_profile(
+        project,
+        profile="minimal",
+        project_name="headless-fail",
+        agent_handoff_mode=AGENT_HANDOFF_UNIFIED,
+        cl_runtime=CL_RUNTIME_HEADLESS,
+    )
+
+    def _fail_lint(paths, agents_path=None):
+        return AgentsLintReport(
+            path=str(agents_path or paths.root / "AGENTS.md"),
+            issues=[LintIssue(severity="error", message="simulated lint failure")],
+        )
+
+    monkeypatch.setattr("hive_planner.cl_migration.lint_agents_md", _fail_lint)
+
+    result = run_cl_migrate(project)
+    assert result["ok"] is False
+    assert result.get("cl_runtime") == CL_RUNTIME_HEADLESS
+    assert any("Headless runtime" in hint for hint in result.get("hints", []))
+
+
 def test_run_cl_migrate_tailors_hints_when_plugin_removed_but_merge_failed(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
