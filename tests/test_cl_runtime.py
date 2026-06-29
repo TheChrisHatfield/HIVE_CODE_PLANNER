@@ -66,6 +66,28 @@ def test_unified_handoff_artifacts_runtime_aware(tmp_path: Path) -> None:
     assert requires_cursor_plugin(resolve_cl_runtime(project)) is False
 
 
+def test_overlay_issues_as_missing_skips_cursor_cl_for_headless(tmp_path: Path) -> None:
+    from hive_planner.vendor_sync import CL_OVERLAY_REL, overlay_issues_as_missing
+
+    project = tmp_path / "headless-overlay"
+    project.mkdir()
+    (project / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    write_project_profile(
+        project,
+        profile="minimal",
+        project_name="headless-overlay",
+        agent_handoff_mode=AGENT_HANDOFF_UNIFIED,
+        cl_runtime=CL_RUNTIME_HEADLESS,
+    )
+    deploy_headless_cl_artifacts(project, CL_RUNTIME_HEADLESS, force=True)
+
+    overlay_missing = overlay_issues_as_missing(project, None)
+    assert not any(rel.startswith(CL_OVERLAY_REL) for rel in overlay_missing)
+
+    status = validate_unified_handoff(project)
+    assert ".cursor/plugins/hive-continual-learning/WORKFLOW.md" not in status.missing
+
+
 def test_ci_cl_install_headless_requires_workflow_artifact(tmp_path: Path) -> None:
     from hive_planner.agent_handoff import AGENT_HANDOFF_UNIFIED
     from hive_planner.cl_runtime import CL_RUNTIME_HEADLESS

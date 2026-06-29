@@ -346,6 +346,9 @@ def _verify_unified_overlays(root: Path, *, manifest: dict | None, cl_runtime: s
 
 def overlay_issues_as_missing(root: Path, manifest: dict | None) -> list[str]:
     """Map overlay verification issues to artifact paths for handoff validation."""
+    from hive_planner.cl_runtime import requires_cursor_plugin, resolve_cl_runtime
+
+    runtime = resolve_cl_runtime(root)
     missing: list[str] = []
     for issue in _verify_spec_kit_overlay(root, manifest=manifest):
         if issue.startswith("spec-kit overlay missing: "):
@@ -356,6 +359,8 @@ def overlay_issues_as_missing(root: Path, manifest: dict | None) -> list[str]:
             rel = f"{SPEC_KIT_OVERLAY_REL}/{OVERLAY_REV_FILE}"
             if rel not in missing:
                 missing.append(rel)
+    if not requires_cursor_plugin(runtime):
+        return missing
     for issue in _verify_cl_overlay(root, manifest=manifest):
         if issue.startswith("continual-learning overlay missing: "):
             rel = issue.split("continual-learning overlay missing: ", 1)[1]
