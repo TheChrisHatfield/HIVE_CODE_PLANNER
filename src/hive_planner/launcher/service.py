@@ -903,11 +903,13 @@ def find_staged_candidates(project_root: Path) -> Path | None:
     proposals = project_root.resolve() / "docs" / "proposals"
     if not proposals.is_dir():
         return None
-    paths = [
-        path
-        for path in proposals.glob("candidates*.md")
-        if path.name != "candidates-template.md" and path.is_file() and path.stat().st_size > 0
-    ]
+    paths: list[Path] = []
+    for pattern in ("candidates*.md", "cartridge-memory-*.md"):
+        for path in proposals.glob(pattern):
+            if path.name == "candidates-template.md":
+                continue
+            if path.is_file() and path.stat().st_size > 0:
+                paths.append(path)
     if not paths:
         return None
     return max(paths, key=lambda path: path.stat().st_mtime)

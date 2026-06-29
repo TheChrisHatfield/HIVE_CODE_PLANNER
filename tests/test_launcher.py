@@ -1502,6 +1502,17 @@ def test_find_staged_candidates_picks_newest(tmp_path: Path) -> None:
     assert find_staged_candidates(project) == newer
 
 
+def test_find_staged_candidates_includes_cartridge_memory_files(tmp_path: Path) -> None:
+    from hive_planner.launcher.service import find_staged_candidates
+
+    project = tmp_path / "app"
+    proposals = project / "docs" / "proposals"
+    proposals.mkdir(parents=True)
+    cartridge = proposals / "cartridge-memory-my-feature-20260626_120000.md"
+    cartridge.write_text("# operational\n\n- Run ci-check before handoff.\n", encoding="utf-8")
+    assert find_staged_candidates(project) == cartridge
+
+
 def test_run_agents_memory_propose_requires_wiring_audit(tmp_path: Path) -> None:
     from hive_planner.launcher.service import run_agents_memory_propose
 
