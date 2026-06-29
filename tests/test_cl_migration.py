@@ -147,6 +147,27 @@ def test_migrate_fails_when_marketplace_remains_without_removal(tmp_path: Path) 
         assert meta.get("cl_source") != "vendored"
 
 
+def test_migrate_without_agents_md_can_still_remove_marketplace_plugin(tmp_path: Path) -> None:
+    from hive_planner.agent_handoff import AGENT_HANDOFF_UNIFIED
+    from hive_planner.project_profile import write_project_profile
+
+    project = tmp_path / "no-agents"
+    project.mkdir()
+    (project / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    write_project_profile(
+        project, profile="minimal", project_name="no-agents", agent_handoff_mode=AGENT_HANDOFF_UNIFIED
+    )
+    _write_plugin(project, MARKETPLACE_CL_REL, "continual-learning")
+    _write_plugin(project, CL_OVERLAY_REL, "hive-continual-learning")
+
+    report = migrate_marketplace_cl(RepoPaths(root=project), remove_marketplace_plugin=True)
+
+    assert report.ok is True
+    assert report.removed_marketplace_plugin is True
+    assert not (project / MARKETPLACE_CL_REL).exists()
+    assert any("AGENTS.md not found" in warning for warning in report.warnings)
+
+
 def test_migrate_requires_hive_plugin(tmp_path: Path) -> None:
     from hive_planner.agent_handoff import AGENT_HANDOFF_UNIFIED
     from hive_planner.project_profile import write_project_profile

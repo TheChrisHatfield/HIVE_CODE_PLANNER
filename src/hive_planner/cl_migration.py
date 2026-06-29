@@ -178,9 +178,15 @@ def migrate_marketplace_cl(
         )
         return report
 
-    agents_path = resolve_repo_agents_path(paths, None)
-    original = agents_path.read_text(encoding="utf-8", errors="replace")
-    merged_text, count = merge_learned_workspace_facts(original)
+    agents_path = paths.root / "AGENTS.md"
+    original = ""
+    merged_text = ""
+    count = 0
+    if agents_path.is_file():
+        original = agents_path.read_text(encoding="utf-8", errors="replace")
+        merged_text, count = merge_learned_workspace_facts(original)
+    else:
+        report.warnings.append("AGENTS.md not found — skipping Learned Workspace Facts merge.")
     report.merged_bullets = count
 
     if count:
@@ -188,7 +194,7 @@ def migrate_marketplace_cl(
     elif LEGACY_WORKSPACE_FACTS in original:
         report.actions.append(f"Removed empty ## {LEGACY_WORKSPACE_FACTS} section")
 
-    if merged_text != original:
+    if merged_text != original and agents_path.is_file():
         report.agents_updated = True
         if not dry_run:
             agents_path.write_text(merged_text, encoding="utf-8")
