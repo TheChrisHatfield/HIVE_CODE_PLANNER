@@ -81,6 +81,8 @@ py -3.11 -m hive_planner unified-verify
 Operator guide: `docs/unified-handoff-upstream-forks.md`
 """
 
+UNIFIED_VENDOR_SECTION_MARKER = "## Unified vendor path"
+
 
 def user_guide_path(config: LauncherConfig | None = None) -> Path:
     root = config.normalized_hive_root() if config else default_hive_root()
@@ -90,5 +92,9 @@ def user_guide_path(config: LauncherConfig | None = None) -> Path:
 def load_user_guide(config: LauncherConfig | None = None) -> str:
     path = user_guide_path(config)
     if path.is_file():
-        return path.read_text(encoding="utf-8")
-    return _FALLBACK_GUIDE
+        text = path.read_text(encoding="utf-8")
+    else:
+        text = _FALLBACK_GUIDE
+    if path.is_file() and UNIFIED_VENDOR_SECTION_MARKER not in text:
+        text = text.rstrip() + "\n\n" + unified_vendor_help_text().strip() + "\n"
+    return text

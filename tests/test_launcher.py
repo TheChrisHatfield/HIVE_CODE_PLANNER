@@ -1250,6 +1250,52 @@ def test_run_deploy_agent_handoff_includes_vendor_hints_when_incomplete(
     assert any("unified-verify" in hint for hint in result["hints"])
 
 
+def test_load_user_guide_fallback_does_not_duplicate_unified_section(tmp_path: Path) -> None:
+    from hive_planner.launcher.user_guide import load_user_guide
+
+    cfg = LauncherConfig(hive_planner_root=str(tmp_path / "missing"))
+    text = load_user_guide(cfg)
+
+    assert "unified-verify" in text
+    assert text.count("## Unified vendor path") == 0
+    assert text.count("Hive **unified handoff** ships vendored") == 0
+
+
+def test_load_user_guide_appends_unified_vendor_section_when_readme_stale(tmp_path: Path) -> None:
+    from hive_planner.launcher.user_guide import UNIFIED_VENDOR_SECTION_MARKER, load_user_guide, user_guide_path
+
+    hive = tmp_path / "hive"
+    scripts = hive / "scripts"
+    scripts.mkdir(parents=True)
+    guide = scripts / "README.md"
+    guide.write_text("# Legacy guide\n\nNo vendor section yet.\n", encoding="utf-8")
+    cfg = LauncherConfig(hive_planner_root=str(hive))
+
+    text = load_user_guide(cfg)
+
+    assert user_guide_path(cfg) == guide.resolve()
+    assert UNIFIED_VENDOR_SECTION_MARKER in text
+    assert "vendor-sync" in text
+    assert "Legacy guide" in text
+
+
+def test_load_user_guide_does_not_duplicate_unified_section(tmp_path: Path) -> None:
+    from hive_planner.launcher.user_guide import load_user_guide
+
+    hive = tmp_path / "hive"
+    scripts = hive / "scripts"
+    scripts.mkdir(parents=True)
+    scripts.joinpath("README.md").write_text(
+        "# Guide\n\n## Unified vendor path (Spec Kit + Continual Learning)\n\nAlready documented.\n",
+        encoding="utf-8",
+    )
+    cfg = LauncherConfig(hive_planner_root=str(hive))
+
+    text = load_user_guide(cfg)
+
+    assert text.count("## Unified vendor path") == 1
+
+
 def test_ci_check_hints_unified_vendor_hive_source_vs_project(tmp_path: Path) -> None:
     from hive_planner.ci_handoff import CiCheckReport, CiStepResult
     from hive_planner.launcher.service import ci_check_hints, is_hive_planner_source_repo
