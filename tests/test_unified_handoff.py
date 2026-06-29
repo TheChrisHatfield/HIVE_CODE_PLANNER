@@ -429,6 +429,30 @@ def test_deploy_spec_kit_overlay_uses_target_pins_rev_for_refresh(tmp_path: Path
     assert (project / ".hive" / "spec-kit" / ".hive-overlay-rev").read_text(encoding="utf-8").strip() == "2"
 
 
+def test_ci_unified_vendor_checks_overlay_when_packaged_unavailable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import hive_planner.vendor_sync as vendor_sync
+
+    project = tmp_path / "unified-project"
+    project.mkdir()
+    vendor_sync.write_project_pins(project, vendor_sync.load_manifest(vendor_sync.packaged_manifest_path()))
+
+    original_load = vendor_sync.load_manifest
+
+    def _load_manifest(path: Path) -> dict:
+        if "vendor_templates" in path.as_posix():
+            raise vendor_sync.VendorSyncError("packaged manifest unavailable")
+        return original_load(path)
+
+    monkeypatch.setattr(vendor_sync, "load_manifest", _load_manifest)
+
+    ok, detail = vendor_sync.ci_unified_vendor_step(RepoPaths(root=project), hive_source=False)
+
+    assert ok is False
+    assert "spec-kit overlay missing" in detail
+
+
 def test_ci_unified_vendor_checks_overlay_with_local_manifest(tmp_path: Path) -> None:
     from hive_planner.vendor_sync import ci_unified_vendor_step, load_manifest, packaged_manifest_path
 
