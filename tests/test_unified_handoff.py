@@ -362,18 +362,37 @@ def test_deploy_spec_kit_overlay_refreshes_when_patch_rev_changes(tmp_path: Path
     assert (project / ".hive" / "spec-kit" / ".hive-overlay-rev").read_text(encoding="utf-8").strip() == "2"
 
 
-def test_ci_unified_vendor_accepts_bootstrapped_pins_without_vendor_manifest(tmp_path: Path) -> None:
+def test_ci_unified_vendor_fails_when_spec_kit_overlay_missing(tmp_path: Path) -> None:
     from hive_planner.vendor_sync import ci_unified_vendor_step, load_manifest, packaged_manifest_path
+
+    project = tmp_path / "unified-project"
+    project.mkdir()
+    write_project_pins(project, load_manifest(packaged_manifest_path()))
+
+    ok, detail = ci_unified_vendor_step(RepoPaths(root=project), hive_source=False)
+
+    assert ok is False
+    assert "spec-kit overlay missing" in detail
+
+
+def test_ci_unified_vendor_accepts_bootstrapped_pins_without_vendor_manifest(tmp_path: Path) -> None:
+    from hive_planner.vendor_sync import (
+        ci_unified_vendor_step,
+        deploy_spec_kit_overlay,
+        load_manifest,
+        packaged_manifest_path,
+    )
 
     project = tmp_path / "unified-project"
     project.mkdir()
     pins = load_manifest(packaged_manifest_path())
     write_project_pins(project, pins)
+    deploy_spec_kit_overlay(Path(__file__).resolve().parents[1], project)
 
     ok, detail = ci_unified_vendor_step(RepoPaths(root=project), hive_source=False)
 
     assert ok is True
-    assert "project pins match packaged manifest" in detail
+    assert "project pins and spec-kit overlay ok" in detail
 
 
 def test_ci_unified_vendor_fails_when_pins_patch_rev_stale(tmp_path: Path) -> None:

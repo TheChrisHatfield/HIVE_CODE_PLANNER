@@ -655,6 +655,9 @@ def ci_unified_vendor_step(
         packaged = load_manifest(packaged_manifest_path())
     except VendorSyncError:
         return True, "project pins valid"
-    if project_pins_match(packaged, pins):
-        return True, "project pins match packaged manifest"
-    return False, "project pins drift from hive-planner manifest (re-run deploy handoff)"
+    if not project_pins_match(packaged, pins):
+        return False, "project pins drift from hive-planner manifest (re-run deploy handoff)"
+    overlay_issues = _verify_spec_kit_overlay(root, manifest=packaged)
+    if overlay_issues:
+        return False, "; ".join(overlay_issues)
+    return True, "project pins and spec-kit overlay ok"
