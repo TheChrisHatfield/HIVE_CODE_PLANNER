@@ -202,9 +202,9 @@ def migrate_marketplace_cl(
             if not lint.ok:
                 agents_path.write_text(original, encoding="utf-8")
                 report.ok = False
+                report.agents_updated = False
                 errors = [issue.message for issue in lint.issues if issue.severity == "error"]
                 report.warnings.append(f"AGENTS.md lint failed after merge — rolled back: {'; '.join(errors)}")
-                return report
 
     if marketplace_cl_installed(root):
         if remove_marketplace_plugin:
