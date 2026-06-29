@@ -1186,6 +1186,70 @@ def test_load_user_guide_fallback_when_missing(tmp_path: Path) -> None:
     assert "First time?" in text
 
 
+def test_load_user_guide_fallback_when_missing(tmp_path: Path) -> None:
+    from hive_planner.launcher.user_guide import load_user_guide
+
+    cfg = LauncherConfig(hive_planner_root=str(tmp_path / "missing"))
+    text = load_user_guide(cfg)
+    assert "Hive Planner" in text
+    assert "First time?" in text
+    assert "unified-verify" in text
+
+
+def test_unified_vendor_help_text_covers_cli_commands() -> None:
+    from hive_planner.launcher.user_guide import unified_vendor_help_text
+
+    text = unified_vendor_help_text()
+    assert "vendor-sync" in text
+    assert "unified-verify" in text
+    assert ".hive/upstream-pins.json" in text
+    assert "hive-continual-learning" in text
+
+
+def test_scripts_readme_documents_unified_vendor_path() -> None:
+    guide = Path(__file__).resolve().parents[1] / "scripts" / "README.md"
+    text = guide.read_text(encoding="utf-8")
+    assert "## Unified vendor path" in text
+    assert "vendor-sync" in text
+    assert "unified-verify" in text
+    assert "Deploy agent handoff" in text
+
+
+def test_unified_vendor_repair_hints_for_overlay_gaps() -> None:
+    from hive_planner.launcher.service import unified_vendor_repair_hints
+
+    hints = unified_vendor_repair_hints(missing=[".hive/spec-kit/WORKFLOW.md"])
+    assert hints
+    assert any("unified-verify" in hint for hint in hints)
+    assert unified_vendor_repair_hints(missing=["docs/specs/foo/spec.md"]) == []
+
+
+def test_run_deploy_agent_handoff_includes_vendor_hints_when_incomplete(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from hive_planner import agent_handoff
+
+    hive_root = _hive_planner_source(tmp_path)
+    project = _minimal_hive_project(tmp_path / "proj")
+
+    def _incomplete(_root: Path):
+        from hive_planner.agent_handoff import AgentHandoffStatus
+
+        return AgentHandoffStatus(
+            mode="unified",
+            spec_kit_enabled=True,
+            continual_learning_enabled=True,
+            complete=False,
+            missing=[".hive/spec-kit/.hive-overlay-rev"],
+        )
+
+    monkeypatch.setattr(agent_handoff, "validate_unified_handoff", _incomplete)
+    result = run_deploy_agent_handoff(project, hive_planner_root=hive_root, force=True)
+    assert result["ok"] is False
+    assert result.get("hints")
+    assert any("unified-verify" in hint for hint in result["hints"])
+
+
 def test_auto_complete_onboarding_when_setup_ready(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     hive = tmp_path / "hive"
     hive.mkdir()

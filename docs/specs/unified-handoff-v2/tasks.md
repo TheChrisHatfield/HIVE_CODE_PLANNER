@@ -51,7 +51,7 @@
 
 - [x] `pyproject.toml` `[unified]` optional extra + `vendor_templates` package-data
 - [x] `hive_planner vendor-sync` / `unified-verify` commands
-- [ ] Launcher help text for unified vendor path
+- [x] Launcher help text for unified vendor path
 
 ## Task 8 — Tests and CI
 
@@ -73,7 +73,7 @@
 
 ## Active task
 
-**Task 7** — Launcher help text for unified vendor path.
+**Task 9** — Docs closure (bootstrap guide, starter-kit integration, cl-spec cross-links).
 
 ## Validation log
 

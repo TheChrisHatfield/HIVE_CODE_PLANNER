@@ -786,6 +786,25 @@ def is_hive_planner_source_repo(root: Path) -> bool:
     return 'name = "hive-planner"' in text
 
 
+def unified_vendor_repair_hints(*, missing: list[str] | None = None) -> list[str]:
+    """Launcher tips when unified vendor artifacts are missing or stale."""
+    if not missing:
+        return []
+    markers = (
+        ".hive/upstream-pins.json",
+        ".hive/spec-kit/",
+        "hive-continual-learning",
+        ".hive-overlay-rev",
+    )
+    if not any(any(marker in rel for marker in markers) for rel in missing):
+        return []
+    return [
+        "Run py -3.11 -m hive_planner unified-verify in the project folder to inspect pins and overlays.",
+        "Repair: Home → Deploy agent handoff (refreshes .hive/spec-kit/ and hive-continual-learning plugin).",
+        "Hive source maintainers: vendor-sync --check / --apply — see scripts/README.md § Unified vendor path.",
+    ]
+
+
 def ci_check_hints(root: Path, report) -> list[str]:
     from hive_planner.ci_handoff import CiCheckReport
     from hive_planner.project_profile import resolve_project_integrations
@@ -811,6 +830,8 @@ def ci_check_hints(root: Path, report) -> list[str]:
         )
     elif "roadmap-artifacts" in failed:
         hints.append("Roadmap failures mean spec/delta/tasks files are missing for planned features in this repo.")
+    if "unified-vendor" in failed:
+        hints.extend(unified_vendor_repair_hints(missing=[".hive/upstream-pins.json"]))
     return hints
 
 
@@ -875,6 +896,9 @@ def run_deploy_agent_handoff(project_root: Path, *, hive_planner_root: Path, for
             "spec_kit_enabled": handoff.spec_kit_enabled,
             "continual_learning_enabled": handoff.continual_learning_enabled,
         }
+        hints = unified_vendor_repair_hints(missing=handoff.missing)
+        if hints:
+            payload["hints"] = hints
     if repair.repaired:
         payload["repair"] = {"feature": repair.feature, "detail": repair.detail}
     rosetta_details: list[str] = []

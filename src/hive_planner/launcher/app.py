@@ -1651,6 +1651,8 @@ class HivePlannerApp:
                 self._append_log(self.home_log, f"  missing: {rel}")
             for warning in result.get("warnings", []):
                 self._append_log(self.home_log, f"Warning: {warning}")
+            for hint in result.get("hints", []):
+                self._append_log(self.home_log, f"Tip: {hint}")
             return
         count = len(result.get("files_written", []))
         self._append_log(
@@ -1667,6 +1669,8 @@ class HivePlannerApp:
                 self._append_log(self.home_log, f"    patched: {rel}")
         for warning in result.get("warnings", []):
             self._append_log(self.home_log, f"Warning: {warning}")
+        for hint in result.get("hints", []):
+            self._append_log(self.home_log, f"Tip: {hint}")
         self._show_dashboard()
 
     def _on_explore(self) -> None:

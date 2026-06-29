@@ -112,7 +112,7 @@ The **active project** is the folder Hive Planner is “pointing at” right now
 | **Run health check** | Runs a bundle of checks (`ci-check`) on the active project. Green / passing means planning files, specs, and maps look aligned. |
 | **Open in Cursor** | Opens the active project folder in the Cursor editor |
 | **Sync impact maps** | Updates planning “impact map” files after you change code |
-| **Deploy agent handoff** | Writes Spec Kit + Continual Learning starter files for unified agent handoff |
+| **Deploy agent handoff** | Writes unified Spec Kit + Continual Learning overlays (`.hive/spec-kit/`, `.cursor/plugins/hive-continual-learning/`, `.hive/upstream-pins.json`). Re-run after Hive upgrades. |
 | **Load cartridge…** | Add reference docs, translate research markdown into draft `cartridge/`, or import an existing cartridge folder. With **unified handoff**, optionally **promote drafts** (force overwrite optional), write CL candidate files, and run **spec-drift**. Import + promote requires a valid feature id. |
 | **Open in Explorer** | Opens the project folder in Windows File Explorer |
 
@@ -191,6 +191,10 @@ Each project remembers its profile (**full** or **minimal**) for labels and chec
 | **Profile (full / minimal)** | How much starter structure a new project gets |
 | **Impact maps** | Files that track which code areas planning docs refer to |
 | **Handoff** | When you finish a chunk of work and pass it to another person or agent |
+| **Unified handoff** | Spec Kit + Continual Learning deployed together (symbiotic pair) |
+| **Vendor overlays** | `.hive/spec-kit/` + `.cursor/plugins/hive-continual-learning/` + `.hive/upstream-pins.json` |
+| **unified-verify** | CLI check that pins and vendor overlays match Hive expectations |
+| **vendor-sync** | Maintainer CLI to import/check pinned upstreams in the Hive source repo |
 
 ---
 
@@ -204,6 +208,56 @@ Each project remembers its profile (**full** or **minimal**) for labels and chec
 | Wrong Python / pip errors | **Settings → Scan for Python** → save → **Install / update Hive** |
 | Console windows flash briefly | Normal during some checks on Windows; the app tries to hide them |
 | Old shortcut icon | Rerun `CreateHivePlannerShortcut.ps1` or refresh Explorer (F5) |
+
+---
+
+## Unified vendor path (Spec Kit + Continual Learning)
+
+Stage 9 **unified handoff** installs Hive-patched forks of Spec Kit and Continual Learning into your project. You do **not** need to run `/add-plugin continual-learning` or install Spec Kit separately for Hive workflows.
+
+### What the app deploys
+
+| Folder / file | What it is |
+|---------------|------------|
+| `.hive/upstream-pins.json` | Pin snapshot — which upstream version and Hive patch rev you have |
+| `.hive/spec-kit/` | Spec Kit templates (task wiring audit, Rosetta nav, post-`/tasks` gates) |
+| `.cursor/plugins/hive-continual-learning/` | Continual Learning plugin (wiring audit before `AGENTS.md` edits) |
+
+**Home → Deploy agent handoff** copies these into your **active project**. Creating a project with handoff **unified** does the same during bootstrap.
+
+### Everyday repair
+
+| Goal | What to do |
+|------|------------|
+| Install or refresh vendor overlays | **Home → Deploy agent handoff** |
+| Check if pins/overlays are OK | Run health check — look for the `unified-vendor` step |
+| After pulling a newer Hive Planner | Deploy agent handoff again (overlays refresh when `hive_patch_rev` bumps) |
+
+### Command line (inside your project folder)
+
+```powershell
+py -3.11 -m hive_planner unified-verify
+```
+
+Use this when health check reports `unified-vendor` failures or deploy still shows missing files. JSON output lists missing overlays or stale patch revs.
+
+### Maintainers (Hive Planner source repo only)
+
+If you develop **this** Hive Planner repo and maintain `vendor/manifest.json`:
+
+```powershell
+py -3.11 -m hive_planner vendor-sync --check
+py -3.11 -m hive_planner vendor-sync --apply
+py -3.11 -m hive_planner unified-verify
+```
+
+| Command | Purpose |
+|---------|---------|
+| `vendor-sync --check` | Validate pin manifest and vendor paths (default) |
+| `vendor-sync --apply` | Import pinned upstream trees from GitHub |
+| `unified-verify` | Confirm manifest, project pins, and deployed overlays align |
+
+Technical operator guide: `docs/unified-handoff-upstream-forks.md` in the repo root.
 
 ---
 
