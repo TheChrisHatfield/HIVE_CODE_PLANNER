@@ -1530,6 +1530,8 @@ class HivePlannerApp:
             return
         for action in result.get("actions") or []:
             self._append_log(self.home_log, f"  {action}")
+        for warning in result.get("warnings", []):
+            self._append_log(self.home_log, f"Warning: {warning}")
         merged = result.get("merged_bullets", 0)
         if merged:
             self._append_log(self.home_log, f"Merged {merged} bullet(s) into ## Durable Workspace Facts.")
@@ -1537,7 +1539,10 @@ class HivePlannerApp:
             self._append_log(self.home_log, "Removed marketplace continual-learning plugin from project.")
         if result.get("cl_source"):
             self._append_log(self.home_log, f"Set cl_source={result['cl_source']} in .hive/project.json.")
-        self._append_log(self.home_log, "CL migration complete.")
+        if result.get("dry_run"):
+            self._append_log(self.home_log, "CL migration dry run complete.")
+        else:
+            self._append_log(self.home_log, "CL migration complete.")
         self._show_dashboard()
 
     def _on_map_sync(self) -> None:

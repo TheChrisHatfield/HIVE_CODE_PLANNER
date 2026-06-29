@@ -1756,6 +1756,30 @@ def test_is_bg_error_treats_cl_migrate_failure_as_structured() -> None:
     ) is False
 
 
+def test_cl_migrate_done_logs_warnings_on_success_path() -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.home_log = object()
+    logs: list[str] = []
+    app._append_log = lambda _widget, line: logs.append(line)
+    app._show_dashboard = lambda: None
+
+    app._cl_migrate_done(
+        {
+            "ok": True,
+            "dry_run": True,
+            "warnings": ["Marketplace plugin still present at .cursor/plugins/continual-learning/"],
+            "actions": ["Merged 1 bullet(s) from ## Learned Workspace Facts"],
+            "merged_bullets": 1,
+        }
+    )
+
+    assert any(line.startswith("Warning:") for line in logs)
+    assert any("dry run complete" in line for line in logs)
+    assert not any(line == "CL migration complete." for line in logs)
+
+
 def test_auto_complete_onboarding_when_setup_ready(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     hive = tmp_path / "hive"
     hive.mkdir()
