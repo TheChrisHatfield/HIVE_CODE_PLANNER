@@ -1251,7 +1251,12 @@ class HivePlannerApp:
             messagebox.showwarning("No project", "Link a workspace first (Projects tab).")
             return
         default = find_staged_candidates(root)
-        initial = str(default) if default else str(root / "docs" / "proposals")
+        if default and default.is_file():
+            initial = str(default.parent)
+        elif default:
+            initial = str(default)
+        else:
+            initial = str(root / "docs" / "proposals")
         selected = filedialog.askopenfilename(
             title="Select CL candidates file",
             initialdir=initial,

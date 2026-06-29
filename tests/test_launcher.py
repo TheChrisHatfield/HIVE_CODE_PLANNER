@@ -1511,6 +1511,7 @@ def test_find_staged_candidates_includes_cartridge_memory_files(tmp_path: Path) 
     cartridge = proposals / "cartridge-memory-my-feature-20260626_120000.md"
     cartridge.write_text("# operational\n\n- Run ci-check before handoff.\n", encoding="utf-8")
     assert find_staged_candidates(project) == cartridge
+    assert find_staged_candidates(project).parent == proposals
 
 
 def test_run_agents_memory_propose_requires_wiring_audit(tmp_path: Path) -> None:
