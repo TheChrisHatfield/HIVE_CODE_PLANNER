@@ -1743,6 +1743,19 @@ def test_pending_memory_survives_dashboard_when_linked_via_workspace_file(tmp_pa
     assert app._pending_memory_link == active_norm
 
 
+def test_is_bg_error_treats_cl_migrate_failure_as_structured() -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    assert app._is_bg_error(
+        {
+            "ok": False,
+            "error": "Hive continual-learning plugin missing",
+            "warnings": ["Hive continual-learning plugin missing"],
+        }
+    ) is False
+
+
 def test_auto_complete_onboarding_when_setup_ready(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     hive = tmp_path / "hive"
     hive.mkdir()

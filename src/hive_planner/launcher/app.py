@@ -1160,6 +1160,9 @@ class HivePlannerApp:
             "findings",
             "issues",
             "detail",
+            "warnings",
+            "actions",
+            "merged_bullets",
         )
         return not any(key in result for key in structured_keys)
 

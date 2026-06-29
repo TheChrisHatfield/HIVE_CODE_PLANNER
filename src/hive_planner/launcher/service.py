@@ -1041,7 +1041,11 @@ def run_cl_migrate(project_root: Path, *, remove_marketplace_plugin: bool = Fals
             dry_run=dry_run,
         )
     except ClMigrationError as exc:
-        return {"ok": False, "error": str(exc)}
+        return {
+            "ok": False,
+            "error": str(exc),
+            "hints": ["Verify the marketplace plugin path before removal."],
+        }
     payload = report.to_dict()
     if not report.ok:
         payload["error"] = "; ".join(report.warnings) if report.warnings else "CL migration failed"

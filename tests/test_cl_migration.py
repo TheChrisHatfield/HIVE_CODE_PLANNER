@@ -70,6 +70,18 @@ def test_merge_learned_workspace_facts_dedupes(tmp_path: Path) -> None:
     assert merged.count("Run ci-check before handoff.") == 1
 
 
+def test_run_cl_migrate_failure_includes_structured_keys(tmp_path: Path) -> None:
+    from hive_planner.launcher.service import run_cl_migrate
+
+    project = tmp_path / "missing"
+    project.mkdir()
+    (project / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+
+    result = run_cl_migrate(project)
+    assert result["ok"] is False
+    assert result.get("warnings") or result.get("hints")
+
+
 def test_migrate_marketplace_cl_merges_and_removes_plugin(tmp_path: Path) -> None:
     from hive_planner.agent_handoff import AGENT_HANDOFF_UNIFIED
     from hive_planner.project_profile import write_project_profile
