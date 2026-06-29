@@ -786,6 +786,37 @@ def is_hive_planner_source_repo(root: Path) -> bool:
     return 'name = "hive-planner"' in text
 
 
+def _missing_from_ci_report(report) -> list[str]:
+    from hive_planner.ci_handoff import CiCheckReport
+    from hive_planner.vendor_sync import CL_OVERLAY_REL, OVERLAY_REV_FILE, SPEC_KIT_OVERLAY_REL
+
+    if not isinstance(report, CiCheckReport):
+        return []
+    missing: list[str] = []
+    for step in report.steps:
+        if step.ok:
+            continue
+        if step.name == "agent-handoff-profile" and step.detail.startswith("missing:"):
+            tail = step.detail.split("missing:", 1)[1]
+            missing.extend(part.strip() for part in tail.split(",") if part.strip())
+        if step.name == "unified-vendor":
+            if "missing .hive/upstream-pins.json" in step.detail:
+                missing.append(".hive/upstream-pins.json")
+            for fragment in step.detail.split(";"):
+                fragment = fragment.strip()
+                if "overlay missing: " in fragment:
+                    missing.append(fragment.split("overlay missing: ", 1)[1].strip())
+                elif "spec-kit overlay stale" in fragment:
+                    missing.append(f"{SPEC_KIT_OVERLAY_REL}/{OVERLAY_REV_FILE}")
+                elif "continual-learning overlay stale" in fragment:
+                    missing.append(f"{CL_OVERLAY_REL}/{OVERLAY_REV_FILE}")
+    deduped: list[str] = []
+    for rel in missing:
+        if rel not in deduped:
+            deduped.append(rel)
+    return deduped
+
+
 def unified_vendor_repair_hints(*, missing: list[str] | None = None) -> list[str]:
     """Launcher tips when unified vendor artifacts are missing or stale."""
     if not missing:
@@ -837,7 +868,8 @@ def ci_check_hints(root: Path, report) -> list[str]:
                 "and vendor-sync --apply from this repo root — see scripts/README.md § Unified vendor path."
             )
         elif integrations.agent_handoff_mode == AGENT_HANDOFF_UNIFIED:
-            hints.extend(unified_vendor_repair_hints(missing=[".hive/upstream-pins.json"]))
+            vendor_missing = _missing_from_ci_report(report)
+            hints.extend(unified_vendor_repair_hints(missing=vendor_missing or [".hive/upstream-pins.json"]))
     return hints
 
 
