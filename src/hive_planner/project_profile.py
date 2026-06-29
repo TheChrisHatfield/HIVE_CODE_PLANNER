@@ -28,6 +28,7 @@ class ProjectProfile:
     agent_handoff_mode: str | None = None
     spec_kit_enabled: bool | None = None
     continual_learning_enabled: bool | None = None
+    cl_source: str | None = None
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -89,6 +90,9 @@ def read_project_profile(project_root: Path) -> ProjectProfile | None:
         spec_kit = bool(spec_kit)
     if continual_learning is not None:
         continual_learning = bool(continual_learning)
+    cl_source = str(data["cl_source"]).strip().lower() if data.get("cl_source") else None
+    if cl_source not in {None, "vendored", "marketplace"}:
+        cl_source = None
     return ProjectProfile(
         bootstrap_profile=profile,
         project_name=name,
@@ -98,6 +102,7 @@ def read_project_profile(project_root: Path) -> ProjectProfile | None:
         agent_handoff_mode=agent_handoff,
         spec_kit_enabled=spec_kit,
         continual_learning_enabled=continual_learning,
+        cl_source=cl_source,
     )
 
 
@@ -125,6 +130,7 @@ def write_project_profile(
     agent_handoff_mode: str | None = None,
     spec_kit_enabled: bool | None = None,
     continual_learning_enabled: bool | None = None,
+    cl_source: str | None = None,
 ) -> Path:
     from hive_planner.agent_handoff import AGENT_HANDOFF_OFF, AGENT_HANDOFF_UNIFIED, integrations_from_mode, normalize_agent_handoff_mode
 
@@ -163,6 +169,11 @@ def write_project_profile(
         agent_handoff_mode=agent_handoff_mode,
         spec_kit_enabled=spec_kit_enabled,
         continual_learning_enabled=continual_learning_enabled,
+        cl_source=(
+            cl_source
+            if cl_source is not None
+            else (existing.cl_source if existing else None)
+        ),
     )
     path = project_meta_path(root)
     path.write_text(json.dumps(payload.to_dict(), indent=2) + "\n", encoding="utf-8")
@@ -184,3 +195,24 @@ def delete_project_profile(project_root: Path) -> tuple[bool, str]:
     except OSError as exc:
         return False, str(exc)
     return True, "Hive profile metadata deleted."
+
+
+def set_project_cl_source(project_root: Path, cl_source: str) -> Path:
+    """Set continual learning source flag in .hive/project.json."""
+    normalized = str(cl_source).strip().lower()
+    if normalized not in {"vendored", "marketplace"}:
+        raise ValueError(f"Unknown cl_source: {cl_source}")
+    root = project_root.resolve()
+    existing = resolve_project_profile(root)
+    if not existing:
+        raise ValueError(f"Not a Hive project: {root}")
+    return write_project_profile(
+        root,
+        profile=existing.bootstrap_profile,
+        project_name=existing.project_name,
+        hive_planner_version=existing.hive_planner_version,
+        agent_handoff_mode=existing.agent_handoff_mode,
+        spec_kit_enabled=existing.spec_kit_enabled,
+        continual_learning_enabled=existing.continual_learning_enabled,
+        cl_source=normalized,
+    )

@@ -115,6 +115,11 @@ def run_ci_check(
     else:
         report.steps.append(CiStepResult("unified-vendor", True, "skipped (not unified / not hive source)"))
 
+    from hive_planner.cl_migration import ci_cl_install_step
+
+    cl_ok, cl_detail = ci_cl_install_step(paths.root)
+    report.steps.append(CiStepResult("cl-install", cl_ok, cl_detail))
+
     if check_map_drift:
         map_report = sync_impact_maps(paths, dry_run=True)
         drift = bool(

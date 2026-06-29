@@ -56,6 +56,7 @@ The desktop app **Deploy agent handoff** button (Home tab) runs the same deploy 
 | After upgrading Hive Planner | **Home → Deploy agent handoff** again (refreshes overlays when patch rev changes) |
 | Check pins and overlays in a project | **Home → Verify vendor pins**, or `py -3.11 -m hive_planner unified-verify` |
 | Detect old marketplace / starter-kit layout | **Home → Scan legacy deployment** |
+| Migrate marketplace CL → Hive vendored CL | **Home → Migrate marketplace CL…**, or `py -3.11 -m hive_planner cl-migrate` |
 | Health check includes vendor step | **Home → Run health check** — fails `unified-vendor` when pins or overlays drift |
 
 ### Wiring audit and memory promotion (unified handoff)

@@ -208,7 +208,7 @@ def scan_legacy_deployment(project_root: Path) -> LegacyDeploymentReport:
                 code="dual_cl_install",
                 severity="warn",
                 detail="Both marketplace continual-learning and hive-continual-learning plugins are present.",
-                repair="Disable or remove marketplace /add-plugin continual-learning; use hive-continual-learning only.",
+                repair="Home → Migrate marketplace CL (merge data + remove marketplace plugin).",
             )
         )
     elif marketplace_installed:
@@ -268,7 +268,7 @@ def scan_legacy_deployment(project_root: Path) -> LegacyDeploymentReport:
                     code="learned_workspace_facts",
                     severity="info",
                     detail="AGENTS.md still uses ## Learned Workspace Facts (upstream CL section name).",
-                    repair="Merge into ## Durable Workspace Facts when running agents-apply or CL memory update.",
+                    repair="Home → Migrate marketplace CL to merge Learned Workspace Facts and set vendored source.",
                 )
             )
 

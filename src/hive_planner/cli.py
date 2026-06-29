@@ -266,6 +266,17 @@ def main(argv: list[str] | None = None) -> int:
     wiring_check = wiring_audit_sub.add_parser("check", help="Verify wiring audit attestation is current")
     wiring_check.add_argument("--feature", default=None, help="Feature id (default: active from AGENTS.md)")
 
+    cl_migrate = sub.add_parser(
+        "cl-migrate",
+        help="Migrate marketplace Continual Learning data to Hive vendored CL",
+    )
+    cl_migrate.add_argument(
+        "--remove-marketplace-plugin",
+        action="store_true",
+        help="Remove .cursor/plugins/continual-learning/ from the project after migration",
+    )
+    cl_migrate.add_argument("--dry-run", action="store_true", help="Report actions without writing files")
+
     args = parser.parse_args(argv)
     root, auto_detected = resolve_root(args.root)
     paths = RepoPaths(root=root)
@@ -541,6 +552,22 @@ def main(argv: list[str] | None = None) -> int:
         print("Applied accepted bullets to AGENTS.md (guarded v2 apply)")
         print(json.dumps(result.to_dict(), indent=2))
         return 0
+
+    if args.command == "cl-migrate":
+        from hive_planner.cl_migration import ClMigrationError, migrate_marketplace_cl
+
+        try:
+            report = migrate_marketplace_cl(
+                paths,
+                remove_marketplace_plugin=args.remove_marketplace_plugin,
+                dry_run=args.dry_run,
+            )
+        except ClMigrationError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        print(f"Root: {root}")
+        print(json.dumps(report.to_dict(), indent=2))
+        return 0 if report.ok else 1
 
     if args.command == "agents-ingest":
         try:

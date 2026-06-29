@@ -32,6 +32,7 @@ from hive_planner.launcher.service import (
     run_deploy_agent_handoff,
     run_install,
     run_legacy_deployment_scan,
+    run_cl_migrate,
     run_project_ci_check,
     run_project_init,
     run_project_map_sync,
@@ -491,6 +492,12 @@ class HivePlannerApp:
             "Scan legacy deployment",
             self._on_legacy_deployment_scan,
             tooltip="Detect marketplace CL, missing pins, or starter-kit-only layouts from pre-unified deploy.",
+        )
+        secondary_button(
+            verify_actions,
+            "Migrate marketplace CL…",
+            self._on_cl_migrate,
+            tooltip="Merge Learned Workspace Facts into Durable Workspace Facts; optionally remove marketplace plugin.",
         )
 
         log_card = card(body)
@@ -1485,6 +1492,49 @@ class HivePlannerApp:
             repair = finding.get("repair")
             if repair:
                 self._append_log(self.home_log, f"    repair: {repair}")
+        self._show_dashboard()
+
+    def _on_cl_migrate(self) -> None:
+        root = self._active_linked_root()
+        if not root:
+            messagebox.showwarning("No project", "Link a workspace first.")
+            return
+        remove_plugin = messagebox.askyesno(
+            "Remove marketplace plugin?",
+            "Also remove .cursor/plugins/continual-learning/ from this project?\n\n"
+            "Choose Yes to avoid dual CL hooks (recommended after Deploy agent handoff).\n"
+            "Choose No to merge AGENTS.md data only.",
+            parent=self.root,
+        )
+        self._append_log(self.home_log, "Migrating marketplace Continual Learning data to Hive format…")
+        self._run_bg(
+            lambda r=root, rm=remove_plugin: run_cl_migrate(r, remove_marketplace_plugin=rm),
+            self._cl_migrate_done,
+        )
+
+    def _cl_migrate_done(self, result: dict) -> None:
+        if self._is_bg_error(result):
+            self._append_log(self.home_log, self._result_detail(result))
+            self._show_dashboard()
+            return
+        if not result.get("ok"):
+            self._append_log(self.home_log, self._result_detail(result))
+            for hint in result.get("hints", []):
+                self._append_log(self.home_log, f"Tip: {hint}")
+            for warning in result.get("warnings", []):
+                self._append_log(self.home_log, f"Warning: {warning}")
+            self._show_dashboard()
+            return
+        for action in result.get("actions") or []:
+            self._append_log(self.home_log, f"  {action}")
+        merged = result.get("merged_bullets", 0)
+        if merged:
+            self._append_log(self.home_log, f"Merged {merged} bullet(s) into ## Durable Workspace Facts.")
+        if result.get("removed_marketplace_plugin"):
+            self._append_log(self.home_log, "Removed marketplace continual-learning plugin from project.")
+        if result.get("cl_source"):
+            self._append_log(self.home_log, f"Set cl_source={result['cl_source']} in .hive/project.json.")
+        self._append_log(self.home_log, "CL migration complete.")
         self._show_dashboard()
 
     def _on_map_sync(self) -> None:

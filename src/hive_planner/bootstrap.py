@@ -881,6 +881,7 @@ def _write_bootstrap_tree(
     )
     written.append(meta_path.relative_to(target).as_posix())
     if spec_kit and continual_learning:
+        from hive_planner.project_profile import set_project_cl_source
         from hive_planner.vendor_sync import deploy_unified_vendor_artifacts
 
         deploy_unified_vendor_artifacts(
@@ -890,6 +891,10 @@ def _write_bootstrap_tree(
             written=written,
             warnings=warnings,
         )
+        try:
+            set_project_cl_source(target, "vendored")
+        except ValueError:
+            pass
 
 
 def deploy_agent_handoff_scaffold(
@@ -952,6 +957,12 @@ def deploy_agent_handoff_scaffold(
         AGENT_HANDOFF_UNIFIED,
         hive_planner_version=existing.hive_planner_version if existing else None,
     )
+    from hive_planner.project_profile import set_project_cl_source
+
+    try:
+        set_project_cl_source(target, "vendored")
+    except ValueError:
+        pass
     written.append(".hive/project.json")
     from hive_planner.vendor_sync import deploy_unified_vendor_artifacts
 

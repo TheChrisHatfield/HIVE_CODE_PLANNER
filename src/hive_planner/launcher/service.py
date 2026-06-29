@@ -893,6 +893,11 @@ def ci_check_hints(root: Path, report) -> list[str]:
         elif integrations.agent_handoff_mode == AGENT_HANDOFF_UNIFIED:
             vendor_missing = _missing_from_ci_report(report)
             hints.extend(unified_vendor_repair_hints(missing=vendor_missing or [".hive/upstream-pins.json"]))
+    if "cl-install" in failed:
+        hints.append(
+            "Migrate marketplace Continual Learning: Home → Migrate marketplace CL, or "
+            "py -3.11 -m hive_planner cl-migrate --remove-marketplace-plugin"
+        )
     if "wiring-audit" in failed:
         hints.append(
             "Record wiring audit after integration validation: Home → Record wiring audit, or "
@@ -1019,6 +1024,31 @@ def run_legacy_deployment_scan(project_root: Path) -> dict:
     else:
         warns = [item for item in report.findings if item.severity == "warn"]
         payload["detail"] = f"{len(warns)} legacy deployment issue(s) detected."
+    return payload
+
+
+def run_cl_migrate(project_root: Path, *, remove_marketplace_plugin: bool = False, dry_run: bool = False) -> dict:
+    summary = summarize_project(project_root)
+    if not summary.ok:
+        return {"ok": False, "error": summary.detail, "detail": summary.detail}
+    from hive_planner.cl_migration import ClMigrationError, migrate_marketplace_cl
+
+    paths = RepoPaths(root=project_root.resolve())
+    try:
+        report = migrate_marketplace_cl(
+            paths,
+            remove_marketplace_plugin=remove_marketplace_plugin,
+            dry_run=dry_run,
+        )
+    except ClMigrationError as exc:
+        return {"ok": False, "error": str(exc)}
+    payload = report.to_dict()
+    if not report.ok:
+        payload["error"] = "; ".join(report.warnings) if report.warnings else "CL migration failed"
+        payload["hints"] = [
+            "Deploy agent handoff first if hive-continual-learning is missing.",
+            "Re-run with remove marketplace plugin enabled after reviewing the log.",
+        ]
     return payload
 
 
