@@ -96,7 +96,7 @@ def load_user_guide(config: LauncherConfig | None = None) -> str:
     if readme_on_disk:
         try:
             text = path.read_text(encoding="utf-8")
-        except OSError:
+        except (OSError, UnicodeDecodeError):
             text = None
     if text is None:
         text = _FALLBACK_GUIDE

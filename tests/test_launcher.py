@@ -1251,6 +1251,27 @@ def test_run_deploy_agent_handoff_includes_vendor_hints_when_incomplete(
     assert any("unified-verify" in hint for hint in result["hints"])
 
 
+def test_load_user_guide_falls_back_when_readme_not_utf8(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from hive_planner.launcher import user_guide as user_guide_mod
+    from hive_planner.launcher.user_guide import load_user_guide
+
+    hive = tmp_path / "hive"
+    scripts = hive / "scripts"
+    scripts.mkdir(parents=True)
+    (scripts / "README.md").write_bytes(b"\xff\xfe")
+    cfg = LauncherConfig(hive_planner_root=str(hive))
+
+    def _raise_unicode(_self: Path, *_args, **_kwargs) -> str:
+        raise UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid start byte")
+
+    monkeypatch.setattr(user_guide_mod.Path, "read_text", _raise_unicode)
+
+    text = load_user_guide(cfg)
+
+    assert "Hive Planner — quick help" in text
+    assert "unified-verify" in text
+
+
 def test_load_user_guide_falls_back_when_readme_unreadable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from hive_planner.launcher import user_guide as user_guide_mod
     from hive_planner.launcher.user_guide import load_user_guide

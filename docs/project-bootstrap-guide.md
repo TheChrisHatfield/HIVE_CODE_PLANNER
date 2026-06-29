@@ -44,7 +44,8 @@ Bootstrap or deploy **Spec Kit + Continual Learning together** — vendored Hive
 # New project with unified handoff (default in launcher)
 py -3.11 -m hive_planner init --target D:\projects\my-app --name "My App" --agent-handoff unified
 
-# Existing Hive project — deploy overlays only
+# Existing Hive project — deploy overlays only (desktop app or re-init)
+# Preferred: Hive Planner → Home → Deploy agent handoff
 py -3.11 -m hive_planner init --target D:\projects\my-app --agent-handoff unified --force
 ```
 
