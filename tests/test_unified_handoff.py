@@ -21,6 +21,17 @@ from hive_planner.vendor_sync import (
 )
 
 
+def _hive_repo_root() -> Path:
+    return Path(__file__).resolve().parents[1]
+
+
+def _deploy_unified_overlays(source: Path, target: Path) -> None:
+    from hive_planner.vendor_sync import deploy_continual_learning_overlay, deploy_spec_kit_overlay
+
+    deploy_spec_kit_overlay(source, target)
+    deploy_continual_learning_overlay(source, target)
+
+
 def test_resolve_manifest_from_repo_vendor(tmp_path: Path) -> None:
     repo = tmp_path / "hive"
     repo.mkdir()
@@ -158,13 +169,13 @@ def test_project_pins_match_compares_ref_and_patch_rev() -> None:
 
 
 def test_unified_verify_bootstrapped_project_without_vendor_manifest(tmp_path: Path) -> None:
-    from hive_planner.vendor_sync import deploy_spec_kit_overlay, load_manifest, packaged_manifest_path
+    from hive_planner.vendor_sync import load_manifest, packaged_manifest_path
 
     repo = tmp_path / "project"
     repo.mkdir()
     pins = load_manifest(packaged_manifest_path())
     write_project_pins(repo, pins)
-    deploy_spec_kit_overlay(Path(__file__).resolve().parents[1], repo)
+    _deploy_unified_overlays(_hive_repo_root(), repo)
 
     report = unified_verify(RepoPaths(root=repo))
 
@@ -212,7 +223,7 @@ def test_unified_verify_detects_stale_overlay_when_packaged_unavailable(
     repo.mkdir()
     pins = vendor_sync.load_manifest(vendor_sync.packaged_manifest_path())
     vendor_sync.write_project_pins(repo, pins)
-    vendor_sync.deploy_spec_kit_overlay(Path(__file__).resolve().parents[1], repo)
+    _deploy_unified_overlays(_hive_repo_root(), repo)
     (repo / ".hive" / "spec-kit" / ".hive-overlay-rev").write_text("0\n", encoding="utf-8")
 
     original_load = vendor_sync.load_manifest
@@ -231,7 +242,7 @@ def test_unified_verify_detects_stale_overlay_when_packaged_unavailable(
 
 
 def test_unified_verify_with_project_pins(tmp_path: Path) -> None:
-    from hive_planner.vendor_sync import deploy_spec_kit_overlay, load_manifest, packaged_manifest_path
+    from hive_planner.vendor_sync import load_manifest, packaged_manifest_path
 
     repo = tmp_path / "project"
     vendor = repo / "vendor"
@@ -239,7 +250,7 @@ def test_unified_verify_with_project_pins(tmp_path: Path) -> None:
     manifest = load_manifest(packaged_manifest_path())
     (vendor / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
     write_project_pins(repo, manifest)
-    deploy_spec_kit_overlay(Path(__file__).resolve().parents[1], repo)
+    _deploy_unified_overlays(_hive_repo_root(), repo)
 
     report = unified_verify(RepoPaths(root=repo))
 
@@ -292,6 +303,36 @@ def test_init_unified_deploys_spec_kit_overlay(tmp_path: Path) -> None:
     assert "Agent navigation (Rosetta Stone)" in spec_text
     assert "Integration wiring audit" in tasks_text
     assert "spec-drift-check" in workflow.read_text(encoding="utf-8")
+
+
+def test_init_unified_deploys_cl_plugin(tmp_path: Path) -> None:
+    source_root = tmp_path / "hive-planner"
+    kit = source_root / "starter-kit"
+    rules = source_root / ".cursor" / "rules"
+    rules.mkdir(parents=True)
+    kit.mkdir(parents=True)
+    (rules / "architecture.mdc").write_text("# a\n", encoding="utf-8")
+    (rules / "task-execution.mdc").write_text("# t\n", encoding="utf-8")
+    (rules / "validation.mdc").write_text("# v\n", encoding="utf-8")
+    (kit / "spec-kit-agent-integration.md").write_text("# sk\n", encoding="utf-8")
+    target = tmp_path / "boot-project"
+
+    init_project(RepoPaths(root=source_root), target, agent_handoff="unified")
+
+    agent_md = target / ".cursor" / "plugins" / "hive-continual-learning" / "agents" / "agents-memory-updater.md"
+    skill_md = target / ".cursor" / "plugins" / "hive-continual-learning" / "skills" / "continual-learning" / "SKILL.md"
+    workflow = target / ".cursor" / "plugins" / "hive-continual-learning" / "WORKFLOW.md"
+    rev = target / ".cursor" / "plugins" / "hive-continual-learning" / ".hive-overlay-rev"
+    assert agent_md.is_file()
+    assert skill_md.is_file()
+    assert workflow.is_file()
+    assert rev.is_file()
+    agent_text = agent_md.read_text(encoding="utf-8")
+    skill_text = skill_md.read_text(encoding="utf-8")
+    assert "Durable Workspace Facts" in agent_text
+    assert "Integration wiring audit" in skill_text
+    assert "spec-drift-check" in workflow.read_text(encoding="utf-8")
+    assert rev.read_text(encoding="utf-8").strip() == "2"
 
 
 def test_write_project_pins_refreshes_when_manifest_changes(tmp_path: Path) -> None:
@@ -394,6 +435,71 @@ def test_deploy_spec_kit_overlay_refreshes_when_patch_rev_changes(tmp_path: Path
     assert (project / ".hive" / "spec-kit" / ".hive-overlay-rev").read_text(encoding="utf-8").strip() == "2"
 
 
+def test_deploy_continual_learning_overlay_refreshes_when_patch_rev_changes(tmp_path: Path) -> None:
+    from hive_planner.vendor_sync import deploy_continual_learning_overlay, packaged_continual_learning_overlay_path
+
+    source = tmp_path / "hive"
+    source.mkdir()
+    vendor = source / "vendor"
+    vendor.mkdir()
+    (vendor / "manifest.json").write_text(
+        json.dumps(
+            {
+                "schema": MANIFEST_SCHEMA,
+                "spec_kit": {
+                    "upstream": "u",
+                    "path": "p",
+                    "ref": "abc",
+                    "hive_patch_rev": "1",
+                },
+                "continual_learning": {
+                    "upstream": "u",
+                    "path": "p",
+                    "ref": "def",
+                    "hive_patch_rev": "1",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    project = tmp_path / "project"
+    project.mkdir()
+    overlay_src = packaged_continual_learning_overlay_path()
+    agent_src = overlay_src / "agents" / "agents-memory-updater.md"
+
+    deploy_continual_learning_overlay(source, project)
+    agent_dest = project / ".cursor" / "plugins" / "hive-continual-learning" / "agents" / "agents-memory-updater.md"
+    assert agent_dest.is_file()
+    agent_dest.write_text("# stale overlay\n", encoding="utf-8")
+
+    (vendor / "manifest.json").write_text(
+        json.dumps(
+            {
+                "schema": MANIFEST_SCHEMA,
+                "spec_kit": {
+                    "upstream": "u",
+                    "path": "p",
+                    "ref": "abc",
+                    "hive_patch_rev": "1",
+                },
+                "continual_learning": {
+                    "upstream": "u",
+                    "path": "p",
+                    "ref": "def",
+                    "hive_patch_rev": "2",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    deploy_continual_learning_overlay(source, project)
+
+    assert "Durable Workspace Facts" in agent_dest.read_text(encoding="utf-8")
+    rev = project / ".cursor" / "plugins" / "hive-continual-learning" / ".hive-overlay-rev"
+    assert rev.read_text(encoding="utf-8").strip() == "2"
+    assert agent_src.read_text(encoding="utf-8")  # ensure packaged overlay still readable
+
+
 def test_deploy_unified_vendor_artifacts_skips_overlay_when_pins_fail(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -414,6 +520,9 @@ def test_deploy_unified_vendor_artifacts_skips_overlay_when_pins_fail(
 
     assert warnings
     assert not (project / ".hive" / "spec-kit" / "templates" / "spec-template.md").is_file()
+    assert not (
+        project / ".cursor" / "plugins" / "hive-continual-learning" / "agents" / "agents-memory-updater.md"
+    ).is_file()
 
 
 def test_deploy_spec_kit_overlay_uses_target_pins_rev_for_refresh(tmp_path: Path) -> None:
@@ -505,23 +614,18 @@ def test_ci_unified_vendor_fails_when_spec_kit_overlay_missing(tmp_path: Path) -
 
 
 def test_ci_unified_vendor_accepts_bootstrapped_pins_without_vendor_manifest(tmp_path: Path) -> None:
-    from hive_planner.vendor_sync import (
-        ci_unified_vendor_step,
-        deploy_spec_kit_overlay,
-        load_manifest,
-        packaged_manifest_path,
-    )
+    from hive_planner.vendor_sync import ci_unified_vendor_step, load_manifest, packaged_manifest_path
 
     project = tmp_path / "unified-project"
     project.mkdir()
     pins = load_manifest(packaged_manifest_path())
     write_project_pins(project, pins)
-    deploy_spec_kit_overlay(Path(__file__).resolve().parents[1], project)
+    _deploy_unified_overlays(_hive_repo_root(), project)
 
     ok, detail = ci_unified_vendor_step(RepoPaths(root=project), hive_source=False)
 
     assert ok is True
-    assert "project pins and spec-kit overlay ok" in detail
+    assert "project pins and unified overlays ok" in detail
 
 
 def test_ci_unified_vendor_fails_when_pins_patch_rev_stale(tmp_path: Path) -> None:

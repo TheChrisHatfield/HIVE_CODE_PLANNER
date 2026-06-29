@@ -31,12 +31,13 @@
 - [x] Post-`/tasks` validation doc → `spec-drift-check` (`WORKFLOW.md`)
 - [x] Packaged overlay at `vendor_templates/spec-kit/` → `.hive/spec-kit/` on bootstrap
 
-## Task 5 — Hive Continual Learning patches
+## Task 5 — Hive Continual Learning patches ✅
 
-- [ ] Map `Learned Workspace Facts` → `Durable Workspace Facts`
-- [ ] Subagent: reject/route behavioral bullets (mirror `classify_bullet`)
-- [ ] Skill: require wiring audit before AGENTS.md edit
-- [ ] Optional: export candidates markdown for `agents-propose`
+- [x] Map `Learned Workspace Facts` → `Durable Workspace Facts`
+- [x] Subagent: reject/route behavioral bullets (mirror `classify_bullet`)
+- [x] Skill: require wiring audit before AGENTS.md edit
+- [x] Optional: export candidates markdown for `agents-propose`
+- [x] Packaged overlay at `vendor_templates/continual-learning/` → `.cursor/plugins/hive-continual-learning/` on bootstrap
 
 ## Task 6 — Bootstrap deploy wiring
 
@@ -44,7 +45,7 @@
 - [x] `init --agent-handoff unified` writes `.hive/upstream-pins.json`
 - [x] `deploy_agent_handoff_scaffold` writes `.hive/upstream-pins.json`
 - [x] Copy Spec Kit overlay to `.hive/spec-kit/` (Task 4)
-- [ ] Copy vendored CL plugin to target (Task 5+)
+- [x] Copy vendored CL plugin to `.cursor/plugins/hive-continual-learning/` (Task 5)
 
 ## Task 7 — CLI and optional extra
 
@@ -72,7 +73,7 @@
 
 ## Active task
 
-**Task 5** — Hive Continual Learning patches (section mapping, wiring audit gate, behavioral routing).
+**Task 7** — Launcher help text for unified vendor path.
 
 ## Validation log
 

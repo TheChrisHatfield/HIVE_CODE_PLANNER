@@ -80,6 +80,20 @@ def test_validate_unified_handoff_flags_stale_spec_kit_overlay_rev(tmp_path: Pat
     assert ".hive/spec-kit/.hive-overlay-rev" in status.missing
 
 
+def test_validate_unified_handoff_flags_stale_cl_overlay_rev(tmp_path: Path) -> None:
+    source = _hive_source(tmp_path)
+    target = tmp_path / "stale-cl-overlay"
+    init_project(source, target, agent_handoff="unified")
+    rev_marker = target / ".cursor" / "plugins" / "hive-continual-learning" / ".hive-overlay-rev"
+    assert rev_marker.is_file()
+    rev_marker.write_text("0\n", encoding="utf-8")
+
+    status = validate_unified_handoff(target)
+
+    assert status.complete is False
+    assert ".cursor/plugins/hive-continual-learning/.hive-overlay-rev" in status.missing
+
+
 def test_validate_unified_handoff_flags_missing_upstream_pins(tmp_path: Path) -> None:
     source = _hive_source(tmp_path)
     target = tmp_path / "no-pins"

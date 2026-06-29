@@ -40,7 +40,7 @@ vendor/
 
 
 
-Hive patches (`hive_patch_rev`) are not yet applied — see Tasks 4–5 in the spec.
+Hive patches (`hive_patch_rev`) ship as packaged overlays — Spec Kit → `.hive/spec-kit/`, Continual Learning → `.cursor/plugins/hive-continual-learning/`. Optional local overrides under `vendor/patches/`.
 
 
 
@@ -88,9 +88,9 @@ Bootstrapped unified projects receive a snapshot at `.hive/upstream-pins.json`.
 
 | Upstream import | ✅ Task 3 |
 
-| Hive patches (SK/CL) | ✅ SK (Task 4) / 📋 CL (Task 5) |
+| Hive patches (SK/CL) | ✅ Task 4 / ✅ Task 5 |
 
-| Bootstrap vendor deploy | 🚧 pins + Spec Kit overlay ✅ |
+| Bootstrap vendor deploy | ✅ pins + both overlays |
 
 
 

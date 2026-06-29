@@ -15,7 +15,9 @@ from hive_planner.config import RepoPaths
 MANIFEST_SCHEMA = "hive-upstream-pins/v1"
 PROJECT_PINS_REL = ".hive/upstream-pins.json"
 SPEC_KIT_OVERLAY_REL = ".hive/spec-kit"
-SPEC_KIT_OVERLAY_REV_FILE = ".hive-overlay-rev"
+CL_OVERLAY_REL = ".cursor/plugins/hive-continual-learning"
+OVERLAY_REV_FILE = ".hive-overlay-rev"
+SPEC_KIT_OVERLAY_REV_FILE = OVERLAY_REV_FILE
 COMPONENT_KEYS = ("spec_kit", "continual_learning")
 COMPONENT_REQUIRED_FIELDS = frozenset({"upstream", "path", "ref", "hive_patch_rev"})
 
@@ -90,8 +92,20 @@ def packaged_spec_kit_overlay_path() -> Path:
     return Path(__file__).resolve().parent / "vendor_templates" / "spec-kit"
 
 
+def packaged_continual_learning_overlay_path() -> Path:
+    return Path(__file__).resolve().parent / "vendor_templates" / "continual-learning"
+
+
 def _spec_kit_overlay_complete(path: Path) -> bool:
     return (path / "templates" / "spec-template.md").is_file() and (path / "WORKFLOW.md").is_file()
+
+
+def _continual_learning_overlay_complete(path: Path) -> bool:
+    return (
+        (path / "agents" / "agents-memory-updater.md").is_file()
+        and (path / "skills" / "continual-learning" / "SKILL.md").is_file()
+        and (path / "WORKFLOW.md").is_file()
+    )
 
 
 def resolve_spec_kit_overlay_path(source_root: Path) -> Path:
@@ -102,6 +116,18 @@ def resolve_spec_kit_overlay_path(source_root: Path) -> Path:
     if _spec_kit_overlay_complete(packaged):
         return packaged
     raise VendorSyncError("Spec Kit overlay not found in vendor/patches/spec-kit or package templates")
+
+
+def resolve_continual_learning_overlay_path(source_root: Path) -> Path:
+    primary = source_root.resolve() / "vendor" / "patches" / "continual-learning"
+    if _continual_learning_overlay_complete(primary):
+        return primary
+    packaged = packaged_continual_learning_overlay_path()
+    if _continual_learning_overlay_complete(packaged):
+        return packaged
+    raise VendorSyncError(
+        "Continual Learning overlay not found in vendor/patches/continual-learning or package templates"
+    )
 
 
 def resolve_manifest_path(repo_root: Path) -> Path:
@@ -276,11 +302,41 @@ def _verify_spec_kit_overlay(root: Path, *, manifest: dict | None = None) -> lis
     if manifest is not None:
         expected_rev = _spec_kit_patch_rev(manifest)
         if expected_rev:
-            deployed_rev = _read_overlay_patch_rev(root)
+            deployed_rev = _read_component_overlay_rev(root, SPEC_KIT_OVERLAY_REL)
             if deployed_rev != expected_rev:
                 issues.append(
                     f"spec-kit overlay stale (deployed rev {deployed_rev!r}, expected {expected_rev!r})"
                 )
+    return issues
+
+
+def _verify_cl_overlay(root: Path, *, manifest: dict | None = None) -> list[str]:
+    issues: list[str] = []
+    overlay_root = root / CL_OVERLAY_REL
+    for rel in (
+        "README.md",
+        "WORKFLOW.md",
+        "agents/agents-memory-updater.md",
+        "skills/continual-learning/SKILL.md",
+        ".cursor-plugin/plugin.json",
+    ):
+        if not (overlay_root / rel).is_file():
+            issues.append(f"continual-learning overlay missing: {CL_OVERLAY_REL}/{rel}")
+    if manifest is not None:
+        expected_rev = _continual_learning_patch_rev(manifest)
+        if expected_rev:
+            deployed_rev = _read_component_overlay_rev(root, CL_OVERLAY_REL)
+            if deployed_rev != expected_rev:
+                issues.append(
+                    f"continual-learning overlay stale (deployed rev {deployed_rev!r}, expected {expected_rev!r})"
+                )
+    return issues
+
+
+def _verify_unified_overlays(root: Path, *, manifest: dict | None) -> list[str]:
+    issues: list[str] = []
+    issues.extend(_verify_spec_kit_overlay(root, manifest=manifest))
+    issues.extend(_verify_cl_overlay(root, manifest=manifest))
     return issues
 
 
@@ -293,7 +349,16 @@ def overlay_issues_as_missing(root: Path, manifest: dict | None) -> list[str]:
             if rel not in missing:
                 missing.append(rel)
         elif "spec-kit overlay stale" in issue:
-            rel = f"{SPEC_KIT_OVERLAY_REL}/{SPEC_KIT_OVERLAY_REV_FILE}"
+            rel = f"{SPEC_KIT_OVERLAY_REL}/{OVERLAY_REV_FILE}"
+            if rel not in missing:
+                missing.append(rel)
+    for issue in _verify_cl_overlay(root, manifest=manifest):
+        if issue.startswith("continual-learning overlay missing: "):
+            rel = issue.split("continual-learning overlay missing: ", 1)[1]
+            if rel not in missing:
+                missing.append(rel)
+        elif "continual-learning overlay stale" in issue:
+            rel = f"{CL_OVERLAY_REL}/{OVERLAY_REV_FILE}"
             if rel not in missing:
                 missing.append(rel)
     return missing
@@ -320,7 +385,7 @@ def unified_verify(paths: RepoPaths) -> UnifiedVerifyReport:
                 if not pins_match:
                     issues.append("project .hive/upstream-pins.json drift from source manifest")
                 else:
-                    overlay_issues = _verify_spec_kit_overlay(root, manifest=project_pins)
+                    overlay_issues = _verify_unified_overlays(root, manifest=project_pins)
                     if overlay_issues:
                         pins_match = False
                         issues.extend(overlay_issues)
@@ -344,12 +409,12 @@ def unified_verify(paths: RepoPaths) -> UnifiedVerifyReport:
                 if pins_match and not project_pins_match(packaged, project_pins):
                     pins_match = False
                     issues.append("project .hive/upstream-pins.json drift from hive-planner manifest")
-                overlay_issues = _verify_spec_kit_overlay(root, manifest=packaged)
+                overlay_issues = _verify_unified_overlays(root, manifest=packaged)
                 if overlay_issues:
                     pins_match = False
                     issues.extend(overlay_issues)
             except VendorSyncError:
-                overlay_issues = _verify_spec_kit_overlay(root, manifest=project_pins)
+                overlay_issues = _verify_unified_overlays(root, manifest=project_pins)
                 if overlay_issues:
                     pins_match = False
                     issues.extend(overlay_issues)
@@ -554,8 +619,15 @@ def _spec_kit_patch_rev(manifest: dict) -> str:
     return ""
 
 
-def _read_overlay_patch_rev(target: Path) -> str | None:
-    marker = target / SPEC_KIT_OVERLAY_REL / SPEC_KIT_OVERLAY_REV_FILE
+def _continual_learning_patch_rev(manifest: dict) -> str:
+    block = manifest.get("continual_learning")
+    if isinstance(block, dict):
+        return str(block.get("hive_patch_rev", "")).strip()
+    return ""
+
+
+def _read_component_overlay_rev(target: Path, overlay_rel: str) -> str | None:
+    marker = target / overlay_rel / OVERLAY_REV_FILE
     if not marker.is_file():
         return None
     try:
@@ -564,12 +636,20 @@ def _read_overlay_patch_rev(target: Path) -> str | None:
         return None
 
 
-def _write_overlay_patch_rev(target: Path, patch_rev: str) -> None:
+def _read_overlay_patch_rev(target: Path) -> str | None:
+    return _read_component_overlay_rev(target, SPEC_KIT_OVERLAY_REL)
+
+
+def _write_component_overlay_rev(target: Path, overlay_rel: str, patch_rev: str) -> None:
     if not patch_rev:
         return
-    marker = target / SPEC_KIT_OVERLAY_REL / SPEC_KIT_OVERLAY_REV_FILE
+    marker = target / overlay_rel / OVERLAY_REV_FILE
     marker.parent.mkdir(parents=True, exist_ok=True)
     marker.write_text(patch_rev + "\n", encoding="utf-8")
+
+
+def _write_overlay_patch_rev(target: Path, patch_rev: str) -> None:
+    _write_component_overlay_rev(target, SPEC_KIT_OVERLAY_REL, patch_rev)
 
 
 def deploy_spec_kit_overlay(
@@ -621,7 +701,61 @@ def deploy_spec_kit_overlay(
     if patch_rev:
         _write_overlay_patch_rev(target, patch_rev)
         if written is not None:
-            rel_marker = f"{SPEC_KIT_OVERLAY_REL}/{SPEC_KIT_OVERLAY_REV_FILE}"
+            rel_marker = f"{SPEC_KIT_OVERLAY_REL}/{OVERLAY_REV_FILE}"
+            if rel_marker not in written:
+                written.append(rel_marker)
+
+
+def deploy_continual_learning_overlay(
+    source_root: Path,
+    target: Path,
+    *,
+    force: bool = False,
+    written: list[str] | None = None,
+    warnings: list[str] | None = None,
+) -> None:
+    try:
+        overlay_root = resolve_continual_learning_overlay_path(source_root)
+    except VendorSyncError as exc:
+        if warnings is not None:
+            warnings.append(str(exc))
+        return
+    manifest: dict | None = None
+    patch_rev = ""
+    try:
+        manifest = load_manifest(resolve_manifest_path(source_root))
+        patch_rev = _continual_learning_patch_rev(manifest)
+    except VendorSyncError:
+        pass
+    target = target.resolve()
+    target_pins = read_project_pins(target)
+    if target_pins:
+        pins_rev = _continual_learning_patch_rev(target_pins)
+        if pins_rev:
+            patch_rev = pins_rev
+    dest_root = target / CL_OVERLAY_REL
+    overlay_force = force
+    if not overlay_force and patch_rev:
+        deployed_rev = _read_component_overlay_rev(target, CL_OVERLAY_REL)
+        if deployed_rev != patch_rev:
+            overlay_force = True
+    for src in sorted(overlay_root.rglob("*")):
+        if not src.is_file():
+            continue
+        rel = src.relative_to(overlay_root)
+        dest = dest_root / rel
+        if dest.exists() and not overlay_force:
+            continue
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dest)
+        if written is not None:
+            rel_dest = dest.relative_to(target).as_posix()
+            if rel_dest not in written:
+                written.append(rel_dest)
+    if patch_rev:
+        _write_component_overlay_rev(target, CL_OVERLAY_REL, patch_rev)
+        if written is not None:
+            rel_marker = f"{CL_OVERLAY_REL}/{OVERLAY_REV_FILE}"
             if rel_marker not in written:
                 written.append(rel_marker)
 
@@ -643,6 +777,13 @@ def deploy_unified_vendor_artifacts(
     ):
         return
     deploy_spec_kit_overlay(
+        source_root,
+        target,
+        force=force,
+        written=written,
+        warnings=warnings,
+    )
+    deploy_continual_learning_overlay(
         source_root,
         target,
         force=force,
@@ -680,23 +821,23 @@ def ci_unified_vendor_step(
         source_manifest = load_manifest(local_manifest)
         if not project_pins_match(source_manifest, pins):
             return False, "project pins drift from source manifest"
-        overlay_issues = _verify_spec_kit_overlay(root, manifest=source_manifest)
+        overlay_issues = _verify_unified_overlays(root, manifest=source_manifest)
         if overlay_issues:
             return False, "; ".join(overlay_issues)
-        return True, "project pins and spec-kit overlay ok"
+        return True, "project pins and unified overlays ok"
     pin_report = validate_project_pins(pins)
     if not pin_report.ok:
         return False, f"project pins invalid: {'; '.join(pin_report.issues)}"
     try:
         packaged = load_manifest(packaged_manifest_path())
     except VendorSyncError:
-        overlay_issues = _verify_spec_kit_overlay(root, manifest=pins)
+        overlay_issues = _verify_unified_overlays(root, manifest=pins)
         if overlay_issues:
             return False, "; ".join(overlay_issues)
         return True, "project pins valid (packaged manifest unavailable)"
     if not project_pins_match(packaged, pins):
         return False, "project pins drift from hive-planner manifest (re-run deploy handoff)"
-    overlay_issues = _verify_spec_kit_overlay(root, manifest=packaged)
+    overlay_issues = _verify_unified_overlays(root, manifest=packaged)
     if overlay_issues:
         return False, "; ".join(overlay_issues)
-    return True, "project pins and spec-kit overlay ok"
+    return True, "project pins and unified overlays ok"

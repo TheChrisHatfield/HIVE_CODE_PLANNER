@@ -76,6 +76,11 @@ def unified_handoff_artifacts(project_root: Path) -> list[str]:
         ".hive/spec-kit/WORKFLOW.md",
         ".hive/spec-kit/templates/spec-template.md",
         ".hive/spec-kit/templates/tasks-template.md",
+        ".cursor/plugins/hive-continual-learning/README.md",
+        ".cursor/plugins/hive-continual-learning/WORKFLOW.md",
+        ".cursor/plugins/hive-continual-learning/agents/agents-memory-updater.md",
+        ".cursor/plugins/hive-continual-learning/skills/continual-learning/SKILL.md",
+        ".cursor/plugins/hive-continual-learning/.cursor-plugin/plugin.json",
     ]
 
 
