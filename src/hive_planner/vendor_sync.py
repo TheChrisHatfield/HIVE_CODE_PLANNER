@@ -324,10 +324,16 @@ def unified_verify(paths: RepoPaths) -> UnifiedVerifyReport:
                 if pins_match and not project_pins_match(packaged, project_pins):
                     pins_match = False
                     issues.append("project .hive/upstream-pins.json drift from hive-planner manifest")
-                issues.extend(_verify_spec_kit_overlay(root, manifest=packaged))
+                overlay_issues = _verify_spec_kit_overlay(root, manifest=packaged)
+                if overlay_issues:
+                    pins_match = False
+                    issues.extend(overlay_issues)
             except VendorSyncError:
-                issues.extend(_verify_spec_kit_overlay(root))
-        ok = pins_match is True and not issues
+                overlay_issues = _verify_spec_kit_overlay(root)
+                if overlay_issues:
+                    pins_match = False
+                    issues.extend(overlay_issues)
+        ok = pins_match is True
     else:
         manifest_report = check_vendor_manifest(root)
         issues = list(manifest_report.issues)

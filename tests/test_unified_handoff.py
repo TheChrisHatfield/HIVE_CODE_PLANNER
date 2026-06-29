@@ -182,6 +182,7 @@ def test_unified_verify_fails_when_spec_kit_overlay_missing(tmp_path: Path) -> N
     report = unified_verify(RepoPaths(root=repo))
 
     assert report.ok is False
+    assert report.pins_match is False
     assert any("spec-kit overlay missing" in issue for issue in report.issues)
 
 
