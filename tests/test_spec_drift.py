@@ -229,6 +229,21 @@ def test_ci_check_includes_spec_drift_step(tmp_path: Path) -> None:
     assert drift.ok
 
 
+def test_spec_drift_ignores_checkbox_lines_in_candidates(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    (paths.root / "AGENTS.md").write_text(_minimal_agents("my-feature"), encoding="utf-8")
+    _write_full_handoff(paths, "my-feature")
+    candidates = paths.root / "candidates.md"
+    candidates.write_text(
+        "- Run ci-check before handoff.\n- [ ] Traced caller end-to-end\n",
+        encoding="utf-8",
+    )
+    report = check_memory_spec_drift(paths, candidates_path=candidates)
+    assert report.ok
+    assert any("Run ci-check before handoff." in b for b in report.operational)
+    assert not any(b.startswith("[ ]") for b in report.operational + report.behavioral + report.ambiguous)
+
+
 def test_propose_rejects_ambiguous_candidate(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     (paths.root / "AGENTS.md").write_text(_minimal_agents("my-feature"), encoding="utf-8")

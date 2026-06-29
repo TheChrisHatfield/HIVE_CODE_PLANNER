@@ -318,16 +318,9 @@ def _bullet_reflected_in_spec(bullet: str, spec_text: str) -> bool:
 
 
 def _collect_bullets_from_candidates(text: str) -> list[str]:
-    bullets: list[str] = []
-    for line in text.splitlines():
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#"):
-            continue
-        if stripped.startswith("- "):
-            bullets.append(stripped[2:].strip())
-        else:
-            bullets.append(stripped)
-    return [b for b in bullets if b]
+    from hive_planner.agents_memory import _parse_candidates
+
+    return _parse_candidates(text)
 
 
 def _collect_agents_facts(paths: RepoPaths) -> list[str]:
