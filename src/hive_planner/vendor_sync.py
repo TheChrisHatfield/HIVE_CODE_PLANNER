@@ -645,9 +645,12 @@ def ci_unified_vendor_step(
     local_manifest = root / "vendor" / "manifest.json"
     if local_manifest.is_file():
         source_manifest = load_manifest(local_manifest)
-        if project_pins_match(source_manifest, pins):
-            return True, "project pins match manifest"
-        return False, "project pins drift from source manifest"
+        if not project_pins_match(source_manifest, pins):
+            return False, "project pins drift from source manifest"
+        overlay_issues = _verify_spec_kit_overlay(root, manifest=source_manifest)
+        if overlay_issues:
+            return False, "; ".join(overlay_issues)
+        return True, "project pins and spec-kit overlay ok"
     pin_report = validate_project_pins(pins)
     if not pin_report.ok:
         return False, f"project pins invalid: {'; '.join(pin_report.issues)}"

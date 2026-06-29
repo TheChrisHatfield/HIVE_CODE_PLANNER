@@ -362,6 +362,22 @@ def test_deploy_spec_kit_overlay_refreshes_when_patch_rev_changes(tmp_path: Path
     assert (project / ".hive" / "spec-kit" / ".hive-overlay-rev").read_text(encoding="utf-8").strip() == "2"
 
 
+def test_ci_unified_vendor_checks_overlay_with_local_manifest(tmp_path: Path) -> None:
+    from hive_planner.vendor_sync import ci_unified_vendor_step, load_manifest, packaged_manifest_path
+
+    project = tmp_path / "unified-project"
+    vendor = project / "vendor"
+    vendor.mkdir(parents=True)
+    manifest = load_manifest(packaged_manifest_path())
+    (vendor / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    write_project_pins(project, manifest)
+
+    ok, detail = ci_unified_vendor_step(RepoPaths(root=project), hive_source=False)
+
+    assert ok is False
+    assert "spec-kit overlay missing" in detail
+
+
 def test_ci_unified_vendor_fails_when_spec_kit_overlay_missing(tmp_path: Path) -> None:
     from hive_planner.vendor_sync import ci_unified_vendor_step, load_manifest, packaged_manifest_path
 
