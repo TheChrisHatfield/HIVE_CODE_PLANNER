@@ -171,10 +171,13 @@ def _write_memory_candidates(paths: RepoPaths, feature: str, bullets: list[str])
         return None
     operational: list[str] = []
     behavioral: list[str] = []
+    ambiguous: list[str] = []
     for bullet in bullets:
         kind = classify_bullet(bullet).kind
         if kind == "behavioral":
             behavioral.append(bullet)
+        elif kind == "ambiguous":
+            ambiguous.append(bullet)
         else:
             operational.append(bullet)
 
@@ -189,9 +192,20 @@ def _write_memory_candidates(paths: RepoPaths, feature: str, bullets: list[str])
         "",
     ]
     lines.extend(f"- {b}" for b in operational)
+    if ambiguous:
+        lines.extend(
+            [
+                "",
+                "# ambiguous",
+                "",
+                "Add `# operational` or `# behavioral` to each bullet before agents-propose.",
+                "",
+            ]
+        )
+        lines.extend(f"- {b}" for b in ambiguous)
     lines.extend(["", "# behavioral", ""])
     lines.extend(f"- {b}" for b in behavioral)
-    if not operational and not behavioral:
+    if not operational and not behavioral and not ambiguous:
         return None
     lines.append("")
     out.parent.mkdir(parents=True, exist_ok=True)

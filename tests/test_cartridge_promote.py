@@ -151,6 +151,32 @@ def test_promote_memory_skips_empty_candidate_sections(tmp_path: Path) -> None:
     assert result.candidates_path is None
 
 
+def test_promote_memory_stages_ambiguous_bullets_separately(tmp_path: Path) -> None:
+    project = _unified_project(tmp_path / "proj")
+    feature = "mixed-mem"
+    paths = RepoPaths(root=project)
+    (paths.cartridge / "memory.md").write_text(
+        "\n".join(
+            [
+                DRAFT_BANNER,
+                "",
+                "# Memory Candidates (draft)",
+                "",
+                "- Run ci-check before handoff; API must return 404 when disabled.",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    result = promote_cartridge_drafts(paths, feature)
+
+    assert result.candidates_path is not None
+    text = (project / result.candidates_path).read_text(encoding="utf-8")
+    assert "# ambiguous" in text
+    assert "404 when disabled" in text
+    assert "# operational" in text
+
+
 def test_promote_skips_when_spec_kit_disabled(tmp_path: Path) -> None:
     project = tmp_path / "plain"
     project.mkdir()
