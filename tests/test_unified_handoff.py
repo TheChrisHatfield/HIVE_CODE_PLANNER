@@ -203,6 +203,33 @@ def test_unified_verify_fails_when_spec_kit_overlay_missing(tmp_path: Path) -> N
     assert any("spec-kit overlay missing" in issue for issue in report.issues)
 
 
+def test_unified_verify_detects_stale_overlay_when_packaged_unavailable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import hive_planner.vendor_sync as vendor_sync
+
+    repo = tmp_path / "project"
+    repo.mkdir()
+    pins = vendor_sync.load_manifest(vendor_sync.packaged_manifest_path())
+    vendor_sync.write_project_pins(repo, pins)
+    vendor_sync.deploy_spec_kit_overlay(Path(__file__).resolve().parents[1], repo)
+    (repo / ".hive" / "spec-kit" / ".hive-overlay-rev").write_text("0\n", encoding="utf-8")
+
+    original_load = vendor_sync.load_manifest
+
+    def _load_manifest(path: Path) -> dict:
+        if "vendor_templates" in path.as_posix():
+            raise vendor_sync.VendorSyncError("packaged manifest unavailable")
+        return original_load(path)
+
+    monkeypatch.setattr(vendor_sync, "load_manifest", _load_manifest)
+
+    report = vendor_sync.unified_verify(RepoPaths(root=repo))
+
+    assert report.ok is False
+    assert any("spec-kit overlay stale" in issue for issue in report.issues)
+
+
 def test_unified_verify_with_project_pins(tmp_path: Path) -> None:
     from hive_planner.vendor_sync import deploy_spec_kit_overlay, load_manifest, packaged_manifest_path
 

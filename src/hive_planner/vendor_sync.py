@@ -349,7 +349,7 @@ def unified_verify(paths: RepoPaths) -> UnifiedVerifyReport:
                     pins_match = False
                     issues.extend(overlay_issues)
             except VendorSyncError:
-                overlay_issues = _verify_spec_kit_overlay(root)
+                overlay_issues = _verify_spec_kit_overlay(root, manifest=project_pins)
                 if overlay_issues:
                     pins_match = False
                     issues.extend(overlay_issues)
