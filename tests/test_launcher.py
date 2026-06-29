@@ -1298,8 +1298,10 @@ def test_load_user_guide_does_not_duplicate_unified_section(tmp_path: Path) -> N
 
 
 def test_ci_check_hints_unified_vendor_hive_source_vs_project(tmp_path: Path) -> None:
+    from hive_planner.agent_handoff import AGENT_HANDOFF_UNIFIED
     from hive_planner.ci_handoff import CiCheckReport, CiStepResult
     from hive_planner.launcher.service import ci_check_hints, is_hive_planner_source_repo
+    from hive_planner.project_profile import write_project_profile
 
     hive = tmp_path / "hive"
     hive.mkdir()
@@ -1308,17 +1310,23 @@ def test_ci_check_hints_unified_vendor_hive_source_vs_project(tmp_path: Path) ->
     app.mkdir()
     (app / "START_HERE.md").write_text("# start\n", encoding="utf-8")
     (app / "pyproject.toml").write_text('[project]\nname = "my-app"\n', encoding="utf-8")
+    unified_app = tmp_path / "unified-app"
+    unified_app.mkdir()
+    (unified_app / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    write_project_profile(unified_app, profile="minimal", project_name="unified-app", agent_handoff_mode=AGENT_HANDOFF_UNIFIED)
 
     failed = CiCheckReport(steps=[CiStepResult("unified-vendor", False, "vendor paths missing")])
 
     hive_hints = ci_check_hints(hive, failed)
     app_hints = ci_check_hints(app, failed)
+    unified_hints = ci_check_hints(unified_app, failed)
 
     assert is_hive_planner_source_repo(hive) is True
     assert any("vendor-sync" in hint for hint in hive_hints)
     assert not any("Deploy agent handoff" in hint for hint in hive_hints)
-    assert any("Deploy agent handoff" in hint for hint in app_hints)
-    assert any("unified-verify" in hint for hint in app_hints)
+    assert not any("Deploy agent handoff" in hint for hint in app_hints)
+    assert any("Deploy agent handoff" in hint for hint in unified_hints)
+    assert any("unified-verify" in hint for hint in unified_hints)
 
 
 def test_auto_complete_onboarding_when_setup_ready(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

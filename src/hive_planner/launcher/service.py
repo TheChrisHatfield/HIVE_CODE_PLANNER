@@ -805,6 +805,7 @@ def unified_vendor_repair_hints(*, missing: list[str] | None = None) -> list[str
 
 
 def ci_check_hints(root: Path, report) -> list[str]:
+    from hive_planner.agent_handoff import AGENT_HANDOFF_UNIFIED
     from hive_planner.ci_handoff import CiCheckReport
     from hive_planner.project_profile import resolve_project_integrations
 
@@ -835,7 +836,7 @@ def ci_check_hints(root: Path, report) -> list[str]:
                 "Hive source vendor check failed. Run py -3.11 -m hive_planner vendor-sync --check "
                 "and vendor-sync --apply from this repo root — see scripts/README.md § Unified vendor path."
             )
-        else:
+        elif integrations.agent_handoff_mode == AGENT_HANDOFF_UNIFIED:
             hints.extend(unified_vendor_repair_hints(missing=[".hive/upstream-pins.json"]))
     return hints
 
