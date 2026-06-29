@@ -373,6 +373,26 @@ def test_migrate_warns_on_unexpected_marketplace_plugin_name(tmp_path: Path) -> 
     assert not any(action == "No marketplace plugin directory detected" for action in report.actions)
 
 
+def test_ci_cl_install_cursor_requires_hive_plugin(tmp_path: Path) -> None:
+    from hive_planner.agent_handoff import AGENT_HANDOFF_UNIFIED
+    from hive_planner.project_profile import write_project_profile
+
+    project = tmp_path / "cursor-no-plugin"
+    project.mkdir()
+    (project / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    write_project_profile(
+        project,
+        profile="minimal",
+        project_name="cursor-no-plugin",
+        agent_handoff_mode=AGENT_HANDOFF_UNIFIED,
+        cl_runtime="cursor",
+    )
+
+    ok, detail = ci_cl_install_step(project)
+    assert ok is False
+    assert "Hive continual-learning plugin missing" in detail
+
+
 def test_migrate_headless_removes_marketplace_when_requested(tmp_path: Path) -> None:
     from hive_planner.agent_handoff import AGENT_HANDOFF_UNIFIED, MARKETPLACE_CL_REL
     from hive_planner.cl_runtime import CL_RUNTIME_HEADLESS
@@ -475,3 +495,30 @@ def test_migrate_requires_hive_plugin(tmp_path: Path) -> None:
 
     report = migrate_marketplace_cl(RepoPaths(root=project))
     assert report.ok is False
+
+def test_migrate_headless_sets_vendored_cl_source_without_marketplace(tmp_path: Path) -> None:
+    from hive_planner.agent_handoff import AGENT_HANDOFF_UNIFIED
+    from hive_planner.cl_runtime import CL_RUNTIME_HEADLESS
+    from hive_planner.project_profile import write_project_profile
+
+    project = tmp_path / "headless-vendored-source"
+    project.mkdir()
+    (project / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    (project / "AGENTS.md").write_text(_minimal_agents_with_learned(), encoding="utf-8")
+    write_project_profile(
+        project,
+        profile="minimal",
+        project_name="headless-vendored-source",
+        agent_handoff_mode=AGENT_HANDOFF_UNIFIED,
+        cl_runtime=CL_RUNTIME_HEADLESS,
+        cl_source="marketplace",
+    )
+
+    report = migrate_marketplace_cl(RepoPaths(root=project))
+
+    assert report.ok is True
+    assert report.cl_source == "vendored"
+    meta = json.loads((project / ".hive" / "project.json").read_text(encoding="utf-8"))
+    assert meta.get("cl_source") == "vendored"
+    assert meta.get("cl_runtime") == CL_RUNTIME_HEADLESS
+

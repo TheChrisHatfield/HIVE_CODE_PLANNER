@@ -218,7 +218,7 @@ def migrate_marketplace_cl(
                 report.warnings.append(f"AGENTS.md lint failed after merge — rolled back: {'; '.join(errors)}")
 
     if marketplace_plugin_tree_present(root):
-        if marketplace_cl_installed(project_root.resolve()):
+        if marketplace_cl_installed(root):
             if remove_marketplace_plugin:
                 report.actions.append(f"Remove marketplace plugin at {MARKETPLACE_CL_REL}/")
                 if not dry_run:
@@ -260,13 +260,12 @@ def migrate_marketplace_cl(
         report.ok = True
 
     lint_failed = any("lint failed" in w for w in report.warnings)
-    if not dry_run and report.ok and cursor_runtime and not lint_failed:
+    if not dry_run and report.ok and not lint_failed:
         from hive_planner.project_profile import set_project_cl_source
 
-        set_project_cl_source(root, CL_SOURCE_VENDORED)
-        report.cl_source = CL_SOURCE_VENDORED
-
-    if not dry_run and report.ok and not lint_failed:
+        if cursor_runtime or not marketplace_plugin_tree_present(root):
+            set_project_cl_source(root, CL_SOURCE_VENDORED)
+            report.cl_source = CL_SOURCE_VENDORED
         _write_migration_record(root, report)
 
     hook_state = root / ".cursor" / "hooks" / "state" / "continual-learning-index.json"
