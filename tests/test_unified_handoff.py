@@ -172,6 +172,23 @@ def test_unified_verify_bootstrapped_project_without_vendor_manifest(tmp_path: P
     assert report.ok is True
 
 
+def test_unified_verify_checks_overlay_with_local_manifest(tmp_path: Path) -> None:
+    from hive_planner.vendor_sync import load_manifest, packaged_manifest_path, unified_verify
+
+    project = tmp_path / "project"
+    vendor = project / "vendor"
+    vendor.mkdir(parents=True)
+    manifest = load_manifest(packaged_manifest_path())
+    (vendor / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    write_project_pins(project, manifest)
+
+    report = unified_verify(RepoPaths(root=project))
+
+    assert report.ok is False
+    assert report.pins_match is False
+    assert any("spec-kit overlay missing" in issue for issue in report.issues)
+
+
 def test_unified_verify_fails_when_spec_kit_overlay_missing(tmp_path: Path) -> None:
     from hive_planner.vendor_sync import load_manifest, packaged_manifest_path
 
@@ -187,28 +204,15 @@ def test_unified_verify_fails_when_spec_kit_overlay_missing(tmp_path: Path) -> N
 
 
 def test_unified_verify_with_project_pins(tmp_path: Path) -> None:
+    from hive_planner.vendor_sync import deploy_spec_kit_overlay, load_manifest, packaged_manifest_path
+
     repo = tmp_path / "project"
-    repo.mkdir()
-    manifest = {
-        "schema": MANIFEST_SCHEMA,
-        "updated": "2026-06-26",
-        "spec_kit": {
-            "upstream": "https://github.com/github/spec-kit",
-            "path": "vendor/spec-kit",
-            "ref": "TBD",
-            "hive_patch_rev": "1",
-        },
-        "continual_learning": {
-            "upstream": "https://github.com/cursor/plugins",
-            "path": "vendor/cursor-plugins/continual-learning",
-            "ref": "TBD",
-            "hive_patch_rev": "1",
-        },
-    }
     vendor = repo / "vendor"
-    vendor.mkdir()
+    vendor.mkdir(parents=True)
+    manifest = load_manifest(packaged_manifest_path())
     (vendor / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
     write_project_pins(repo, manifest)
+    deploy_spec_kit_overlay(Path(__file__).resolve().parents[1], repo)
 
     report = unified_verify(RepoPaths(root=repo))
 

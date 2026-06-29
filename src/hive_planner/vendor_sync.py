@@ -319,6 +319,11 @@ def unified_verify(paths: RepoPaths) -> UnifiedVerifyReport:
                 pins_match = project_pins_match(source_manifest, project_pins)
                 if not pins_match:
                     issues.append("project .hive/upstream-pins.json drift from source manifest")
+                else:
+                    overlay_issues = _verify_spec_kit_overlay(root, manifest=project_pins)
+                    if overlay_issues:
+                        pins_match = False
+                        issues.extend(overlay_issues)
         ok = manifest_report.ok and (pins_match is not False)
     elif pins_path.is_file():
         project_pins = read_project_pins(root)
