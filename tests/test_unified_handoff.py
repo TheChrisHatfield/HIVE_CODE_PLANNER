@@ -394,6 +394,28 @@ def test_deploy_spec_kit_overlay_refreshes_when_patch_rev_changes(tmp_path: Path
     assert (project / ".hive" / "spec-kit" / ".hive-overlay-rev").read_text(encoding="utf-8").strip() == "2"
 
 
+def test_deploy_unified_vendor_artifacts_skips_overlay_when_pins_fail(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import hive_planner.vendor_sync as vendor_sync
+
+    def _fail_resolve(_root: Path) -> Path:
+        raise vendor_sync.VendorSyncError("no manifest")
+
+    monkeypatch.setattr(vendor_sync, "resolve_manifest_path", _fail_resolve)
+
+    source = tmp_path / "empty-source"
+    source.mkdir()
+    project = tmp_path / "project"
+    project.mkdir()
+    warnings: list[str] = []
+
+    vendor_sync.deploy_unified_vendor_artifacts(source, project, warnings=warnings)
+
+    assert warnings
+    assert not (project / ".hive" / "spec-kit" / "templates" / "spec-template.md").is_file()
+
+
 def test_deploy_spec_kit_overlay_uses_target_pins_rev_for_refresh(tmp_path: Path) -> None:
     from hive_planner.vendor_sync import deploy_spec_kit_overlay, write_project_pins
 

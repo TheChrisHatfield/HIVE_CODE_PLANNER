@@ -531,19 +531,20 @@ def write_unified_vendor_pins(
     force: bool = False,
     written: list[str] | None = None,
     warnings: list[str] | None = None,
-) -> None:
+) -> bool:
     try:
         manifest_path = resolve_manifest_path(source_root)
         manifest = load_manifest(manifest_path)
     except VendorSyncError as exc:
         if warnings is not None:
             warnings.append(str(exc))
-        return
+        return False
     write_project_pins(target, manifest, force=force)
     if written is not None:
         rel = PROJECT_PINS_REL
         if rel not in written:
             written.append(rel)
+    return True
 
 
 def _spec_kit_patch_rev(manifest: dict) -> str:
@@ -633,13 +634,14 @@ def deploy_unified_vendor_artifacts(
     written: list[str] | None = None,
     warnings: list[str] | None = None,
 ) -> None:
-    write_unified_vendor_pins(
+    if not write_unified_vendor_pins(
         source_root,
         target,
         force=force,
         written=written,
         warnings=warnings,
-    )
+    ):
+        return
     deploy_spec_kit_overlay(
         source_root,
         target,
