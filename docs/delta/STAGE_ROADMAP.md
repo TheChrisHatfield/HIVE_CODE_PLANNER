@@ -5,13 +5,15 @@
 Hive Code Planner compiler roadmap (Stages 1–6) is **complete** as of v1.0.0.  
 **Stage 7** (CL/spec integration, memory v2, rule seeds, impact v3, bootstrap) is **complete** as of v1.1.0.  
 **Stage 8** (starter-kit v2 full profile, security hardening) is **complete** as of v1.2.0.  
-**Stage 9** (unified upstream forks — Spec Kit + Continual Learning vendored deploy) is **in progress** — Task 3 import complete 2026-06-26.
+**Stage 9** (unified upstream forks — Spec Kit + Continual Learning vendored deploy) is **complete** as of v1.3.0.
 
 **Post-v1.0.0 bug audit:** 2026-06-21 — stage-by-stage audit complete; 103/103 pytest, ci-check 5/5.
 
 **Stage 7 closure:** 2026-06-26 — 18/18 roadmap artifacts, ci-check 5/5.
 
 **Stage 8 closure:** 2026-06-26 — 20/20 roadmap artifacts, 166 pytest, ci-check 5/5.
+
+**Stage 9 closure:** 2026-06-26 — 22/22 roadmap artifacts, unified vendor deploy + launcher help.
 
 | Stage | Feature | Status |
 |-------|---------|--------|
@@ -35,18 +37,18 @@ Hive Code Planner compiler roadmap (Stages 1–6) is **complete** as of v1.0.0.
 | 7F | roadmap-complete-v2 | ✅ |
 | 8A | starter-kit-v2 | ✅ |
 | 8B | roadmap-complete-v3 | ✅ |
-| 9A | unified-handoff-v2 | 🚧 in progress |
-| 9B | roadmap-complete-v4 | 📋 planned |
+| 9A | unified-handoff-v2 | ✅ |
+| 9B | roadmap-complete-v4 | ✅ |
 
-### Stage 9 — Unified upstream forks
+### Stage 9 — Unified upstream forks (complete)
 
 Vendored, pinned forks of [github/spec-kit](https://github.com/github/spec-kit) and [cursor/plugins/continual-learning](https://github.com/cursor/plugins/tree/main/continual-learning) with Hive symbiotic patches. Bootstrap deploys both; IDE CL plugin and Hive CLI share one contract.
 
 - **Spec:** [specs/unified-handoff-v2/spec.md](../specs/unified-handoff-v2/spec.md)
 - **Operator guide:** [unified-handoff-upstream-forks.md](../unified-handoff-upstream-forks.md)
-- **Active task:** Task 5 — Hive Continual Learning patches (`docs/specs/unified-handoff-v2/tasks.md`)
+- **Closure:** [specs/roadmap-complete-v4/spec.md](../specs/roadmap-complete-v4/spec.md)
 
-`ROADMAP_FEATURES` remains at 20 features until Stage 9 implementation closes via `roadmap-complete-v4`.
+`ROADMAP_FEATURES` validates **22** features (Stage 9 adds `unified-handoff-v2`, `roadmap-complete-v4`).
 
 Validate anytime:
 

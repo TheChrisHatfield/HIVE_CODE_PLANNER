@@ -58,11 +58,18 @@ Primary truth drives the immediate task. Secondary governs behavior. Tertiary is
 
 ## Active feature
 
-**roadmap-complete-v3** — Stage 8 complete (v1.2.0). Extended roadmap: 20/20 artifacts.
+**roadmap-complete-v4** — Stage 9 complete (v1.3.0). Extended roadmap: 22/22 artifacts.
 
 ```powershell
 py -3.11 -m hive_planner roadmap-status
 py -3.11 -m hive_planner ci-check
+py -3.11 -m hive_planner unified-verify
+```
+
+Unified handoff (Stage 9A):
+
+```powershell
+py -3.11 -m hive_planner init --target D:\projects\my-app --agent-handoff unified --name "My App"
 ```
 
 Starter-kit v2 (Stage 8A):
@@ -179,6 +186,7 @@ Full thread export (reference only): `docs/HIVE_PLANNING_DEV.md`
 - v1.0.0 — Stages 1–6 compiler roadmap complete; use `roadmap-status` to verify.
 - v1.1.0 — Stage 7 complete (CL/spec integration, memory v2, rule seeds, impact v3, project bootstrap); `roadmap-status` validates 18/18 features.
 - v1.2.0 — Stage 8 complete (starter-kit v2 full profile, path/feature validation hardening); `roadmap-status` validates 20/20 features.
+- v1.3.0 — Stage 9 complete (unified Spec Kit + CL vendored deploy); `roadmap-status` validates 22/22 features; use `unified-verify` on bootstrapped projects.
 - `hive_planner init` must target a directory outside the Hive source tree (never a subdirectory of this repo).
 - Bootstrapped projects use plain `None` for active feature until the first real feature id is set.
 - Starter-kit v2 (`--profile full`) adds pyproject, src/tests layout, `.gitignore`, and GitHub CI stub; `--git-init` is optional.

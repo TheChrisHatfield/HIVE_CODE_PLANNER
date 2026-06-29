@@ -25,6 +25,8 @@ ROADMAP_FEATURES: tuple[str, ...] = (
     "roadmap-complete-v2",
     "starter-kit-v2",
     "roadmap-complete-v3",
+    "unified-handoff-v2",
+    "roadmap-complete-v4",
 )
 
 

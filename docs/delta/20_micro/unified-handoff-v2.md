@@ -21,13 +21,13 @@ Stage 7 integrated Spec Kit and Continual Learning **around** external tools (do
 
 ## Acceptance Criteria
 
-- [ ] `vendor/` layout documented with pinned upstream SHAs
-- [ ] Hive fork patch list applied to Spec Kit templates + CL subagent/skill
-- [ ] `init --agent-handoff unified` and `deploy-agent-handoff` copy vendored plugin + spec-kit config
-- [ ] CL plugin pre-promote calls wiring audit + `spec-drift-check` / `agents-propose` contract
-- [ ] `pyproject.toml` exposes `[unified]` optional extra with install docs
-- [ ] `docs/unified-handoff-upstream-forks.md` is the operator guide
-- [ ] Tests cover vendor copy + version pin manifest
+- [x] `vendor/` layout documented with pinned upstream SHAs
+- [x] Hive fork patch list applied to Spec Kit templates + CL subagent/skill
+- [x] `init --agent-handoff unified` and `deploy-agent-handoff` copy vendored plugin + spec-kit config
+- [x] CL plugin pre-promote calls wiring audit + `spec-drift-check` / `agents-propose` contract
+- [x] `pyproject.toml` exposes `[unified]` optional extra with install docs
+- [x] `docs/unified-handoff-upstream-forks.md` is the operator guide
+- [x] Tests cover vendor copy + version pin manifest
 
 ## Validation
 

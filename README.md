@@ -24,10 +24,13 @@ d:\DRIVE_DOWNLOADS\HIVE_CODE_PLANNER
 
 ## Active development
 
-**Feature:** `roadmap-complete-v3` — **v1.2.0 — Stage 8 complete (20/20)**
+**Feature:** `roadmap-complete-v4` — **v1.3.0 — Stage 9 complete (22/22)**
 
 | Stage | Hooks | Command |
 |-------|-------|---------|
+| 9B | `workflow.tools` | `py -3.11 -m hive_planner roadmap-status` |
+| 9A | `integration.unified_handoff` | `py -3.11 -m hive_planner init --agent-handoff unified --target <path>` |
+| 9A | `integration.unified_handoff` | `py -3.11 -m hive_planner unified-verify` |
 | 8B | `workflow.tools` | `py -3.11 -m hive_planner roadmap-status` |
 | 8A | `workflow.project_bootstrap` | `py -3.11 -m hive_planner init --profile full --git-init --target <path>` |
 | 7F | `workflow.tools` | `py -3.11 -m hive_planner ci-check` |
