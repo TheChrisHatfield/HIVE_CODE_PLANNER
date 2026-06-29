@@ -1046,7 +1046,63 @@ def test_run_deploy_agent_handoff_ok_when_unified_complete(tmp_path: Path) -> No
 
     assert result["ok"] is True
     assert result.get("error") is None
+    assert result.get("cl_runtime") == "cursor"
     assert (project / "spec-kit-agent-integration.md").is_file()
+
+
+def test_run_deploy_agent_handoff_headless_skips_cursor_plugin(tmp_path: Path) -> None:
+    from hive_planner.cl_runtime import CL_RUNTIME_HEADLESS, HEADLESS_CL_WORKFLOW_REL
+    from hive_planner.vendor_sync import CL_OVERLAY_REL
+
+    hive_root = _hive_planner_source(tmp_path)
+    project = _minimal_hive_project(tmp_path / "headless-proj")
+
+    result = run_deploy_agent_handoff(
+        project,
+        hive_planner_root=hive_root,
+        force=True,
+        cl_runtime=CL_RUNTIME_HEADLESS,
+    )
+
+    assert result.get("cl_runtime") == CL_RUNTIME_HEADLESS
+    assert (project / HEADLESS_CL_WORKFLOW_REL).is_file()
+    assert not (project / CL_OVERLAY_REL).exists()
+
+
+def test_cl_runtime_status_label_for_headless_project(tmp_path: Path) -> None:
+    from hive_planner.agent_handoff import AGENT_HANDOFF_UNIFIED
+    from hive_planner.cl_runtime import CL_RUNTIME_HEADLESS
+    from hive_planner.launcher.service import cl_runtime_status_label
+    from hive_planner.project_profile import write_project_profile
+
+    project = tmp_path / "status"
+    project.mkdir()
+    (project / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    write_project_profile(
+        project,
+        profile="minimal",
+        project_name="status",
+        agent_handoff_mode=AGENT_HANDOFF_UNIFIED,
+        cl_runtime=CL_RUNTIME_HEADLESS,
+    )
+
+    assert cl_runtime_status_label(project) == "headless (CLI)"
+
+
+def test_run_set_cl_runtime_updates_profile(tmp_path: Path) -> None:
+    from hive_planner.cl_runtime import CL_RUNTIME_HEADLESS
+    from hive_planner.launcher.service import run_set_cl_runtime
+    from hive_planner.project_profile import read_project_profile
+
+    project = _minimal_hive_project(tmp_path / "set-rt")
+
+    result = run_set_cl_runtime(project, CL_RUNTIME_HEADLESS)
+
+    assert result["ok"] is True
+    assert result["cl_runtime"] == CL_RUNTIME_HEADLESS
+    meta = read_project_profile(project)
+    assert meta is not None
+    assert meta.cl_runtime == CL_RUNTIME_HEADLESS
 
 
 def test_run_deploy_agent_handoff_reports_incomplete_when_validation_fails(

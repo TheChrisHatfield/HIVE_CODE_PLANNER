@@ -1165,9 +1165,16 @@ def run_project_ci_check(project_root: Path) -> dict:
     return payload
 
 
-def run_deploy_agent_handoff(project_root: Path, *, hive_planner_root: Path, force: bool = False) -> dict:
+def run_deploy_agent_handoff(
+    project_root: Path,
+    *,
+    hive_planner_root: Path,
+    force: bool = False,
+    cl_runtime: str | None = None,
+) -> dict:
     from hive_planner.agent_handoff import validate_unified_handoff
     from hive_planner.bootstrap import BootstrapError, deploy_agent_handoff_scaffold
+    from hive_planner.cl_runtime import normalize_cl_runtime, resolve_cl_runtime
     from hive_planner.rosetta_nav import DEPLOY_HANDOFF_NAV_LAYERS, ensure_handoff_rosetta_navigation
     from hive_planner.spec_drift import BOOTSTRAP_DEFAULT_FEATURE, repair_agents_active_feature, repair_agents_rosetta_section
 
@@ -1175,9 +1182,15 @@ def run_deploy_agent_handoff(project_root: Path, *, hive_planner_root: Path, for
     summary = summarize_project(target)
     if not summary.ok:
         return {"ok": False, "error": summary.detail}
+    resolved_runtime = normalize_cl_runtime(cl_runtime or resolve_cl_runtime(target))
     paths = RepoPaths(root=hive_planner_root.resolve())
     try:
-        written, warnings = deploy_agent_handoff_scaffold(paths, target, force=force)
+        written, warnings = deploy_agent_handoff_scaffold(
+            paths,
+            target,
+            force=force,
+            cl_runtime=resolved_runtime,
+        )
     except BootstrapError as exc:
         return {"ok": False, "error": str(exc)}
     target_paths = RepoPaths(root=target)
@@ -1194,6 +1207,7 @@ def run_deploy_agent_handoff(project_root: Path, *, hive_planner_root: Path, for
         "files_written": written,
         "warnings": warnings,
         "agent_handoff_mode": "unified",
+        "cl_runtime": resolved_runtime,
     }
     if not handoff.complete:
         payload["error"] = f"Unified handoff incomplete — missing: {', '.join(handoff.missing)}"
@@ -1507,6 +1521,40 @@ def run_cartridge_import_folder(
     return payload
 
 
+def cl_runtime_status_label(project_root: Path) -> str:
+    from hive_planner.agent_handoff import resolve_agent_handoff_mode, AGENT_HANDOFF_UNIFIED
+    from hive_planner.cl_runtime import requires_cursor_plugin, resolve_cl_runtime
+
+    root = project_root.resolve()
+    if resolve_agent_handoff_mode(root) != AGENT_HANDOFF_UNIFIED:
+        return "\u2014"
+    runtime = resolve_cl_runtime(root)
+    if requires_cursor_plugin(runtime):
+        return "cursor (plugin)"
+    if runtime == "external":
+        return "external (CLI)"
+    return "headless (CLI)"
+
+
+def run_set_cl_runtime(project_root: Path, runtime: str) -> dict:
+    from hive_planner.cl_runtime import normalize_cl_runtime, set_project_cl_runtime
+
+    target = project_root.resolve()
+    summary = summarize_project(target)
+    if not summary.ok:
+        return {"ok": False, "error": summary.detail}
+    try:
+        set_project_cl_runtime(target, runtime)
+    except ValueError as exc:
+        return {"ok": False, "error": str(exc)}
+    normalized = normalize_cl_runtime(runtime)
+    return {
+        "ok": True,
+        "cl_runtime": normalized,
+        "hints": ["Home \u2192 Deploy agent handoff to refresh CL artifacts for the selected runtime."],
+    }
+
+
 def run_project_init(
     config: LauncherConfig,
     *,
@@ -1518,6 +1566,7 @@ def run_project_init(
     agent_handoff: str | None = None,
     spec_kit: bool | None = None,
     continual_learning: bool | None = None,
+    cl_runtime: str | None = None,
 ) -> dict:
     hive_root = config.normalized_hive_root()
     paths = RepoPaths(root=hive_root)
@@ -1532,6 +1581,7 @@ def run_project_init(
             agent_handoff=agent_handoff,
             spec_kit=spec_kit,
             continual_learning=continual_learning,
+            cl_runtime=cl_runtime,
         )
     except BootstrapError as exc:
         return {"ok": False, "error": str(exc)}
@@ -1545,6 +1595,9 @@ def run_project_init(
     if mode == AGENT_HANDOFF_UNIFIED:
         handoff = validate_unified_handoff(target)
         payload["ok"] = handoff.complete
+        from hive_planner.cl_runtime import resolve_cl_runtime
+
+        payload["cl_runtime"] = resolve_cl_runtime(target)
         if not handoff.complete:
             payload["error"] = f"Unified handoff incomplete — missing: {', '.join(handoff.missing)}"
             payload["handoff"] = {

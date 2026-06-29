@@ -36,11 +36,13 @@ from hive_planner.launcher.service import (
     run_project_ci_check,
     run_project_init,
     run_project_map_sync,
+    run_set_cl_runtime,
     run_unified_verify,
     run_wiring_audit_check,
     run_wiring_audit_record,
     summarize_linked_project,
     summarize_project,
+    cl_runtime_status_label,
     wiring_audit_status_label,
     workspace_primary_folder,
 )
@@ -435,6 +437,7 @@ class HivePlannerApp:
             ("Hive", self.setup.hive_version or "not installed"),
             ("Profile", self._active_profile_label() or "—"),
             ("Handoff", self._active_handoff_label()),
+            ("CL runtime", self._active_cl_runtime_label()),
             ("Feature", self._active_feature_label()),
             ("Wiring", self._wiring_audit_label()),
         ]:
@@ -492,6 +495,12 @@ class HivePlannerApp:
             "Scan legacy deployment",
             self._on_legacy_deployment_scan,
             tooltip="Detect marketplace CL, missing pins, or starter-kit-only layouts from pre-unified deploy.",
+        )
+        secondary_button(
+            verify_actions,
+            "Set CL runtime…",
+            self._on_set_cl_runtime,
+            tooltip="Choose Cursor plugin vs headless CLI memory loop (.hive/project.json cl_runtime).",
         )
         secondary_button(
             verify_actions,
@@ -558,6 +567,7 @@ class HivePlannerApp:
         self.new_profile = tk.StringVar(value=self.config.default_profile)
         self.new_git = tk.BooleanVar(value=True)
         self.new_agent_handoff = tk.StringVar(value=self.config.default_agent_handoff)
+        self.new_cl_runtime = tk.StringVar(value="cursor")
         self._field(form, "Project name", self.new_name)
         self._field(form, "Target folder", self.new_target, browse=True)
         profile_row = tk.Frame(form, bg=COLORS["card"])
@@ -591,6 +601,31 @@ class HivePlannerApp:
         tk.Label(
             handoff_row,
             text="Unified = Spec Kit + Continual Learning together",
+            bg=COLORS["card"],
+            fg=COLORS["muted"],
+            font=FONT_SUBTITLE,
+        ).pack(anchor="w", padx=(14, 0), pady=(2, 0))
+        cl_runtime_row = tk.Frame(form, bg=COLORS["card"])
+        cl_runtime_row.pack(fill="x", padx=12, pady=(4, 4))
+        tk.Label(
+            cl_runtime_row,
+            text="CL runtime",
+            width=14,
+            anchor="w",
+            bg=COLORS["card"],
+            fg=COLORS["fg"],
+            font=FONT,
+        ).pack(side="left")
+        ttk.Combobox(
+            cl_runtime_row,
+            textvariable=self.new_cl_runtime,
+            values=["cursor", "headless"],
+            state="readonly",
+            width=28,
+        ).pack(side="left", fill="x", expand=True)
+        tk.Label(
+            cl_runtime_row,
+            text="cursor = vendored plugin; headless = CLI agents-propose path (other IDEs)",
             bg=COLORS["card"],
             fg=COLORS["muted"],
             font=FONT_SUBTITLE,
@@ -911,6 +946,14 @@ class HivePlannerApp:
             return "unified ✓" if status.complete else "unified (incomplete)"
         return "off"
 
+    def _active_cl_runtime_label(self) -> str:
+        if not self.config.active_project:
+            return "\u2014"
+        root, _repair = prepare_linked_project_root(Path(self.config.active_project), repair_agents=False)
+        if not root:
+            return "\u2014"
+        return cl_runtime_status_label(root)
+
     def _active_feature_label(self) -> str:
         if not self.config.active_project:
             return "—"
@@ -937,6 +980,101 @@ class HivePlannerApp:
         if stored:
             return stored.bootstrap_profile
         return ""
+
+    def _ask_cl_runtime(self, *, title: str, current: str) -> str | None:
+        from hive_planner.cl_runtime import CL_RUNTIME_CURSOR, CL_RUNTIME_HEADLESS, normalize_cl_runtime
+
+        resolved = normalize_cl_runtime(current)
+        dialog = tk.Toplevel(self.root)
+        dialog.title(title)
+        dialog.configure(bg=COLORS["bg"])
+        dialog.transient(self.root)
+        dialog.grab_set()
+        dialog.resizable(False, False)
+        dialog.geometry("520x280")
+
+        choice = tk.StringVar(value=resolved if resolved in {CL_RUNTIME_CURSOR, CL_RUNTIME_HEADLESS} else CL_RUNTIME_CURSOR)
+        result: list[str | None] = [None]
+
+        tk.Label(
+            dialog,
+            text="Continual Learning runtime for this project",
+            font=FONT_TITLE,
+            bg=COLORS["bg"],
+            fg=COLORS["fg"],
+        ).pack(anchor="w", padx=16, pady=(16, 8))
+        tk.Label(
+            dialog,
+            text="Cursor installs the vendored hive-continual-learning plugin.\n"
+            "Headless uses the Hive CLI memory loop for other IDEs (no Cursor hooks).",
+            justify="left",
+            wraplength=480,
+            bg=COLORS["bg"],
+            fg=COLORS["muted"],
+            font=FONT,
+        ).pack(anchor="w", padx=16, pady=(0, 8))
+
+        body = tk.Frame(dialog, bg=COLORS["bg"])
+        body.pack(fill="both", expand=True, padx=16)
+        for value, label in (
+            (CL_RUNTIME_CURSOR, "Cursor plugin (.cursor/plugins/hive-continual-learning/)"),
+            (CL_RUNTIME_HEADLESS, "Headless / other IDE (.hive/continual-learning/ + CLI)"),
+        ):
+            tk.Radiobutton(
+                body,
+                text=label,
+                variable=choice,
+                value=value,
+                bg=COLORS["bg"],
+                fg=COLORS["fg"],
+                activebackground=COLORS["bg"],
+                activeforeground=COLORS["fg"],
+                selectcolor=COLORS["card"],
+                anchor="w",
+                justify="left",
+            ).pack(anchor="w", pady=4)
+
+        actions = tk.Frame(dialog, bg=COLORS["bg"])
+        actions.pack(fill="x", padx=16, pady=(8, 16))
+
+        def _confirm() -> None:
+            result[0] = choice.get()
+            dialog.destroy()
+
+        def _cancel() -> None:
+            result[0] = None
+            dialog.destroy()
+
+        primary_button(actions, "Continue", _confirm)
+        secondary_button(actions, "Cancel", _cancel)
+        dialog.wait_window()
+        return result[0]
+
+    def _on_set_cl_runtime(self) -> None:
+        root = self._active_linked_root()
+        if not root:
+            messagebox.showwarning("No project", "Link a workspace first.")
+            return
+        from hive_planner.cl_runtime import resolve_cl_runtime
+
+        current = resolve_cl_runtime(root)
+        selected = self._ask_cl_runtime(title="Set CL runtime", current=current)
+        if selected is None:
+            return
+        self._append_log(self.home_log, f"Setting CL runtime to {selected}…")
+        self._run_bg(lambda r=root, rt=selected: run_set_cl_runtime(r, rt), self._set_cl_runtime_done)
+
+    def _set_cl_runtime_done(self, result: dict) -> None:
+        if self._is_bg_error(result) or not result.get("ok"):
+            self._append_log(self.home_log, self._result_detail(result))
+            for hint in result.get("hints", []):
+                self._append_log(self.home_log, f"Tip: {hint}")
+            return
+        runtime = result.get("cl_runtime", "")
+        self._append_log(self.home_log, f"Set cl_runtime={runtime} in .hive/project.json.")
+        for hint in result.get("hints", []):
+            self._append_log(self.home_log, f"Tip: {hint}")
+        self._show_dashboard()
 
     def _append_log(self, widget: scrolledtext.ScrolledText, text: str) -> None:
         widget.configure(state="normal")
@@ -1572,14 +1710,24 @@ class HivePlannerApp:
         if not root:
             messagebox.showwarning("No project", "Link a workspace first.")
             return
+        from hive_planner.cl_runtime import resolve_cl_runtime
+
+        current = resolve_cl_runtime(root)
+        selected = self._ask_cl_runtime(title="Deploy agent handoff", current=current)
+        if selected is None:
+            return
         cfg = load_config()
-        self._append_log(self.home_log, "Deploying unified agent handoff (Spec Kit + Continual Learning)…")
+        self._append_log(
+            self.home_log,
+            f"Deploying unified agent handoff (Spec Kit + Continual Learning, cl_runtime={selected})…",
+        )
         hive_root = cfg.normalized_hive_root()
         self._run_bg(
-            lambda r=root, h=hive_root: run_deploy_agent_handoff(
+            lambda r=root, h=hive_root, rt=selected: run_deploy_agent_handoff(
                 r,
                 hive_planner_root=h,
                 force=False,
+                cl_runtime=rt,
             ),
             self._deploy_handoff_done,
         )
@@ -2076,9 +2224,11 @@ class HivePlannerApp:
                 self._append_log(self.home_log, f"Tip: {hint}")
             return
         count = len(result.get("files_written", []))
+        runtime = result.get("cl_runtime", "")
         self._append_log(
             self.home_log,
-            f"Agent handoff deployed ({count} file(s)). Mode: {result.get('agent_handoff_mode', 'unified')}.",
+            f"Agent handoff deployed ({count} file(s)). Mode: {result.get('agent_handoff_mode', 'unified')}"
+            + (f", cl_runtime={runtime}." if runtime else "."),
         )
         repair = result.get("repair")
         if repair:
@@ -2388,6 +2538,7 @@ class HivePlannerApp:
         from hive_planner.agent_handoff import normalize_agent_handoff_mode
 
         agent_handoff = normalize_agent_handoff_mode(self.new_agent_handoff.get(), default="unified")
+        cl_runtime = self.new_cl_runtime.get().strip() or "cursor"
         cfg = load_config()
 
         def work():
@@ -2399,6 +2550,7 @@ class HivePlannerApp:
                 git_init=git_init,
                 force=False,
                 agent_handoff=agent_handoff,
+                cl_runtime=cl_runtime if agent_handoff == "unified" else None,
             )
 
         self._run_bg(work, self._create_done)
