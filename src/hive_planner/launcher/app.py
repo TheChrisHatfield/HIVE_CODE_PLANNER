@@ -24,6 +24,7 @@ from hive_planner.launcher.service import (
     run_cartridge_translate,
     cartridge_load_needs_feature,
     cartridge_load_will_promote,
+    candidates_path_in_project,
     find_staged_candidates,
     run_agents_memory_apply,
     run_agents_memory_propose,
@@ -1338,6 +1339,13 @@ class HivePlannerApp:
         if not selected:
             return
         candidates = Path(selected)
+        if not candidates_path_in_project(root, candidates):
+            messagebox.showerror(
+                "Invalid candidates file",
+                "Select a candidates file inside the linked project (docs/proposals/).",
+                parent=self.root,
+            )
+            return
         self._set_pending_memory_candidates(root, candidates)
         self._append_log(self.home_log, f"Running agents-propose on {candidates.name}…")
         self._run_bg(
@@ -1365,6 +1373,13 @@ class HivePlannerApp:
         if not selected:
             return
         candidates = Path(selected)
+        if not candidates_path_in_project(root, candidates):
+            messagebox.showerror(
+                "Invalid candidates file",
+                "Select a candidates file inside the linked project (docs/proposals/).",
+                parent=self.root,
+            )
+            return
         self._set_pending_memory_candidates(root, candidates)
         if not messagebox.askyesno(
             "Apply memory",
@@ -1438,7 +1453,7 @@ class HivePlannerApp:
             messagebox.showwarning("No project", "Link a workspace first.")
             return
         self._append_log(self.home_log, "Verifying upstream pins and vendored overlays…")
-        self._run_bg(lambda: run_unified_verify(root), self._unified_verify_done)
+        self._run_bg(lambda r=root: run_unified_verify(r), self._unified_verify_done)
 
     def _unified_verify_done(self, result: dict) -> None:
         if self._is_bg_error(result):
@@ -1463,7 +1478,7 @@ class HivePlannerApp:
             messagebox.showwarning("No project", "Link a workspace first.")
             return
         self._append_log(self.home_log, "Scanning for legacy deployment traces…")
-        self._run_bg(lambda: run_legacy_deployment_scan(root), self._legacy_deployment_scan_done)
+        self._run_bg(lambda r=root: run_legacy_deployment_scan(r), self._legacy_deployment_scan_done)
 
     def _legacy_deployment_scan_done(self, result: dict) -> None:
         if self._is_bg_error(result):

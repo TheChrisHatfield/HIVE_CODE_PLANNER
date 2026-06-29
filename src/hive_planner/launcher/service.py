@@ -974,7 +974,7 @@ def run_wiring_audit_record(project_root: Path, evidence: str) -> dict:
 def run_unified_verify(project_root: Path) -> dict:
     summary = summarize_project(project_root)
     if not summary.ok:
-        return {"ok": False, "error": summary.detail}
+        return {"ok": False, "error": summary.detail, "detail": summary.detail}
     from hive_planner.vendor_sync import unified_verify
 
     paths = RepoPaths(root=project_root.resolve())
@@ -993,7 +993,7 @@ def run_unified_verify(project_root: Path) -> dict:
 def run_legacy_deployment_scan(project_root: Path) -> dict:
     summary = summarize_project(project_root)
     if not summary.ok:
-        return {"ok": False, "error": summary.detail}
+        return {"ok": False, "error": summary.detail, "detail": summary.detail}
     from hive_planner.agent_handoff import scan_legacy_deployment
 
     report = scan_legacy_deployment(project_root.resolve())
