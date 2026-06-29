@@ -575,6 +575,12 @@ def ci_unified_vendor_step(
             return True, "project pins match manifest"
         return False, "project pins drift from source manifest"
     pin_report = validate_project_pins(pins)
-    if pin_report.ok:
+    if not pin_report.ok:
+        return False, f"project pins invalid: {'; '.join(pin_report.issues)}"
+    try:
+        packaged = load_manifest(packaged_manifest_path())
+    except VendorSyncError:
         return True, "project pins valid"
-    return False, f"project pins invalid: {'; '.join(pin_report.issues)}"
+    if project_pins_match(packaged, pins):
+        return True, "project pins match packaged manifest"
+    return False, "project pins drift from hive-planner manifest (re-run deploy handoff)"

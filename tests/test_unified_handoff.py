@@ -298,32 +298,32 @@ def test_ci_unified_vendor_requires_pins_for_unified_projects(tmp_path: Path) ->
 
 
 def test_ci_unified_vendor_accepts_bootstrapped_pins_without_vendor_manifest(tmp_path: Path) -> None:
-    from hive_planner.vendor_sync import ci_unified_vendor_step
+    from hive_planner.vendor_sync import ci_unified_vendor_step, load_manifest, packaged_manifest_path
 
     project = tmp_path / "unified-project"
     project.mkdir()
-    pins = {
-        "schema": MANIFEST_SCHEMA,
-        "updated": "2026-06-26",
-        "spec_kit": {
-            "upstream": "https://github.com/github/spec-kit",
-            "path": "vendor/spec-kit",
-            "ref": "b7e67f55bf7a937aaa57dbe0a8198774e285de3a",
-            "hive_patch_rev": "1",
-        },
-        "continual_learning": {
-            "upstream": "https://github.com/cursor/plugins",
-            "path": "vendor/cursor-plugins/continual-learning",
-            "ref": "0452e08a314c03621ec5ac1324f1ad1dd824f1a4",
-            "hive_patch_rev": "1",
-        },
-    }
+    pins = load_manifest(packaged_manifest_path())
     write_project_pins(project, pins)
 
     ok, detail = ci_unified_vendor_step(RepoPaths(root=project), hive_source=False)
 
     assert ok is True
-    assert detail == "project pins valid"
+    assert "project pins match packaged manifest" in detail
+
+
+def test_ci_unified_vendor_fails_when_pins_patch_rev_stale(tmp_path: Path) -> None:
+    from hive_planner.vendor_sync import ci_unified_vendor_step, load_manifest, packaged_manifest_path
+
+    project = tmp_path / "unified-project"
+    project.mkdir()
+    pins = load_manifest(packaged_manifest_path())
+    pins["spec_kit"]["hive_patch_rev"] = "0"
+    write_project_pins(project, pins)
+
+    ok, detail = ci_unified_vendor_step(RepoPaths(root=project), hive_source=False)
+
+    assert ok is False
+    assert "drift from hive-planner manifest" in detail
 
 
 def test_ci_unified_vendor_on_hive_source_repo() -> None:
