@@ -823,7 +823,7 @@ def ci_check_hints(root: Path, report) -> list[str]:
         )
     if integrations.spec_kit_enabled and "spec-drift" in failed and not feature:
         hints.append("Spec drift stays red until Active feature is set and matching spec/delta files exist.")
-    if not is_hive_planner_source_repo(root):
+    if not report.ok and not is_hive_planner_source_repo(root):
         hints.append(
             "Full roadmap checks apply only to the Hive Planner source repo. "
             "Bootstrapped app/workspace projects skip roadmap-artifacts."

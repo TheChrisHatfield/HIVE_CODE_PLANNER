@@ -653,7 +653,7 @@ def test_run_project_ci_check_skips_roadmap_for_app_projects(
     monkeypatch.setattr("hive_planner.launcher.service.run_ci_check", fake_ci_check)
     result = run_project_ci_check(project)
     assert captured.get("check_roadmap") is False
-    assert result.get("hints")
+    assert not result.get("hints")
 
 
 def test_is_hive_planner_source_repo_detects_main_repo(tmp_path: Path) -> None:
@@ -1318,6 +1318,34 @@ def test_load_user_guide_does_not_duplicate_unified_section(tmp_path: Path) -> N
     text = load_user_guide(cfg)
 
     assert text.count("## Unified vendor path") == 1
+
+
+def test_ci_check_hints_parses_vendor_missing_from_profile_step(tmp_path: Path) -> None:
+    from hive_planner.agent_handoff import AGENT_HANDOFF_UNIFIED
+    from hive_planner.ci_handoff import CiCheckReport, CiStepResult
+    from hive_planner.launcher.service import ci_check_hints
+    from hive_planner.project_profile import write_project_profile
+
+    project = tmp_path / "unified-app"
+    project.mkdir()
+    (project / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    write_project_profile(project, profile="minimal", project_name="unified-app", agent_handoff_mode=AGENT_HANDOFF_UNIFIED)
+
+    failed = CiCheckReport(
+        steps=[
+            CiStepResult(
+                "agent-handoff-profile",
+                False,
+                "missing: .hive/spec-kit/WORKFLOW.md, .cursor/plugins/hive-continual-learning/WORKFLOW.md",
+            ),
+            CiStepResult("unified-vendor", False, "continual-learning overlay missing: .cursor/plugins/hive-continual-learning/WORKFLOW.md"),
+        ]
+    )
+
+    hints = ci_check_hints(project, failed)
+
+    assert any("unified-verify" in hint for hint in hints)
+    assert any("Deploy agent handoff" in hint for hint in hints)
 
 
 def test_ci_check_hints_unified_vendor_hive_source_vs_project(tmp_path: Path) -> None:
