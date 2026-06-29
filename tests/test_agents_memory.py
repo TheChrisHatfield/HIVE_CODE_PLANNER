@@ -346,6 +346,16 @@ def test_parse_candidates_ignores_prose_lines() -> None:
     assert parsed == ["Run ci-check before handoff."]
 
 
+def test_propose_rejects_candidates_outside_project_root(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path / "project")
+    paths.root.mkdir(parents=True)
+    (paths.root / "AGENTS.md").write_text(_minimal_agents(), encoding="utf-8")
+    outside = tmp_path / "outside-candidates.md"
+    outside.write_text("- New durable operational fact.\n", encoding="utf-8")
+    with pytest.raises(AgentsMemoryError, match="inside project root"):
+        propose_agents_memory(paths, outside)
+
+
 def test_normalize_candidates_requires_bullets() -> None:
     with pytest.raises(AgentsMemoryError, match="No candidate bullets"):
         normalize_candidates_text("user: hello\nassistant: hi\n")

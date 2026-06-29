@@ -478,6 +478,12 @@ def run_agents_memory(
     candidate_file = candidates_path if candidates_path.is_absolute() else paths.root / candidates_path
     if not candidate_file.exists():
         raise AgentsMemoryError(f"Candidates file not found: {candidates_path}")
+    try:
+        candidate_file.resolve().relative_to(paths.root.resolve())
+    except ValueError as exc:
+        raise AgentsMemoryError(
+            f"Candidates file must be inside project root: {paths.root}"
+        ) from exc
 
     agents_text = target.read_text(encoding="utf-8", errors="replace")
     sections = parse_sections(agents_text)
