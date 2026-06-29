@@ -801,7 +801,6 @@ def unified_vendor_repair_hints(*, missing: list[str] | None = None) -> list[str
     return [
         "Run py -3.11 -m hive_planner unified-verify in the project folder to inspect pins and overlays.",
         "Repair: Home → Deploy agent handoff (refreshes .hive/spec-kit/ and hive-continual-learning plugin).",
-        "Hive source maintainers: vendor-sync --check / --apply — see scripts/README.md § Unified vendor path.",
     ]
 
 

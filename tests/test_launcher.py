@@ -1221,6 +1221,7 @@ def test_unified_vendor_repair_hints_for_overlay_gaps() -> None:
     hints = unified_vendor_repair_hints(missing=[".hive/spec-kit/WORKFLOW.md"])
     assert hints
     assert any("unified-verify" in hint for hint in hints)
+    assert not any("vendor-sync" in hint for hint in hints)
     assert unified_vendor_repair_hints(missing=["docs/specs/foo/spec.md"]) == []
 
 
