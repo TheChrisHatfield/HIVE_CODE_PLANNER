@@ -570,6 +570,8 @@ def normalize_candidates_text(text: str) -> str:
             bullet = stripped
         if not bullet or bullet.startswith("```"):
             continue
+        if CHECKBOX_BULLET_RE.match(bullet):
+            continue
         bullet, inline_tag = _strip_inline_tag(bullet)
         if not bullet:
             continue

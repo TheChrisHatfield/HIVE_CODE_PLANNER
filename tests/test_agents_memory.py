@@ -300,6 +300,19 @@ r
     assert updated.index("## Delta model") < facts_idx
 
 
+def test_ingest_skips_task_checkbox_lines(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    source = paths.root / "export.txt"
+    source.write_text(
+        "- Run ci-check before handoff.\n- [ ] Traced caller end-to-end\n",
+        encoding="utf-8",
+    )
+    out = ingest_agents_candidates(paths, source)
+    text = out.read_text(encoding="utf-8")
+    assert "Run ci-check before handoff." in text
+    assert "Traced caller" not in text
+
+
 def test_parse_candidates_skips_task_checkbox_lines(tmp_path: Path) -> None:
     from hive_planner.agents_memory import _parse_candidates
 
