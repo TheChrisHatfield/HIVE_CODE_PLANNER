@@ -1537,12 +1537,19 @@ def cl_runtime_status_label(project_root: Path) -> str:
 
 
 def run_set_cl_runtime(project_root: Path, runtime: str) -> dict:
+    from hive_planner.agent_handoff import AGENT_HANDOFF_UNIFIED, resolve_agent_handoff_mode
     from hive_planner.cl_runtime import normalize_cl_runtime, set_project_cl_runtime
 
     target = project_root.resolve()
     summary = summarize_project(target)
     if not summary.ok:
         return {"ok": False, "error": summary.detail}
+    if resolve_agent_handoff_mode(target) != AGENT_HANDOFF_UNIFIED:
+        return {
+            "ok": False,
+            "error": "CL runtime applies only to unified agent handoff (Spec Kit + Continual Learning).",
+            "hints": ["Deploy agent handoff first, then set CL runtime."],
+        }
     try:
         set_project_cl_runtime(target, runtime)
     except ValueError as exc:

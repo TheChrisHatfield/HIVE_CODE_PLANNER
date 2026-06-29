@@ -1090,11 +1090,18 @@ def test_cl_runtime_status_label_for_headless_project(tmp_path: Path) -> None:
 
 
 def test_run_set_cl_runtime_updates_profile(tmp_path: Path) -> None:
+    from hive_planner.agent_handoff import AGENT_HANDOFF_UNIFIED
     from hive_planner.cl_runtime import CL_RUNTIME_HEADLESS
     from hive_planner.launcher.service import run_set_cl_runtime
-    from hive_planner.project_profile import read_project_profile
+    from hive_planner.project_profile import read_project_profile, write_project_profile
 
     project = _minimal_hive_project(tmp_path / "set-rt")
+    write_project_profile(
+        project,
+        profile="minimal",
+        project_name="set-rt",
+        agent_handoff_mode=AGENT_HANDOFF_UNIFIED,
+    )
 
     result = run_set_cl_runtime(project, CL_RUNTIME_HEADLESS)
 
@@ -1103,6 +1110,26 @@ def test_run_set_cl_runtime_updates_profile(tmp_path: Path) -> None:
     meta = read_project_profile(project)
     assert meta is not None
     assert meta.cl_runtime == CL_RUNTIME_HEADLESS
+
+
+def test_run_set_cl_runtime_rejects_non_unified_handoff(tmp_path: Path) -> None:
+    from hive_planner.agent_handoff import AGENT_HANDOFF_OFF
+    from hive_planner.cl_runtime import CL_RUNTIME_HEADLESS
+    from hive_planner.launcher.service import run_set_cl_runtime
+    from hive_planner.project_profile import write_project_profile
+
+    project = _minimal_hive_project(tmp_path / "set-rt-off")
+    write_project_profile(
+        project,
+        profile="minimal",
+        project_name="set-rt-off",
+        agent_handoff_mode=AGENT_HANDOFF_OFF,
+    )
+
+    result = run_set_cl_runtime(project, CL_RUNTIME_HEADLESS)
+
+    assert result["ok"] is False
+    assert "unified agent handoff" in result.get("error", "").lower()
 
 
 def test_run_deploy_agent_handoff_reports_incomplete_when_validation_fails(
