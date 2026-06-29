@@ -241,6 +241,32 @@ def test_unified_verify_detects_stale_overlay_when_packaged_unavailable(
     assert any("spec-kit overlay stale" in issue for issue in report.issues)
 
 
+def test_unified_verify_headless_requires_workflow_artifact(tmp_path: Path) -> None:
+    from hive_planner.agent_handoff import AGENT_HANDOFF_UNIFIED
+    from hive_planner.cl_runtime import CL_RUNTIME_HEADLESS, HEADLESS_CL_WORKFLOW_REL
+    from hive_planner.project_profile import write_project_profile
+    from hive_planner.vendor_sync import deploy_spec_kit_overlay, load_manifest, packaged_manifest_path
+
+    repo = tmp_path / "headless-project"
+    repo.mkdir()
+    write_project_profile(
+        repo,
+        profile="minimal",
+        project_name="headless-project",
+        agent_handoff_mode=AGENT_HANDOFF_UNIFIED,
+        cl_runtime=CL_RUNTIME_HEADLESS,
+    )
+    write_project_pins(repo, load_manifest(packaged_manifest_path()))
+    deploy_spec_kit_overlay(_hive_repo_root(), repo)
+
+    report = unified_verify(RepoPaths(root=repo))
+
+    assert report.ok is False
+    assert report.pins_match is False
+    assert any(HEADLESS_CL_WORKFLOW_REL in issue for issue in report.issues)
+    assert any("headless CL artifact missing" in issue for issue in report.issues)
+
+
 def test_unified_verify_with_project_pins(tmp_path: Path) -> None:
     from hive_planner.vendor_sync import load_manifest, packaged_manifest_path
 

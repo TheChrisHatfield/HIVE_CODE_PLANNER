@@ -333,6 +333,16 @@ def _verify_cl_overlay(root: Path, *, manifest: dict | None = None) -> list[str]
     return issues
 
 
+def _verify_headless_cl_artifacts(root: Path, *, runtime: str) -> list[str]:
+    from hive_planner.cl_runtime import continual_learning_artifact_paths
+
+    issues: list[str] = []
+    for rel in continual_learning_artifact_paths(runtime):
+        if not (root / rel).is_file():
+            issues.append(f"headless CL artifact missing: {rel}")
+    return issues
+
+
 def _verify_unified_overlays(root: Path, *, manifest: dict | None, cl_runtime: str | None = None) -> list[str]:
     from hive_planner.cl_runtime import requires_cursor_plugin, resolve_cl_runtime
 
@@ -341,6 +351,8 @@ def _verify_unified_overlays(root: Path, *, manifest: dict | None, cl_runtime: s
     issues.extend(_verify_spec_kit_overlay(root, manifest=manifest))
     if requires_cursor_plugin(runtime):
         issues.extend(_verify_cl_overlay(root, manifest=manifest))
+    else:
+        issues.extend(_verify_headless_cl_artifacts(root, runtime=runtime))
     return issues
 
 
