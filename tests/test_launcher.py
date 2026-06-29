@@ -1602,6 +1602,7 @@ def test_run_legacy_deployment_scan_reports_starter_kit_layout(tmp_path: Path) -
 
     assert result["ok"] is False
     assert any(item["code"] == "missing_upstream_pins" for item in result["findings"])
+    assert "hints" not in result
 
 
 def test_run_agents_memory_apply_writes_agents_md(tmp_path: Path) -> None:
@@ -2507,6 +2508,8 @@ def test_ci_check_report_is_not_bg_error() -> None:
             "hints": ["review tasks.md"],
         }
     ) is False
+    assert app._is_bg_error({"ok": False, "error": "Not a Hive project", "detail": "missing START_HERE"}) is False
+    assert app._is_bg_error({"ok": False, "error": "verify failed", "issues": ["stale overlay"]}) is False
 
 
 def test_install_result_failure_dict() -> None:

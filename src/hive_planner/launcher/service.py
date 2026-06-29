@@ -1005,9 +1005,6 @@ def run_legacy_deployment_scan(project_root: Path) -> dict:
     else:
         warns = [item for item in report.findings if item.severity == "warn"]
         payload["detail"] = f"{len(warns)} legacy deployment issue(s) detected."
-        payload["hints"] = [
-            item.repair for item in warns if item.repair
-        ]
     return payload
 
 

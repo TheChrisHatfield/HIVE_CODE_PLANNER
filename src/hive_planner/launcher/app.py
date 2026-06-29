@@ -1148,6 +1148,9 @@ class HivePlannerApp:
             "proposal_path",
             "accepted",
             "rejected",
+            "findings",
+            "issues",
+            "detail",
         )
         return not any(key in result for key in structured_keys)
 
@@ -1464,8 +1467,6 @@ class HivePlannerApp:
             repair = finding.get("repair")
             if repair:
                 self._append_log(self.home_log, f"    repair: {repair}")
-        for hint in result.get("hints", []):
-            self._append_log(self.home_log, f"Tip: {hint}")
         self._show_dashboard()
 
     def _on_map_sync(self) -> None:
