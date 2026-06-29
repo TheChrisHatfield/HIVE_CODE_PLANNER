@@ -332,7 +332,7 @@ def test_init_unified_deploys_cl_plugin(tmp_path: Path) -> None:
     assert "Durable Workspace Facts" in agent_text
     assert "Integration wiring audit" in skill_text
     assert "spec-drift-check" in workflow.read_text(encoding="utf-8")
-    assert rev.read_text(encoding="utf-8").strip() == "2"
+    assert rev.read_text(encoding="utf-8").strip() == "3"
 
 
 def test_write_project_pins_refreshes_when_manifest_changes(tmp_path: Path) -> None:

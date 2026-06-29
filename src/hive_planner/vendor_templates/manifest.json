@@ -14,6 +14,6 @@
     "path": "vendor/cursor-plugins/continual-learning",
     "subtree": "continual-learning",
     "ref": "0452e08a314c03621ec5ac1324f1ad1dd824f1a4",
-    "hive_patch_rev": "2"
+    "hive_patch_rev": "3"
   }
 }

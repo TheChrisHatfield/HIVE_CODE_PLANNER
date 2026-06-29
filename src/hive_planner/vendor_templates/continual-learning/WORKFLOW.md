@@ -31,5 +31,5 @@ Behavioral bullets routed by the subagent go to `docs/proposals/cl-candidates.md
 
 ## Related
 
-- [docs/cl-spec-integration.md](../../docs/cl-spec-integration.md)
-- [.hive/spec-kit/WORKFLOW.md](../../.hive/spec-kit/WORKFLOW.md)
+- [docs/cl-spec-integration.md](../../../../docs/cl-spec-integration.md)
+- [.hive/spec-kit/WORKFLOW.md](../../../../.hive/spec-kit/WORKFLOW.md)

@@ -3,7 +3,7 @@
 Hive-patched fork of [cursor/plugins/continual-learning](https://github.com/cursor/plugins/tree/main/continual-learning) for symbiotic deploy with Hive Planner and Spec Kit.
 
 **Deploy path:** `.cursor/plugins/hive-continual-learning/`  
-**Contract:** [docs/cl-spec-integration.md](../../docs/cl-spec-integration.md)
+**Contract:** [docs/cl-spec-integration.md](../../../../docs/cl-spec-integration.md)
 
 ## Hive patches (CL-1–CL-6)
 

@@ -8,7 +8,7 @@ model: inherit
 
 Own the full memory update flow for continual learning in **Hive unified handoff** projects.
 
-**Contract:** [docs/cl-spec-integration.md](../../../docs/cl-spec-integration.md)
+**Contract:** [docs/cl-spec-integration.md](../../../../../docs/cl-spec-integration.md)
 
 ## Trigger
 

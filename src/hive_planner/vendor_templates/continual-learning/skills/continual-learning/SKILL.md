@@ -8,7 +8,7 @@ disable-model-invocation: true
 
 Keep `AGENTS.md` current by delegating the memory update flow to one subagent, with Hive symbiotic gates.
 
-**Contract:** [docs/cl-spec-integration.md](../../../../docs/cl-spec-integration.md)
+**Contract:** [docs/cl-spec-integration.md](../../../../../../docs/cl-spec-integration.md)
 
 ## Trigger
 
