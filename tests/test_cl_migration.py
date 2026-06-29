@@ -312,6 +312,8 @@ def test_run_cl_migrate_tailors_hints_when_plugin_removed_but_merge_failed(
     assert result["ok"] is True
     assert result["removed_marketplace_plugin"] is True
     assert any("lint failed" in warning for warning in result["warnings"])
+    assert result.get("hints")
+    assert any("lint" in hint.lower() for hint in result["hints"])
 
 
 def test_migrate_warns_on_unexpected_marketplace_plugin_name(tmp_path: Path) -> None:

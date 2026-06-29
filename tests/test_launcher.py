@@ -1453,6 +1453,53 @@ def _minimal_unified_project(tmp_path: Path, feature: str = "my-feature") -> Pat
     return project
 
 
+
+
+def test_ci_check_hints_cl_install_learned_facts_without_remove_flag(tmp_path: Path) -> None:
+    from hive_planner.agent_handoff import AGENT_HANDOFF_UNIFIED
+    from hive_planner.ci_handoff import CiCheckReport, CiStepResult
+    from hive_planner.launcher.service import ci_check_hints
+    from hive_planner.project_profile import write_project_profile
+    from hive_planner.vendor_sync import CL_OVERLAY_REL
+    from tests.test_cl_migration import _minimal_agents_with_learned, _write_plugin
+
+    project = tmp_path / "legacy-facts-hints"
+    project.mkdir()
+    (project / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    (project / "AGENTS.md").write_text(_minimal_agents_with_learned(), encoding="utf-8")
+    write_project_profile(
+        project, profile="minimal", project_name="legacy-facts-hints", agent_handoff_mode=AGENT_HANDOFF_UNIFIED
+    )
+    _write_plugin(project, CL_OVERLAY_REL, "hive-continual-learning")
+
+    failed = CiCheckReport(steps=[CiStepResult("cl-install", False, "learned workspace facts")])
+    hints = ci_check_hints(project, failed)
+    assert hints
+    joined = " ".join(hints)
+    assert "cl-migrate" in joined
+    assert "--remove-marketplace-plugin" not in joined
+
+
+def test_ci_check_hints_cl_install_dual_uses_remove_flag(tmp_path: Path) -> None:
+    from hive_planner.agent_handoff import AGENT_HANDOFF_UNIFIED, MARKETPLACE_CL_REL
+    from hive_planner.ci_handoff import CiCheckReport, CiStepResult
+    from hive_planner.launcher.service import ci_check_hints
+    from hive_planner.project_profile import write_project_profile
+    from hive_planner.vendor_sync import CL_OVERLAY_REL
+    from tests.test_cl_migration import _write_plugin
+
+    project = tmp_path / "dual-hints"
+    project.mkdir()
+    (project / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    write_project_profile(project, profile="minimal", project_name="dual-hints", agent_handoff_mode=AGENT_HANDOFF_UNIFIED)
+    _write_plugin(project, MARKETPLACE_CL_REL, "continual-learning")
+    _write_plugin(project, CL_OVERLAY_REL, "hive-continual-learning")
+
+    failed = CiCheckReport(steps=[CiStepResult("cl-install", False, "dual install")])
+    hints = ci_check_hints(project, failed)
+    assert any("--remove-marketplace-plugin" in hint for hint in hints)
+
+
 def test_ci_check_hints_wiring_audit_failure(tmp_path: Path) -> None:
     from hive_planner.ci_handoff import CiCheckReport, CiStepResult
     from hive_planner.launcher.service import ci_check_hints

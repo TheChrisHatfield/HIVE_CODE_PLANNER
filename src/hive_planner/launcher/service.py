@@ -894,9 +894,15 @@ def ci_check_hints(root: Path, report) -> list[str]:
             vendor_missing = _missing_from_ci_report(report)
             hints.extend(unified_vendor_repair_hints(missing=vendor_missing or [".hive/upstream-pins.json"]))
     if "cl-install" in failed:
+        from hive_planner.agent_handoff import scan_legacy_deployment
+
+        findings = {item.code: item for item in scan_legacy_deployment(root).findings}
+        migrate_cmd = "py -3.11 -m hive_planner cl-migrate"
+        if "dual_cl_install" in findings or "marketplace_cl_only" in findings:
+            migrate_cmd += " --remove-marketplace-plugin"
         hints.append(
             "Migrate marketplace Continual Learning: Home → Migrate marketplace CL, or "
-            "py -3.11 -m hive_planner cl-migrate --remove-marketplace-plugin"
+            + migrate_cmd
         )
     if "wiring-audit" in failed:
         hints.append(
@@ -1047,7 +1053,11 @@ def run_cl_migrate(project_root: Path, *, remove_marketplace_plugin: bool = Fals
             "hints": ["Verify the marketplace plugin path before removal."],
         }
     payload = report.to_dict()
-    if not report.ok:
+    if report.ok and any("lint failed" in w for w in report.warnings):
+        payload["hints"] = [
+            "Marketplace plugin removed; fix AGENTS.md lint issues and re-run migrate to merge Learned Workspace Facts.",
+        ]
+    elif not report.ok:
         payload["error"] = "; ".join(report.warnings) if report.warnings else "CL migration failed"
         if report.removed_marketplace_plugin:
             payload["hints"] = [
