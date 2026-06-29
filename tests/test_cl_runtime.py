@@ -89,6 +89,33 @@ def test_ci_cl_install_headless_skips_cursor_plugin_checks(tmp_path: Path) -> No
     assert "headless" in detail
 
 
+def test_headless_deploy_warns_when_cursor_plugins_remain(tmp_path: Path) -> None:
+    from hive_planner.agent_handoff import MARKETPLACE_CL_REL
+    from hive_planner.config import RepoPaths
+    from hive_planner.vendor_sync import CL_OVERLAY_REL, deploy_unified_vendor_artifacts
+    from tests.test_cl_migration import _write_plugin
+
+    source = tmp_path / "hive"
+    source.mkdir()
+    target = tmp_path / "project"
+    target.mkdir()
+    (target / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    _write_plugin(target, MARKETPLACE_CL_REL, "continual-learning")
+    _write_plugin(target, CL_OVERLAY_REL, "hive-continual-learning")
+
+    warnings: list[str] = []
+    deploy_unified_vendor_artifacts(
+        source,
+        target,
+        force=True,
+        warnings=warnings,
+        cl_runtime=CL_RUNTIME_HEADLESS,
+    )
+
+    assert any("Cursor CL plugin tree still present" in item for item in warnings)
+    assert any("hive-continual-learning overlay still present" in item for item in warnings)
+
+
 def test_init_headless_runtime_skips_cursor_plugin(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from hive_planner.bootstrap import init_project
     from hive_planner.config import RepoPaths

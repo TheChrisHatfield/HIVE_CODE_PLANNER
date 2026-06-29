@@ -807,6 +807,24 @@ def deploy_unified_vendor_artifacts(
         )
     else:
         deploy_headless_cl_artifacts(target, runtime, force=force, written=written)
+        from hive_planner.agent_handoff import MARKETPLACE_CL_REL
+        from hive_planner.cl_migration import marketplace_plugin_tree_present
+
+        if marketplace_plugin_tree_present(target):
+            message = (
+                f"Cursor CL plugin tree still present at {MARKETPLACE_CL_REL}/ — "
+                "remove manually or switch to cl-runtime cursor and re-deploy."
+            )
+            if warnings is not None:
+                warnings.append(message)
+        hive_overlay = target / CL_OVERLAY_REL
+        if hive_overlay.is_dir():
+            message = (
+                f"Cursor hive-continual-learning overlay still present at {CL_OVERLAY_REL}/ — "
+                "safe to remove for headless runtime."
+            )
+            if warnings is not None:
+                warnings.append(message)
         try:
             set_project_cl_runtime(target, runtime)
             if written is not None and ".hive/project.json" not in written:
