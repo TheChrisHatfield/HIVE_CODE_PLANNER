@@ -19,7 +19,7 @@ from hive_planner.agents_memory import (
     parse_sections,
     _preamble_lines,
 )
-from hive_planner.config import RepoPaths, resolve_repo_agents_path
+from hive_planner.config import RepoPaths
 
 LEGACY_WORKSPACE_FACTS = "Learned Workspace Facts"
 CL_MIGRATION_REL = ".hive/cl-migration.json"
@@ -65,6 +65,13 @@ def _plugin_name(plugin_root: Path) -> str | None:
         return None
     name = data.get("name")
     return str(name).strip() if name else None
+
+
+def marketplace_plugin_tree_present(project_root: Path) -> bool:
+    from hive_planner.agent_handoff import _plugin_tree_present
+
+    root = project_root.resolve() / MARKETPLACE_CL_REL
+    return _plugin_tree_present(root)
 
 
 def marketplace_cl_installed(project_root: Path) -> bool:
@@ -206,27 +213,34 @@ def migrate_marketplace_cl(
                 errors = [issue.message for issue in lint.issues if issue.severity == "error"]
                 report.warnings.append(f"AGENTS.md lint failed after merge — rolled back: {'; '.join(errors)}")
 
-    if marketplace_cl_installed(root):
-        if remove_marketplace_plugin:
-            report.actions.append(f"Remove marketplace plugin at {MARKETPLACE_CL_REL}/")
-            if not dry_run:
-                try:
-                    report.removed_marketplace_plugin = remove_marketplace_cl_plugin(root)
-                except ClMigrationError as exc:
-                    if report.agents_updated and agents_path.is_file():
-                        agents_path.write_text(original, encoding="utf-8")
-                        report.agents_updated = False
-                    report.ok = False
-                    report.warnings.append(str(exc))
+    if marketplace_plugin_tree_present(root):
+        if marketplace_cl_installed(root):
+            if remove_marketplace_plugin:
+                report.actions.append(f"Remove marketplace plugin at {MARKETPLACE_CL_REL}/")
+                if not dry_run:
+                    try:
+                        report.removed_marketplace_plugin = remove_marketplace_cl_plugin(root)
+                    except ClMigrationError as exc:
+                        if report.agents_updated and agents_path.is_file():
+                            agents_path.write_text(original, encoding="utf-8")
+                            report.agents_updated = False
+                        report.ok = False
+                        report.warnings.append(str(exc))
+            else:
+                report.warnings.append(
+                    f"Marketplace plugin still present at {MARKETPLACE_CL_REL}/ — "
+                    "disable in Cursor or re-run with --remove-marketplace-plugin."
+                )
         else:
+            plugin_name = _plugin_name(root / MARKETPLACE_CL_REL)
             report.warnings.append(
-                f"Marketplace plugin still present at {MARKETPLACE_CL_REL}/ — "
-                "disable in Cursor or re-run with --remove-marketplace-plugin."
+                f"Plugin tree at {MARKETPLACE_CL_REL}/ has unexpected name {plugin_name!r} — "
+                "manual review required before removal."
             )
-    elif "## Learned Workspace Facts" not in merged_text:
+    elif "## Learned Workspace Facts" not in merged_text and agents_path.is_file():
         report.actions.append("No marketplace plugin directory detected")
 
-    if marketplace_cl_installed(root) and not dry_run:
+    if marketplace_plugin_tree_present(root) and not dry_run:
         report.ok = False
 
     if not dry_run and report.ok:
