@@ -1333,7 +1333,7 @@ class HivePlannerApp:
         self._set_pending_memory_candidates(root, candidates)
         self._append_log(self.home_log, f"Running agents-propose on {candidates.name}…")
         self._run_bg(
-            lambda: run_agents_memory_propose(root, candidates, apply=False),
+            lambda r=root, c=candidates: run_agents_memory_propose(r, c, apply=False),
             self._agents_propose_done,
         )
 
@@ -1406,20 +1406,22 @@ class HivePlannerApp:
             self._append_log(self.home_log, f"Rejected {len(rejected)} candidate(s) — see proposal file.")
         if result.get("applied"):
             self._append_log(self.home_log, "Applied to AGENTS.md.")
-        elif accepted and self._pending_memory_for_root(root):
-            if messagebox.askyesno(
-                "Apply memory?",
-                f"Apply {len(accepted)} accepted bullet(s) to AGENTS.md now?",
-                parent=self.root,
-            ):
-                candidates = self._pending_memory_for_root(root)
-                if candidates:
-                    self._append_log(self.home_log, f"Running agents-apply on {candidates.name}…")
-                    self._run_bg(
-                        lambda r=root, c=candidates: run_agents_memory_apply(r, c),
-                        self._agents_apply_done,
-                    )
-                    return
+        else:
+            root = self._active_linked_root()
+            if accepted and root and self._pending_memory_for_root(root):
+                if messagebox.askyesno(
+                    "Apply memory?",
+                    f"Apply {len(accepted)} accepted bullet(s) to AGENTS.md now?",
+                    parent=self.root,
+                ):
+                    candidates = self._pending_memory_for_root(root)
+                    if candidates:
+                        self._append_log(self.home_log, f"Running agents-apply on {candidates.name}…")
+                        self._run_bg(
+                            lambda r=root, c=candidates: run_agents_memory_apply(r, c),
+                            self._agents_apply_done,
+                        )
+                        return
         self._show_dashboard()
 
     def _on_unified_verify(self) -> None:

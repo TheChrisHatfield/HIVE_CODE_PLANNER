@@ -1649,6 +1649,40 @@ def test_run_agents_memory_propose_rejects_outside_root_candidates(tmp_path: Pat
     assert result.get("hints")
 
 
+def test_agents_propose_done_prompts_apply_without_name_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.root = None
+    app.home_log = object()
+    logs: list[str] = []
+    app._append_log = lambda _widget, line: logs.append(line)
+    app._show_dashboard = lambda: None
+    prompted: list[bool] = []
+
+    monkeypatch.setattr(
+        "hive_planner.launcher.app.messagebox.askyesno",
+        lambda *args, **kwargs: prompted.append(True) or False,
+    )
+    project = Path("C:/proj")
+    app._active_linked_root = lambda: project
+    app._pending_memory_candidates = Path("C:/proj/docs/proposals/candidates.md")
+    app._pending_memory_project = str(project.resolve())
+
+    app._agents_propose_done(
+        {
+            "ok": True,
+            "proposal_path": "docs/proposals/agents-memory-1.md",
+            "accepted": ["Keep logs concise."],
+            "rejected": [],
+            "applied": False,
+        }
+    )
+
+    assert prompted == [True]
+    assert not any("NameError" in line for line in logs)
+
+
 def test_auto_complete_onboarding_when_setup_ready(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     hive = tmp_path / "hive"
     hive.mkdir()
