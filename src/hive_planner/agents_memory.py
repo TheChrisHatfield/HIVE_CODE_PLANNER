@@ -86,6 +86,8 @@ class AgentsMemoryResult:
 
 def _normalize_bullet(text: str) -> str:
     cleaned = re.sub(r"^[-*]\s+", "", text.strip())
+    cleaned = TAG_BEHAVIORAL.sub("", cleaned).strip()
+    cleaned = TAG_OPERATIONAL.sub("", cleaned).strip()
     cleaned = re.sub(r"\*\*([^*]+)\*\*", r"\1", cleaned)
     cleaned = re.sub(r"`([^`]+)`", r"\1", cleaned)
     return re.sub(r"\s+", " ", cleaned).strip().lower()

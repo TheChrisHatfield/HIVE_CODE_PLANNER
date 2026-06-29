@@ -255,6 +255,15 @@ def test_ingest_routes_operational_out_of_behavioral_section(tmp_path: Path) -> 
     assert "Run ci-check before handoff." in operational_part
 
 
+def test_propose_rejects_duplicate_candidate_with_inline_tag(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    (paths.root / "AGENTS.md").write_text(_minimal_agents(), encoding="utf-8")
+    candidates = paths.root / "candidates.md"
+    candidates.write_text("- Existing durable fact one. # operational\n", encoding="utf-8")
+    with pytest.raises(AgentsMemoryError, match="All candidate"):
+        propose_agents_memory(paths, candidates)
+
+
 def test_apply_inserts_editable_section_after_active_feature(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     agents_text = """# AGENTS.md
