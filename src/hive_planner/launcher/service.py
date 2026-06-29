@@ -1049,10 +1049,15 @@ def run_cl_migrate(project_root: Path, *, remove_marketplace_plugin: bool = Fals
     payload = report.to_dict()
     if not report.ok:
         payload["error"] = "; ".join(report.warnings) if report.warnings else "CL migration failed"
-        payload["hints"] = [
-            "Deploy agent handoff first if hive-continual-learning is missing.",
-            "Re-run with remove marketplace plugin enabled after reviewing the log.",
-        ]
+        if report.removed_marketplace_plugin:
+            payload["hints"] = [
+                "Marketplace plugin removed; fix AGENTS.md lint issues and re-run migrate to merge Learned Workspace Facts.",
+            ]
+        else:
+            payload["hints"] = [
+                "Deploy agent handoff first if hive-continual-learning is missing.",
+                "Re-run with remove marketplace plugin enabled after reviewing the log.",
+            ]
     return payload
 
 

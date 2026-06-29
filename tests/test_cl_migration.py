@@ -178,7 +178,7 @@ def test_migrate_still_removes_marketplace_when_agents_lint_fails(
     assert report.removed_marketplace_plugin is True
     assert not (project / MARKETPLACE_CL_REL).exists()
     assert agents_path.read_text(encoding="utf-8") == _minimal_agents_with_learned()
-    assert report.ok is False
+    assert report.ok is True
     assert any("lint failed" in warning for warning in report.warnings)
 
 
@@ -252,6 +252,39 @@ def test_ci_cl_install_step_fails_on_learned_workspace_facts(tmp_path: Path) -> 
     assert ok is False
     assert "Learned Workspace Facts" in detail
     assert "cl-migrate" in detail
+
+
+def test_run_cl_migrate_tailors_hints_when_plugin_removed_but_merge_failed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from hive_planner.agent_handoff import AGENT_HANDOFF_UNIFIED
+    from hive_planner.agents_memory import AgentsLintReport, LintIssue
+    from hive_planner.launcher.service import run_cl_migrate
+    from hive_planner.project_profile import write_project_profile
+
+    project = tmp_path / "partial-merge"
+    project.mkdir()
+    (project / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    (project / "AGENTS.md").write_text(_minimal_agents_with_learned(), encoding="utf-8")
+    write_project_profile(
+        project, profile="minimal", project_name="partial-merge", agent_handoff_mode=AGENT_HANDOFF_UNIFIED
+    )
+    _write_plugin(project, MARKETPLACE_CL_REL, "continual-learning")
+    _write_plugin(project, CL_OVERLAY_REL, "hive-continual-learning")
+
+    def _fail_lint(paths, agents_path=None):
+        return AgentsLintReport(
+            path=str(agents_path or paths.root / "AGENTS.md"),
+            issues=[LintIssue(severity="error", message="simulated lint failure")],
+        )
+
+    monkeypatch.setattr("hive_planner.cl_migration.lint_agents_md", _fail_lint)
+
+    result = run_cl_migrate(project, remove_marketplace_plugin=True)
+
+    assert result["ok"] is True
+    assert result["removed_marketplace_plugin"] is True
+    assert any("lint failed" in warning for warning in result["warnings"])
 
 
 def test_migrate_warns_on_unexpected_marketplace_plugin_name(tmp_path: Path) -> None:

@@ -242,6 +242,8 @@ def migrate_marketplace_cl(
 
     if marketplace_plugin_tree_present(root) and not dry_run:
         report.ok = False
+    elif not dry_run and report.removed_marketplace_plugin:
+        report.ok = True
 
     if not dry_run and report.ok:
         from hive_planner.project_profile import set_project_cl_source
