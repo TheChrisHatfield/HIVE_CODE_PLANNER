@@ -210,7 +210,14 @@ def migrate_marketplace_cl(
         if remove_marketplace_plugin:
             report.actions.append(f"Remove marketplace plugin at {MARKETPLACE_CL_REL}/")
             if not dry_run:
-                report.removed_marketplace_plugin = remove_marketplace_cl_plugin(root)
+                try:
+                    report.removed_marketplace_plugin = remove_marketplace_cl_plugin(root)
+                except ClMigrationError as exc:
+                    if report.agents_updated and agents_path.is_file():
+                        agents_path.write_text(original, encoding="utf-8")
+                        report.agents_updated = False
+                    report.ok = False
+                    report.warnings.append(str(exc))
         else:
             report.warnings.append(
                 f"Marketplace plugin still present at {MARKETPLACE_CL_REL}/ — "

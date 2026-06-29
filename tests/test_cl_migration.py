@@ -182,6 +182,38 @@ def test_migrate_still_removes_marketplace_when_agents_lint_fails(
     assert any("lint failed" in warning for warning in report.warnings)
 
 
+def test_migrate_rolls_back_agents_when_plugin_removal_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from hive_planner.agent_handoff import AGENT_HANDOFF_UNIFIED
+    from hive_planner.cl_migration import ClMigrationError
+    from hive_planner.project_profile import write_project_profile
+
+    project = tmp_path / "remove-fail"
+    project.mkdir()
+    (project / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    agents_path = project / "AGENTS.md"
+    original_agents = _minimal_agents_with_learned()
+    agents_path.write_text(original_agents, encoding="utf-8")
+    write_project_profile(
+        project, profile="minimal", project_name="remove-fail", agent_handoff_mode=AGENT_HANDOFF_UNIFIED
+    )
+    _write_plugin(project, MARKETPLACE_CL_REL, "continual-learning")
+    _write_plugin(project, CL_OVERLAY_REL, "hive-continual-learning")
+
+    def _fail_remove(_root: Path) -> bool:
+        raise ClMigrationError("simulated plugin removal failure")
+
+    monkeypatch.setattr("hive_planner.cl_migration.remove_marketplace_cl_plugin", _fail_remove)
+
+    report = migrate_marketplace_cl(RepoPaths(root=project), remove_marketplace_plugin=True)
+
+    assert report.ok is False
+    assert (project / MARKETPLACE_CL_REL).exists()
+    assert agents_path.read_text(encoding="utf-8") == original_agents
+    assert any("simulated plugin removal failure" in warning for warning in report.warnings)
+
+
 def test_migrate_without_agents_md_can_still_remove_marketplace_plugin(tmp_path: Path) -> None:
     from hive_planner.agent_handoff import AGENT_HANDOFF_UNIFIED
     from hive_planner.project_profile import write_project_profile
