@@ -91,10 +91,16 @@ def user_guide_path(config: LauncherConfig | None = None) -> Path:
 
 def load_user_guide(config: LauncherConfig | None = None) -> str:
     path = user_guide_path(config)
-    if path.is_file():
-        text = path.read_text(encoding="utf-8")
-    else:
+    readme_on_disk = path.is_file()
+    text: str | None = None
+    if readme_on_disk:
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            text = None
+    if text is None:
         text = _FALLBACK_GUIDE
-    if path.is_file() and UNIFIED_VENDOR_SECTION_MARKER not in text:
+        readme_on_disk = False
+    if readme_on_disk and UNIFIED_VENDOR_SECTION_MARKER not in text:
         text = text.rstrip() + "\n\n" + unified_vendor_help_text().strip() + "\n"
     return text
