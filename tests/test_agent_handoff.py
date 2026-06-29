@@ -6,10 +6,12 @@ from pathlib import Path
 from hive_planner.agent_handoff import (
     AGENT_HANDOFF_OFF,
     AGENT_HANDOFF_UNIFIED,
+    MARKETPLACE_CL_REL,
     apply_agent_handoff_mode,
     deploy_unified_agent_handoff,
     integrations_from_mode,
     resolve_agent_handoff_mode,
+    scan_legacy_deployment,
     validate_unified_handoff,
 )
 from hive_planner.bootstrap import init_project
@@ -139,3 +141,57 @@ def test_apply_agent_handoff_mode_infers_full_bootstrap_profile(tmp_path: Path) 
     meta = read_project_profile(project)
     assert meta is not None
     assert meta.bootstrap_profile == "full"
+
+
+def test_scan_legacy_deployment_detects_marketplace_cl(tmp_path: Path) -> None:
+    project = tmp_path / "legacy-cl"
+    project.mkdir()
+    plugin = project / MARKETPLACE_CL_REL / ".cursor-plugin"
+    plugin.mkdir(parents=True)
+    (plugin / "plugin.json").write_text('{"name":"continual-learning"}\n', encoding="utf-8")
+
+    report = scan_legacy_deployment(project)
+
+    assert not report.ok
+    codes = {item.code for item in report.findings}
+    assert "marketplace_cl_only" in codes
+
+
+def test_scan_legacy_deployment_detects_dual_cl(tmp_path: Path) -> None:
+    project = tmp_path / "dual-cl"
+    project.mkdir()
+    for rel in (
+        MARKETPLACE_CL_REL,
+        ".cursor/plugins/hive-continual-learning",
+    ):
+        plugin = project / rel / ".cursor-plugin"
+        plugin.mkdir(parents=True)
+        (plugin / "plugin.json").write_text('{"name":"cl"}\n', encoding="utf-8")
+
+    report = scan_legacy_deployment(project)
+
+    assert not report.ok
+    assert any(item.code == "dual_cl_install" for item in report.findings)
+
+
+def test_scan_legacy_deployment_detects_starter_kit_without_pins(tmp_path: Path) -> None:
+    project = tmp_path / "starter-only"
+    project.mkdir()
+    (project / "spec-kit-agent-integration.md").write_text("# Spec Kit\n", encoding="utf-8")
+
+    report = scan_legacy_deployment(project)
+
+    codes = {item.code for item in report.findings}
+    assert "missing_upstream_pins" in codes
+    assert "starter_kit_only_layout" in codes
+
+
+def test_scan_legacy_deployment_clean_unified_project(tmp_path: Path) -> None:
+    source = _hive_source(tmp_path)
+    target = tmp_path / "unified-clean"
+    init_project(source, target, agent_handoff="unified")
+
+    report = scan_legacy_deployment(target)
+
+    assert not any(item.code == "marketplace_cl_only" for item in report.findings)
+    assert not any(item.code == "dual_cl_install" for item in report.findings)

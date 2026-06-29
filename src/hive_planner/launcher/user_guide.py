@@ -17,11 +17,12 @@ First time?
 Daily use:
   Projects → Open project… (or Create project)
   Home → Run health check before handoff
+  Home → Verify vendor pins / Scan legacy deployment (unified handoff)
   Home → Open in Cursor
 
 Unified vendor (Spec Kit + Continual Learning):
   Home → Deploy agent handoff copies pinned overlays into the project.
-  To verify pins and overlays: py -3.11 -m hive_planner unified-verify
+  Home → Verify vendor pins checks pins and overlay revs (or: unified-verify CLI).
   Hive source maintainers: vendor-sync --check / --apply (see scripts/README.md)
 
 Full guide:
@@ -53,7 +54,8 @@ The desktop app **Deploy agent handoff** button (Home tab) runs the same deploy 
 |-----------|--------|
 | New project with unified handoff | **Projects → Create project** with handoff **unified**, or **Home → Deploy agent handoff** on an existing Hive project |
 | After upgrading Hive Planner | **Home → Deploy agent handoff** again (refreshes overlays when patch rev changes) |
-| Check pins and overlays in a project | `py -3.11 -m hive_planner unified-verify` |
+| Check pins and overlays in a project | **Home → Verify vendor pins**, or `py -3.11 -m hive_planner unified-verify` |
+| Detect old marketplace / starter-kit layout | **Home → Scan legacy deployment** |
 | Health check includes vendor step | **Home → Run health check** — fails `unified-vendor` when pins or overlays drift |
 
 ### Wiring audit and memory promotion (unified handoff)
@@ -64,6 +66,7 @@ Before promoting Continual Learning candidates into `AGENTS.md`:
 2. **Home → Record wiring audit…** — enter your validation command (e.g. `pytest -q`)
 3. **Home → Check wiring audit** — confirm attestation is current (also in **Run health check**)
 4. **Home → Promote memory…** — run `agents-propose` on staged candidates in `docs/proposals/`
+5. **Home → Apply memory…** — run `agents-apply` (or accept the prompt after propose)
 
 CLI equivalents:
 
@@ -71,6 +74,7 @@ CLI equivalents:
 py -3.11 -m hive_planner wiring-audit record --evidence "pytest -q"
 py -3.11 -m hive_planner wiring-audit check
 py -3.11 -m hive_planner agents-propose --candidates docs/proposals/candidates-….md
+py -3.11 -m hive_planner agents-apply --candidates docs/proposals/candidates-….md
 ```
 
 ### Command line (project folder)

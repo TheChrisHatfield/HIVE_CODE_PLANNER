@@ -1220,7 +1220,7 @@ def test_unified_vendor_repair_hints_for_overlay_gaps() -> None:
 
     hints = unified_vendor_repair_hints(missing=[".hive/spec-kit/WORKFLOW.md"])
     assert hints
-    assert any("unified-verify" in hint for hint in hints)
+    assert any("Verify vendor pins" in hint for hint in hints)
     assert not any("vendor-sync" in hint for hint in hints)
     assert unified_vendor_repair_hints(missing=["docs/specs/foo/spec.md"]) == []
 
@@ -1248,7 +1248,7 @@ def test_run_deploy_agent_handoff_includes_vendor_hints_when_incomplete(
     result = run_deploy_agent_handoff(project, hive_planner_root=hive_root, force=True)
     assert result["ok"] is False
     assert result.get("hints")
-    assert any("unified-verify" in hint for hint in result["hints"])
+    assert any("Verify vendor pins" in hint for hint in result["hints"])
 
 
 def test_load_user_guide_falls_back_when_readme_not_utf8(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1365,7 +1365,7 @@ def test_ci_check_hints_parses_vendor_missing_from_profile_step(tmp_path: Path) 
 
     hints = ci_check_hints(project, failed)
 
-    assert any("unified-verify" in hint for hint in hints)
+    assert any("Verify vendor pins" in hint for hint in hints)
     assert any("Deploy agent handoff" in hint for hint in hints)
 
 
@@ -1398,7 +1398,7 @@ def test_ci_check_hints_unified_vendor_hive_source_vs_project(tmp_path: Path) ->
     assert not any("Deploy agent handoff" in hint for hint in hive_hints)
     assert not any("Deploy agent handoff" in hint for hint in app_hints)
     assert any("Deploy agent handoff" in hint for hint in unified_hints)
-    assert any("unified-verify" in hint for hint in unified_hints)
+    assert any("Verify vendor pins" in hint for hint in unified_hints)
 
 
 def _minimal_unified_project(tmp_path: Path, feature: str = "my-feature") -> Path:
@@ -1563,6 +1563,89 @@ def test_run_agents_memory_propose_hints_when_all_candidates_rejected(tmp_path: 
     result = run_agents_memory_propose(project, candidates)
     assert result["ok"] is False
     assert any("behavioral" in hint.lower() or "operational" in hint.lower() for hint in result.get("hints", []))
+
+
+def test_run_unified_verify_on_bootstrapped_project(tmp_path: Path) -> None:
+    from hive_planner.launcher.service import run_unified_verify
+    from hive_planner.vendor_sync import (
+        deploy_continual_learning_overlay,
+        deploy_spec_kit_overlay,
+        load_manifest,
+        packaged_manifest_path,
+        write_project_pins,
+    )
+
+    project = tmp_path / "verify-app"
+    project.mkdir()
+    (project / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    source = Path(__file__).resolve().parents[1]
+    pins = load_manifest(packaged_manifest_path())
+    write_project_pins(project, pins, force=True)
+    deploy_spec_kit_overlay(source, project, force=True)
+    deploy_continual_learning_overlay(source, project, force=True)
+
+    result = run_unified_verify(project)
+
+    assert result["ok"] is True
+    assert result.get("issues") == []
+
+
+def test_run_legacy_deployment_scan_reports_starter_kit_layout(tmp_path: Path) -> None:
+    from hive_planner.launcher.service import run_legacy_deployment_scan
+
+    project = tmp_path / "legacy-scan"
+    project.mkdir()
+    (project / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    (project / "spec-kit-agent-integration.md").write_text("# Spec Kit\n", encoding="utf-8")
+
+    result = run_legacy_deployment_scan(project)
+
+    assert result["ok"] is False
+    assert any(item["code"] == "missing_upstream_pins" for item in result["findings"])
+
+
+def test_run_agents_memory_apply_writes_agents_md(tmp_path: Path) -> None:
+    from hive_planner.launcher.service import run_agents_memory_apply, run_agents_memory_propose
+    from hive_planner.wiring_audit import record_wiring_audit
+
+    project = _minimal_unified_project(tmp_path)
+    record_wiring_audit(RepoPaths(root=project), evidence="pytest -q")
+    candidates = project / "docs" / "proposals" / "candidates.md"
+    candidates.parent.mkdir(parents=True, exist_ok=True)
+    candidates.write_text("- # operational\n- Keep launcher logs concise.\n", encoding="utf-8")
+    proposed = run_agents_memory_propose(project, candidates)
+    assert proposed["ok"] is True
+    applied = run_agents_memory_apply(project, candidates)
+    assert applied["ok"] is True
+    assert applied.get("applied") is True
+    assert "Keep launcher logs concise." in (project / "AGENTS.md").read_text(encoding="utf-8")
+
+
+def test_candidates_path_in_project_rejects_outside_root(tmp_path: Path) -> None:
+    from hive_planner.launcher.service import candidates_path_in_project
+
+    project = tmp_path / "app"
+    project.mkdir()
+    outside = tmp_path / "outside.md"
+    outside.write_text("- x\n", encoding="utf-8")
+    inside = project / "docs" / "proposals" / "candidates.md"
+    inside.parent.mkdir(parents=True)
+    inside.write_text("- x\n", encoding="utf-8")
+
+    assert candidates_path_in_project(project, inside) is True
+    assert candidates_path_in_project(project, outside) is False
+
+
+def test_run_agents_memory_propose_rejects_outside_root_candidates(tmp_path: Path) -> None:
+    from hive_planner.launcher.service import run_agents_memory_propose
+
+    project = _minimal_unified_project(tmp_path)
+    outside = tmp_path / "outside.md"
+    outside.write_text("- # operational\n- Outside fact.\n", encoding="utf-8")
+    result = run_agents_memory_propose(project, outside)
+    assert result["ok"] is False
+    assert "inside project root" in result["error"]
+    assert result.get("hints")
 
 
 def test_auto_complete_onboarding_when_setup_ready(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

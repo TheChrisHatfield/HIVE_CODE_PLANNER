@@ -622,6 +622,15 @@ def resolve_linked_project_root(path: Path) -> Path | None:
     return workspace_primary_folder(path)
 
 
+def candidates_path_in_project(project_root: Path, candidates_path: Path) -> bool:
+    """True when candidates_path resolves inside project_root."""
+    try:
+        candidates_path.resolve().relative_to(project_root.resolve())
+    except ValueError:
+        return False
+    return candidates_path.is_file()
+
+
 def prepare_linked_project_root(path: Path, *, repair_agents: bool = True):
     from hive_planner.project_profile import resolve_project_integrations
     from hive_planner.spec_drift import AgentsRepairResult, repair_agents_active_feature, repair_handoff_rosetta_navigation
@@ -830,7 +839,7 @@ def unified_vendor_repair_hints(*, missing: list[str] | None = None) -> list[str
     if not any(any(marker in rel for marker in markers) for rel in missing):
         return []
     return [
-        "Run py -3.11 -m hive_planner unified-verify in the project folder to inspect pins and overlays.",
+        "Home → Verify vendor pins to inspect pins and overlays.",
         "Repair: Home → Deploy agent handoff (refreshes .hive/spec-kit/ and hive-continual-learning plugin).",
     ]
 
@@ -962,6 +971,46 @@ def run_wiring_audit_record(project_root: Path, evidence: str) -> dict:
     return payload
 
 
+def run_unified_verify(project_root: Path) -> dict:
+    summary = summarize_project(project_root)
+    if not summary.ok:
+        return {"ok": False, "error": summary.detail}
+    from hive_planner.vendor_sync import unified_verify
+
+    paths = RepoPaths(root=project_root.resolve())
+    report = unified_verify(paths)
+    payload = report.to_dict()
+    payload["ok"] = report.ok
+    if not report.ok:
+        payload["error"] = "; ".join(report.issues) if report.issues else "Unified vendor verify failed"
+        payload["hints"] = [
+            "Home → Deploy agent handoff refreshes .hive/upstream-pins.json and vendored overlays.",
+            "Home → Scan legacy deployment for marketplace CL or starter-kit-only layout.",
+        ]
+    return payload
+
+
+def run_legacy_deployment_scan(project_root: Path) -> dict:
+    summary = summarize_project(project_root)
+    if not summary.ok:
+        return {"ok": False, "error": summary.detail}
+    from hive_planner.agent_handoff import scan_legacy_deployment
+
+    report = scan_legacy_deployment(project_root.resolve())
+    payload = report.to_dict()
+    if not report.findings:
+        payload["detail"] = "No legacy deployment traces detected."
+    elif report.ok:
+        payload["detail"] = f"{len(report.findings)} informational finding(s); no blocking legacy layout."
+    else:
+        warns = [item for item in report.findings if item.severity == "warn"]
+        payload["detail"] = f"{len(warns)} legacy deployment issue(s) detected."
+        payload["hints"] = [
+            item.repair for item in warns if item.repair
+        ]
+    return payload
+
+
 def run_agents_memory_propose(project_root: Path, candidates_path: Path, *, apply: bool = False) -> dict:
     from hive_planner.agents_memory import AgentsMemoryError, run_agents_memory
     from hive_planner.wiring_audit import check_wiring_audit, wiring_audit_enforced
@@ -973,6 +1022,12 @@ def run_agents_memory_propose(project_root: Path, candidates_path: Path, *, appl
     candidate_file = candidates_path if candidates_path.is_absolute() else paths.root / candidates_path
     if not candidate_file.is_file():
         return {"ok": False, "error": f"Candidates file not found: {candidates_path}"}
+    if not candidates_path_in_project(paths.root, candidate_file):
+        return {
+            "ok": False,
+            "error": f"Candidates file must be inside project root: {paths.root}",
+            "hints": ["Select a candidates file from the linked project docs/proposals folder."],
+        }
     if wiring_audit_enforced(paths):
         wiring = check_wiring_audit(paths)
         if not wiring.ok:
@@ -1008,6 +1063,11 @@ def run_agents_memory_propose(project_root: Path, candidates_path: Path, *, appl
         "accepted": result.accepted,
         "rejected": [{"candidate": c, "reason": r} for c, r in result.rejected],
     }
+
+
+def run_agents_memory_apply(project_root: Path, candidates_path: Path) -> dict:
+    """Apply accepted CL candidates to AGENTS.md (agents-apply)."""
+    return run_agents_memory_propose(project_root, candidates_path, apply=True)
 
 
 def run_project_ci_check(project_root: Path) -> dict:

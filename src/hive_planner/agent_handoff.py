@@ -134,6 +134,145 @@ def deploy_unified_agent_handoff(
     )
 
 
+MARKETPLACE_CL_REL = ".cursor/plugins/continual-learning"
+
+
+@dataclass
+class LegacyDeploymentFinding:
+    code: str
+    severity: str
+    detail: str
+    repair: str | None = None
+
+    def to_dict(self) -> dict:
+        return {
+            "code": self.code,
+            "severity": self.severity,
+            "detail": self.detail,
+            "repair": self.repair,
+        }
+
+
+@dataclass
+class LegacyDeploymentReport:
+    findings: list[LegacyDeploymentFinding]
+
+    @property
+    def ok(self) -> bool:
+        return not any(item.severity == "warn" for item in self.findings)
+
+    def to_dict(self) -> dict:
+        return {
+            "ok": self.ok,
+            "findings": [item.to_dict() for item in self.findings],
+        }
+
+
+def _plugin_tree_present(plugin_root: Path) -> bool:
+    return (
+        (plugin_root / ".cursor-plugin" / "plugin.json").is_file()
+        or (plugin_root / "skills" / "continual-learning" / "SKILL.md").is_file()
+    )
+
+
+def scan_legacy_deployment(project_root: Path) -> LegacyDeploymentReport:
+    """Detect pre-unified or marketplace-only handoff artifacts in a Hive project."""
+    from hive_planner.project_profile import infer_spec_kit_enabled, read_project_profile
+    from hive_planner.vendor_sync import CL_OVERLAY_REL, PROJECT_PINS_REL, SPEC_KIT_OVERLAY_REL
+
+    root = project_root.resolve()
+    findings: list[LegacyDeploymentFinding] = []
+
+    marketplace_cl = root / MARKETPLACE_CL_REL
+    hive_cl = root / CL_OVERLAY_REL
+    marketplace_installed = _plugin_tree_present(marketplace_cl)
+    hive_installed = _plugin_tree_present(hive_cl)
+
+    if marketplace_installed and hive_installed:
+        findings.append(
+            LegacyDeploymentFinding(
+                code="dual_cl_install",
+                severity="warn",
+                detail="Both marketplace continual-learning and hive-continual-learning plugins are present.",
+                repair="Disable or remove marketplace /add-plugin continual-learning; use hive-continual-learning only.",
+            )
+        )
+    elif marketplace_installed:
+        findings.append(
+            LegacyDeploymentFinding(
+                code="marketplace_cl_only",
+                severity="warn",
+                detail=f"Marketplace Continual Learning plugin found at {MARKETPLACE_CL_REL}/.",
+                repair="Home → Deploy agent handoff (installs vendored hive-continual-learning).",
+            )
+        )
+
+    starter_kit_doc = (root / "spec-kit-agent-integration.md").is_file()
+    pins_path = root / PROJECT_PINS_REL
+    spec_kit_overlay = root / SPEC_KIT_OVERLAY_REL
+    if starter_kit_doc and not pins_path.is_file():
+        findings.append(
+            LegacyDeploymentFinding(
+                code="missing_upstream_pins",
+                severity="warn",
+                detail="spec-kit-agent-integration.md present but .hive/upstream-pins.json is missing (pre-Stage 9 layout).",
+                repair="Home → Deploy agent handoff to write pins and vendored overlays.",
+            )
+        )
+    if starter_kit_doc and not (spec_kit_overlay / "WORKFLOW.md").is_file():
+        findings.append(
+            LegacyDeploymentFinding(
+                code="starter_kit_only_layout",
+                severity="warn",
+                detail="Starter-kit Spec Kit guide present but .hive/spec-kit/ vendored overlay is missing or incomplete.",
+                repair="Home → Deploy agent handoff to install .hive/spec-kit/ templates.",
+            )
+        )
+
+    mode = resolve_agent_handoff_mode(root)
+    meta = read_project_profile(root)
+    if mode != AGENT_HANDOFF_UNIFIED and infer_spec_kit_enabled(root):
+        profile_mode = meta.agent_handoff_mode if meta and meta.agent_handoff_mode else "inferred"
+        findings.append(
+            LegacyDeploymentFinding(
+                code="handoff_mode_not_unified",
+                severity="warn",
+                detail=f"Spec Kit artifacts detected but agent handoff mode is {profile_mode!r}, not unified.",
+                repair="Home → Deploy agent handoff to enable unified Spec Kit + Continual Learning.",
+            )
+        )
+
+    agents_path = root / "AGENTS.md"
+    if agents_path.is_file():
+        try:
+            agents_text = agents_path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            agents_text = ""
+        if "## Learned Workspace Facts" in agents_text:
+            findings.append(
+                LegacyDeploymentFinding(
+                    code="learned_workspace_facts",
+                    severity="info",
+                    detail="AGENTS.md still uses ## Learned Workspace Facts (upstream CL section name).",
+                    repair="Merge into ## Durable Workspace Facts when running agents-apply or CL memory update.",
+                )
+            )
+
+    if mode == AGENT_HANDOFF_UNIFIED:
+        status = validate_unified_handoff(root)
+        if not status.complete:
+            findings.append(
+                LegacyDeploymentFinding(
+                    code="unified_handoff_incomplete",
+                    severity="warn",
+                    detail=f"Unified handoff enabled but {len(status.missing)} required artifact(s) missing.",
+                    repair="Home → Verify vendor pins, then Deploy agent handoff if overlays are stale.",
+                )
+            )
+
+    return LegacyDeploymentReport(findings=findings)
+
+
 def apply_agent_handoff_mode(
     project_root: Path,
     mode: str,

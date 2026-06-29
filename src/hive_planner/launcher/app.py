@@ -25,12 +25,15 @@ from hive_planner.launcher.service import (
     cartridge_load_needs_feature,
     cartridge_load_will_promote,
     find_staged_candidates,
+    run_agents_memory_apply,
     run_agents_memory_propose,
     run_deploy_agent_handoff,
     run_install,
+    run_legacy_deployment_scan,
     run_project_ci_check,
     run_project_init,
     run_project_map_sync,
+    run_unified_verify,
     run_wiring_audit_check,
     run_wiring_audit_record,
     summarize_linked_project,
@@ -118,6 +121,8 @@ class HivePlannerApp:
         self._bg_generation = 0
         self._python_scan_active = False
         self._pending_home_log: list[str] = []
+        self._pending_memory_candidates: Path | None = None
+        self._pending_memory_project: str | None = None
 
         root.title("Hive Planner")
         root.geometry("920x680")
@@ -286,6 +291,14 @@ class HivePlannerApp:
         self._clear_container()
         self.config = load_config()
         self.setup = get_setup_status(self.config)
+        active_norm = (
+            normalize_project_path(self.config.active_project)
+            if self.config.active_project
+            else ""
+        )
+        if self._pending_memory_project and self._pending_memory_project != active_norm:
+            self._pending_memory_candidates = None
+            self._pending_memory_project = None
 
         header = tk.Frame(self.container, bg=COLORS["bg"])
         header.pack(fill="x", padx=16, pady=(16, 8))
@@ -455,6 +468,27 @@ class HivePlannerApp:
             "Promote memory…",
             self._on_agents_propose,
             tooltip="Run agents-propose on staged CL candidates (requires wiring audit attestation).",
+        )
+        secondary_button(
+            handoff_actions,
+            "Apply memory…",
+            self._on_agents_apply,
+            tooltip="Apply accepted CL candidates to AGENTS.md (agents-apply; requires prior propose).",
+        )
+
+        verify_actions = tk.Frame(body, bg=COLORS["bg"])
+        verify_actions.pack(fill="x", padx=16, pady=(0, 8))
+        secondary_button(
+            verify_actions,
+            "Verify vendor pins",
+            self._on_unified_verify,
+            tooltip="Check .hive/upstream-pins.json and vendored Spec Kit + CL overlay revs.",
+        )
+        secondary_button(
+            verify_actions,
+            "Scan legacy deployment",
+            self._on_legacy_deployment_scan,
+            tooltip="Detect marketplace CL, missing pins, or starter-kit-only layouts from pre-unified deploy.",
         )
 
         log_card = card(body)
@@ -1262,6 +1296,17 @@ class HivePlannerApp:
                 self._append_log(self.home_log, f"Tip: {hint}")
         self._show_dashboard()
 
+    def _set_pending_memory_candidates(self, root: Path, candidates: Path) -> None:
+        self._pending_memory_candidates = candidates
+        self._pending_memory_project = normalize_project_path(str(root))
+
+    def _pending_memory_for_root(self, root: Path) -> Path | None:
+        if not self._pending_memory_candidates:
+            return None
+        if self._pending_memory_project != normalize_project_path(str(root)):
+            return None
+        return self._pending_memory_candidates
+
     def _on_agents_propose(self) -> None:
         root = self._active_linked_root()
         if not root:
@@ -1282,11 +1327,63 @@ class HivePlannerApp:
         if not selected:
             return
         candidates = Path(selected)
+        self._set_pending_memory_candidates(root, candidates)
         self._append_log(self.home_log, f"Running agents-propose on {candidates.name}…")
         self._run_bg(
             lambda: run_agents_memory_propose(root, candidates, apply=False),
             self._agents_propose_done,
         )
+
+    def _on_agents_apply(self) -> None:
+        root = self._active_linked_root()
+        if not root:
+            messagebox.showwarning("No project", "Link a workspace first (Projects tab).")
+            return
+        default = self._pending_memory_for_root(root) or find_staged_candidates(root)
+        if default and default.is_file():
+            initial = str(default.parent)
+        elif default:
+            initial = str(default)
+        else:
+            initial = str(root / "docs" / "proposals")
+        selected = filedialog.askopenfilename(
+            title="Select CL candidates file to apply",
+            initialdir=initial,
+            filetypes=[("Markdown", "*.md"), ("All files", "*.*")],
+        )
+        if not selected:
+            return
+        candidates = Path(selected)
+        self._set_pending_memory_candidates(root, candidates)
+        if not messagebox.askyesno(
+            "Apply memory",
+            "Apply accepted candidates from this file to AGENTS.md?\n\n"
+            "Run Promote memory first if you have not generated a proposal.",
+            parent=self.root,
+        ):
+            return
+        self._append_log(self.home_log, f"Running agents-apply on {candidates.name}…")
+        self._run_bg(
+            lambda r=root, c=candidates: run_agents_memory_apply(r, c),
+            self._agents_apply_done,
+        )
+
+    def _agents_apply_done(self, result: dict) -> None:
+        if self._is_bg_error(result):
+            self._append_log(self.home_log, self._result_detail(result))
+            return
+        if not result.get("ok"):
+            self._append_log(self.home_log, self._result_detail(result))
+            for hint in result.get("hints", []):
+                self._append_log(self.home_log, f"Tip: {hint}")
+            return
+        self._append_log(self.home_log, f"Proposal: {result.get('proposal_path')}")
+        accepted = result.get("accepted") or []
+        if accepted:
+            self._append_log(self.home_log, f"Applied {len(accepted)} bullet(s) to AGENTS.md.")
+        if result.get("applied"):
+            self._append_log(self.home_log, "AGENTS.md updated.")
+        self._show_dashboard()
 
     def _agents_propose_done(self, result: dict) -> None:
         if self._is_bg_error(result):
@@ -1306,6 +1403,69 @@ class HivePlannerApp:
             self._append_log(self.home_log, f"Rejected {len(rejected)} candidate(s) — see proposal file.")
         if result.get("applied"):
             self._append_log(self.home_log, "Applied to AGENTS.md.")
+        elif accepted and self._pending_memory_for_root(root):
+            if messagebox.askyesno(
+                "Apply memory?",
+                f"Apply {len(accepted)} accepted bullet(s) to AGENTS.md now?",
+                parent=self.root,
+            ):
+                candidates = self._pending_memory_for_root(root)
+                if candidates:
+                    self._append_log(self.home_log, f"Running agents-apply on {candidates.name}…")
+                    self._run_bg(
+                        lambda r=root, c=candidates: run_agents_memory_apply(r, c),
+                        self._agents_apply_done,
+                    )
+                    return
+        self._show_dashboard()
+
+    def _on_unified_verify(self) -> None:
+        root = self._active_linked_root()
+        if not root:
+            messagebox.showwarning("No project", "Link a workspace first.")
+            return
+        self._append_log(self.home_log, "Verifying upstream pins and vendored overlays…")
+        self._run_bg(lambda: run_unified_verify(root), self._unified_verify_done)
+
+    def _unified_verify_done(self, result: dict) -> None:
+        if self._is_bg_error(result):
+            self._append_log(self.home_log, self._result_detail(result))
+            return
+        if result.get("ok"):
+            self._append_log(self.home_log, "Vendor pins and overlays OK.")
+        else:
+            self._append_log(self.home_log, self._result_detail(result))
+            for issue in result.get("issues") or []:
+                self._append_log(self.home_log, f"  issue: {issue}")
+            for hint in result.get("hints", []):
+                self._append_log(self.home_log, f"Tip: {hint}")
+        pins_match = result.get("pins_match")
+        if pins_match is not None:
+            self._append_log(self.home_log, f"Pins match packaged manifest: {pins_match}")
+        self._show_dashboard()
+
+    def _on_legacy_deployment_scan(self) -> None:
+        root = self._active_linked_root()
+        if not root:
+            messagebox.showwarning("No project", "Link a workspace first.")
+            return
+        self._append_log(self.home_log, "Scanning for legacy deployment traces…")
+        self._run_bg(lambda: run_legacy_deployment_scan(root), self._legacy_deployment_scan_done)
+
+    def _legacy_deployment_scan_done(self, result: dict) -> None:
+        if self._is_bg_error(result):
+            self._append_log(self.home_log, self._result_detail(result))
+            return
+        self._append_log(self.home_log, result.get("detail", "Scan complete."))
+        for finding in result.get("findings") or []:
+            severity = finding.get("severity", "info")
+            prefix = "WARN" if severity == "warn" else "info"
+            self._append_log(self.home_log, f"  [{prefix}] {finding.get('detail')}")
+            repair = finding.get("repair")
+            if repair:
+                self._append_log(self.home_log, f"    repair: {repair}")
+        for hint in result.get("hints", []):
+            self._append_log(self.home_log, f"Tip: {hint}")
         self._show_dashboard()
 
     def _on_map_sync(self) -> None:
