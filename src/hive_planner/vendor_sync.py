@@ -284,6 +284,21 @@ def _verify_spec_kit_overlay(root: Path, *, manifest: dict | None = None) -> lis
     return issues
 
 
+def overlay_issues_as_missing(root: Path, manifest: dict | None) -> list[str]:
+    """Map overlay verification issues to artifact paths for handoff validation."""
+    missing: list[str] = []
+    for issue in _verify_spec_kit_overlay(root, manifest=manifest):
+        if issue.startswith("spec-kit overlay missing: "):
+            rel = issue.split("spec-kit overlay missing: ", 1)[1]
+            if rel not in missing:
+                missing.append(rel)
+        elif "spec-kit overlay stale" in issue:
+            rel = f"{SPEC_KIT_OVERLAY_REL}/{SPEC_KIT_OVERLAY_REV_FILE}"
+            if rel not in missing:
+                missing.append(rel)
+    return missing
+
+
 def unified_verify(paths: RepoPaths) -> UnifiedVerifyReport:
     root = paths.root.resolve()
     local_manifest = root / "vendor" / "manifest.json"

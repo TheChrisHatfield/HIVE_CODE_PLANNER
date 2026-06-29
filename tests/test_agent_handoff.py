@@ -66,6 +66,20 @@ def test_deploy_unified_agent_handoff_to_existing_project(tmp_path: Path) -> Non
     assert meta["agent_handoff_mode"] == "unified"
 
 
+def test_validate_unified_handoff_flags_stale_spec_kit_overlay_rev(tmp_path: Path) -> None:
+    source = _hive_source(tmp_path)
+    target = tmp_path / "stale-overlay"
+    init_project(source, target, agent_handoff="unified")
+    rev_marker = target / ".hive" / "spec-kit" / ".hive-overlay-rev"
+    assert rev_marker.is_file()
+    rev_marker.write_text("0\n", encoding="utf-8")
+
+    status = validate_unified_handoff(target)
+
+    assert status.complete is False
+    assert ".hive/spec-kit/.hive-overlay-rev" in status.missing
+
+
 def test_validate_unified_handoff_flags_missing_upstream_pins(tmp_path: Path) -> None:
     source = _hive_source(tmp_path)
     target = tmp_path / "no-pins"
