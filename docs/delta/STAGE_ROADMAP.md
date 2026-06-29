@@ -44,7 +44,7 @@ Vendored, pinned forks of [github/spec-kit](https://github.com/github/spec-kit) 
 
 - **Spec:** [specs/unified-handoff-v2/spec.md](../specs/unified-handoff-v2/spec.md)
 - **Operator guide:** [unified-handoff-upstream-forks.md](../unified-handoff-upstream-forks.md)
-- **Active task:** Task 4 — Hive Spec Kit patches (`docs/specs/unified-handoff-v2/tasks.md`)
+- **Active task:** Task 5 — Hive Continual Learning patches (`docs/specs/unified-handoff-v2/tasks.md`)
 
 `ROADMAP_FEATURES` remains at 20 features until Stage 9 implementation closes via `roadmap-complete-v4`.
 

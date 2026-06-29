@@ -234,6 +234,33 @@ def test_init_unified_writes_upstream_pins(tmp_path: Path) -> None:
     assert data.get("schema") == MANIFEST_SCHEMA
 
 
+def test_init_unified_deploys_spec_kit_overlay(tmp_path: Path) -> None:
+    source_root = tmp_path / "hive-planner"
+    kit = source_root / "starter-kit"
+    rules = source_root / ".cursor" / "rules"
+    rules.mkdir(parents=True)
+    kit.mkdir(parents=True)
+    (rules / "architecture.mdc").write_text("# a\n", encoding="utf-8")
+    (rules / "task-execution.mdc").write_text("# t\n", encoding="utf-8")
+    (rules / "validation.mdc").write_text("# v\n", encoding="utf-8")
+    (kit / "spec-kit-agent-integration.md").write_text("# sk\n", encoding="utf-8")
+    target = tmp_path / "boot-project"
+
+    init_project(RepoPaths(root=source_root), target, agent_handoff="unified")
+
+    spec_template = target / ".hive" / "spec-kit" / "templates" / "spec-template.md"
+    tasks_template = target / ".hive" / "spec-kit" / "templates" / "tasks-template.md"
+    workflow = target / ".hive" / "spec-kit" / "WORKFLOW.md"
+    assert spec_template.is_file()
+    assert tasks_template.is_file()
+    assert workflow.is_file()
+    spec_text = spec_template.read_text(encoding="utf-8")
+    tasks_text = tasks_template.read_text(encoding="utf-8")
+    assert "Agent navigation (Rosetta Stone)" in spec_text
+    assert "Integration wiring audit" in tasks_text
+    assert "spec-drift-check" in workflow.read_text(encoding="utf-8")
+
+
 def test_write_project_pins_refreshes_when_manifest_changes(tmp_path: Path) -> None:
     project = tmp_path / "project"
     project.mkdir()

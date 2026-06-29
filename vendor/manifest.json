@@ -6,7 +6,7 @@
     "fork": "https://github.com/github/spec-kit",
     "path": "vendor/spec-kit",
     "ref": "b7e67f55bf7a937aaa57dbe0a8198774e285de3a",
-    "hive_patch_rev": "1"
+    "hive_patch_rev": "2"
   },
   "continual_learning": {
     "upstream": "https://github.com/cursor/plugins",

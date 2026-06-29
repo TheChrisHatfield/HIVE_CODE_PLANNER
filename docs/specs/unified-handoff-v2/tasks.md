@@ -23,12 +23,13 @@
 - [x] Record SHAs in `vendor/manifest.json` after first import
 - [x] `vendor-sync --apply` imports via git sparse checkout
 
-## Task 4 — Hive Spec Kit patches
+## Task 4 — Hive Spec Kit patches ✅
 
-- [ ] Task template: wiring audit checklist per task
-- [ ] Spec template: Rosetta nav placeholder block
-- [ ] Document feature-id ↔ `.hive/project.json` in Spec Kit README overlay
-- [ ] Post-`/tasks` validation doc → `spec-drift-check`
+- [x] Task template: wiring audit checklist per task
+- [x] Spec template: Rosetta nav placeholder block
+- [x] Document feature-id ↔ `.hive/project.json` in Spec Kit README overlay
+- [x] Post-`/tasks` validation doc → `spec-drift-check` (`WORKFLOW.md`)
+- [x] Packaged overlay at `vendor_templates/spec-kit/` → `.hive/spec-kit/` on bootstrap
 
 ## Task 5 — Hive Continual Learning patches
 
@@ -42,7 +43,8 @@
 - [x] `vendor_sync.py` — manifest load, verify, project pins snapshot
 - [x] `init --agent-handoff unified` writes `.hive/upstream-pins.json`
 - [x] `deploy_agent_handoff_scaffold` writes `.hive/upstream-pins.json`
-- [ ] Copy vendored plugin + spec-kit overlay to target (Task 3+)
+- [x] Copy Spec Kit overlay to `.hive/spec-kit/` (Task 4)
+- [ ] Copy vendored CL plugin to target (Task 5+)
 
 ## Task 7 — CLI and optional extra
 
@@ -70,7 +72,7 @@
 
 ## Active task
 
-**Task 4** — Hive Spec Kit patches (wiring audit template, Rosetta nav, feature-id docs).
+**Task 5** — Hive Continual Learning patches (section mapping, wiring audit gate, behavioral routing).
 
 ## Validation log
 
@@ -79,7 +81,7 @@
 - unified-handoff-v2 spec/plan/tasks + upstream forks guide
 - STAGE_ROADMAP Stage 9 planned (ROADMAP_FEATURES unchanged at 20/20)
 
-2026-06-26 — Stage 9 Task 3 upstream import
-- vendor-sync --apply imports spec-kit + continual-learning at pinned SHAs
-- vendor/spec-kit @ b7e67f55, vendor/cursor-plugins/continual-learning @ 0452e08
+2026-06-26 — Stage 9 Task 4 Spec Kit patches
+- vendor_templates/spec-kit overlay (SK-1–SK-5); deploy to .hive/spec-kit on unified bootstrap
+- spec_kit hive_patch_rev bumped to 2
 ```

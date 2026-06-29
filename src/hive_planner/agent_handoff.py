@@ -72,6 +72,10 @@ def unified_handoff_artifacts(project_root: Path) -> list[str]:
         ".cursor/rules/integration-wiring-audit.mdc",
         ".cursor/rules/cl-spec-integration.mdc",
         ".hive/upstream-pins.json",
+        ".hive/spec-kit/README.md",
+        ".hive/spec-kit/WORKFLOW.md",
+        ".hive/spec-kit/templates/spec-template.md",
+        ".hive/spec-kit/templates/tasks-template.md",
     ]
 
 

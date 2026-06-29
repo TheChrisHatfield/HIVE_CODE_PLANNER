@@ -88,9 +88,9 @@ Bootstrapped unified projects receive a snapshot at `.hive/upstream-pins.json`.
 
 | Upstream import | ✅ Task 3 |
 
-| Hive patches (SK/CL) | 📋 Tasks 4–5 |
+| Hive patches (SK/CL) | ✅ SK (Task 4) / 📋 CL (Task 5) |
 
-| Bootstrap vendor deploy | 📋 Task 6 (pins snapshot ✅) |
+| Bootstrap vendor deploy | 🚧 pins + Spec Kit overlay ✅ |
 
 
 

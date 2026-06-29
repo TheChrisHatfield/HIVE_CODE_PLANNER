@@ -14,6 +14,7 @@ from hive_planner.config import RepoPaths
 
 MANIFEST_SCHEMA = "hive-upstream-pins/v1"
 PROJECT_PINS_REL = ".hive/upstream-pins.json"
+SPEC_KIT_OVERLAY_REL = ".hive/spec-kit"
 COMPONENT_KEYS = ("spec_kit", "continual_learning")
 COMPONENT_REQUIRED_FIELDS = frozenset({"upstream", "path", "ref", "hive_patch_rev"})
 
@@ -82,6 +83,24 @@ class UnifiedVerifyReport:
 
 def packaged_manifest_path() -> Path:
     return Path(__file__).resolve().parent / "vendor_templates" / "manifest.json"
+
+
+def packaged_spec_kit_overlay_path() -> Path:
+    return Path(__file__).resolve().parent / "vendor_templates" / "spec-kit"
+
+
+def _spec_kit_overlay_complete(path: Path) -> bool:
+    return (path / "templates" / "spec-template.md").is_file() and (path / "WORKFLOW.md").is_file()
+
+
+def resolve_spec_kit_overlay_path(source_root: Path) -> Path:
+    primary = source_root.resolve() / "vendor" / "patches" / "spec-kit"
+    if _spec_kit_overlay_complete(primary):
+        return primary
+    packaged = packaged_spec_kit_overlay_path()
+    if _spec_kit_overlay_complete(packaged):
+        return packaged
+    raise VendorSyncError("Spec Kit overlay not found in vendor/patches/spec-kit or package templates")
 
 
 def resolve_manifest_path(repo_root: Path) -> Path:
@@ -468,6 +487,61 @@ def write_unified_vendor_pins(
         rel = PROJECT_PINS_REL
         if rel not in written:
             written.append(rel)
+
+
+def deploy_spec_kit_overlay(
+    source_root: Path,
+    target: Path,
+    *,
+    force: bool = False,
+    written: list[str] | None = None,
+    warnings: list[str] | None = None,
+) -> None:
+    try:
+        overlay_root = resolve_spec_kit_overlay_path(source_root)
+    except VendorSyncError as exc:
+        if warnings is not None:
+            warnings.append(str(exc))
+        return
+    target = target.resolve()
+    dest_root = target / SPEC_KIT_OVERLAY_REL
+    for src in sorted(overlay_root.rglob("*")):
+        if not src.is_file():
+            continue
+        rel = src.relative_to(overlay_root)
+        dest = dest_root / rel
+        if dest.exists() and not force:
+            continue
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dest)
+        if written is not None:
+            rel_dest = dest.relative_to(target).as_posix()
+            if rel_dest not in written:
+                written.append(rel_dest)
+
+
+def deploy_unified_vendor_artifacts(
+    source_root: Path,
+    target: Path,
+    *,
+    force: bool = False,
+    written: list[str] | None = None,
+    warnings: list[str] | None = None,
+) -> None:
+    write_unified_vendor_pins(
+        source_root,
+        target,
+        force=force,
+        written=written,
+        warnings=warnings,
+    )
+    deploy_spec_kit_overlay(
+        source_root,
+        target,
+        force=force,
+        written=written,
+        warnings=warnings,
+    )
 
 
 def ci_unified_vendor_step(

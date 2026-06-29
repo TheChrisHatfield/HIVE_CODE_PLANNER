@@ -881,9 +881,9 @@ def _write_bootstrap_tree(
     )
     written.append(meta_path.relative_to(target).as_posix())
     if spec_kit and continual_learning:
-        from hive_planner.vendor_sync import write_unified_vendor_pins
+        from hive_planner.vendor_sync import deploy_unified_vendor_artifacts
 
-        write_unified_vendor_pins(
+        deploy_unified_vendor_artifacts(
             source_paths.root,
             target,
             force=force,
@@ -953,9 +953,9 @@ def deploy_agent_handoff_scaffold(
         hive_planner_version=existing.hive_planner_version if existing else None,
     )
     written.append(".hive/project.json")
-    from hive_planner.vendor_sync import write_unified_vendor_pins
+    from hive_planner.vendor_sync import deploy_unified_vendor_artifacts
 
-    write_unified_vendor_pins(
+    deploy_unified_vendor_artifacts(
         source_paths.root,
         target,
         force=force,
