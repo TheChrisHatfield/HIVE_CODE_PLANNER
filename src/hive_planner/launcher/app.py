@@ -24,13 +24,18 @@ from hive_planner.launcher.service import (
     run_cartridge_translate,
     cartridge_load_needs_feature,
     cartridge_load_will_promote,
+    find_staged_candidates,
+    run_agents_memory_propose,
     run_deploy_agent_handoff,
     run_install,
     run_project_ci_check,
     run_project_init,
     run_project_map_sync,
+    run_wiring_audit_check,
+    run_wiring_audit_record,
     summarize_linked_project,
     summarize_project,
+    wiring_audit_status_label,
     workspace_primary_folder,
 )
 from hive_planner.config import validate_feature_id
@@ -415,6 +420,7 @@ class HivePlannerApp:
             ("Profile", self._active_profile_label() or "—"),
             ("Handoff", self._active_handoff_label()),
             ("Feature", self._active_feature_label()),
+            ("Wiring", self._wiring_audit_label()),
         ]:
             cell = tk.Frame(row, bg=COLORS["secondary"], padx=12, pady=10)
             cell.pack(side="left", fill="x", expand=True, padx=4)
@@ -429,6 +435,27 @@ class HivePlannerApp:
         secondary_button(actions, "Deploy agent handoff", self._on_deploy_agent_handoff)
         secondary_button(actions, "Load cartridge…", self._on_load_cartridge)
         secondary_button(actions, "Open in Explorer", self._on_explore)
+
+        handoff_actions = tk.Frame(body, bg=COLORS["bg"])
+        handoff_actions.pack(fill="x", padx=16, pady=(0, 8))
+        secondary_button(
+            handoff_actions,
+            "Check wiring audit",
+            self._on_wiring_audit_check,
+            tooltip="Verify .hive/wiring-audit.json and tasks.md wiring checklist (unified handoff).",
+        )
+        secondary_button(
+            handoff_actions,
+            "Record wiring audit…",
+            self._on_wiring_audit_record,
+            tooltip="Record integration validation evidence after completing the wiring audit checklist.",
+        )
+        secondary_button(
+            handoff_actions,
+            "Promote memory…",
+            self._on_agents_propose,
+            tooltip="Run agents-propose on staged CL candidates (requires wiring audit attestation).",
+        )
 
         log_card = card(body)
         card_title(log_card, "Output")
@@ -849,6 +876,14 @@ class HivePlannerApp:
             return "—"
         return summary.active_feature or "—"
 
+    def _wiring_audit_label(self) -> str:
+        if not self.config.active_project:
+            return "—"
+        root, _repair = prepare_linked_project_root(Path(self.config.active_project), repair_agents=False)
+        if not root:
+            return "—"
+        return wiring_audit_status_label(root)
+
     def _active_profile_label(self) -> str:
         if not self.config.active_project:
             return "—"
@@ -1124,6 +1159,132 @@ class HivePlannerApp:
             self._show_dashboard()
         for hint in report.get("hints", []):
             self._append_log(self.home_log, f"Tip: {hint}")
+
+    def _on_wiring_audit_check(self) -> None:
+        root = self._active_linked_root()
+        if not root:
+            messagebox.showwarning("No project", "Link a workspace first (Projects tab).")
+            return
+        self._append_log(self.home_log, "Checking wiring audit attestation…")
+        self._run_bg(lambda: run_wiring_audit_check(root), self._wiring_audit_check_done)
+
+    def _wiring_audit_check_done(self, result: dict) -> None:
+        if self._is_bg_error(result):
+            self._append_log(self.home_log, self._result_detail(result))
+            return
+        if result.get("skipped"):
+            self._append_log(self.home_log, result.get("detail", "Wiring audit not enforced."))
+            return
+        detail = result.get("detail", "ok")
+        mark = "ok" if result.get("ok") else "failed"
+        self._append_log(self.home_log, f"Wiring audit: {mark} — {detail}")
+        for hint in result.get("hints", []):
+            self._append_log(self.home_log, f"Tip: {hint}")
+        self._show_dashboard()
+
+    def _on_wiring_audit_record(self) -> None:
+        root = self._active_linked_root()
+        if not root:
+            messagebox.showwarning("No project", "Link a workspace first (Projects tab).")
+            return
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Record wiring audit")
+        dialog.configure(bg=COLORS["bg"])
+        dialog.transient(self.root)
+        dialog.grab_set()
+        dialog.resizable(False, False)
+        tk.Label(
+            dialog,
+            text="Integration validation command (evidence):",
+            bg=COLORS["bg"],
+            fg=COLORS["fg"],
+            font=FONT,
+        ).pack(anchor="w", padx=16, pady=(16, 4))
+        evidence_var = tk.StringVar(value="pytest -q")
+        entry = tk.Entry(dialog, textvariable=evidence_var, width=52, font=FONT)
+        entry.pack(padx=16, pady=(0, 8))
+        entry.focus_set()
+        tk.Label(
+            dialog,
+            text="Complete tasks.md wiring audit checklist before recording.",
+            bg=COLORS["bg"],
+            fg=COLORS["muted"],
+            font=FONT_SUBTITLE,
+            wraplength=420,
+            justify="left",
+        ).pack(anchor="w", padx=16, pady=(0, 12))
+
+        def submit() -> None:
+            evidence = evidence_var.get().strip()
+            if not evidence:
+                messagebox.showwarning("Evidence required", "Enter the validation command you ran.", parent=dialog)
+                return
+            dialog.destroy()
+            self._append_log(self.home_log, f"Recording wiring audit (evidence: {evidence})…")
+            self._run_bg(
+                lambda: run_wiring_audit_record(root, evidence),
+                self._wiring_audit_record_done,
+            )
+
+        btn_row = tk.Frame(dialog, bg=COLORS["bg"])
+        btn_row.pack(fill="x", padx=16, pady=(0, 16))
+        primary_button(btn_row, "Record", submit)
+        secondary_button(btn_row, "Cancel", dialog.destroy)
+
+    def _wiring_audit_record_done(self, result: dict) -> None:
+        if self._is_bg_error(result):
+            self._append_log(self.home_log, self._result_detail(result))
+            return
+        if result.get("recorded"):
+            self._append_log(self.home_log, f"Wrote {result['recorded']}")
+        if result.get("ok"):
+            self._append_log(self.home_log, "Wiring audit attestation valid.")
+        else:
+            self._append_log(self.home_log, self._result_detail(result))
+            for hint in result.get("hints", []):
+                self._append_log(self.home_log, f"Tip: {hint}")
+        self._show_dashboard()
+
+    def _on_agents_propose(self) -> None:
+        root = self._active_linked_root()
+        if not root:
+            messagebox.showwarning("No project", "Link a workspace first (Projects tab).")
+            return
+        default = find_staged_candidates(root)
+        initial = str(default) if default else str(root / "docs" / "proposals")
+        selected = filedialog.askopenfilename(
+            title="Select CL candidates file",
+            initialdir=initial,
+            filetypes=[("Markdown", "*.md"), ("All files", "*.*")],
+        )
+        if not selected:
+            return
+        candidates = Path(selected)
+        self._append_log(self.home_log, f"Running agents-propose on {candidates.name}…")
+        self._run_bg(
+            lambda: run_agents_memory_propose(root, candidates, apply=False),
+            self._agents_propose_done,
+        )
+
+    def _agents_propose_done(self, result: dict) -> None:
+        if self._is_bg_error(result):
+            self._append_log(self.home_log, self._result_detail(result))
+            return
+        if not result.get("ok"):
+            self._append_log(self.home_log, self._result_detail(result))
+            for hint in result.get("hints", []):
+                self._append_log(self.home_log, f"Tip: {hint}")
+            return
+        self._append_log(self.home_log, f"Wrote proposal: {result.get('proposal_path')}")
+        accepted = result.get("accepted") or []
+        rejected = result.get("rejected") or []
+        if accepted:
+            self._append_log(self.home_log, f"Accepted {len(accepted)} candidate(s).")
+        if rejected:
+            self._append_log(self.home_log, f"Rejected {len(rejected)} candidate(s) — see proposal file.")
+        if result.get("applied"):
+            self._append_log(self.home_log, "Applied to AGENTS.md.")
+        self._show_dashboard()
 
     def _on_map_sync(self) -> None:
         root = self._active_linked_root()
@@ -1589,11 +1750,11 @@ class HivePlannerApp:
         if promote.get("candidates_path"):
             self._append_log(
                 self.home_log,
-                f"  CL candidates (review, then agents-propose): {promote['candidates_path']}",
+                f"  CL candidates (review, then promote memory): {promote['candidates_path']}",
             )
             self._append_log(
                 self.home_log,
-                f"  Next: py -3.11 -m hive_planner agents-propose --candidates {promote['candidates_path']}",
+                "  Next: Home → Record wiring audit, then Home → Promote memory (or agents-propose CLI).",
             )
         if promote.get("ok") is False and promote.get("promotions", {}).get("status") == "skipped (agent handoff off)":
             self._append_log(

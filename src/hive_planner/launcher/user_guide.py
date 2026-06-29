@@ -56,6 +56,23 @@ The desktop app **Deploy agent handoff** button (Home tab) runs the same deploy 
 | Check pins and overlays in a project | `py -3.11 -m hive_planner unified-verify` |
 | Health check includes vendor step | **Home → Run health check** — fails `unified-vendor` when pins or overlays drift |
 
+### Wiring audit and memory promotion (unified handoff)
+
+Before promoting Continual Learning candidates into `AGENTS.md`:
+
+1. Complete the **Integration wiring audit** checklist in `tasks.md`
+2. **Home → Record wiring audit…** — enter your validation command (e.g. `pytest -q`)
+3. **Home → Check wiring audit** — confirm attestation is current (also in **Run health check**)
+4. **Home → Promote memory…** — run `agents-propose` on staged candidates in `docs/proposals/`
+
+CLI equivalents:
+
+```powershell
+py -3.11 -m hive_planner wiring-audit record --evidence "pytest -q"
+py -3.11 -m hive_planner wiring-audit check
+py -3.11 -m hive_planner agents-propose --candidates docs/proposals/candidates-….md
+```
+
 ### Command line (project folder)
 
 ```powershell

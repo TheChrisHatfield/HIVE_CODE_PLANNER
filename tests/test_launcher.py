@@ -1401,6 +1401,120 @@ def test_ci_check_hints_unified_vendor_hive_source_vs_project(tmp_path: Path) ->
     assert any("unified-verify" in hint for hint in unified_hints)
 
 
+def _minimal_unified_project(tmp_path: Path, feature: str = "my-feature") -> Path:
+    from hive_planner.agent_handoff import AGENT_HANDOFF_UNIFIED
+    from hive_planner.cartridge_promote import _tasks_wiring_audit_block
+    from hive_planner.project_profile import write_project_profile
+
+    project = tmp_path / "unified-app"
+    project.mkdir()
+    (project / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    (project / "AGENTS.md").write_text(
+        "\n".join(
+            [
+                "# AGENTS.md",
+                "",
+                "## Repository root",
+                "",
+                "`root`",
+                "",
+                "## Planning Rosetta Stone",
+                "",
+                "- hook `planning.rosetta`",
+                "",
+                "## Startup read order",
+                "",
+                "1. rosetta",
+                "",
+                "## Delta model",
+                "",
+                "- Holistic / Macro / Micro",
+                "",
+                "## Active feature",
+                "",
+                f"**{feature}**",
+                "",
+                "## Durable Workspace Facts",
+                "",
+                "- Run ci-check before handoff.",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    _write_handoff_bundle(project, feature)
+    tasks_path = project / "docs" / "specs" / feature / "tasks.md"
+    tasks_path.write_text(
+        tasks_path.read_text(encoding="utf-8").rstrip()
+        + "\n\n"
+        + _tasks_wiring_audit_block().replace("- [ ]", "- [x]"),
+        encoding="utf-8",
+    )
+    write_project_profile(project, profile="minimal", project_name="unified-app", agent_handoff_mode=AGENT_HANDOFF_UNIFIED)
+    return project
+
+
+def test_ci_check_hints_wiring_audit_failure(tmp_path: Path) -> None:
+    from hive_planner.ci_handoff import CiCheckReport, CiStepResult
+    from hive_planner.launcher.service import ci_check_hints
+
+    project = _minimal_unified_project(tmp_path)
+    failed = CiCheckReport(
+        steps=[CiStepResult("wiring-audit", False, "Missing wiring audit attestation at .hive/wiring-audit.json")]
+    )
+    hints = ci_check_hints(project, failed)
+    assert any("Record wiring audit" in hint for hint in hints)
+    assert any("tasks.md" in hint for hint in hints)
+
+
+def test_wiring_audit_status_label_and_record(tmp_path: Path) -> None:
+    from hive_planner.launcher.service import (
+        run_wiring_audit_check,
+        run_wiring_audit_record,
+        wiring_audit_status_label,
+    )
+
+    project = _minimal_unified_project(tmp_path)
+    assert wiring_audit_status_label(project) == "missing"
+    check = run_wiring_audit_check(project)
+    assert check["ok"] is False
+    assert check.get("hints")
+    recorded = run_wiring_audit_record(project, "pytest -q")
+    assert recorded["ok"] is True
+    assert recorded["recorded"] == ".hive/wiring-audit.json"
+    assert wiring_audit_status_label(project) == "ok"
+
+
+def test_find_staged_candidates_picks_newest(tmp_path: Path) -> None:
+    from hive_planner.launcher.service import find_staged_candidates
+
+    project = tmp_path / "app"
+    proposals = project / "docs" / "proposals"
+    proposals.mkdir(parents=True)
+    older = proposals / "candidates-old.md"
+    newer = proposals / "candidates-new.md"
+    older.write_text("- old\n", encoding="utf-8")
+    newer.write_text("- new\n", encoding="utf-8")
+    older.touch()
+    import time
+
+    time.sleep(0.02)
+    newer.touch()
+    assert find_staged_candidates(project) == newer
+
+
+def test_run_agents_memory_propose_requires_wiring_audit(tmp_path: Path) -> None:
+    from hive_planner.launcher.service import run_agents_memory_propose
+
+    project = _minimal_unified_project(tmp_path)
+    candidates = project / "docs" / "proposals" / "candidates.md"
+    candidates.parent.mkdir(parents=True, exist_ok=True)
+    candidates.write_text("- New durable operational fact.\n", encoding="utf-8")
+    blocked = run_agents_memory_propose(project, candidates)
+    assert blocked["ok"] is False
+    assert "Wiring audit required" in blocked["error"]
+    assert blocked.get("hints")
+
+
 def test_auto_complete_onboarding_when_setup_ready(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     hive = tmp_path / "hive"
     hive.mkdir()

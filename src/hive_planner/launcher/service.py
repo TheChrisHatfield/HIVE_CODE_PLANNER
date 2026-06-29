@@ -870,7 +870,126 @@ def ci_check_hints(root: Path, report) -> list[str]:
         elif integrations.agent_handoff_mode == AGENT_HANDOFF_UNIFIED:
             vendor_missing = _missing_from_ci_report(report)
             hints.extend(unified_vendor_repair_hints(missing=vendor_missing or [".hive/upstream-pins.json"]))
+    if "wiring-audit" in failed:
+        hints.append(
+            "Record wiring audit after integration validation: Home → Record wiring audit, or "
+            'py -3.11 -m hive_planner wiring-audit record --evidence "pytest tests/… -q"'
+        )
+        hints.append(
+            "Complete unchecked items in tasks.md Integration wiring audit checklist before recording."
+        )
     return hints
+
+
+def wiring_audit_status_label(project_root: Path) -> str:
+    from hive_planner.wiring_audit import check_wiring_audit, wiring_audit_enforced
+
+    paths = RepoPaths(root=project_root.resolve())
+    if not wiring_audit_enforced(paths):
+        return "n/a"
+    report = check_wiring_audit(paths)
+    if report.ok:
+        return "ok"
+    if "Missing wiring audit" in report.detail:
+        return "missing"
+    if any("stale" in item for item in report.missing):
+        return "stale"
+    if any("checklist incomplete" in item for item in report.missing):
+        return "checklist"
+    return "review"
+
+
+def find_staged_candidates(project_root: Path) -> Path | None:
+    proposals = project_root.resolve() / "docs" / "proposals"
+    if not proposals.is_dir():
+        return None
+    paths = [
+        path
+        for path in proposals.glob("candidates*.md")
+        if path.name != "candidates-template.md" and path.is_file() and path.stat().st_size > 0
+    ]
+    if not paths:
+        return None
+    return max(paths, key=lambda path: path.stat().st_mtime)
+
+
+def run_wiring_audit_check(project_root: Path) -> dict:
+    summary = summarize_project(project_root)
+    if not summary.ok:
+        return {"ok": False, "error": summary.detail}
+    from hive_planner.wiring_audit import check_wiring_audit, wiring_audit_enforced
+
+    paths = RepoPaths(root=project_root.resolve())
+    if not wiring_audit_enforced(paths):
+        return {"ok": True, "skipped": True, "detail": "wiring audit not enforced for this project"}
+    report = check_wiring_audit(paths)
+    payload = report.to_dict()
+    payload["ok"] = report.ok
+    if not report.ok:
+        payload["hints"] = [
+            'Home → Record wiring audit, or: py -3.11 -m hive_planner wiring-audit record --evidence "pytest … -q"',
+            "Complete the Integration wiring audit checklist in tasks.md before recording.",
+        ]
+    return payload
+
+
+def run_wiring_audit_record(project_root: Path, evidence: str) -> dict:
+    summary = summarize_project(project_root)
+    if not summary.ok:
+        return {"ok": False, "error": summary.detail}
+    from hive_planner.wiring_audit import WiringAuditError, check_wiring_audit, record_wiring_audit
+
+    paths = RepoPaths(root=project_root.resolve())
+    try:
+        out_path = record_wiring_audit(paths, evidence=evidence)
+    except WiringAuditError as exc:
+        return {"ok": False, "error": str(exc)}
+    check = check_wiring_audit(paths)
+    payload = {
+        "ok": check.ok,
+        "recorded": out_path.relative_to(paths.root).as_posix(),
+        "check": check.to_dict(),
+    }
+    if not check.ok:
+        payload["error"] = check.detail
+        payload["hints"] = [
+            "Attestation recorded but check still failing — review tasks.md wiring audit checklist.",
+        ]
+    return payload
+
+
+def run_agents_memory_propose(project_root: Path, candidates_path: Path, *, apply: bool = False) -> dict:
+    from hive_planner.agents_memory import AgentsMemoryError, run_agents_memory
+    from hive_planner.wiring_audit import check_wiring_audit, wiring_audit_enforced
+
+    summary = summarize_project(project_root)
+    if not summary.ok:
+        return {"ok": False, "error": summary.detail}
+    paths = RepoPaths(root=project_root.resolve())
+    candidate_file = candidates_path if candidates_path.is_absolute() else paths.root / candidates_path
+    if not candidate_file.is_file():
+        return {"ok": False, "error": f"Candidates file not found: {candidates_path}"}
+    if wiring_audit_enforced(paths):
+        wiring = check_wiring_audit(paths)
+        if not wiring.ok:
+            return {
+                "ok": False,
+                "error": f"Wiring audit required before memory promotion - {wiring.detail}",
+                "hints": [
+                    'Home → Record wiring audit after validation, or: py -3.11 -m hive_planner wiring-audit record --evidence "pytest … -q"',
+                ],
+            }
+    try:
+        result = run_agents_memory(paths, candidate_file, apply=apply)
+    except AgentsMemoryError as exc:
+        return {"ok": False, "error": str(exc)}
+    return {
+        "ok": True,
+        "applied": result.applied,
+        "proposal_path": result.proposal_path.relative_to(paths.root).as_posix(),
+        "accepted": result.accepted,
+        "rejected": [{"candidate": c, "reason": r} for c, r in result.rejected],
+    }
 
 
 def run_project_ci_check(project_root: Path) -> dict:
