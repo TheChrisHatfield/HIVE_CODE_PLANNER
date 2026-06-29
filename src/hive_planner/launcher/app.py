@@ -26,6 +26,7 @@ from hive_planner.launcher.service import (
     cartridge_load_will_promote,
     candidates_path_in_project,
     find_staged_candidates,
+    memory_candidates_picker_dir,
     run_agents_memory_apply,
     run_agents_memory_propose,
     run_deploy_agent_handoff,
@@ -1325,15 +1326,9 @@ class HivePlannerApp:
             messagebox.showwarning("No project", "Link a workspace first (Projects tab).")
             return
         default = find_staged_candidates(root)
-        if default and default.is_file():
-            initial = str(default.parent)
-        elif default:
-            initial = str(default)
-        else:
-            initial = str(root / "docs" / "proposals")
         selected = filedialog.askopenfilename(
             title="Select CL candidates file",
-            initialdir=initial,
+            initialdir=memory_candidates_picker_dir(root, default),
             filetypes=[("Markdown", "*.md"), ("All files", "*.*")],
         )
         if not selected:
@@ -1359,15 +1354,9 @@ class HivePlannerApp:
             messagebox.showwarning("No project", "Link a workspace first (Projects tab).")
             return
         default = self._pending_memory_for_root(root) or find_staged_candidates(root)
-        if default and default.is_file():
-            initial = str(default.parent)
-        elif default:
-            initial = str(default)
-        else:
-            initial = str(root / "docs" / "proposals")
         selected = filedialog.askopenfilename(
             title="Select CL candidates file to apply",
-            initialdir=initial,
+            initialdir=memory_candidates_picker_dir(root, default),
             filetypes=[("Markdown", "*.md"), ("All files", "*.*")],
         )
         if not selected:

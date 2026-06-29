@@ -631,6 +631,20 @@ def candidates_path_in_project(project_root: Path, candidates_path: Path) -> boo
     return candidates_path.is_file()
 
 
+def memory_candidates_picker_dir(project_root: Path, default: Path | None = None) -> str:
+    """Existing directory for CL candidates file picker (Windows requires a real initialdir)."""
+    root = project_root.resolve()
+    if default is not None:
+        if default.is_file():
+            return str(default.parent)
+        if default.is_dir():
+            return str(default)
+    proposals = root / "docs" / "proposals"
+    if proposals.is_dir():
+        return str(proposals)
+    return str(root)
+
+
 def prepare_linked_project_root(path: Path, *, repair_agents: bool = True):
     from hive_planner.project_profile import resolve_project_integrations
     from hive_planner.spec_drift import AgentsRepairResult, repair_agents_active_feature, repair_handoff_rosetta_navigation

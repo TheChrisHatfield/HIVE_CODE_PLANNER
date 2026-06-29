@@ -1649,6 +1649,22 @@ def test_run_agents_memory_propose_rejects_outside_root_candidates(tmp_path: Pat
     assert result.get("hints")
 
 
+def test_memory_candidates_picker_dir_falls_back_to_project_root(tmp_path: Path) -> None:
+    from hive_planner.launcher.service import memory_candidates_picker_dir
+
+    project = tmp_path / "app"
+    project.mkdir()
+    assert memory_candidates_picker_dir(project) == str(project.resolve())
+
+    proposals = project / "docs" / "proposals"
+    proposals.mkdir(parents=True)
+    assert memory_candidates_picker_dir(project) == str(proposals.resolve())
+
+    staged = proposals / "candidates.md"
+    staged.write_text("- x\n", encoding="utf-8")
+    assert memory_candidates_picker_dir(project, staged) == str(proposals.resolve())
+
+
 def test_agents_propose_done_prompts_apply_without_name_error(monkeypatch: pytest.MonkeyPatch) -> None:
     from hive_planner.launcher.app import HivePlannerApp
 
