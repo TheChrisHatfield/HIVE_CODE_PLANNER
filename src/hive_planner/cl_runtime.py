@@ -40,6 +40,16 @@ def requires_cursor_plugin(runtime: str) -> bool:
     return normalize_cl_runtime(runtime) == CL_RUNTIME_CURSOR
 
 
+def cl_runtime_launcher_choice(current: str) -> str:
+    """Map a resolved runtime to the launcher dialog choice (cursor | headless only)."""
+    resolved = normalize_cl_runtime(current)
+    if resolved == CL_RUNTIME_EXTERNAL:
+        return CL_RUNTIME_HEADLESS
+    if resolved in {CL_RUNTIME_CURSOR, CL_RUNTIME_HEADLESS}:
+        return resolved
+    return CL_RUNTIME_CURSOR
+
+
 def continual_learning_artifact_paths(runtime: str) -> tuple[str, ...]:
     if requires_cursor_plugin(runtime):
         return CURSOR_CL_ARTIFACTS

@@ -8,8 +8,10 @@ import pytest
 from hive_planner.agent_handoff import AGENT_HANDOFF_UNIFIED, unified_handoff_artifacts, validate_unified_handoff
 from hive_planner.cl_migration import ci_cl_install_step
 from hive_planner.cl_runtime import (
+    CL_RUNTIME_EXTERNAL,
     CL_RUNTIME_HEADLESS,
     HEADLESS_CL_WORKFLOW_REL,
+    cl_runtime_launcher_choice,
     deploy_headless_cl_artifacts,
     normalize_cl_runtime,
     requires_cursor_plugin,
@@ -22,6 +24,12 @@ from hive_planner.project_profile import read_project_profile, write_project_pro
 def test_normalize_cl_runtime_aliases() -> None:
     assert normalize_cl_runtime("cli") == CL_RUNTIME_HEADLESS
     assert normalize_cl_runtime("cursor") == "cursor"
+
+
+def test_cl_runtime_launcher_choice_maps_external_to_headless() -> None:
+    assert cl_runtime_launcher_choice(CL_RUNTIME_EXTERNAL) == CL_RUNTIME_HEADLESS
+    assert cl_runtime_launcher_choice(CL_RUNTIME_HEADLESS) == CL_RUNTIME_HEADLESS
+    assert cl_runtime_launcher_choice("cursor") == "cursor"
 
 
 def test_set_and_resolve_cl_runtime(tmp_path: Path) -> None:

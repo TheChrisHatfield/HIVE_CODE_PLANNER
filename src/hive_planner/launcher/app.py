@@ -982,9 +982,9 @@ class HivePlannerApp:
         return ""
 
     def _ask_cl_runtime(self, *, title: str, current: str) -> str | None:
-        from hive_planner.cl_runtime import CL_RUNTIME_CURSOR, CL_RUNTIME_HEADLESS, normalize_cl_runtime
+        from hive_planner.cl_runtime import CL_RUNTIME_CURSOR, CL_RUNTIME_HEADLESS, cl_runtime_launcher_choice
 
-        resolved = normalize_cl_runtime(current)
+        dialog_default = cl_runtime_launcher_choice(current)
         dialog = tk.Toplevel(self.root)
         dialog.title(title)
         dialog.configure(bg=COLORS["bg"])
@@ -993,7 +993,7 @@ class HivePlannerApp:
         dialog.resizable(False, False)
         dialog.geometry("520x280")
 
-        choice = tk.StringVar(value=resolved if resolved in {CL_RUNTIME_CURSOR, CL_RUNTIME_HEADLESS} else CL_RUNTIME_CURSOR)
+        choice = tk.StringVar(value=dialog_default)
         result: list[str | None] = [None]
 
         tk.Label(
