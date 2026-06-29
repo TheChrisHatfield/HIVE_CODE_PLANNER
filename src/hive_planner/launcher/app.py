@@ -1170,9 +1170,9 @@ class HivePlannerApp:
                 self.home_log,
                 f"Repaired AGENTS.md — {repair.get('detail', 'updated Active feature')}.",
             )
-            self._show_dashboard()
         for hint in report.get("hints", []):
             self._append_log(self.home_log, f"Tip: {hint}")
+        self._show_dashboard()
 
     def _on_wiring_audit_check(self) -> None:
         root = self._active_linked_root()
