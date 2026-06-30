@@ -7,14 +7,15 @@ from pathlib import Path
 
 
 def default_config_dir() -> Path:
-    appdata = os.environ.get("APPDATA")
-    if appdata:
-        return Path(appdata) / "HivePlanner"
-    return Path.home() / ".hive-planner"
+    from hive_planner.runtime_paths import default_config_dir as _portable_config_dir
+
+    return _portable_config_dir()
 
 
 def default_hive_root() -> Path:
-    return Path(__file__).resolve().parents[3]
+    from hive_planner.runtime_paths import default_hive_root as _portable_hive_root
+
+    return _portable_hive_root()
 
 
 def normalize_project_path(path: str | Path) -> str:

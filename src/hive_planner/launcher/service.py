@@ -35,6 +35,9 @@ class SetupStatus:
     hive_version: str
     git_available: bool
     onboarding_complete: bool
+    portable_mode: bool = False
+    unified_handoff_ready: bool = False
+    unified_handoff_detail: str = ""
 
     def to_dict(self) -> dict:
         return {
@@ -46,6 +49,9 @@ class SetupStatus:
             "hive_version": self.hive_version,
             "git_available": self.git_available,
             "onboarding_complete": self.onboarding_complete,
+            "portable_mode": self.portable_mode,
+            "unified_handoff_ready": self.unified_handoff_ready,
+            "unified_handoff_detail": self.unified_handoff_detail,
         }
 
 
@@ -315,8 +321,41 @@ def format_python_scan_report(installations: list[PythonInstallation]) -> str:
 
 
 def get_setup_status(config: LauncherConfig) -> SetupStatus:
+    from hive_planner.portable_runtime import verify_portable_deploy
+    from hive_planner.runtime_paths import is_portable_runtime, portable_app_root
+
     hive_root = config.normalized_hive_root()
     runtime_version = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+    if is_portable_runtime():
+        python_ok = sys.version_info >= (3, 10)
+        python_version = f"{runtime_version}  (bundled — no separate Python install)"
+        try:
+            from hive_planner import __version__ as hive_version_str
+
+            hive_version = hive_version_str
+        except ImportError:
+            hive_version = ""
+        app_root = portable_app_root()
+        deployed_ok, missing = verify_portable_deploy(app_root)
+        if deployed_ok:
+            unified_detail = "Spec Kit + Continual Learning ready"
+            unified_ready = True
+        else:
+            unified_detail = f"Not deployed — run Verify install ({len(missing)} missing)"
+            unified_ready = False
+        return SetupStatus(
+            python_ok=python_ok,
+            python_version=python_version,
+            hive_root=str(app_root),
+            hive_root_ok=True,
+            hive_installed=True,
+            hive_version=hive_version,
+            git_available=shutil.which("git") is not None,
+            onboarding_complete=config.onboarding_complete,
+            portable_mode=True,
+            unified_handoff_ready=unified_ready,
+            unified_handoff_detail=unified_detail,
+        )
     configured = probe_python_command(_python_command(config))
     if configured:
         python_ok = configured.supported
@@ -345,7 +384,16 @@ def get_setup_status(config: LauncherConfig) -> SetupStatus:
 
 def auto_complete_onboarding_if_ready(config: LauncherConfig) -> bool:
     """Mark onboarding done when Python, hive root, and package are already OK."""
+    from hive_planner.portable_runtime import verify_portable_deploy
+    from hive_planner.runtime_paths import is_portable_runtime, portable_app_root
+
     if config.onboarding_complete:
+        return False
+    if is_portable_runtime():
+        deployed_ok, _missing = verify_portable_deploy(portable_app_root())
+        if deployed_ok:
+            config.onboarding_complete = True
+            return True
         return False
     status = get_setup_status(config)
     if status.python_ok and status.hive_root_ok and status.hive_installed:
@@ -355,6 +403,20 @@ def auto_complete_onboarding_if_ready(config: LauncherConfig) -> bool:
 
 
 def run_install(config: LauncherConfig, *, extras: str = "dev") -> InstallResult:
+    from hive_planner.portable_runtime import ensure_portable_runtime
+    from hive_planner.runtime_paths import is_portable_runtime, portable_app_root
+
+    if is_portable_runtime():
+        report = ensure_portable_runtime(portable_app_root(), force=True)
+        if report.ok:
+            detail = report.detail
+            if report.files_written:
+                detail += f" ({len(report.files_written)} file(s) updated)"
+        else:
+            detail = report.detail
+            if report.missing:
+                detail += f" — missing: {', '.join(report.missing)}"
+        return InstallResult(report.ok, detail)
     hive_root = config.normalized_hive_root()
     if not hive_root.is_dir():
         return InstallResult(False, f"Hive root not found: {hive_root}")
@@ -381,6 +443,17 @@ def run_install(config: LauncherConfig, *, extras: str = "dev") -> InstallResult
     detail = f"Installed hive-planner {version}" if version else "Install complete"
     clear_python_probe_cache()
     return InstallResult(True, detail, output=output[-4000:])
+
+
+def run_portable_bootstrap(*, force: bool = False) -> dict:
+    """Deploy or verify Spec Kit + CL beside the portable exe (first-run / repair)."""
+    from hive_planner.portable_runtime import ensure_portable_runtime
+    from hive_planner.runtime_paths import is_portable_runtime, portable_app_root
+
+    if not is_portable_runtime():
+        return {"ok": False, "error": "Not a portable runtime"}
+    report = ensure_portable_runtime(portable_app_root(), force=force)
+    return report.to_dict()
 
 
 def summarize_project(project_root: Path) -> ProjectSummary:
@@ -1149,11 +1222,17 @@ def run_project_ci_check(project_root: Path) -> dict:
     if not summary.ok:
         return {"ok": False, "error": summary.detail}
     paths = RepoPaths(root=target)
+    from hive_planner.runtime_paths import is_portable_runtime
     from hive_planner.spec_drift import repair_handoff_rosetta_navigation
 
     rosetta_repair = repair_handoff_rosetta_navigation(paths)
     repair = repair_agents_active_feature(paths)
-    report = run_ci_check(paths, check_roadmap=is_hive_planner_source_repo(target))
+    portable = is_portable_runtime()
+    report = run_ci_check(
+        paths,
+        check_roadmap=is_hive_planner_source_repo(target) and not portable,
+        skip_pytest=portable,
+    )
     payload = report.to_dict()
     if rosetta_repair:
         payload["rosetta_repair"] = rosetta_repair

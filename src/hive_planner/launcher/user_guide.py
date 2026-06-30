@@ -107,6 +107,12 @@ UNIFIED_VENDOR_SECTION_MARKER = "## Unified vendor path"
 
 
 def user_guide_path(config: LauncherConfig | None = None) -> Path:
+    from hive_planner.runtime_paths import bundled_resource, is_portable_runtime
+
+    if is_portable_runtime():
+        bundled = bundled_resource("scripts", "README.md")
+        if bundled is not None:
+            return bundled
     root = config.normalized_hive_root() if config else default_hive_root()
     return root.resolve() / "scripts" / "README.md"
 

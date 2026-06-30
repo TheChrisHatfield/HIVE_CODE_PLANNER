@@ -10,7 +10,9 @@ from hive_planner.launcher.service import _hidden_subprocess_kwargs
 
 
 def _repo_root() -> Path:
-    return Path(__file__).resolve().parents[3]
+    from hive_planner.runtime_paths import default_hive_root
+
+    return default_hive_root()
 
 
 def _console_python() -> str:
@@ -53,6 +55,10 @@ def _show_startup_error(message: str, detail: str = "") -> None:
 
 
 def ensure_installed() -> None:
+    from hive_planner.runtime_paths import is_portable_runtime
+
+    if is_portable_runtime():
+        return
     if _package_installed():
         return
 
