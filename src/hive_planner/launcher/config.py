@@ -84,6 +84,10 @@ class LauncherConfig:
     project_profiles: dict[str, str] = field(default_factory=dict)
 
     def normalized_hive_root(self) -> Path:
+        from hive_planner.runtime_paths import is_portable_runtime, portable_app_root
+
+        if is_portable_runtime():
+            return portable_app_root().resolve()
         raw = self.hive_planner_root.strip()
         if raw:
             return Path(raw).resolve()

@@ -100,6 +100,18 @@ def test_run_install_portable_deploys_bundle(monkeypatch: pytest.MonkeyPatch, tm
     assert (tmp_path / ".hive" / "spec-kit" / "WORKFLOW.md").is_file()
 
 
+def test_normalized_hive_root_ignores_stale_path_in_portable_mode(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from hive_planner.launcher.config import LauncherConfig
+
+    monkeypatch.setenv("HIVE_PLANNER_PORTABLE", "1")
+    monkeypatch.setenv("HIVE_PLANNER_APP_ROOT", str(tmp_path))
+    cfg = LauncherConfig(hive_planner_root=r"D:\wrong\hive-checkout")
+
+    assert cfg.normalized_hive_root() == tmp_path.resolve()
+
+
 def test_save_settings_preserves_portable_paths(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     from hive_planner.launcher.app import HivePlannerApp
     from hive_planner.launcher.config import LauncherConfig, save_config
