@@ -112,6 +112,39 @@ def test_normalized_hive_root_ignores_stale_path_in_portable_mode(
     assert cfg.normalized_hive_root() == tmp_path.resolve()
 
 
+def test_load_config_rewrites_stale_portable_paths(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    import json
+    import sys
+
+    from hive_planner.launcher.config import config_path, load_config
+
+    monkeypatch.setenv("HIVE_PLANNER_PORTABLE", "1")
+    monkeypatch.setenv("HIVE_PLANNER_APP_ROOT", str(tmp_path))
+    cfg_dir = tmp_path / "config"
+    cfg_dir.mkdir()
+    config_path().parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "onboarding_complete": False,
+        "hive_planner_root": r"D:\old\machine\HivePlannerPortable",
+        "python_executable": "py -3.11",
+        "cursor_executable": "",
+        "default_profile": "full",
+        "default_agent_handoff": "unified",
+        "theme": "light",
+        "active_project": "",
+        "recent_projects": [],
+        "project_profiles": {},
+    }
+    config_path().write_text(json.dumps(payload), encoding="utf-8")
+
+    cfg = load_config()
+
+    assert cfg.hive_planner_root == str(tmp_path.resolve())
+    assert cfg.python_executable == sys.executable
+    saved = json.loads(config_path().read_text(encoding="utf-8"))
+    assert saved["hive_planner_root"] == str(tmp_path.resolve())
+
+
 def test_save_settings_preserves_portable_paths(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     from hive_planner.launcher.app import HivePlannerApp
     from hive_planner.launcher.config import LauncherConfig, save_config

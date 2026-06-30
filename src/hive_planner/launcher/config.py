@@ -166,6 +166,26 @@ def config_path() -> Path:
     return default_config_dir() / "config.json"
 
 
+def _sync_portable_config_fields(cfg: LauncherConfig) -> bool:
+    """Rewrite portable config paths to match the current exe folder."""
+    import sys
+
+    from hive_planner.runtime_paths import is_portable_runtime, portable_app_root
+
+    if not is_portable_runtime():
+        return False
+    changed = False
+    app_root = str(portable_app_root().resolve())
+    if cfg.hive_planner_root != app_root:
+        cfg.hive_planner_root = app_root
+        changed = True
+    runtime_python = sys.executable
+    if cfg.python_executable != runtime_python:
+        cfg.python_executable = runtime_python
+        changed = True
+    return changed
+
+
 def load_config() -> LauncherConfig:
     from hive_planner.agent_handoff import normalize_agent_handoff_mode
     from hive_planner.launcher.service import auto_complete_onboarding_if_ready
@@ -206,9 +226,12 @@ def load_config() -> LauncherConfig:
         recent_projects=recent,
         project_profiles=profiles,
     )
-    if prune_stale_projects(cfg):
-        save_config(cfg)
-    elif auto_complete_onboarding_if_ready(cfg):
+    changed = prune_stale_projects(cfg)
+    if _sync_portable_config_fields(cfg):
+        changed = True
+    if auto_complete_onboarding_if_ready(cfg):
+        changed = True
+    if changed:
         save_config(cfg)
     return cfg
 
