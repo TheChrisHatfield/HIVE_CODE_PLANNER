@@ -73,6 +73,22 @@ def test_ensure_portable_runtime_skips_marker_when_deploy_incomplete(
     assert not (tmp_path / PORTABLE_RUNTIME_MARKER).is_file()
 
 
+def test_ensure_portable_runtime_repairs_deleted_artifact(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HIVE_PLANNER_PORTABLE", "1")
+    monkeypatch.setenv("HIVE_PLANNER_APP_ROOT", str(tmp_path))
+
+    first = ensure_portable_runtime(tmp_path, force=True)
+    assert first.ok is True
+
+    workflow = tmp_path / ".hive" / "spec-kit" / "WORKFLOW.md"
+    assert workflow.is_file()
+    workflow.unlink()
+
+    repaired = ensure_portable_runtime(tmp_path, force=False)
+    assert repaired.ok is True
+    assert workflow.is_file()
+
+
 def test_run_portable_bootstrap_service(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from hive_planner.launcher.service import run_portable_bootstrap
 

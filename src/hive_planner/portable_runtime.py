@@ -127,10 +127,12 @@ def ensure_portable_runtime(app_root: Path, *, force: bool = False) -> PortableR
     written: list[str] = []
     warnings: list[str] = []
     if force or not deployed_ok:
+        artifacts_present, _ = verify_portable_artifacts(root)
+        deploy_force = force or not artifacts_present
         deploy_unified_vendor_artifacts(
             root,
             root,
-            force=force,
+            force=deploy_force,
             written=written,
             warnings=warnings,
         )
