@@ -30,6 +30,7 @@ from hive_planner.launcher.service import (
     run_agents_memory_apply,
     run_agents_memory_propose,
     run_deploy_agent_handoff,
+    run_portable_bootstrap,
     run_install,
     run_legacy_deployment_scan,
     run_cl_migrate,
@@ -138,6 +139,24 @@ class HivePlannerApp:
         self.container = tk.Frame(root, bg=COLORS["bg"])
         self.container.pack(fill="both", expand=True)
 
+        if self._is_portable_mode() and not self.setup.unified_handoff_ready:
+            self._run_bg(lambda: run_portable_bootstrap(force=False), self._portable_bootstrap_done)
+        elif not self.config.onboarding_complete:
+            self._show_onboarding()
+        else:
+            self._show_dashboard()
+
+    def _is_portable_mode(self) -> bool:
+        from hive_planner.runtime_paths import is_portable_runtime
+
+        return is_portable_runtime()
+
+    def _portable_bootstrap_done(self, result: dict) -> None:
+        self.config = load_config()
+        self.setup = get_setup_status(self.config)
+        if not result.get("ok"):
+            detail = result.get("detail") or result.get("error") or "Portable bootstrap failed"
+            messagebox.showwarning("Portable setup", detail)
         if not self.config.onboarding_complete:
             self._show_onboarding()
         else:
@@ -217,19 +236,32 @@ class HivePlannerApp:
 
         if self._wizard_step == 0:
             intro = card(body)
-            card_title(intro, "What you get")
-            tk.Label(
-                intro,
-                text="• Bootstrap Hive projects with Delta planning layout\n"
+            card_title(intro, "What you get" if not self._is_portable_mode() else "Portable edition")
+            intro_text = (
+                "• Bootstrap Hive projects with Delta planning layout\n"
                 "• Unified agent handoff: Spec Kit + Continual Learning (symbiotic)\n"
                 "• Run ci-check health gates before handoff\n"
-                "• Sync impact maps and open projects in Cursor",
+                "• Sync impact maps and open projects in Cursor"
+            )
+            if self._is_portable_mode():
+                intro_text = (
+                    "Self-contained Windows app — no Python install required.\n\n"
+                    "• Spec Kit + Continual Learning vendored overlays deploy beside this exe\n"
+                    "• Link or create Cursor projects from the dashboard\n"
+                    "• Deploy agent handoff copies the same unified bundle into your projects"
+                )
+            tk.Label(
+                intro,
+                text=intro_text,
                 justify="left",
                 font=FONT,
                 bg=COLORS["card"],
                 fg=COLORS["muted"],
             ).pack(anchor="w", padx=12, pady=(0, 12))
-            if self.setup.python_ok and self.setup.hive_installed and self.setup.hive_root_ok:
+            ready = self.setup.python_ok and self.setup.hive_installed and self.setup.hive_root_ok
+            if self._is_portable_mode():
+                ready = ready and self.setup.unified_handoff_ready
+            if ready:
                 primary_button(actions, "Open dashboard →", self._finish_onboarding)
             else:
                 primary_button(actions, "Get started →", lambda: self._advance_wizard(1))
@@ -237,23 +269,70 @@ class HivePlannerApp:
             self.setup = get_setup_status(self.config)
             status_card = card(body)
             card_title(status_card, "Environment")
-            for label, ok, detail in [
+            status_rows = [
                 ("Python", self.setup.python_ok, self.setup.python_version),
                 ("Hive installed", self.setup.hive_installed, self.setup.hive_version or "missing"),
-                ("Git", self.setup.git_available, "available" if self.setup.git_available else "optional"),
-            ]:
+            ]
+            if self._is_portable_mode():
+                status_rows = [
+                    ("Runtime", self.setup.python_ok, self.setup.python_version),
+                    ("Hive Planner", self.setup.hive_installed, self.setup.hive_version or "bundled"),
+                    (
+                        "Spec Kit + CL",
+                        self.setup.unified_handoff_ready,
+                        self.setup.unified_handoff_detail,
+                    ),
+                ]
+            status_rows.append(
+                ("Git", self.setup.git_available, "available" if self.setup.git_available else "optional")
+            )
+            for label, ok, detail in status_rows:
                 row = tk.Frame(status_card, bg=COLORS["card"])
                 row.pack(fill="x", padx=12, pady=4)
                 tk.Label(row, text=label, width=16, anchor="w", bg=COLORS["card"], fg=COLORS["fg"], font=FONT).pack(side="left")
                 badge = COLORS["success"] if ok else COLORS["warning"]
                 tk.Label(row, text=detail, bg=COLORS["card"], fg=badge, font=FONT_BOLD).pack(side="left")
             secondary_button(actions, "← Back", lambda: self._advance_wizard(0))
-            secondary_button(actions, "Scan for Python", self._on_scan_python)
-            secondary_button(actions, "Install / update", self._on_install)
-            if self.setup.python_ok and self.setup.hive_installed and self.setup.hive_root_ok:
+            if not self._is_portable_mode():
+                secondary_button(actions, "Scan for Python", self._on_scan_python)
+            install_label = "Verify install" if self._is_portable_mode() else "Install / update"
+            install_tip = (
+                "Deploy or repair Spec Kit + Continual Learning beside this portable app."
+                if self._is_portable_mode()
+                else "Install or refresh the hive_planner Python package from the repo root above."
+            )
+            secondary_button(actions, install_label, self._on_install, tooltip=install_tip)
+            ready = self.setup.python_ok and self.setup.hive_installed and self.setup.hive_root_ok
+            if self._is_portable_mode():
+                ready = ready and self.setup.unified_handoff_ready
+            if ready:
                 primary_button(actions, "Open dashboard →", self._finish_onboarding)
             else:
                 primary_button(actions, "Continue →", lambda: self._advance_wizard(2))
+        elif self._wizard_step == 2 and self._is_portable_mode():
+            paths_card = card(body)
+            card_title(paths_card, "Portable folder")
+            tk.Label(
+                paths_card,
+                text=f"App folder (settings + deployed overlays):\n{self.setup.hive_root}",
+                justify="left",
+                wraplength=640,
+                bg=COLORS["card"],
+                fg=COLORS["muted"],
+                font=FONT,
+            ).pack(anchor="w", padx=12, pady=(0, 12))
+            tk.Label(
+                paths_card,
+                text="config\\config.json stores linked projects.\n"
+                ".hive\\spec-kit and .cursor\\plugins\\hive-continual-learning are deployed here for project handoff.",
+                justify="left",
+                wraplength=640,
+                bg=COLORS["card"],
+                fg=COLORS["muted"],
+                font=FONT_SUBTITLE,
+            ).pack(anchor="w", padx=12, pady=(0, 12))
+            secondary_button(actions, "← Back", lambda: self._advance_wizard(1))
+            primary_button(actions, "Continue →", lambda: self._advance_wizard(3))
         elif self._wizard_step == 2:
             paths_card = card(body)
             card_title(paths_card, "Paths")
@@ -288,6 +367,14 @@ class HivePlannerApp:
         self._advance_wizard(3)
 
     def _finish_onboarding(self) -> None:
+        self.setup = get_setup_status(self.config)
+        if self._is_portable_mode() and not self.setup.unified_handoff_ready:
+            messagebox.showwarning(
+                "Setup incomplete",
+                "Spec Kit + Continual Learning are not deployed yet.\n\n"
+                "Use Verify install on the Setup step, then try again.",
+            )
+            return
         self.config.onboarding_complete = True
         save_config(self.config)
         self._show_dashboard()
@@ -438,6 +525,11 @@ class HivePlannerApp:
             ("Profile", self._active_profile_label() or "—"),
             ("Handoff", self._active_handoff_label()),
             ("CL runtime", self._active_cl_runtime_label()),
+            *(
+                [("Bundle", "ready ✓" if self.setup.unified_handoff_ready else "repair")]
+                if self.setup.portable_mode
+                else []
+            ),
             ("Feature", self._active_feature_label()),
             ("Wiring", self._wiring_audit_label()),
         ]:
@@ -696,22 +788,38 @@ class HivePlannerApp:
         self.cfg_cursor = tk.StringVar(value=self.config.cursor_executable)
         self.cfg_profile = tk.StringVar(value=self.config.default_profile)
         self.cfg_agent_handoff = tk.StringVar(value=self.config.default_agent_handoff)
-        self._field(
-            form,
-            "Hive planner root",
-            self.cfg_hive,
-            browse=True,
-            tooltip="Folder containing this Hive Planner checkout (pyproject.toml, src/hive_planner).",
-            browse_tooltip="Pick the Hive Planner repo folder on disk.",
-        )
-        self._field(
-            form,
-            "Python command",
-            self.cfg_python,
-            scan_python=True,
-            tooltip="Command used to run Hive (for example py -3.11 or a full python.exe path).",
-            scan_tooltip="Search this PC for Python 3.11+ installations.",
-        )
+        portable = self.setup.portable_mode
+        if portable:
+            portable_card = card(parent)
+            card_title(portable_card, "Portable runtime")
+            bundle_status = self.setup.unified_handoff_detail or "unknown"
+            tk.Label(
+                portable_card,
+                text=f"App folder:\n{self.setup.hive_root}\n\n"
+                f"Unified handoff bundle: {bundle_status}",
+                justify="left",
+                wraplength=760,
+                bg=COLORS["card"],
+                fg=COLORS["muted"],
+                font=FONT,
+            ).pack(anchor="w", padx=12, pady=(0, 12))
+        else:
+            self._field(
+                form,
+                "Hive planner root",
+                self.cfg_hive,
+                browse=True,
+                tooltip="Folder containing this Hive Planner checkout (pyproject.toml, src/hive_planner).",
+                browse_tooltip="Pick the Hive Planner repo folder on disk.",
+            )
+            self._field(
+                form,
+                "Python command",
+                self.cfg_python,
+                scan_python=True,
+                tooltip="Command used to run Hive (for example py -3.11 or a full python.exe path).",
+                scan_tooltip="Search this PC for Python 3.11+ installations.",
+            )
         self._field(
             form,
             "Cursor executable",
@@ -783,9 +891,13 @@ class HivePlannerApp:
         )
         secondary_button(
             btn_row,
-            "Install / update Hive",
+            "Verify install" if portable else "Install / update Hive",
             self._on_install,
-            tooltip="Install or refresh the hive_planner Python package from the repo root above.",
+            tooltip=(
+                "Deploy or repair Spec Kit + Continual Learning beside this portable app."
+                if portable
+                else "Install or refresh the hive_planner Python package from the repo root above."
+            ),
         )
         secondary_button(
             btn_row,
@@ -2661,8 +2773,9 @@ class HivePlannerApp:
         self._show_dashboard()
 
     def _on_save_settings(self) -> None:
-        self.config.hive_planner_root = self.cfg_hive.get().strip()
-        self.config.python_executable = self.cfg_python.get().strip() or "py -3.11"
+        if not self.setup.portable_mode:
+            self.config.hive_planner_root = self.cfg_hive.get().strip()
+            self.config.python_executable = self.cfg_python.get().strip() or "py -3.11"
         self.config.cursor_executable = self.cfg_cursor.get().strip()
         self.config.default_profile = self.cfg_profile.get().strip() or "full"
         from hive_planner.agent_handoff import normalize_agent_handoff_mode
