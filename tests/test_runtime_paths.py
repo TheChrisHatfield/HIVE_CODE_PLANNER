@@ -40,6 +40,41 @@ def test_is_cli_invocation_detects_subcommands() -> None:
     assert is_cli_invocation(["HivePlanner.exe", FROZEN_CLI_FLAG, "init"]) is True
 
 
+def test_frozen_entry_bootstraps_before_cli(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    import hive_planner.frozen_entry as entry
+    import hive_planner.portable_runtime as pr
+    import hive_planner.runtime_paths as rp
+
+    monkeypatch.setenv("HIVE_PLANNER_PORTABLE", "1")
+    monkeypatch.setenv("HIVE_PLANNER_APP_ROOT", str(tmp_path))
+    calls: list[bool] = []
+
+    def _ensure(root: Path, *, force: bool = False):
+        calls.append(force)
+        return pr.PortableRuntimeReport(
+            ok=True,
+            bundled_ok=True,
+            deployed_ok=True,
+            detail="ok",
+        )
+
+    monkeypatch.setattr(pr, "ensure_portable_runtime", _ensure)
+    monkeypatch.setattr(rp, "is_cli_invocation", lambda _argv=None: True)
+    monkeypatch.setattr(
+        rp,
+        "strip_cli_dispatch_argv",
+        lambda _argv=None: ["HivePlanner.exe", "roadmap-status"],
+    )
+
+    def _cli_main():
+        return 0
+
+    monkeypatch.setattr("hive_planner.cli.main", _cli_main)
+
+    assert entry.run() == 0
+    assert calls == [False]
+
+
 def test_auto_complete_onboarding_portable(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     from hive_planner.launcher.config import LauncherConfig
     from hive_planner.launcher.service import auto_complete_onboarding_if_ready
