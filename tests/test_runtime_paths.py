@@ -38,6 +38,14 @@ def test_is_cli_invocation_detects_subcommands() -> None:
     assert is_cli_invocation(["HivePlanner.exe"]) is False
     assert is_cli_invocation(["HivePlanner.exe", "--console"]) is False
     assert is_cli_invocation(["HivePlanner.exe", FROZEN_CLI_FLAG, "init"]) is True
+    assert is_cli_invocation(["HivePlanner.exe", FROZEN_CLI_FLAG]) is True
+
+
+def test_strip_cli_dispatch_argv_bare_flag_shows_help() -> None:
+    assert strip_cli_dispatch_argv(["HivePlanner.exe", FROZEN_CLI_FLAG]) == [
+        "HivePlanner.exe",
+        "--help",
+    ]
 
 
 def test_frozen_entry_bootstraps_before_cli(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

@@ -86,7 +86,7 @@ def is_cli_invocation(argv: list[str] | None = None) -> bool:
     if first in _GUI_ONLY_ARGS:
         return False
     if first == FROZEN_CLI_FLAG:
-        return len(args) > 2
+        return True
     if first.startswith("-"):
         return first in {"-h", "--help"}
     return True
@@ -96,5 +96,8 @@ def strip_cli_dispatch_argv(argv: list[str] | None = None) -> list[str]:
     """Normalize argv for hive_planner.cli.main after frozen dispatch."""
     args = list(argv if argv is not None else sys.argv)
     if len(args) > 1 and args[1] == FROZEN_CLI_FLAG:
-        return [args[0], *args[2:]]
+        rest = args[2:]
+        if not rest:
+            return [args[0], "--help"]
+        return [args[0], *rest]
     return args
