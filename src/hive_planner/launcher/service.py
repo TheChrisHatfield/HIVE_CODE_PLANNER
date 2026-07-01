@@ -1230,7 +1230,7 @@ def run_project_ci_check(project_root: Path) -> dict:
     portable = is_portable_runtime()
     report = run_ci_check(
         paths,
-        check_roadmap=is_hive_planner_source_repo(target) and not portable,
+        check_roadmap=None,
         skip_pytest=portable,
     )
     payload = report.to_dict()

@@ -51,10 +51,15 @@ def run_ci_check(
     *,
     skip_pytest: bool = False,
     check_map_drift: bool = True,
-    check_roadmap: bool = True,
+    check_roadmap: bool | None = None,
     check_spec_kit: bool | None = None,
 ) -> CiCheckReport:
     report = CiCheckReport()
+    hive_source = _is_hive_planner_source(paths)
+    if check_roadmap is None:
+        from hive_planner.runtime_paths import is_portable_runtime
+
+        check_roadmap = hive_source and not is_portable_runtime()
     integrations = resolve_project_integrations(paths.root)
     spec_kit = integrations.spec_kit_enabled if check_spec_kit is None else check_spec_kit
 
@@ -104,7 +109,6 @@ def run_ci_check(
 
     from hive_planner.vendor_sync import ci_unified_vendor_step
 
-    hive_source = _is_hive_planner_source(paths)
     require_pins = not hive_source and integrations.agent_handoff_mode == AGENT_HANDOFF_UNIFIED
     if hive_source or integrations.agent_handoff_mode == AGENT_HANDOFF_UNIFIED:
         vendor_ok, vendor_detail = ci_unified_vendor_step(

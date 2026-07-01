@@ -447,6 +447,7 @@ def main(argv: list[str] | None = None) -> int:
             paths,
             skip_pytest=args.skip_pytest,
             check_map_drift=not args.allow_map_drift,
+            check_roadmap=None,
         )
         print(f"Root: {root}")
         print(json.dumps(report.to_dict(), indent=2))

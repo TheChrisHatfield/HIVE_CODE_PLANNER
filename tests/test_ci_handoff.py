@@ -91,6 +91,28 @@ def test_ci_check_auto_skips_pytest_in_frozen_runtime(
     assert "skipped" in pytest_step.detail
 
 
+def test_run_ci_check_skips_roadmap_for_client_projects(tmp_path: Path) -> None:
+    from hive_planner.ci_handoff import run_ci_check
+    from hive_planner.config import RepoPaths
+
+    root = tmp_path / "client-app"
+    root.mkdir()
+    (root / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    (root / "AGENTS.md").write_text(
+        "# AGENTS\n\n## Active feature\n\n**example-feature** — test\n",
+        encoding="utf-8",
+    )
+    paths = RepoPaths(root=root)
+    report = run_ci_check(
+        paths,
+        skip_pytest=True,
+        check_map_drift=False,
+        check_roadmap=None,
+        check_spec_kit=False,
+    )
+    assert not any(step.name == "roadmap-artifacts" for step in report.steps)
+
+
 def test_parse_active_feature_from_file(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     _write_agents(paths, "# AGENTS\n\n## Active feature\n\n**git-handoff-ci-v1** — complete.\n")
