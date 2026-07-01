@@ -75,6 +75,36 @@ def test_frozen_entry_bootstraps_before_cli(monkeypatch: pytest.MonkeyPatch, tmp
     assert calls == [False]
 
 
+def test_frozen_entry_exits_when_bootstrap_fails(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    import hive_planner.frozen_entry as entry
+    import hive_planner.portable_runtime as pr
+    import hive_planner.runtime_paths as rp
+
+    monkeypatch.setenv("HIVE_PLANNER_PORTABLE", "1")
+    monkeypatch.setenv("HIVE_PLANNER_APP_ROOT", str(tmp_path))
+
+    def _fail(root: Path, *, force: bool = False):
+        return pr.PortableRuntimeReport(
+            ok=False,
+            bundled_ok=False,
+            deployed_ok=False,
+            detail="Bundled templates missing",
+            missing=["vendor_templates/manifest.json"],
+        )
+
+    monkeypatch.setattr(pr, "ensure_portable_runtime", _fail)
+    gui_called = {"value": False}
+
+    def _gui_main():
+        gui_called["value"] = True
+        return 0
+
+    monkeypatch.setattr("hive_planner.launcher.__main__.main", _gui_main)
+
+    assert entry.run() == 1
+    assert gui_called["value"] is False
+
+
 def test_auto_complete_onboarding_portable(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     from hive_planner.launcher.config import LauncherConfig
     from hive_planner.launcher.service import auto_complete_onboarding_if_ready
