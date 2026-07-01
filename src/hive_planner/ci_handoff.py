@@ -10,6 +10,7 @@ from hive_planner.config import RepoPaths
 from hive_planner.map_sync import sync_impact_maps
 from hive_planner.project_profile import resolve_project_integrations
 from hive_planner.roadmap_status import validate_roadmap
+from hive_planner.runtime_paths import is_frozen, is_portable_runtime
 from hive_planner.spec_drift import check_memory_spec_drift, check_spec_handoff
 
 
@@ -148,7 +149,17 @@ def run_ci_check(
             )
         )
 
-    if not skip_pytest:
+    if skip_pytest:
+        pass
+    elif is_frozen() or is_portable_runtime():
+        report.steps.append(
+            CiStepResult(
+                "pytest",
+                True,
+                "skipped (portable runtime — no bundled pytest)",
+            )
+        )
+    else:
         proc = subprocess.run(
             [sys.executable, "-m", "pytest", "-q"],
             cwd=paths.root,

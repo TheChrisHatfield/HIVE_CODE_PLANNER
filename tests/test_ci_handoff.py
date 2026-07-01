@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import sys
 from pathlib import Path
+
+import pytest
 
 from hive_planner.ci_handoff import run_ci_check
 from hive_planner.config import RepoPaths
@@ -70,6 +73,22 @@ def _minimal_agents(feature: str) -> str:
             "",
         ]
     )
+
+
+def test_ci_check_auto_skips_pytest_in_frozen_runtime(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    paths = RepoPaths(root=tmp_path)
+    _write_agents(paths, _minimal_agents("git-handoff-ci-v1"))
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+
+    report = run_ci_check(
+        paths, skip_pytest=False, check_map_drift=False, check_roadmap=False, check_spec_kit=False
+    )
+
+    pytest_step = next(s for s in report.steps if s.name == "pytest")
+    assert pytest_step.ok is True
+    assert "skipped" in pytest_step.detail
 
 
 def test_parse_active_feature_from_file(tmp_path: Path) -> None:
