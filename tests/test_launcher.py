@@ -652,7 +652,7 @@ def test_run_project_ci_check_skips_roadmap_for_app_projects(
 
     monkeypatch.setattr("hive_planner.launcher.service.run_ci_check", fake_ci_check)
     result = run_project_ci_check(project)
-    assert captured.get("check_roadmap") is False
+    assert captured.get("check_roadmap") is None
     assert not result.get("hints")
 
 
@@ -1191,9 +1191,8 @@ def test_create_done_shows_partial_bootstrap_when_handoff_incomplete() -> None:
     from hive_planner.launcher.app import HivePlannerApp
 
     app = HivePlannerApp.__new__(HivePlannerApp)
-    app.home_log = type("L", (), {"configure": lambda *a, **k: None})()
-    lines: list[str] = []
-    app._append_log = lambda _w, text: lines.append(text)  # type: ignore[method-assign]
+    app._pending_home_log = []
+    app._refresh_home_dashboard = lambda: None  # type: ignore[method-assign]
 
     class Box:
         calls: list[tuple[str, str]] = []
@@ -1221,7 +1220,7 @@ def test_create_done_shows_partial_bootstrap_when_handoff_incomplete() -> None:
 
     assert Box.calls
     assert "Partial bootstrap" in Box.calls[0][1]
-    joined = "\n".join(lines)
+    joined = "\n".join(app._pending_home_log)
     assert "missing: docs/cl-spec-integration.md" in joined
     assert "template warning" in joined
 
@@ -2755,25 +2754,75 @@ def test_recent_double_click_opens_folder(tmp_path: Path, monkeypatch: pytest.Mo
     assert opened == [str(project.resolve())]
 
 
-def test_ci_check_done_clears_stale_steps_on_error() -> None:
+def test_queue_home_log_flushes_after_dashboard_rebuild() -> None:
     from hive_planner.launcher.app import HivePlannerApp
 
     app = HivePlannerApp.__new__(HivePlannerApp)
-    app.home_log = type("L", (), {"configure": lambda *a, **k: None})()
-    app.ci_list = type(
-        "L",
-        (),
-        {
-            "items": ["old"],
-            "delete": lambda self, a, b: setattr(self, "items", []),
-            "insert": lambda self, *a, **k: None,
-        },
-    )()
-    lines: list[str] = []
-    app._append_log = lambda _w, text: lines.append(text)  # type: ignore[method-assign]
+    app._pending_home_log = []
+    app._queue_home_log("Vendor pins and overlays OK.")
+    app._queue_home_log("Tip: redeploy handoff")
+    flushed: list[str] = []
+
+    class _Log:
+        def configure(self, *args, **kwargs) -> None:
+            pass
+
+    app.home_log = _Log()
+    app._append_log = lambda _w, text: flushed.append(text)  # type: ignore[method-assign]
+    app._flush_pending_home_log()
+    assert flushed == ["Vendor pins and overlays OK.", "Tip: redeploy handoff"]
+    assert app._pending_home_log == []
+
+
+def test_ci_check_done_clears_stale_steps_on_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    monkeypatch.setattr("hive_planner.launcher.app.messagebox.showerror", lambda *a, **k: None)
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.root = type("R", (), {})()
+    app._pending_home_log = []
+    app._last_ci_report = {"ok": True, "steps": [{"name": "old", "ok": True, "detail": "x"}]}
+    app._show_dashboard = lambda: None  # type: ignore[method-assign]
+    app._refresh_home_dashboard = lambda: None  # type: ignore[method-assign]
     app._ci_check_done({"ok": False, "error": "Not a Hive project (missing START_HERE.md)"})
-    assert app.ci_list.items == []
-    assert "START_HERE" in lines[0]
+    assert app._last_ci_report is None
+    assert app._pending_home_log
+    assert "START_HERE" in app._pending_home_log[0]
+
+
+def test_ci_check_done_preserves_report_for_dashboard_refresh(monkeypatch: pytest.MonkeyPatch) -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    monkeypatch.setattr("hive_planner.launcher.app.messagebox.showwarning", lambda *a, **k: None)
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.root = type("R", (), {})()
+    app._pending_home_log = []
+    app._last_ci_report = None
+    app._show_dashboard = lambda: None  # type: ignore[method-assign]
+    app._refresh_home_dashboard = lambda: None  # type: ignore[method-assign]
+    report = {
+        "ok": False,
+        "steps": [
+            {"name": "agents-lint", "ok": True, "detail": "ok"},
+            {"name": "wiring-audit", "ok": False, "detail": "missing attestation"},
+        ],
+    }
+    app._ci_check_done(report)
+    assert app._last_ci_report == report
+    assert any("wiring-audit" in line for line in app._pending_home_log)
+    inserted: list[str] = []
+
+    class _List:
+        def delete(self, _a, _b) -> None:
+            inserted.clear()
+
+        def insert(self, _end, text) -> None:
+            inserted.append(text)
+
+    app.ci_list = _List()
+    app._populate_ci_list(app._last_ci_report)
+    assert len(inserted) == 2
+    assert "wiring-audit" in inserted[1]
 
 
 def test_ci_check_report_is_not_bg_error() -> None:

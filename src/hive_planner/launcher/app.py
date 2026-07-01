@@ -127,6 +127,7 @@ class HivePlannerApp:
         self._bg_generation = 0
         self._python_scan_active = False
         self._pending_home_log: list[str] = []
+        self._last_ci_report: dict | None = None
         self._pending_memory_candidates: Path | None = None
         self._pending_memory_link: str | None = None
 
@@ -473,6 +474,19 @@ class HivePlannerApp:
             return
         self._pending_home_log.clear()
 
+    def _queue_home_log(self, message: str) -> None:
+        text = str(message).rstrip()
+        if text:
+            self._pending_home_log.append(text)
+
+    def _refresh_home_dashboard(self) -> None:
+        """Rebuild dashboard; queued Output lines are flushed in _build_home_tab."""
+        self._show_dashboard()
+
+    def _start_home_action(self, message: str) -> None:
+        """Queue an in-progress line so it survives the post-action dashboard refresh."""
+        self._queue_home_log(message)
+
     def _bind_page_wheel(self, parent: tk.Misc, canvas: tk.Canvas) -> None:
         bind_mousewheel(canvas, target=canvas)
         self._bind_page_wheel_children(parent, canvas)
@@ -621,6 +635,7 @@ class HivePlannerApp:
         self.ci_list = tk.Listbox(check_card, height=6, font=FONT, bg=COLORS["card"], fg=COLORS["fg"], relief="flat")
         self.ci_list.pack(fill="x", padx=12, pady=(0, 12))
         bind_mousewheel(self.ci_list)
+        self._populate_ci_list(self._last_ci_report)
         self._bind_page_wheel(body, canvas)
         self._flush_pending_home_log()
 
@@ -1173,20 +1188,21 @@ class HivePlannerApp:
         selected = self._ask_cl_runtime(title="Set CL runtime", current=current)
         if selected is None:
             return
-        self._append_log(self.home_log, f"Setting CL runtime to {selected}…")
+        self._start_home_action(f"Setting CL runtime to {selected}…")
         self._run_bg(lambda r=root, rt=selected: run_set_cl_runtime(r, rt), self._set_cl_runtime_done)
 
     def _set_cl_runtime_done(self, result: dict) -> None:
         if self._is_bg_error(result) or not result.get("ok"):
-            self._append_log(self.home_log, self._result_detail(result))
+            self._queue_home_log(self._result_detail(result))
             for hint in result.get("hints", []):
-                self._append_log(self.home_log, f"Tip: {hint}")
+                self._queue_home_log(f"Tip: {hint}")
+            self._refresh_home_dashboard()
             return
         runtime = result.get("cl_runtime", "")
-        self._append_log(self.home_log, f"Set cl_runtime={runtime} in .hive/project.json.")
+        self._queue_home_log(f"Set cl_runtime={runtime} in .hive/project.json.")
         for hint in result.get("hints", []):
-            self._append_log(self.home_log, f"Tip: {hint}")
-        self._show_dashboard()
+            self._queue_home_log(f"Tip: {hint}")
+        self._refresh_home_dashboard()
 
     def _append_log(self, widget: scrolledtext.ScrolledText, text: str) -> None:
         widget.configure(state="normal")
@@ -1444,56 +1460,81 @@ class HivePlannerApp:
             return None
         return resolve_linked_project_root(Path(self.config.active_project))
 
+    def _populate_ci_list(self, report: dict | None) -> None:
+        if not report or not hasattr(self, "ci_list"):
+            return
+        try:
+            self.ci_list.delete(0, "end")
+            for step in report.get("steps", []):
+                mark = "✓" if step.get("ok") else "✗"
+                self.ci_list.insert("end", f"{mark}  {step.get('name')}: {step.get('detail')}")
+        except tk.TclError:
+            return
+
+    def _queue_ci_check_log(self, report: dict) -> None:
+        if self._is_bg_error(report):
+            self._last_ci_report = None
+            self._queue_home_log(self._result_detail(report))
+            return
+        self._last_ci_report = report
+        for step in report.get("steps", []):
+            mark = "✓" if step.get("ok") else "✗"
+            self._queue_home_log(f"  {mark}  {step.get('name')}: {step.get('detail')}")
+        summary = "All checks passed." if report.get("ok") else "Some checks failed."
+        self._queue_home_log(summary)
+        repair = report.get("repair")
+        if repair:
+            self._queue_home_log(
+                f"Repaired AGENTS.md — {repair.get('detail', 'updated Active feature')}."
+            )
+        for hint in report.get("hints", []):
+            self._queue_home_log(f"Tip: {hint}")
+
     def _on_ci_check(self) -> None:
         root = self._active_linked_root()
         if not root:
-            messagebox.showwarning("No project", "Link a workspace first (Projects tab).")
+            messagebox.showwarning("No project", "Link a workspace first (Projects tab).", parent=self.root)
             return
-        self._append_log(self.home_log, "Running ci-check…")
+        self._start_home_action("Running ci-check…")
         self._run_bg(lambda r=root: run_project_ci_check(r), self._ci_check_done)
 
     def _ci_check_done(self, report: dict) -> None:
+        self._queue_ci_check_log(report)
         if self._is_bg_error(report):
-            self.ci_list.delete(0, "end")
-            self._append_log(self.home_log, self._result_detail(report))
-            return
-        self.ci_list.delete(0, "end")
-        for step in report.get("steps", []):
-            mark = "✓" if step.get("ok") else "✗"
-            self.ci_list.insert("end", f"{mark}  {step.get('name')}: {step.get('detail')}")
-        summary = "All checks passed." if report.get("ok") else "Some checks failed."
-        self._append_log(self.home_log, summary)
-        repair = report.get("repair")
-        if repair:
-            self._append_log(
-                self.home_log,
-                f"Repaired AGENTS.md — {repair.get('detail', 'updated Active feature')}.",
+            messagebox.showerror("Health check", self._result_detail(report), parent=self.root)
+        elif report.get("ok"):
+            messagebox.showinfo("Health check", "All checks passed.", parent=self.root)
+        else:
+            messagebox.showwarning(
+                "Health check",
+                "Some checks failed — see Latest ci-check and Output below.",
+                parent=self.root,
             )
-        for hint in report.get("hints", []):
-            self._append_log(self.home_log, f"Tip: {hint}")
-        self._show_dashboard()
+        self._refresh_home_dashboard()
 
     def _on_wiring_audit_check(self) -> None:
         root = self._active_linked_root()
         if not root:
             messagebox.showwarning("No project", "Link a workspace first (Projects tab).")
             return
-        self._append_log(self.home_log, "Checking wiring audit attestation…")
+        self._start_home_action("Checking wiring audit attestation…")
         self._run_bg(lambda r=root: run_wiring_audit_check(r), self._wiring_audit_check_done)
 
     def _wiring_audit_check_done(self, result: dict) -> None:
         if self._is_bg_error(result):
-            self._append_log(self.home_log, self._result_detail(result))
+            self._queue_home_log(self._result_detail(result))
+            self._refresh_home_dashboard()
             return
         if result.get("skipped"):
-            self._append_log(self.home_log, result.get("detail", "Wiring audit not enforced."))
+            self._queue_home_log(result.get("detail", "Wiring audit not enforced."))
+            self._refresh_home_dashboard()
             return
         detail = result.get("detail", "ok")
         mark = "ok" if result.get("ok") else "failed"
-        self._append_log(self.home_log, f"Wiring audit: {mark} — {detail}")
+        self._queue_home_log(f"Wiring audit: {mark} — {detail}")
         for hint in result.get("hints", []):
-            self._append_log(self.home_log, f"Tip: {hint}")
-        self._show_dashboard()
+            self._queue_home_log(f"Tip: {hint}")
+        self._refresh_home_dashboard()
 
     def _on_wiring_audit_record(self) -> None:
         root = self._active_linked_root()
@@ -1533,7 +1574,7 @@ class HivePlannerApp:
                 messagebox.showwarning("Evidence required", "Enter the validation command you ran.", parent=dialog)
                 return
             dialog.destroy()
-            self._append_log(self.home_log, f"Recording wiring audit (evidence: {evidence})…")
+            self._start_home_action(f"Recording wiring audit (evidence: {evidence})…")
             self._run_bg(
                 lambda r=root, e=evidence: run_wiring_audit_record(r, e),
                 self._wiring_audit_record_done,
@@ -1546,20 +1587,22 @@ class HivePlannerApp:
 
     def _wiring_audit_record_done(self, result: dict) -> None:
         if self._is_bg_error(result):
-            self._append_log(self.home_log, self._result_detail(result))
+            self._queue_home_log(self._result_detail(result))
+            self._refresh_home_dashboard()
             return
         if result.get("skipped"):
-            self._append_log(self.home_log, result.get("detail", "Wiring audit not enforced."))
+            self._queue_home_log(result.get("detail", "Wiring audit not enforced."))
+            self._refresh_home_dashboard()
             return
         if result.get("recorded"):
-            self._append_log(self.home_log, f"Wrote {result['recorded']}")
+            self._queue_home_log(f"Wrote {result['recorded']}")
         if result.get("ok"):
-            self._append_log(self.home_log, "Wiring audit attestation valid.")
+            self._queue_home_log("Wiring audit attestation valid.")
         else:
-            self._append_log(self.home_log, self._result_detail(result))
+            self._queue_home_log(self._result_detail(result))
             for hint in result.get("hints", []):
-                self._append_log(self.home_log, f"Tip: {hint}")
-        self._show_dashboard()
+                self._queue_home_log(f"Tip: {hint}")
+        self._refresh_home_dashboard()
 
     def _set_pending_memory_candidates(self, root: Path, candidates: Path) -> None:
         self._pending_memory_candidates = candidates
@@ -1602,7 +1645,7 @@ class HivePlannerApp:
             )
             return
         self._set_pending_memory_candidates(root, candidates)
-        self._append_log(self.home_log, f"Running agents-propose on {candidates.name}…")
+        self._start_home_action(f"Running agents-propose on {candidates.name}…")
         self._run_bg(
             lambda r=root, c=candidates: run_agents_memory_propose(r, c, apply=False),
             self._agents_propose_done,
@@ -1637,7 +1680,7 @@ class HivePlannerApp:
             parent=self.root,
         ):
             return
-        self._append_log(self.home_log, f"Running agents-apply on {candidates.name}…")
+        self._start_home_action(f"Running agents-apply on {candidates.name}…")
         self._run_bg(
             lambda r=root, c=candidates: run_agents_memory_apply(r, c),
             self._agents_apply_done,
@@ -1645,43 +1688,43 @@ class HivePlannerApp:
 
     def _agents_apply_done(self, result: dict) -> None:
         if self._is_bg_error(result):
-            self._append_log(self.home_log, self._result_detail(result))
-            self._show_dashboard()
+            self._queue_home_log(self._result_detail(result))
+            self._refresh_home_dashboard()
             return
         if not result.get("ok"):
-            self._append_log(self.home_log, self._result_detail(result))
+            self._queue_home_log(self._result_detail(result))
             for hint in result.get("hints", []):
-                self._append_log(self.home_log, f"Tip: {hint}")
-            self._show_dashboard()
+                self._queue_home_log(f"Tip: {hint}")
+            self._refresh_home_dashboard()
             return
-        self._append_log(self.home_log, f"Proposal: {result.get('proposal_path')}")
+        self._queue_home_log(f"Proposal: {result.get('proposal_path')}")
         accepted = result.get("accepted") or []
         if accepted:
-            self._append_log(self.home_log, f"Applied {len(accepted)} bullet(s) to AGENTS.md.")
+            self._queue_home_log(f"Applied {len(accepted)} bullet(s) to AGENTS.md.")
         if result.get("applied"):
-            self._append_log(self.home_log, "AGENTS.md updated.")
-        self._show_dashboard()
+            self._queue_home_log("AGENTS.md updated.")
+        self._refresh_home_dashboard()
 
     def _agents_propose_done(self, result: dict) -> None:
         if self._is_bg_error(result):
-            self._append_log(self.home_log, self._result_detail(result))
-            self._show_dashboard()
+            self._queue_home_log(self._result_detail(result))
+            self._refresh_home_dashboard()
             return
         if not result.get("ok"):
-            self._append_log(self.home_log, self._result_detail(result))
+            self._queue_home_log(self._result_detail(result))
             for hint in result.get("hints", []):
-                self._append_log(self.home_log, f"Tip: {hint}")
-            self._show_dashboard()
+                self._queue_home_log(f"Tip: {hint}")
+            self._refresh_home_dashboard()
             return
-        self._append_log(self.home_log, f"Wrote proposal: {result.get('proposal_path')}")
+        self._queue_home_log(f"Wrote proposal: {result.get('proposal_path')}")
         accepted = result.get("accepted") or []
         rejected = result.get("rejected") or []
         if accepted:
-            self._append_log(self.home_log, f"Accepted {len(accepted)} candidate(s).")
+            self._queue_home_log(f"Accepted {len(accepted)} candidate(s).")
         if rejected:
-            self._append_log(self.home_log, f"Rejected {len(rejected)} candidate(s) — see proposal file.")
+            self._queue_home_log(f"Rejected {len(rejected)} candidate(s) — see proposal file.")
         if result.get("applied"):
-            self._append_log(self.home_log, "Applied to AGENTS.md.")
+            self._queue_home_log("Applied to AGENTS.md.")
         else:
             root = self._active_linked_root()
             if accepted and root and self._pending_memory_for_root(root):
@@ -1692,60 +1735,62 @@ class HivePlannerApp:
                 ):
                     candidates = self._pending_memory_for_root(root)
                     if candidates:
-                        self._append_log(self.home_log, f"Running agents-apply on {candidates.name}…")
+                        self._start_home_action(f"Running agents-apply on {candidates.name}…")
                         self._run_bg(
                             lambda r=root, c=candidates: run_agents_memory_apply(r, c),
                             self._agents_apply_done,
                         )
                         return
-        self._show_dashboard()
+        self._refresh_home_dashboard()
 
     def _on_unified_verify(self) -> None:
         root = self._active_linked_root()
         if not root:
             messagebox.showwarning("No project", "Link a workspace first.")
             return
-        self._append_log(self.home_log, "Verifying upstream pins and vendored overlays…")
+        self._start_home_action("Verifying upstream pins and vendored overlays…")
         self._run_bg(lambda r=root: run_unified_verify(r), self._unified_verify_done)
 
     def _unified_verify_done(self, result: dict) -> None:
         if self._is_bg_error(result):
-            self._append_log(self.home_log, self._result_detail(result))
+            self._queue_home_log(self._result_detail(result))
+            self._refresh_home_dashboard()
             return
         if result.get("ok"):
-            self._append_log(self.home_log, "Vendor pins and overlays OK.")
+            self._queue_home_log("Vendor pins and overlays OK.")
         else:
-            self._append_log(self.home_log, self._result_detail(result))
+            self._queue_home_log(self._result_detail(result))
             for issue in result.get("issues") or []:
-                self._append_log(self.home_log, f"  issue: {issue}")
+                self._queue_home_log(f"  issue: {issue}")
             for hint in result.get("hints", []):
-                self._append_log(self.home_log, f"Tip: {hint}")
+                self._queue_home_log(f"Tip: {hint}")
         pins_match = result.get("pins_match")
         if pins_match is not None:
-            self._append_log(self.home_log, f"Pins match packaged manifest: {pins_match}")
-        self._show_dashboard()
+            self._queue_home_log(f"Pins match packaged manifest: {pins_match}")
+        self._refresh_home_dashboard()
 
     def _on_legacy_deployment_scan(self) -> None:
         root = self._active_linked_root()
         if not root:
             messagebox.showwarning("No project", "Link a workspace first.")
             return
-        self._append_log(self.home_log, "Scanning for legacy deployment traces…")
+        self._start_home_action("Scanning for legacy deployment traces…")
         self._run_bg(lambda r=root: run_legacy_deployment_scan(r), self._legacy_deployment_scan_done)
 
     def _legacy_deployment_scan_done(self, result: dict) -> None:
         if self._is_bg_error(result):
-            self._append_log(self.home_log, self._result_detail(result))
+            self._queue_home_log(self._result_detail(result))
+            self._refresh_home_dashboard()
             return
-        self._append_log(self.home_log, result.get("detail", "Scan complete."))
+        self._queue_home_log(result.get("detail", "Scan complete."))
         for finding in result.get("findings") or []:
             severity = finding.get("severity", "info")
             prefix = "WARN" if severity == "warn" else "info"
-            self._append_log(self.home_log, f"  [{prefix}] {finding.get('detail')}")
+            self._queue_home_log(f"  [{prefix}] {finding.get('detail')}")
             repair = finding.get("repair")
             if repair:
-                self._append_log(self.home_log, f"    repair: {repair}")
-        self._show_dashboard()
+                self._queue_home_log(f"    repair: {repair}")
+        self._refresh_home_dashboard()
 
     def _on_cl_migrate(self) -> None:
         root = self._active_linked_root()
@@ -1759,7 +1804,7 @@ class HivePlannerApp:
             "Choose No to merge AGENTS.md data only.",
             parent=self.root,
         )
-        self._append_log(self.home_log, "Migrating marketplace Continual Learning data to Hive format…")
+        self._start_home_action("Migrating marketplace Continual Learning data to Hive format…")
         self._run_bg(
             lambda r=root, rm=remove_plugin: run_cl_migrate(r, remove_marketplace_plugin=rm),
             self._cl_migrate_done,
@@ -1767,55 +1812,58 @@ class HivePlannerApp:
 
     def _cl_migrate_done(self, result: dict) -> None:
         if self._is_bg_error(result):
-            self._append_log(self.home_log, self._result_detail(result))
-            self._show_dashboard()
+            self._queue_home_log(self._result_detail(result))
+            self._refresh_home_dashboard()
             return
         if not result.get("ok"):
-            self._append_log(self.home_log, self._result_detail(result))
+            self._queue_home_log(self._result_detail(result))
             for hint in result.get("hints", []):
-                self._append_log(self.home_log, f"Tip: {hint}")
+                self._queue_home_log(f"Tip: {hint}")
             for warning in result.get("warnings", []):
-                self._append_log(self.home_log, f"Warning: {warning}")
-            self._show_dashboard()
+                self._queue_home_log(f"Warning: {warning}")
+            self._refresh_home_dashboard()
             return
         for action in result.get("actions") or []:
-            self._append_log(self.home_log, f"  {action}")
+            self._queue_home_log(f"  {action}")
         for warning in result.get("warnings", []):
-            self._append_log(self.home_log, f"Warning: {warning}")
+            self._queue_home_log(f"Warning: {warning}")
         merged = result.get("merged_bullets", 0)
         if merged:
-            self._append_log(self.home_log, f"Merged {merged} bullet(s) into ## Durable Workspace Facts.")
+            self._queue_home_log(f"Merged {merged} bullet(s) into ## Durable Workspace Facts.")
         if result.get("removed_marketplace_plugin"):
-            self._append_log(self.home_log, "Removed marketplace continual-learning plugin from project.")
+            self._queue_home_log("Removed marketplace continual-learning plugin from project.")
         if result.get("cl_source"):
-            self._append_log(self.home_log, f"Set cl_source={result['cl_source']} in .hive/project.json.")
+            self._queue_home_log(f"Set cl_source={result['cl_source']} in .hive/project.json.")
         if result.get("dry_run"):
-            self._append_log(self.home_log, "CL migration dry run complete.")
+            self._queue_home_log("CL migration dry run complete.")
         else:
-            self._append_log(self.home_log, "CL migration complete.")
-        self._show_dashboard()
+            self._queue_home_log("CL migration complete.")
+        self._refresh_home_dashboard()
 
     def _on_map_sync(self) -> None:
         root = self._active_linked_root()
         if not root:
             messagebox.showwarning("No project", "Link a workspace first.")
             return
-        self._append_log(self.home_log, "Syncing impact maps…")
+        self._start_home_action("Syncing impact maps…")
         self._run_bg(lambda r=root: run_project_map_sync(r), self._map_sync_done)
 
     def _map_sync_done(self, result: dict) -> None:
         if self._is_bg_error(result):
-            self._append_log(self.home_log, self._result_detail(result))
+            self._queue_home_log(self._result_detail(result))
+            self._refresh_home_dashboard()
             return
         if result.get("ok") is False:
-            self._append_log(self.home_log, self._result_detail(result))
+            self._queue_home_log(self._result_detail(result))
+            self._refresh_home_dashboard()
             return
         added = len(result.get("project_added", [])) + len(result.get("test_added", []))
         updated = len(result.get("project_updated", [])) + len(result.get("test_updated", []))
         if added or updated:
-            self._append_log(self.home_log, f"Impact maps synced: {added} added, {updated} updated.")
+            self._queue_home_log(f"Impact maps synced: {added} added, {updated} updated.")
         else:
-            self._append_log(self.home_log, "Impact maps already up to date.")
+            self._queue_home_log("Impact maps already up to date.")
+        self._refresh_home_dashboard()
 
     def _on_deploy_agent_handoff(self) -> None:
         root = self._active_linked_root()
@@ -1829,9 +1877,8 @@ class HivePlannerApp:
         if selected is None:
             return
         cfg = load_config()
-        self._append_log(
-            self.home_log,
-            f"Deploying unified agent handoff (Spec Kit + Continual Learning, cl_runtime={selected})…",
+        self._start_home_action(
+            f"Deploying unified agent handoff (Spec Kit + Continual Learning, cl_runtime={selected})…"
         )
         hive_root = cfg.normalized_hive_root()
         self._run_bg(
@@ -2308,53 +2355,53 @@ class HivePlannerApp:
 
     def _deploy_handoff_done(self, result: dict) -> None:
         if self._is_bg_error(result):
-            self._append_log(self.home_log, self._result_detail(result))
+            self._queue_home_log(self._result_detail(result))
+            self._refresh_home_dashboard()
             return
         if not result.get("ok"):
             if result.get("error"):
-                self._append_log(self.home_log, self._result_detail(result))
+                self._queue_home_log(self._result_detail(result))
             count = len(result.get("files_written", []))
             if count:
-                self._append_log(
-                    self.home_log,
-                    f"Partial deploy — {count} file(s) written; unified handoff still incomplete.",
+                self._queue_home_log(
+                    f"Partial deploy — {count} file(s) written; unified handoff still incomplete."
                 )
             repair = result.get("repair")
             if repair:
-                self._append_log(self.home_log, f"Repaired AGENTS.md — {repair.get('detail', 'updated')}.")
+                self._queue_home_log(f"Repaired AGENTS.md — {repair.get('detail', 'updated')}.")
             rosetta = result.get("rosetta_repair")
             if rosetta:
-                self._append_log(self.home_log, f"  Rosetta navigation: {rosetta.get('detail')}")
+                self._queue_home_log(f"  Rosetta navigation: {rosetta.get('detail')}")
                 for rel in rosetta.get("patched") or []:
-                    self._append_log(self.home_log, f"    patched: {rel}")
+                    self._queue_home_log(f"    patched: {rel}")
             handoff = result.get("handoff") or {}
             for rel in handoff.get("missing") or []:
-                self._append_log(self.home_log, f"  missing: {rel}")
+                self._queue_home_log(f"  missing: {rel}")
             for warning in result.get("warnings", []):
-                self._append_log(self.home_log, f"Warning: {warning}")
+                self._queue_home_log(f"Warning: {warning}")
             for hint in result.get("hints", []):
-                self._append_log(self.home_log, f"Tip: {hint}")
+                self._queue_home_log(f"Tip: {hint}")
+            self._refresh_home_dashboard()
             return
         count = len(result.get("files_written", []))
         runtime = result.get("cl_runtime", "")
-        self._append_log(
-            self.home_log,
+        self._queue_home_log(
             f"Agent handoff deployed ({count} file(s)). Mode: {result.get('agent_handoff_mode', 'unified')}"
-            + (f", cl_runtime={runtime}." if runtime else "."),
+            + (f", cl_runtime={runtime}." if runtime else ".")
         )
         repair = result.get("repair")
         if repair:
-            self._append_log(self.home_log, f"Repaired AGENTS.md — {repair.get('detail', 'updated')}.")
+            self._queue_home_log(f"Repaired AGENTS.md — {repair.get('detail', 'updated')}.")
         rosetta = result.get("rosetta_repair")
         if rosetta:
-            self._append_log(self.home_log, f"  Rosetta navigation: {rosetta.get('detail')}")
+            self._queue_home_log(f"  Rosetta navigation: {rosetta.get('detail')}")
             for rel in rosetta.get("patched") or []:
-                self._append_log(self.home_log, f"    patched: {rel}")
+                self._queue_home_log(f"    patched: {rel}")
         for warning in result.get("warnings", []):
-            self._append_log(self.home_log, f"Warning: {warning}")
+            self._queue_home_log(f"Warning: {warning}")
         for hint in result.get("hints", []):
-            self._append_log(self.home_log, f"Tip: {hint}")
-        self._show_dashboard()
+            self._queue_home_log(f"Tip: {hint}")
+        self._refresh_home_dashboard()
 
     def _on_explore(self) -> None:
         if not self.config.active_project:
@@ -2676,13 +2723,13 @@ class HivePlannerApp:
                     f"{result['target']}"
                 )
             messagebox.showerror("Create failed", detail)
-            if hasattr(self, "home_log"):
-                self._append_log(self.home_log, detail)
-                for warning in result.get("warnings", []):
-                    self._append_log(self.home_log, f"Warning: {warning}")
-                handoff = result.get("handoff") or {}
-                for rel in handoff.get("missing") or []:
-                    self._append_log(self.home_log, f"  missing: {rel}")
+            self._queue_home_log(detail)
+            for warning in result.get("warnings", []):
+                self._queue_home_log(f"Warning: {warning}")
+            handoff = result.get("handoff") or {}
+            for rel in handoff.get("missing") or []:
+                self._queue_home_log(f"  missing: {rel}")
+            self._refresh_home_dashboard()
             return
         self.config = load_config()
         self.config.add_recent_project(Path(result["target"]))
