@@ -476,8 +476,11 @@ class HivePlannerApp:
 
     def _queue_home_log(self, message: str) -> None:
         text = str(message).rstrip()
-        if text:
-            self._pending_home_log.append(text)
+        if not text:
+            return
+        if not hasattr(self, "_pending_home_log") or self._pending_home_log is None:
+            self._pending_home_log = []
+        self._pending_home_log.append(text)
 
     def _refresh_home_dashboard(self) -> None:
         """Rebuild dashboard; queued Output lines are flushed in _build_home_tab."""

@@ -1163,10 +1163,8 @@ def test_deploy_handoff_done_logs_partial_work_when_validation_fails() -> None:
     from hive_planner.launcher.app import HivePlannerApp
 
     app = HivePlannerApp.__new__(HivePlannerApp)
-    app.home_log = type("L", (), {"configure": lambda *a, **k: None})()
-    lines: list[str] = []
-    app._append_log = lambda _w, text: lines.append(text)  # type: ignore[method-assign]
-    app._show_dashboard = lambda: None  # type: ignore[method-assign]
+    app._pending_home_log = []
+    app._refresh_home_dashboard = lambda: None  # type: ignore[method-assign]
 
     app._deploy_handoff_done(
         {
@@ -1179,7 +1177,7 @@ def test_deploy_handoff_done_logs_partial_work_when_validation_fails() -> None:
         }
     )
 
-    joined = "\n".join(lines)
+    joined = "\n".join(app._pending_home_log)
     assert "Partial deploy" in joined
     assert "missing: docs/cl-spec-integration.md" in joined
     assert "template warning" in joined
@@ -1835,10 +1833,8 @@ def test_agents_apply_done_refreshes_dashboard_on_failure(monkeypatch: pytest.Mo
     from hive_planner.launcher.app import HivePlannerApp
 
     app = HivePlannerApp.__new__(HivePlannerApp)
-    app.home_log = object()
     refreshed: list[bool] = []
-    app._append_log = lambda _widget, _line: None
-    app._show_dashboard = lambda: refreshed.append(True)
+    app._refresh_home_dashboard = lambda: refreshed.append(True)  # type: ignore[method-assign]
 
     app._agents_apply_done({"ok": False, "error": "Wiring audit required", "hints": ["Record wiring audit"]})
     assert refreshed == [True]
@@ -1849,10 +1845,8 @@ def test_agents_propose_done_prompts_apply_without_name_error(monkeypatch: pytes
 
     app = HivePlannerApp.__new__(HivePlannerApp)
     app.root = None
-    app.home_log = object()
-    logs: list[str] = []
-    app._append_log = lambda _widget, line: logs.append(line)
-    app._show_dashboard = lambda: None
+    app._pending_home_log = []
+    app._refresh_home_dashboard = lambda: None  # type: ignore[method-assign]
     prompted: list[bool] = []
 
     monkeypatch.setattr(
@@ -1875,7 +1869,7 @@ def test_agents_propose_done_prompts_apply_without_name_error(monkeypatch: pytes
     )
 
     assert prompted == [True]
-    assert not any("NameError" in line for line in logs)
+    assert not any("NameError" in line for line in app._pending_home_log)
 
 
 def test_pending_memory_survives_dashboard_when_linked_via_workspace_file(tmp_path: Path) -> None:
@@ -1918,10 +1912,8 @@ def test_cl_migrate_done_logs_warnings_on_success_path() -> None:
     from hive_planner.launcher.app import HivePlannerApp
 
     app = HivePlannerApp.__new__(HivePlannerApp)
-    app.home_log = object()
-    logs: list[str] = []
-    app._append_log = lambda _widget, line: logs.append(line)
-    app._show_dashboard = lambda: None
+    app._pending_home_log = []
+    app._refresh_home_dashboard = lambda: None  # type: ignore[method-assign]
 
     app._cl_migrate_done(
         {
@@ -1933,9 +1925,9 @@ def test_cl_migrate_done_logs_warnings_on_success_path() -> None:
         }
     )
 
-    assert any(line.startswith("Warning:") for line in logs)
-    assert any("dry run complete" in line for line in logs)
-    assert not any(line == "CL migration complete." for line in logs)
+    assert any(line.startswith("Warning:") for line in app._pending_home_log)
+    assert any("dry run complete" in line for line in app._pending_home_log)
+    assert not any(line == "CL migration complete." for line in app._pending_home_log)
 
 
 def test_auto_complete_onboarding_when_setup_ready(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -2012,9 +2004,8 @@ def test_map_sync_done_formats_success() -> None:
     from hive_planner.launcher.app import HivePlannerApp
 
     app = HivePlannerApp.__new__(HivePlannerApp)
-    app.home_log = type("L", (), {"configure": lambda *a, **k: None})()
-    lines: list[str] = []
-    app._append_log = lambda _w, text: lines.append(text)  # type: ignore[method-assign]
+    app._pending_home_log = []
+    app._refresh_home_dashboard = lambda: None  # type: ignore[method-assign]
     app._map_sync_done(
         {
             "ok": True,
@@ -2024,7 +2015,7 @@ def test_map_sync_done_formats_success() -> None:
             "test_updated": [],
         }
     )
-    assert lines == ["Impact maps synced: 1 added, 1 updated."]
+    assert app._pending_home_log == ["Impact maps synced: 1 added, 1 updated."]
 
 
 def test_stale_scan_callback_cleans_progress_state() -> None:
