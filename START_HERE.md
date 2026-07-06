@@ -45,6 +45,10 @@ Tertiary context must not override primary task truth.
 
 `docs/planning-rosetta-stone.md` is the searchable legend. Use its `HOOK_ID` values to map questions, tasks, and changes to the right concept instead of inferring structure from raw chat or the full planning archive.
 
+To **author or extend** a Rosetta Stone (any agentic system), follow [`docs/planning-rosetta-stone-generation-template.md`](docs/planning-rosetta-stone-generation-template.md).
+
+To **upload to Perplexity / Gemini / ChatGPT** at the start of a planning session, upload [`docs/ROSETTA-PLANNING-SESSION-CONTRACT.md`](docs/ROSETTA-PLANNING-SESSION-CONTRACT.md) (standalone — inline markers + Rosetta output rules).
+
 ## Execution rule
 
 Before editing code:

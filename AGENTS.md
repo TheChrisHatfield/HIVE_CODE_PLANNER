@@ -16,6 +16,8 @@ Before planning or coding, load the Rosetta Stone into normal context:
 
 Follow linked hooks and `PRIMARY FILES` from that document. Do not treat the raw Perplexity export as the only source of truth.
 
+To generate or extend a Rosetta Stone from another agentic system, use [`docs/planning-rosetta-stone-generation-template.md`](docs/planning-rosetta-stone-generation-template.md).
+
 ## Startup read order
 
 See [`START_HERE.md`](START_HERE.md).

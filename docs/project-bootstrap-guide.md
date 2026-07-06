@@ -78,6 +78,7 @@ Hive source maintainers (this repo): see [unified-handoff-upstream-forks.md](./u
 | `START_HERE.md` | Agent loader entrypoint |
 | `AGENTS.md` | Durable operating guidance |
 | `docs/planning-rosetta-stone.md` | Hook legend (project-scoped) |
+| `docs/planning-rosetta-stone-generation-template.md` | Unified template for agents generating the hook map |
 | `docs/delta/` | Holistic, macro, micro briefs |
 | `docs/specs/example-feature/` | Spec Kit starter trio |
 | `docs/change-impact/` | Impact policy + maps |

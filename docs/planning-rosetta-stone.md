@@ -560,6 +560,7 @@ Use this file as the top-level legend for:
 **PRIMARY FILES:**
 
 - [thread-outline-with-metatags.md](./thread-outline-with-metatags.md)
+- [planning-rosetta-stone-generation-template.md](./planning-rosetta-stone-generation-template.md)
 - [planning-rosetta-stone.md](./planning-rosetta-stone.md)
 
 **UNLOCKS:**
@@ -567,6 +568,7 @@ Use this file as the top-level legend for:
 - new hook creation
 - duplicate prevention
 - anchor governance
+- Rosetta generation for other agentic systems
 
 **THREAD COVERAGE:** Meta-tag governance and long-term reuse.
 
