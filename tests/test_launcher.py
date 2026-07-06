@@ -2648,6 +2648,47 @@ def test_bootstrap_and_activate_add_missing_partial(tmp_path: Path, monkeypatch:
     assert (target / "docs" / "planning-rosetta-stone.md").is_file()
 
 
+def test_bootstrap_and_activate_repairs_after_init(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    target = tmp_path / "new-app"
+    target.mkdir()
+    cfg = LauncherConfig(hive_planner_root=str(Path(__file__).resolve().parents[1]))
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app._show_dashboard = lambda: None  # type: ignore[method-assign]
+
+    import hive_planner.launcher.app as app_mod
+
+    repair_calls: list[Path] = []
+
+    monkeypatch.setattr(app_mod, "load_config", lambda: cfg)
+    monkeypatch.setattr(app_mod, "save_config", lambda _cfg: None)
+    monkeypatch.setattr(app_mod.messagebox, "showinfo", lambda *a, **k: None)
+    monkeypatch.setattr(
+        app_mod,
+        "run_project_init",
+        lambda *_a, **_k: {"ok": True, "target": str(target.resolve())},
+    )
+    monkeypatch.setattr(
+        app_mod,
+        "prepare_linked_project_root",
+        lambda p, **kw: repair_calls.append(Path(p)) or (target, None),
+    )
+
+    assert (
+        app._bootstrap_and_activate(
+            target,
+            notify=False,
+            setup_action="create",
+            agent_handoff="unified",
+            cl_runtime="cursor",
+        )
+        is True
+    )
+    assert repair_calls == [target.resolve()]
+
+
 def test_bootstrap_and_activate_passes_cl_runtime(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from hive_planner.launcher.app import HivePlannerApp
 
