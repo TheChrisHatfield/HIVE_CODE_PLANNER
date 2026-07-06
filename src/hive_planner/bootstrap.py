@@ -736,10 +736,8 @@ def init_project(
     written: list[str] = []
     warnings: list[str] = []
 
-    if is_repo_root(target) and not force:
-        raise BootstrapError(f"Target already initialized (START_HERE.md exists): {target}")
-
-    if target.exists() and any(target.iterdir()) and not force:
+    partial_hive = (target / "START_HERE.md").is_file() or (target / "docs" / "planning-rosetta-stone.md").is_file()
+    if target.exists() and any(target.iterdir()) and not force and not partial_hive:
         raise BootstrapError(f"Target not empty: {target} — use --force to scaffold anyway")
 
     target.mkdir(parents=True, exist_ok=True)

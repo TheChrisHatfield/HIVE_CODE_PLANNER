@@ -234,9 +234,11 @@ def test_init_rejects_already_initialized(tmp_path: Path) -> None:
     source = _hive_source(tmp_path)
     target = tmp_path / "already"
     init_project(source, target)
+    original = (target / "START_HERE.md").read_text(encoding="utf-8")
 
-    with pytest.raises(BootstrapError, match="already initialized"):
-        init_project(source, target)
+    result = init_project(source, target)
+    assert (target / "START_HERE.md").read_text(encoding="utf-8") == original
+    assert "START_HERE.md" not in result.files_written
 
 
 def test_init_rejects_file_target(tmp_path: Path) -> None:

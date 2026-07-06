@@ -5,6 +5,11 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, scrolledtext, ttk
 
+from hive_planner.launcher.bootstrap_state import (
+    BootstrapState,
+    LinkBootstrapChoice,
+    summarize_bootstrap_state,
+)
 from hive_planner.launcher.config import LauncherConfig, linked_project_exists, load_config, normalize_project_path, save_config
 from hive_planner.launcher.service import (
     CursorWorkspace,
@@ -2551,39 +2556,47 @@ class HivePlannerApp:
             or target
         )
         self.config = load_config()
+        bootstrap_target = pick_hive_bootstrap_target(hive_folder) or hive_folder
+        state = summarize_bootstrap_state(bootstrap_target)
         already_known = any(
             normalize_project_path(entry) == normalize_project_path(target)
             for entry in self.config.recent_projects
         )
 
-        if not workspace.hive_ready and notify and not already_known:
-            try:
-                empty = hive_folder.is_dir() and not any(hive_folder.iterdir())
-            except OSError:
-                empty = False
-            if empty:
-                if messagebox.askyesno(
-                    "Set up this folder?",
-                    f"Folder is empty:\n{hive_folder}\n\nCreate Hive planning files here now?",
-                ):
-                    return self._bootstrap_and_activate(hive_folder, notify=notify, link_path=target)
+        needs_setup = notify and (
+            state.is_empty
+            or state.needs_handoff_repair
+            or (not state.hive_ready and (state.has_partial_hive or not already_known))
+            or (state.hive_ready and not already_known)
+        )
+        if needs_setup:
+            choice = self._prompt_link_bootstrap_setup(
+                bootstrap_target,
+                state,
+                workspace_label=workspace.name,
+            )
+            if choice is None:
                 return False
-            if workspace.has_cursor_dir or workspace.has_git or workspace.entry_kind == "workspace":
-                label = workspace.name
-                if messagebox.askyesno(
-                    "Add Hive planning files?",
-                    f"Cursor workspace:\n{label}\n\n"
-                    f"Hive files will be added to:\n{hive_folder}\n\n"
-                    "Health checks and handoff tools need START_HERE.md.\n\n"
-                    "Add them now?",
-                ):
-                    return self._bootstrap_and_activate(hive_folder, notify=notify, link_path=target)
-            elif not messagebox.askyesno(
-                "Link this folder?",
-                f"Link workspace:\n{hive_folder}\n\n"
-                "This folder is not a Cursor or Hive project yet. Link it anyway?",
-            ):
-                return False
+            if choice.action == "link_only":
+                self.config.add_recent_project(target)
+                save_config(self.config)
+                _, repair = prepare_linked_project_root(target, repair_agents=True)
+                if notify:
+                    messagebox.showinfo(
+                        "Workspace linked",
+                        f"{workspace.name}\n\nLinked without changing Hive planning files.",
+                    )
+                self._show_dashboard()
+                return True
+            return self._bootstrap_and_activate(
+                bootstrap_target,
+                notify=notify,
+                link_path=target,
+                profile=choice.profile,
+                agent_handoff=choice.agent_handoff,
+                cl_runtime=choice.cl_runtime,
+                setup_action=choice.action,
+            )
 
         self.config.add_recent_project(target)
         save_config(self.config)
@@ -2611,6 +2624,229 @@ class HivePlannerApp:
     def _on_link_workspace(self) -> None:
         self._show_workspace_picker()
 
+    def _prompt_link_bootstrap_setup(
+        self,
+        bootstrap_target: Path,
+        state: BootstrapState,
+        *,
+        workspace_label: str,
+    ) -> LinkBootstrapChoice | None:
+        from hive_planner.agent_handoff import normalize_agent_handoff_mode
+        from hive_planner.cl_runtime import resolve_cl_runtime
+
+        cfg = load_config()
+        dialog = tk.Toplevel(self.root)
+        if state.hive_ready and state.needs_handoff_repair:
+            dialog.title("Repair Hive handoff")
+        elif state.hive_ready:
+            dialog.title("Hive project found")
+        elif state.is_empty:
+            dialog.title("Set up this folder?")
+        else:
+            dialog.title("Add Hive planning files?")
+        dialog.configure(bg=COLORS["bg"])
+        dialog.transient(self.root)
+        dialog.grab_set()
+        dialog.resizable(False, False)
+        dialog.geometry("560x520")
+
+        profile_var = tk.StringVar(value=cfg.default_profile)
+        handoff_var = tk.StringVar(value=cfg.default_agent_handoff)
+        try:
+            default_runtime = resolve_cl_runtime(bootstrap_target)
+        except OSError:
+            default_runtime = "cursor"
+        cl_runtime_var = tk.StringVar(value=default_runtime)
+
+        if state.hive_ready and state.needs_handoff_repair and not state.has_partial_hive:
+            default_action = "add_missing"
+        elif state.has_existing_hive_files and state.allows_add_missing:
+            default_action = "add_missing"
+        elif state.has_existing_hive_files:
+            default_action = "link_only"
+        elif state.is_empty:
+            default_action = "create"
+        else:
+            default_action = "add_missing"
+        action_var = tk.StringVar(value=default_action)
+
+        result: list[LinkBootstrapChoice | None] = [None]
+
+        tk.Label(
+            dialog,
+            text=workspace_label,
+            font=FONT_TITLE,
+            bg=COLORS["bg"],
+            fg=COLORS["fg"],
+        ).pack(anchor="w", padx=16, pady=(16, 4))
+        tk.Label(
+            dialog,
+            text=f"Hive files target:\n{bootstrap_target}",
+            justify="left",
+            wraplength=520,
+            bg=COLORS["bg"],
+            fg=COLORS["muted"],
+            font=FONT,
+        ).pack(anchor="w", padx=16, pady=(0, 8))
+
+        if state.hive_ready and state.needs_handoff_repair:
+            missing_preview = ", ".join(state.handoff_missing[:4])
+            if len(state.handoff_missing) > 4:
+                missing_preview += f", +{len(state.handoff_missing) - 4} more"
+            tk.Label(
+                dialog,
+                text=f"Unified handoff incomplete — missing: {missing_preview}",
+                justify="left",
+                wraplength=520,
+                bg=COLORS["bg"],
+                fg=COLORS["muted"],
+                font=FONT,
+            ).pack(anchor="w", padx=16, pady=(0, 8))
+
+        body = tk.Frame(dialog, bg=COLORS["bg"])
+        body.pack(fill="both", expand=True, padx=16)
+
+        profile_row = tk.Frame(body, bg=COLORS["bg"])
+        profile_row.pack(fill="x", pady=4)
+        tk.Label(profile_row, text="Profile", width=14, anchor="w", bg=COLORS["bg"], fg=COLORS["fg"], font=FONT).pack(
+            side="left"
+        )
+        ttk.Combobox(
+            profile_row,
+            textvariable=profile_var,
+            values=["full", "minimal"],
+            state="readonly",
+            width=30,
+        ).pack(side="left", fill="x", expand=True)
+
+        handoff_row = tk.Frame(body, bg=COLORS["bg"])
+        handoff_row.pack(fill="x", pady=4)
+        tk.Label(
+            handoff_row,
+            text="Agent handoff",
+            width=14,
+            anchor="w",
+            bg=COLORS["bg"],
+            fg=COLORS["fg"],
+            font=FONT,
+        ).pack(side="left")
+        ttk.Combobox(
+            handoff_row,
+            textvariable=handoff_var,
+            values=["unified", "off"],
+            state="readonly",
+            width=30,
+        ).pack(side="left", fill="x", expand=True)
+
+        cl_row = tk.Frame(body, bg=COLORS["bg"])
+        cl_row.pack(fill="x", pady=4)
+        tk.Label(cl_row, text="CL runtime", width=14, anchor="w", bg=COLORS["bg"], fg=COLORS["fg"], font=FONT).pack(
+            side="left"
+        )
+        ttk.Combobox(
+            cl_row,
+            textvariable=cl_runtime_var,
+            values=["cursor", "headless"],
+            state="readonly",
+            width=30,
+        ).pack(side="left", fill="x", expand=True)
+
+        if state.has_existing_hive_files:
+            tk.Label(
+                body,
+                text="Existing Hive files detected:",
+                bg=COLORS["bg"],
+                fg=COLORS["fg"],
+                font=FONT_BOLD,
+            ).pack(anchor="w", pady=(12, 4))
+            for value, label in (
+                ("link_only", "Link only — add workspace to list without changing files"),
+                (
+                    "add_missing",
+                    "Add missing files only — keep existing Hive files; fill gaps",
+                ),
+                (
+                    "overwrite",
+                    "Overwrite bootstrap files — replace START_HERE, AGENTS, rosetta, and profile metadata",
+                ),
+            ):
+                if value == "add_missing" and not state.allows_add_missing:
+                    continue
+                tk.Radiobutton(
+                    body,
+                    text=label,
+                    variable=action_var,
+                    value=value,
+                    bg=COLORS["bg"],
+                    fg=COLORS["fg"],
+                    activebackground=COLORS["bg"],
+                    activeforeground=COLORS["fg"],
+                    selectcolor=COLORS["card"],
+                    anchor="w",
+                    justify="left",
+                    font=FONT,
+                    wraplength=500,
+                ).pack(anchor="w", pady=2)
+            if action_var.get() == "add_missing" and not state.allows_add_missing:
+                action_var.set("link_only")
+        else:
+            tk.Label(
+                body,
+                text="Setup choice:",
+                bg=COLORS["bg"],
+                fg=COLORS["fg"],
+                font=FONT_BOLD,
+            ).pack(anchor="w", pady=(12, 4))
+            for value, label in (
+                ("create", "Create Hive planning files in this folder"),
+                ("link_only", "Link without Hive files — add workspace to list only"),
+            ):
+                tk.Radiobutton(
+                    body,
+                    text=label,
+                    variable=action_var,
+                    value=value,
+                    bg=COLORS["bg"],
+                    fg=COLORS["fg"],
+                    activebackground=COLORS["bg"],
+                    activeforeground=COLORS["fg"],
+                    selectcolor=COLORS["card"],
+                    anchor="w",
+                    justify="left",
+                    font=FONT,
+                    wraplength=500,
+                ).pack(anchor="w", pady=2)
+
+        actions = tk.Frame(dialog, bg=COLORS["bg"])
+        actions.pack(fill="x", padx=16, pady=(8, 16))
+
+        def _confirm() -> None:
+            action = action_var.get()
+            if action == "overwrite" and not messagebox.askyesno(
+                "Overwrite Hive files?",
+                "This will overwrite core bootstrap files (START_HERE.md, AGENTS.md, "
+                "docs/planning-rosetta-stone.md, and profile metadata).\n\n"
+                "Other project files are kept. Continue?",
+            ):
+                return
+            result[0] = LinkBootstrapChoice(
+                action=action,  # type: ignore[arg-type]
+                profile=profile_var.get().strip() or cfg.default_profile,
+                agent_handoff=normalize_agent_handoff_mode(handoff_var.get(), default=cfg.default_agent_handoff),
+                cl_runtime=cl_runtime_var.get().strip() or "cursor",
+            )
+            dialog.destroy()
+
+        def _cancel() -> None:
+            result[0] = None
+            dialog.destroy()
+
+        primary_button(actions, "Continue", _confirm)
+        secondary_button(actions, "Cancel", _cancel)
+        dialog.protocol("WM_DELETE_WINDOW", _cancel)
+        dialog.wait_window()
+        return result[0]
+
     def _bootstrap_and_activate(
         self,
         path: Path,
@@ -2618,42 +2854,77 @@ class HivePlannerApp:
         notify: bool = True,
         force: bool = False,
         link_path: Path | None = None,
+        profile: str | None = None,
+        agent_handoff: str | None = None,
+        cl_runtime: str | None = None,
+        setup_action: str | None = None,
     ) -> bool:
+        from hive_planner.agent_handoff import AGENT_HANDOFF_UNIFIED, normalize_agent_handoff_mode
+
         cfg = load_config()
         bootstrap_target = pick_hive_bootstrap_target(path) or path
-        try:
-            non_empty = bootstrap_target.is_dir() and any(bootstrap_target.iterdir())
-        except OSError:
-            non_empty = False
-        if non_empty and not force and (bootstrap_target / "START_HERE.md").is_file():
-            messagebox.showinfo(
-                "Already a Hive project",
-                f"Hive planning files already exist in:\n{bootstrap_target}",
+        state = summarize_bootstrap_state(bootstrap_target)
+        resolved_profile = (profile or cfg.default_profile).strip() or cfg.default_profile
+        resolved_handoff = normalize_agent_handoff_mode(
+            agent_handoff or cfg.default_agent_handoff,
+            default=cfg.default_agent_handoff,
+        )
+        resolved_cl_runtime = (cl_runtime or "cursor").strip() or "cursor"
+
+        action = setup_action
+        if action is None and state.has_existing_hive_files:
+            choice = self._prompt_link_bootstrap_setup(
+                bootstrap_target,
+                state,
+                workspace_label=bootstrap_target.name,
             )
+            if choice is None:
+                return False
+            action = choice.action
+            resolved_profile = choice.profile
+            resolved_handoff = choice.agent_handoff
+            resolved_cl_runtime = choice.cl_runtime
+
+        if action == "link_only":
             self.config = load_config()
             self.config.add_recent_project(link_path or path)
             save_config(self.config)
             self._show_dashboard()
             return True
-        if non_empty and not force:
-            if not messagebox.askyesno(
-                "Add to existing folder?",
-                f"Add Hive planning files to:\n{bootstrap_target}\n\n"
-                "Existing project files will be kept. Only missing Hive files are added.",
-            ):
-                return False
-            force = True
+
+        init_force = force
+        if action == "overwrite":
+            init_force = True
+        elif action == "add_missing":
+            init_force = False
+        elif action == "create":
+            init_force = not state.is_empty and not state.has_partial_hive
+        elif state.has_existing_hive_files and not init_force:
+            init_force = False
+
         result = run_project_init(
             cfg,
             target=bootstrap_target,
             name=bootstrap_target.name,
-            profile=cfg.default_profile,
+            profile=resolved_profile,
             git_init=False,
-            force=force,
-            agent_handoff=cfg.default_agent_handoff,
+            force=init_force,
+            agent_handoff=resolved_handoff,
+            cl_runtime=resolved_cl_runtime if resolved_handoff == AGENT_HANDOFF_UNIFIED else None,
         )
         if not result.get("ok"):
-            messagebox.showerror("Setup failed", result.get("error", "Could not create Hive project."))
+            detail = result.get("error", "Could not create Hive project.")
+            if result.get("files_written"):
+                detail = (
+                    f"{detail}\n\nPartial bootstrap — {len(result['files_written'])} file(s) written to:\n"
+                    f"{result.get('target', bootstrap_target)}"
+                )
+            messagebox.showerror("Setup failed", detail)
+            if result.get("files_written"):
+                self.config = load_config()
+                self.config.add_recent_project(link_path or path)
+                save_config(self.config)
+                self._show_dashboard()
             return False
         self.config = load_config()
         self.config.add_recent_project(link_path or path)
@@ -2662,7 +2933,7 @@ class HivePlannerApp:
             messagebox.showinfo(
                 "Hive project ready",
                 f"Created planning files in:\n{bootstrap_target}\n\n"
-                f"Profile: {cfg.default_profile}\nHandoff: {cfg.default_agent_handoff}",
+                f"Profile: {resolved_profile}\nHandoff: {resolved_handoff}",
             )
         self._show_dashboard()
         return True

@@ -2513,6 +2513,332 @@ def test_bootstrap_and_activate_scaffolds_empty_folder(tmp_path: Path, monkeypat
     assert (target / "AGENTS.md").is_file()
 
 
+def test_summarize_bootstrap_state_empty(tmp_path: Path) -> None:
+    from hive_planner.launcher.bootstrap_state import summarize_bootstrap_state
+
+    target = tmp_path / "empty"
+    target.mkdir()
+    state = summarize_bootstrap_state(target)
+    assert state.is_empty is True
+    assert state.has_start_here is False
+    assert state.has_rosetta is False
+    assert state.hive_ready is False
+    assert state.handoff_missing == []
+    assert state.allows_add_missing is False
+
+
+def test_summarize_bootstrap_state_hive_ready(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from hive_planner.agent_handoff import AgentHandoffStatus
+    from hive_planner.launcher.bootstrap_state import summarize_bootstrap_state
+
+    target = tmp_path / "ready"
+    target.mkdir()
+    (target / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    (target / "docs").mkdir()
+    (target / "docs" / "planning-rosetta-stone.md").write_text("# rosetta\n", encoding="utf-8")
+    monkeypatch.setattr(
+        "hive_planner.launcher.bootstrap_state.validate_unified_handoff",
+        lambda _root: AgentHandoffStatus(
+            mode="unified",
+            spec_kit_enabled=True,
+            continual_learning_enabled=True,
+            complete=True,
+            missing=[],
+        ),
+    )
+    state = summarize_bootstrap_state(target)
+    assert state.hive_ready is True
+    assert state.has_partial_hive is True
+    assert state.needs_handoff_repair is False
+
+
+def test_summarize_bootstrap_state_partial_and_missing_handoff(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from hive_planner.agent_handoff import AgentHandoffStatus
+    from hive_planner.launcher.bootstrap_state import summarize_bootstrap_state
+
+    target = tmp_path / "partial"
+    target.mkdir()
+    (target / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    monkeypatch.setattr(
+        "hive_planner.launcher.bootstrap_state.validate_unified_handoff",
+        lambda _root: AgentHandoffStatus(
+            mode="unified",
+            spec_kit_enabled=True,
+            continual_learning_enabled=True,
+            complete=False,
+            missing=["docs/cl-spec-integration.md"],
+        ),
+    )
+    state = summarize_bootstrap_state(target)
+    assert state.hive_ready is False
+    assert state.has_start_here is True
+    assert state.allows_add_missing is True
+    assert state.handoff_missing == ["docs/cl-spec-integration.md"]
+
+
+def test_bootstrap_and_activate_link_only_skips_init(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    target = tmp_path / "existing"
+    target.mkdir()
+    (target / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    cfg = LauncherConfig(hive_planner_root=str(Path(__file__).resolve().parents[1]))
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app._show_dashboard = lambda: None  # type: ignore[method-assign]
+
+    import hive_planner.launcher.app as app_mod
+
+    init_calls: list[dict] = []
+
+    def fake_init(*_args, **kwargs):
+        init_calls.append(kwargs)
+        return {"ok": True}
+
+    saved: list[LauncherConfig] = []
+
+    monkeypatch.setattr(app_mod, "load_config", lambda: cfg)
+    monkeypatch.setattr(app_mod, "save_config", lambda c: saved.append(c))
+    monkeypatch.setattr(app_mod, "run_project_init", fake_init)
+
+    assert app._bootstrap_and_activate(target, notify=False, setup_action="link_only") is True
+    assert init_calls == []
+    assert saved[-1].recent_projects == [str(target.resolve())]
+
+
+def test_bootstrap_and_activate_add_missing_partial(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    hive_root = Path(__file__).resolve().parents[1]
+    target = tmp_path / "partial"
+    target.mkdir()
+    (target / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    cfg = LauncherConfig(hive_planner_root=str(hive_root), default_profile="minimal", default_agent_handoff="unified")
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app._show_dashboard = lambda: None  # type: ignore[method-assign]
+
+    import hive_planner.launcher.app as app_mod
+
+    monkeypatch.setattr(app_mod, "load_config", lambda: cfg)
+    monkeypatch.setattr(app_mod, "save_config", lambda _cfg: None)
+    monkeypatch.setattr(app_mod.messagebox, "showinfo", lambda *a, **k: None)
+
+    with patch("hive_planner.bootstrap.subprocess.run"):
+        assert (
+            app._bootstrap_and_activate(
+                target,
+                notify=False,
+                setup_action="add_missing",
+                agent_handoff="unified",
+                cl_runtime="cursor",
+            )
+            is True
+        )
+    assert (target / "docs" / "planning-rosetta-stone.md").is_file()
+
+
+def test_bootstrap_and_activate_passes_cl_runtime(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    target = tmp_path / "new-app"
+    target.mkdir()
+    cfg = LauncherConfig(hive_planner_root=str(Path(__file__).resolve().parents[1]))
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app._show_dashboard = lambda: None  # type: ignore[method-assign]
+
+    import hive_planner.launcher.app as app_mod
+
+    captured: list[dict] = []
+
+    def fake_init(_cfg, **kwargs):
+        captured.append(kwargs)
+        return {"ok": True, "target": str(target)}
+
+    monkeypatch.setattr(app_mod, "load_config", lambda: cfg)
+    monkeypatch.setattr(app_mod, "save_config", lambda _cfg: None)
+    monkeypatch.setattr(app_mod.messagebox, "showinfo", lambda *a, **k: None)
+    monkeypatch.setattr(app_mod, "run_project_init", fake_init)
+
+    app._bootstrap_and_activate(
+        target,
+        notify=False,
+        setup_action="create",
+        agent_handoff="unified",
+        cl_runtime="headless",
+    )
+    assert captured[0]["cl_runtime"] == "headless"
+    assert captured[0]["agent_handoff"] == "unified"
+
+
+def test_link_workspace_offers_setup_when_relinking_incomplete(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+    from hive_planner.launcher.bootstrap_state import LinkBootstrapChoice
+
+    project = tmp_path / "repo"
+    project.mkdir()
+    (project / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    resolved = str(project.resolve())
+    cfg = LauncherConfig(recent_projects=[resolved], hive_planner_root=str(Path(__file__).resolve().parents[1]))
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.config = cfg
+    app._show_dashboard = lambda: None  # type: ignore[method-assign]
+    app.root = type("R", (), {})()
+
+    import hive_planner.launcher.app as app_mod
+
+    prompted: list[Path] = []
+
+    def fake_prompt(target, state, *, workspace_label):
+        prompted.append(target)
+        return LinkBootstrapChoice(
+            action="add_missing",
+            profile="minimal",
+            agent_handoff="unified",
+            cl_runtime="cursor",
+        )
+
+    bootstrap_calls: list[dict] = []
+
+    def fake_bootstrap(path, **kwargs):
+        bootstrap_calls.append({"path": path, **kwargs})
+        return True
+
+    monkeypatch.setattr(app_mod, "load_config", lambda: cfg)
+    monkeypatch.setattr(app_mod, "save_config", lambda _cfg: None)
+    monkeypatch.setattr(app_mod.messagebox, "showinfo", lambda *a, **k: None)
+    app._prompt_link_bootstrap_setup = fake_prompt  # type: ignore[method-assign]
+    app._bootstrap_and_activate = fake_bootstrap  # type: ignore[method-assign]
+
+    assert app._link_workspace(project, notify=True) is True
+    assert prompted == [project.resolve()]
+    assert bootstrap_calls
+    assert bootstrap_calls[0]["setup_action"] == "add_missing"
+
+
+def test_link_workspace_offers_setup_when_hive_ready(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+    from hive_planner.launcher.bootstrap_state import LinkBootstrapChoice
+
+    project = tmp_path / "ready"
+    project.mkdir()
+    (project / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    (project / "docs").mkdir()
+    (project / "docs" / "planning-rosetta-stone.md").write_text("# rosetta\n", encoding="utf-8")
+    cfg = LauncherConfig(hive_planner_root=str(Path(__file__).resolve().parents[1]))
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.config = cfg
+    app._show_dashboard = lambda: None  # type: ignore[method-assign]
+    app.root = type("R", (), {})()
+
+    import hive_planner.launcher.app as app_mod
+
+    prompted: list[tuple[Path, BootstrapState]] = []
+
+    def fake_prompt(target, state, *, workspace_label):
+        prompted.append((target, state))
+        return LinkBootstrapChoice(
+            action="link_only",
+            profile="minimal",
+            agent_handoff="unified",
+            cl_runtime="cursor",
+        )
+
+    monkeypatch.setattr(app_mod, "load_config", lambda: cfg)
+    monkeypatch.setattr(app_mod, "save_config", lambda _cfg: None)
+    monkeypatch.setattr(app_mod, "prepare_linked_project_root", lambda *_a, **_k: (project, None))
+    monkeypatch.setattr(app_mod.messagebox, "showinfo", lambda *a, **k: None)
+    app._prompt_link_bootstrap_setup = fake_prompt  # type: ignore[method-assign]
+
+    assert app._link_workspace(project, notify=True) is True
+    assert len(prompted) == 1
+    assert prompted[0][1].hive_ready is True
+    assert prompted[0][1].needs_handoff_repair is False
+
+
+def test_link_workspace_skips_setup_when_already_known(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    project = tmp_path / "ready"
+    project.mkdir()
+    (project / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    (project / "docs").mkdir()
+    (project / "docs" / "planning-rosetta-stone.md").write_text("# rosetta\n", encoding="utf-8")
+    resolved = str(project.resolve())
+    cfg = LauncherConfig(recent_projects=[resolved], hive_planner_root=str(Path(__file__).resolve().parents[1]))
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.config = cfg
+    app._show_dashboard = lambda: None  # type: ignore[method-assign]
+    app.root = type("R", (), {})()
+
+    import hive_planner.launcher.app as app_mod
+
+    prompted = False
+
+    def fake_prompt(*_args, **_kwargs):
+        nonlocal prompted
+        prompted = True
+        return None
+
+    monkeypatch.setattr(app_mod, "load_config", lambda: cfg)
+    monkeypatch.setattr(app_mod, "save_config", lambda _cfg: None)
+    monkeypatch.setattr(app_mod, "prepare_linked_project_root", lambda *_a, **_k: (project, None))
+    monkeypatch.setattr(app_mod.messagebox, "showinfo", lambda *a, **k: None)
+    app._prompt_link_bootstrap_setup = fake_prompt  # type: ignore[method-assign]
+
+    assert app._link_workspace(project, notify=True) is True
+    assert prompted is False
+
+
+def test_bootstrap_and_activate_add_missing_handoff_only(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    hive_root = Path(__file__).resolve().parents[1]
+    target = tmp_path / "handoff-gap"
+    target.mkdir()
+    (target / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    (target / "docs").mkdir()
+    (target / "docs" / "planning-rosetta-stone.md").write_text("# rosetta\n", encoding="utf-8")
+    cfg = LauncherConfig(hive_planner_root=str(hive_root), default_profile="minimal", default_agent_handoff="unified")
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app._show_dashboard = lambda: None  # type: ignore[method-assign]
+
+    import hive_planner.launcher.app as app_mod
+
+    monkeypatch.setattr(app_mod, "load_config", lambda: cfg)
+    monkeypatch.setattr(app_mod, "save_config", lambda _cfg: None)
+    monkeypatch.setattr(app_mod.messagebox, "showinfo", lambda *a, **k: None)
+
+    with patch("hive_planner.bootstrap.subprocess.run"):
+        assert (
+            app._bootstrap_and_activate(
+                target,
+                notify=False,
+                setup_action="add_missing",
+                agent_handoff="unified",
+                cl_runtime="cursor",
+            )
+            is True
+        )
+    assert (target / "spec-kit-agent-integration.md").is_file()
+    assert (target / "AGENTS.md").is_file()
+
+
 def test_load_config_normalizes_project_paths(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     project = tmp_path / "my-app"
     project.mkdir()
