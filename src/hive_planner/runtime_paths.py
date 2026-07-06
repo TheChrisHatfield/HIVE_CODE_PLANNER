@@ -9,6 +9,7 @@ from pathlib import Path
 FROZEN_CLI_FLAG = "--hive-cli"
 
 _GUI_ONLY_ARGS = frozenset({"--console"})
+_CLI_DISPATCH_FLAGS = frozenset({"-h", "--help", "--root"})
 
 
 def is_frozen() -> bool:
@@ -88,7 +89,7 @@ def is_cli_invocation(argv: list[str] | None = None) -> bool:
     if first == FROZEN_CLI_FLAG:
         return True
     if first.startswith("-"):
-        return first in {"-h", "--help"}
+        return first in _CLI_DISPATCH_FLAGS
     return True
 
 

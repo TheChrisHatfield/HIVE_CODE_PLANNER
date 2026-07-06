@@ -41,6 +41,11 @@ def test_is_cli_invocation_detects_subcommands() -> None:
     assert is_cli_invocation(["HivePlanner.exe", FROZEN_CLI_FLAG]) is True
 
 
+def test_is_cli_invocation_treats_global_root_flag_as_cli() -> None:
+    assert is_cli_invocation(["HivePlanner.exe", "--root", ".", "ci-check"]) is True
+    assert is_cli_invocation(["HivePlanner.exe", "--root", "."]) is True
+
+
 def test_strip_cli_dispatch_argv_bare_flag_shows_help() -> None:
     assert strip_cli_dispatch_argv(["HivePlanner.exe", FROZEN_CLI_FLAG]) == [
         "HivePlanner.exe",
