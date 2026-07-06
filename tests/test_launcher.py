@@ -1205,6 +1205,51 @@ def test_create_done_repairs_agents_after_success(tmp_path: Path, monkeypatch: p
     assert repair_calls == [target.resolve()]
 
 
+def test_bootstrap_and_activate_repairs_after_partial_init(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    target = tmp_path / "partial-init"
+    target.mkdir()
+    cfg = LauncherConfig(hive_planner_root=str(Path(__file__).resolve().parents[1]))
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app._show_dashboard = lambda: None  # type: ignore[method-assign]
+
+    import hive_planner.launcher.app as app_mod
+
+    repair_calls: list[Path] = []
+
+    monkeypatch.setattr(app_mod, "load_config", lambda: cfg)
+    monkeypatch.setattr(app_mod, "save_config", lambda _cfg: None)
+    monkeypatch.setattr(app_mod.messagebox, "showerror", lambda *a, **k: None)
+    monkeypatch.setattr(
+        app_mod,
+        "run_project_init",
+        lambda *_a, **_k: {
+            "ok": False,
+            "error": "Unified handoff incomplete",
+            "target": str(target.resolve()),
+            "files_written": ["START_HERE.md"],
+        },
+    )
+    monkeypatch.setattr(
+        app_mod,
+        "prepare_linked_project_root",
+        lambda p, **kw: repair_calls.append(Path(p)) or (target, None),
+    )
+
+    assert (
+        app._bootstrap_and_activate(
+            target,
+            notify=False,
+            setup_action="create",
+            agent_handoff="unified",
+        )
+        is False
+    )
+    assert repair_calls == [target.resolve()]
+
+
 def test_create_done_shows_partial_bootstrap_when_handoff_incomplete() -> None:
     from hive_planner.launcher.app import HivePlannerApp
 
@@ -1241,6 +1286,37 @@ def test_create_done_shows_partial_bootstrap_when_handoff_incomplete() -> None:
     joined = "\n".join(app._pending_home_log)
     assert "missing: docs/cl-spec-integration.md" in joined
     assert "template warning" in joined
+
+
+def test_create_done_repairs_after_partial_bootstrap(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    target = tmp_path / "partial"
+    target.mkdir()
+    repair_calls: list[Path] = []
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app._pending_home_log = []
+    app._refresh_home_dashboard = lambda: None  # type: ignore[method-assign]
+
+    import hive_planner.launcher.app as app_mod
+
+    monkeypatch.setattr(
+        app_mod,
+        "prepare_linked_project_root",
+        lambda p, **kw: repair_calls.append(Path(p)) or (target, None),
+    )
+    monkeypatch.setattr(app_mod.messagebox, "showerror", lambda *a, **k: None)
+
+    app._create_done(
+        {
+            "ok": False,
+            "error": "Unified handoff incomplete",
+            "target": str(target.resolve()),
+            "files_written": ["START_HERE.md"],
+        }
+    )
+    assert repair_calls == [target.resolve()]
 
 
 def test_run_cartridge_import_invalid_feature_promote_reports_error(tmp_path: Path) -> None:

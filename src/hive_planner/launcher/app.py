@@ -2922,6 +2922,7 @@ class HivePlannerApp:
                 self.config = load_config()
                 self.config.add_recent_project(link_path or path)
                 save_config(self.config)
+                prepare_linked_project_root(link_path or path, repair_agents=True)
                 self._show_dashboard()
             return False
         self.config = load_config()
@@ -3002,6 +3003,8 @@ class HivePlannerApp:
             handoff = result.get("handoff") or {}
             for rel in handoff.get("missing") or []:
                 self._queue_home_log(f"  missing: {rel}")
+            if result.get("target") and result.get("files_written"):
+                prepare_linked_project_root(Path(result["target"]), repair_agents=True)
             self._refresh_home_dashboard()
             return
         self.config = load_config()
