@@ -471,7 +471,7 @@ class HivePlannerApp:
                 message = "Background task finished after dashboard refresh."
         else:
             message = f"Background task finished after dashboard refresh: {result}"
-        self._pending_home_log.append(message)
+        self._queue_home_log(message)
 
     def _flush_pending_home_log(self) -> None:
         if not self._pending_home_log or not hasattr(self, "home_log"):

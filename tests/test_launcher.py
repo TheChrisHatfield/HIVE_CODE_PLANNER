@@ -3656,6 +3656,14 @@ def test_note_stale_bg_result_preserves_cartridge_details() -> None:
     assert "dashboard refresh" in joined
 
 
+def test_note_stale_bg_result_lazy_inits_pending_log() -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app._note_stale_bg_result({"ok": False, "error": "late finish"})
+    assert app._pending_home_log == ["Background task finished after dashboard refresh: late finish"]
+
+
 def test_load_config_reads_default_agent_handoff(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from hive_planner.launcher.config import config_path, load_config, save_config
 
