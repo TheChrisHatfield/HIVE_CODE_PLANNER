@@ -900,9 +900,8 @@ def test_cartridge_load_done_does_not_log_success_after_emit_failure() -> None:
     from hive_planner.launcher.app import HivePlannerApp
 
     app = HivePlannerApp.__new__(HivePlannerApp)
-    app.home_log = type("L", (), {"configure": lambda *a, **k: None})()
-    lines: list[str] = []
-    app._append_log = lambda _w, text: lines.append(text)  # type: ignore[method-assign]
+    app._pending_home_log = []
+    app._refresh_home_dashboard = lambda: None  # type: ignore[method-assign]
     app._log_cartridge_promote = lambda _promote: None  # type: ignore[method-assign]
 
     app._cartridge_load_done(
@@ -916,7 +915,7 @@ def test_cartridge_load_done_does_not_log_success_after_emit_failure() -> None:
         }
     )
 
-    joined = "\n".join(lines)
+    joined = "\n".join(app._pending_home_log)
     assert "emit failed" in joined
     assert "Cartridge sources loaded" not in joined
     assert "Cartridge load incomplete" in joined
@@ -926,10 +925,9 @@ def test_cartridge_load_done_warns_on_promote_failure_in_error_path() -> None:
     from hive_planner.launcher.app import HivePlannerApp
 
     app = HivePlannerApp.__new__(HivePlannerApp)
-    app.home_log = type("L", (), {"configure": lambda *a, **k: None})()
-    lines: list[str] = []
-    app._append_log = lambda _w, text: lines.append(text)  # type: ignore[method-assign]
-    app._log_cartridge_promote = lambda _promote: lines.append("PROMOTE_LOG")  # type: ignore[method-assign]
+    app._pending_home_log = []
+    app._refresh_home_dashboard = lambda: None  # type: ignore[method-assign]
+    app._log_cartridge_promote = lambda _promote: app._pending_home_log.append("PROMOTE_LOG")  # type: ignore[method-assign]
 
     app._cartridge_load_done(
         {
@@ -941,7 +939,7 @@ def test_cartridge_load_done_warns_on_promote_failure_in_error_path() -> None:
         }
     )
 
-    joined = "\n".join(lines)
+    joined = "\n".join(app._pending_home_log)
     assert "PROMOTE_LOG" in joined
     assert "promotion/handoff needs review" in joined
 
@@ -950,10 +948,9 @@ def test_cartridge_load_done_warns_when_promote_fails_on_success() -> None:
     from hive_planner.launcher.app import HivePlannerApp
 
     app = HivePlannerApp.__new__(HivePlannerApp)
-    app.home_log = type("L", (), {"configure": lambda *a, **k: None})()
-    lines: list[str] = []
-    app._append_log = lambda _w, text: lines.append(text)  # type: ignore[method-assign]
-    app._log_cartridge_promote = lambda _promote: lines.append("PROMOTE_LOG")  # type: ignore[method-assign]
+    app._pending_home_log = []
+    app._refresh_home_dashboard = lambda: None  # type: ignore[method-assign]
+    app._log_cartridge_promote = lambda _promote: app._pending_home_log.append("PROMOTE_LOG")  # type: ignore[method-assign]
 
     app._cartridge_load_done(
         {
@@ -964,7 +961,7 @@ def test_cartridge_load_done_warns_when_promote_fails_on_success() -> None:
         }
     )
 
-    joined = "\n".join(lines)
+    joined = "\n".join(app._pending_home_log)
     assert "Imported 1 cartridge file(s)." in joined
     assert "PROMOTE_LOG" in joined
     assert "promotion/handoff needs review" in joined
@@ -974,9 +971,7 @@ def test_log_cartridge_promote_omits_startup_when_nothing_promoted() -> None:
     from hive_planner.launcher.app import HivePlannerApp
 
     app = HivePlannerApp.__new__(HivePlannerApp)
-    app.home_log = type("L", (), {"configure": lambda *a, **k: None})()
-    lines: list[str] = []
-    app._append_log = lambda _w, text: lines.append(text)  # type: ignore[method-assign]
+    app._pending_home_log = []
 
     app._log_cartridge_promote(
         {
@@ -986,7 +981,7 @@ def test_log_cartridge_promote_omits_startup_when_nothing_promoted() -> None:
         }
     )
 
-    joined = "\n".join(lines)
+    joined = "\n".join(app._pending_home_log)
     assert "Agent startup" not in joined
 
 
@@ -994,9 +989,7 @@ def test_log_cartridge_promote_includes_startup_when_layers_written() -> None:
     from hive_planner.launcher.app import HivePlannerApp
 
     app = HivePlannerApp.__new__(HivePlannerApp)
-    app.home_log = type("L", (), {"configure": lambda *a, **k: None})()
-    lines: list[str] = []
-    app._append_log = lambda _w, text: lines.append(text)  # type: ignore[method-assign]
+    app._pending_home_log = []
 
     app._log_cartridge_promote(
         {
@@ -1006,7 +999,7 @@ def test_log_cartridge_promote_includes_startup_when_layers_written() -> None:
         }
     )
 
-    joined = "\n".join(lines)
+    joined = "\n".join(app._pending_home_log)
     assert "Agent startup: load docs/planning-rosetta-stone.md" in joined
 
 
@@ -3534,9 +3527,30 @@ def test_note_stale_bg_result_queues_home_log_message() -> None:
     app = HivePlannerApp.__new__(HivePlannerApp)
     app._pending_home_log = []
     app._note_stale_bg_result({"ok": False, "mode": "import", "error": "emit failed"})
-    assert len(app._pending_home_log) == 1
-    assert "emit failed" in app._pending_home_log[0]
-    assert "dashboard refresh" in app._pending_home_log[0]
+    joined = "\n".join(app._pending_home_log)
+    assert "emit failed" in joined
+    assert "dashboard refresh" in joined
+
+
+def test_note_stale_bg_result_preserves_cartridge_details() -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app._pending_home_log = []
+    app._note_stale_bg_result(
+        {
+            "ok": False,
+            "mode": "sources",
+            "error": "emit failed",
+            "copied": ["context-library/sources/imported/notes.md"],
+            "processed": 1,
+            "feature": "my-feature",
+        }
+    )
+    joined = "\n".join(app._pending_home_log)
+    assert "emit failed" in joined
+    assert "context-library/sources/imported/notes.md" in joined
+    assert "dashboard refresh" in joined
 
 
 def test_load_config_reads_default_agent_handoff(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

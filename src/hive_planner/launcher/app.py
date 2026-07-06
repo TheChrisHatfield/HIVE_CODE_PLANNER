@@ -453,6 +453,10 @@ class HivePlannerApp:
     _PAGE_WHEEL_SKIP = (tk.Listbox, tk.Text, scrolledtext.ScrolledText, tk.Scrollbar)
 
     def _note_stale_bg_result(self, result: object) -> None:
+        if isinstance(result, dict) and result.get("mode") in ("sources", "import", "translate"):
+            self._queue_cartridge_result_log(result)
+            self._queue_home_log("(Cartridge load finished after dashboard refresh — output preserved above.)")
+            return
         if isinstance(result, dict):
             err = result.get("error")
             mode = result.get("mode")
@@ -2175,8 +2179,7 @@ class HivePlannerApp:
 
             dialog.destroy()
             if mode == "sources":
-                self._append_log(
-                    self.home_log,
+                self._start_home_action(
                     f"Loading {len(selected_files)} source file(s) and emitting cartridge for '{feature}'…",
                 )
                 self._run_bg(
@@ -2190,7 +2193,9 @@ class HivePlannerApp:
                     self._cartridge_load_done,
                 )
             elif mode == "translate":
-                self._append_log(self.home_log, f"Translating research into draft cartridge for '{feature}'…")
+                self._start_home_action(
+                    f"Translating research into draft cartridge for '{feature}'…",
+                )
                 self._run_bg(
                     lambda: run_cartridge_translate(
                         root,
@@ -2202,7 +2207,7 @@ class HivePlannerApp:
                     self._cartridge_load_done,
                 )
             else:
-                self._append_log(self.home_log, "Importing cartridge folder…")
+                self._start_home_action("Importing cartridge folder…")
                 self._run_bg(
                     lambda: run_cartridge_import_folder(
                         root,
@@ -2223,11 +2228,7 @@ class HivePlannerApp:
         )
         secondary_button(action_row, "Cancel", dialog.destroy)
 
-    def _cartridge_load_done(self, result: dict) -> None:
-        if not isinstance(result, dict):
-            self._append_log(self.home_log, str(result))
-            return
-
+    def _queue_cartridge_result_log(self, result: dict) -> None:
         worked = bool(
             result.get("files_written")
             or result.get("copied")
@@ -2237,129 +2238,125 @@ class HivePlannerApp:
 
         if result.get("ok") is False:
             if result.get("error"):
-                self._append_log(self.home_log, self._result_detail(result))
+                self._queue_home_log(self._result_detail(result))
             for rel in result.get("copied", []):
-                self._append_log(self.home_log, f"  copied: {rel}")
+                self._queue_home_log(f"  copied: {rel}")
             for rel in result.get("skipped", []):
-                self._append_log(self.home_log, f"  skipped (exists): cartridge/{rel}")
+                self._queue_home_log(f"  skipped (exists): cartridge/{rel}")
             for warning in result.get("warnings", []):
-                self._append_log(self.home_log, f"Warning: {warning}")
+                self._queue_home_log(f"Warning: {warning}")
             if worked:
-                self._append_log(
-                    self.home_log,
+                self._queue_home_log(
                     "Cartridge load incomplete — partial work saved; see errors above.",
                 )
             elif result.get("mode") == "import" and result.get("skipped") and "already exist" in str(result.get("error", "")):
-                self._append_log(
-                    self.home_log,
+                self._queue_home_log(
                     "Tip: re-open Load cartridge, enable Overwrite existing cartridge files, then try again.",
                 )
             self._log_cartridge_promote(result.get("promote"))
             promote = result.get("promote") or {}
             if promote and promote.get("ok") is False:
-                self._append_log(
-                    self.home_log,
+                self._queue_home_log(
                     "Cartridge load incomplete — files saved but promotion/handoff needs review (see above).",
                 )
             return
 
         mode = result.get("mode")
         if mode == "sources":
-            self._append_log(
-                self.home_log,
+            self._queue_home_log(
                 f"Cartridge sources loaded ({result.get('processed', 0)} indexed, feature: {result.get('feature')}).",
             )
             for rel in result.get("copied", []):
-                self._append_log(self.home_log, f"  copied: {rel}")
+                self._queue_home_log(f"  copied: {rel}")
             for name, rel in (result.get("outputs") or {}).items():
-                self._append_log(self.home_log, f"  wrote {name}: {rel}")
+                self._queue_home_log(f"  wrote {name}: {rel}")
         elif mode == "translate":
-            self._append_log(
-                self.home_log,
+            self._queue_home_log(
                 f"Draft cartridge written for '{result.get('feature')}' ({len(result.get('files_written', []))} file(s)).",
             )
             for rel in result.get("files_written", []):
-                self._append_log(self.home_log, f"  cartridge/{rel}")
+                self._queue_home_log(f"  cartridge/{rel}")
         elif mode == "import":
-            self._append_log(
-                self.home_log,
+            self._queue_home_log(
                 f"Imported {len(result.get('written', []))} cartridge file(s).",
             )
             for rel in result.get("written", []):
-                self._append_log(self.home_log, f"  wrote: cartridge/{rel}")
+                self._queue_home_log(f"  wrote: cartridge/{rel}")
             for rel in result.get("skipped", []):
-                self._append_log(self.home_log, f"  skipped (exists): cartridge/{rel}")
+                self._queue_home_log(f"  skipped (exists): cartridge/{rel}")
             adapt = result.get("adapt")
             if adapt and adapt.get("adapted"):
-                self._append_log(
-                    self.home_log,
+                self._queue_home_log(
                     f"Adapted custom files to standard layout (feature: {adapt.get('feature')}).",
                 )
                 for rel in adapt.get("adapted", []):
-                    self._append_log(self.home_log, f"  layer file: cartridge/{rel}")
+                    self._queue_home_log(f"  layer file: cartridge/{rel}")
                 for src, dst in sorted((adapt.get("mappings") or {}).items()):
                     if src != dst:
-                        self._append_log(self.home_log, f"  mapped: {src} -> cartridge/{dst}")
+                        self._queue_home_log(f"  mapped: {src} -> cartridge/{dst}")
             if result.get("feature"):
-                self._append_log(self.home_log, f"  using feature id: {result['feature']}")
+                self._queue_home_log(f"  using feature id: {result['feature']}")
         self._log_cartridge_promote(result.get("promote"))
         promote = result.get("promote") or {}
         if promote and promote.get("ok") is False:
-            self._append_log(
-                self.home_log,
+            self._queue_home_log(
                 "Cartridge load incomplete — files saved but promotion/handoff needs review (see above).",
             )
         for warning in result.get("warnings", []):
-            self._append_log(self.home_log, f"Warning: {warning}")
+            self._queue_home_log(f"Warning: {warning}")
+
+    def _cartridge_load_done(self, result: dict) -> None:
+        if not isinstance(result, dict):
+            self._queue_home_log(str(result))
+            self._refresh_home_dashboard()
+            return
+        self._queue_cartridge_result_log(result)
+        self._refresh_home_dashboard()
 
     def _log_cartridge_promote(self, promote: dict | None) -> None:
         if not promote:
             return
         from hive_planner.cartridge_promote import promote_nothing_written_guidance, promote_wrote_layers
 
-        self._append_log(self.home_log, "Promotion / symbiotic handoff:")
+        self._queue_home_log("Promotion / symbiotic handoff:")
         if promote.get("feature"):
-            self._append_log(self.home_log, f"  feature: {promote['feature']}")
+            self._queue_home_log(f"  feature: {promote['feature']}")
         for layer, status in sorted(promote.get("promotions", {}).items()):
-            self._append_log(self.home_log, f"  {layer}: {status}")
+            self._queue_home_log(f"  {layer}: {status}")
         if promote.get("candidates_path"):
-            self._append_log(
-                self.home_log,
+            self._queue_home_log(
                 f"  CL candidates (review, then promote memory): {promote['candidates_path']}",
             )
-            self._append_log(
-                self.home_log,
+            self._queue_home_log(
                 "  Next: Home → Record wiring audit, then Home → Promote memory (or agents-propose CLI).",
             )
         if promote.get("ok") is False and promote.get("promotions", {}).get("status") == "skipped (agent handoff off)":
-            self._append_log(
-                self.home_log,
+            self._queue_home_log(
                 "  Enable unified handoff (Deploy agent handoff) to promote cartridge drafts.",
             )
         repair = promote.get("agents_repair")
         if repair:
-            self._append_log(self.home_log, f"  AGENTS.md repair: {repair.get('detail')}")
+            self._queue_home_log(f"  AGENTS.md repair: {repair.get('detail')}")
         rosetta = promote.get("rosetta_repair")
         if rosetta:
-            self._append_log(self.home_log, f"  Rosetta navigation: {rosetta.get('detail')}")
+            self._queue_home_log(f"  Rosetta navigation: {rosetta.get('detail')}")
             for rel in rosetta.get("patched") or []:
-                self._append_log(self.home_log, f"    patched: {rel}")
+                self._queue_home_log(f"    patched: {rel}")
         if promote_wrote_layers(promote.get("promotions", {})) or rosetta:
-            self._append_log(
-                self.home_log,
+            self._queue_home_log(
                 "  Agent startup: load docs/planning-rosetta-stone.md (hook planning.rosetta) before spec/delta",
             )
         drift = promote.get("spec_drift")
         if drift is not None:
             mark = "ok" if drift.get("ok") else "review needed"
-            self._append_log(self.home_log, f"  spec-drift: {mark}")
+            self._queue_home_log(f"  spec-drift: {mark}")
         for warning in promote.get("warnings", []):
-            self._append_log(self.home_log, f"  Warning: {warning}")
+            self._queue_home_log(f"  Warning: {warning}")
         guidance = promote_nothing_written_guidance(promote)
         if guidance:
-            self._append_log(self.home_log, f"  Note: {guidance}")
+            self._queue_home_log(f"  Note: {guidance}")
         if promote.get("ok") is False:
-            self._append_log(self.home_log, "Promotion/spec-drift needs review before handoff.")
+            self._queue_home_log("Promotion/spec-drift needs review before handoff.")
 
     def _deploy_handoff_done(self, result: dict) -> None:
         if self._is_bg_error(result):
