@@ -37,6 +37,7 @@ npm-debug.log*
 *.tmp
 *.temp
 .cache/
+packaging/version_info.txt
 
 # Generated Windows shortcut (machine-specific paths; run CreateHivePlannerShortcut.ps1)
 scripts/HivePlanner.lnk

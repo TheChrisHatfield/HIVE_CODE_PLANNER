@@ -7,6 +7,7 @@ block_cipher = None
 root = Path(SPECPATH).resolve().parent
 pkg = root / "src" / "hive_planner"
 icon = root / "scripts" / "assets" / "HivePlanner.ico"
+version_info = root / "packaging" / "version_info.txt"
 
 datas = [
     (str(pkg / "bootstrap_templates"), "hive_planner/bootstrap_templates"),
@@ -63,14 +64,16 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    upx=False,
     console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    uac_admin=False,
     icon=str(icon) if icon.is_file() else None,
+    version=str(version_info) if version_info.is_file() else None,
 )
 
 coll = COLLECT(
@@ -79,7 +82,7 @@ coll = COLLECT(
     a.zipfiles,
     a.datas,
     strip=False,
-    upx=True,
+    upx=False,
     upx_exclude=[],
     name="HivePlannerPortable",
 )

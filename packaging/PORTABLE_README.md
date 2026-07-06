@@ -47,6 +47,12 @@ HivePlanner.exe --hive-cli ci-check --root D:\projects\my-app
 - PDF/DOCX ingest and embedding features are not bundled; use a dev install for those extras.
 - Health check in the portable app skips pytest (no test suite bundled).
 
+## Windows Defender / SmartScreen
+
+Unsigned portable builds may be flagged until reputation builds. This distribution is built **without UPX packing** and includes Windows **version metadata** plus `BUILD-SHA256.txt` for verification.
+
+If blocked: see **DEFENDER.md** in this folder (allow on device, folder exclusion, or report false positive to Microsoft). For production deploy, sign the exe with an Authenticode certificate during build (`-Sign` in `scripts\build_portable.ps1`).
+
 ## Build (developers)
 
 From the Hive Code Planner source checkout:
