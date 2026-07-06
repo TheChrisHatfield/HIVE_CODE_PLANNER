@@ -3007,6 +3007,7 @@ class HivePlannerApp:
         self.config = load_config()
         self.config.add_recent_project(Path(result["target"]))
         save_config(self.config)
+        prepare_linked_project_root(Path(result["target"]), repair_agents=True)
         messagebox.showinfo("Created", f"Project ready at:\n{result['target']}")
         self._show_dashboard()
 

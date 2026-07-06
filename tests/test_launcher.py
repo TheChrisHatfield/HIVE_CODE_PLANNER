@@ -1178,6 +1178,33 @@ def test_deploy_handoff_done_logs_partial_work_when_validation_fails() -> None:
     assert "Agent handoff deployed" not in joined
 
 
+def test_create_done_repairs_agents_after_success(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    target = tmp_path / "new-proj"
+    target.mkdir()
+    cfg = LauncherConfig(hive_planner_root=str(Path(__file__).resolve().parents[1]))
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app._show_dashboard = lambda: None  # type: ignore[method-assign]
+
+    import hive_planner.launcher.app as app_mod
+
+    repair_calls: list[Path] = []
+
+    monkeypatch.setattr(app_mod, "load_config", lambda: cfg)
+    monkeypatch.setattr(app_mod, "save_config", lambda _cfg: None)
+    monkeypatch.setattr(app_mod.messagebox, "showinfo", lambda *a, **k: None)
+    monkeypatch.setattr(
+        app_mod,
+        "prepare_linked_project_root",
+        lambda p, **kw: repair_calls.append(Path(p)) or (target, None),
+    )
+
+    app._create_done({"ok": True, "target": str(target.resolve())})
+    assert repair_calls == [target.resolve()]
+
+
 def test_create_done_shows_partial_bootstrap_when_handoff_incomplete() -> None:
     from hive_planner.launcher.app import HivePlannerApp
 
