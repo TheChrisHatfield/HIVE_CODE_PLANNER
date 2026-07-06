@@ -2889,6 +2889,7 @@ class HivePlannerApp:
             self.config = load_config()
             self.config.add_recent_project(link_path or path)
             save_config(self.config)
+            prepare_linked_project_root(link_path or path, repair_agents=True)
             self._show_dashboard()
             return True
 

@@ -2603,8 +2603,16 @@ def test_bootstrap_and_activate_link_only_skips_init(tmp_path: Path, monkeypatch
     monkeypatch.setattr(app_mod, "save_config", lambda c: saved.append(c))
     monkeypatch.setattr(app_mod, "run_project_init", fake_init)
 
+    repair_calls: list[Path] = []
+    monkeypatch.setattr(
+        app_mod,
+        "prepare_linked_project_root",
+        lambda p, **kw: repair_calls.append(Path(p)) or (target, None),
+    )
+
     assert app._bootstrap_and_activate(target, notify=False, setup_action="link_only") is True
     assert init_calls == []
+    assert repair_calls == [target.resolve()]
     assert saved[-1].recent_projects == [str(target.resolve())]
 
 
