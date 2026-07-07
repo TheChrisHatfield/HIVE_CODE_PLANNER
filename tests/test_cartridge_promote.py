@@ -389,6 +389,10 @@ def test_promote_cli_exit_code_spec_drift_failure(tmp_path: Path) -> None:
 
 
 def test_emit_cli_mark_draft_without_promote(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import io
+    import json
+    from contextlib import redirect_stdout
+
     from hive_planner.cli import main
     from hive_planner.delta_emit import AUTO_SYNC_PREFIX
 
@@ -407,13 +411,18 @@ def test_emit_cli_mark_draft_without_promote(tmp_path: Path, monkeypatch: pytest
         promote_called.append(feature)
         raise AssertionError("promote should not run without --promote")
 
-    monkeypatch.setattr("hive_planner.emitter.emit_cartridge", fake_emit)
+    monkeypatch.setattr("hive_planner.cli.emit_cartridge", fake_emit)
     monkeypatch.setattr("hive_planner.cartridge_promote.promote_cartridge_drafts", fake_promote)
 
-    code = main(
-        ["--root", str(project), "emit", "--feature", "example-feature", "--mark-draft"],
-    )
+    stdout = io.StringIO()
+    with redirect_stdout(stdout):
+        code = main(
+            ["--root", str(project), "emit", "--feature", "example-feature", "--mark-draft"],
+        )
 
     assert code == 0
     assert promote_called == []
     assert holistic.read_text(encoding="utf-8").startswith(DRAFT_BANNER)
+    text = stdout.getvalue()
+    payload = json.loads(text[text.index("{") :])
+    assert payload["mark_draft"]["holistic"] == "marked draft"

@@ -419,6 +419,8 @@ def main(argv: list[str] | None = None) -> int:
             from hive_planner.cartridge_promote import promote_cli_exit_code
 
             return promote_cli_exit_code(promote)
+        if args.mark_draft:
+            print(json.dumps(payload, indent=2))
         return 0
 
     if args.command == "status":
