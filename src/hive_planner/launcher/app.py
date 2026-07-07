@@ -456,6 +456,7 @@ class HivePlannerApp:
         if isinstance(result, dict) and result.get("mode") in ("sources", "import", "translate"):
             self._queue_cartridge_result_log(result)
             self._queue_home_log("(Cartridge load finished after dashboard refresh — output preserved above.)")
+            self._refresh_home_dashboard()
             return
         if isinstance(result, dict):
             err = result.get("error")
@@ -472,6 +473,7 @@ class HivePlannerApp:
         else:
             message = f"Background task finished after dashboard refresh: {result}"
         self._queue_home_log(message)
+        self._refresh_home_dashboard()
 
     def _flush_pending_home_log(self) -> None:
         if not self._pending_home_log or not hasattr(self, "home_log"):

@@ -3629,6 +3629,7 @@ def test_note_stale_bg_result_queues_home_log_message() -> None:
 
     app = HivePlannerApp.__new__(HivePlannerApp)
     app._pending_home_log = []
+    app._refresh_home_dashboard = lambda: None  # type: ignore[method-assign]
     app._note_stale_bg_result({"ok": False, "mode": "import", "error": "emit failed"})
     joined = "\n".join(app._pending_home_log)
     assert "emit failed" in joined
@@ -3640,6 +3641,8 @@ def test_note_stale_bg_result_preserves_cartridge_details() -> None:
 
     app = HivePlannerApp.__new__(HivePlannerApp)
     app._pending_home_log = []
+    app._refresh_home_dashboard = lambda: None  # type: ignore[method-assign]
+    app._log_cartridge_promote = lambda _promote: None  # type: ignore[method-assign]
     app._note_stale_bg_result(
         {
             "ok": False,
@@ -3660,8 +3663,32 @@ def test_note_stale_bg_result_lazy_inits_pending_log() -> None:
     from hive_planner.launcher.app import HivePlannerApp
 
     app = HivePlannerApp.__new__(HivePlannerApp)
+    refreshed = {"value": False}
+    app._refresh_home_dashboard = lambda: refreshed.__setitem__("value", True)  # type: ignore[method-assign]
     app._note_stale_bg_result({"ok": False, "error": "late finish"})
     assert app._pending_home_log == ["Background task finished after dashboard refresh: late finish"]
+    assert refreshed["value"] is True
+
+
+def test_note_stale_bg_result_refreshes_dashboard_for_cartridge() -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app._pending_home_log = []
+    refreshed = {"count": 0}
+    app._refresh_home_dashboard = lambda: refreshed.__setitem__("count", refreshed["count"] + 1)  # type: ignore[method-assign]
+    app._log_cartridge_promote = lambda _promote: None  # type: ignore[method-assign]
+
+    app._note_stale_bg_result(
+        {
+            "ok": False,
+            "mode": "import",
+            "error": "exists",
+            "skipped": ["holistic.md"],
+        }
+    )
+    assert refreshed["count"] == 1
+    assert any("dashboard refresh" in line for line in app._pending_home_log)
 
 
 def test_load_config_reads_default_agent_handoff(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
