@@ -2939,12 +2939,13 @@ class HivePlannerApp:
                     f"{result.get('target', bootstrap_target)}"
                 )
             messagebox.showerror("Setup failed", detail)
+            self._queue_home_log(detail)
             if result.get("files_written"):
                 self.config = load_config()
                 self.config.add_recent_project(link_path or path)
                 save_config(self.config)
                 prepare_linked_project_root(link_path or path, repair_agents=True)
-                self._show_dashboard()
+            self._refresh_home_dashboard()
             return False
         self.config = load_config()
         self.config.add_recent_project(link_path or path)
