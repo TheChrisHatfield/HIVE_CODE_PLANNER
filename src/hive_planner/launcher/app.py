@@ -498,6 +498,17 @@ class HivePlannerApp:
         self._queue_home_log(message)
         self._flush_pending_home_log()
 
+    def _queue_handoff_repair_warning(self, state: BootstrapState) -> None:
+        if not state.needs_handoff_repair:
+            return
+        missing_preview = ", ".join(state.handoff_missing[:3])
+        if len(state.handoff_missing) > 3:
+            missing_preview += f", +{len(state.handoff_missing) - 3} more"
+        self._queue_home_log(
+            f"Warning: unified handoff incomplete — missing: {missing_preview}. "
+            "Use Deploy agent handoff or re-link with repair.",
+        )
+
     def _refresh_home_dashboard(self) -> None:
         """Rebuild dashboard; queued Output lines are flushed in _build_home_tab."""
         self._show_dashboard()
@@ -2585,6 +2596,7 @@ class HivePlannerApp:
                 self.config.add_recent_project(target)
                 save_config(self.config)
                 _, repair = prepare_linked_project_root(target, repair_agents=True)
+                self._queue_handoff_repair_warning(state)
                 if notify:
                     messagebox.showinfo(
                         "Workspace linked",
@@ -2605,14 +2617,7 @@ class HivePlannerApp:
         self.config.add_recent_project(target)
         save_config(self.config)
         _, repair = prepare_linked_project_root(target, repair_agents=True)
-        if state.needs_handoff_repair:
-            missing_preview = ", ".join(state.handoff_missing[:3])
-            if len(state.handoff_missing) > 3:
-                missing_preview += f", +{len(state.handoff_missing) - 3} more"
-            self._queue_home_log(
-                f"Warning: unified handoff incomplete — missing: {missing_preview}. "
-                "Use Deploy agent handoff or re-link with repair.",
-            )
+        self._queue_handoff_repair_warning(state)
         if notify:
             if state.hive_ready and bootstrap_target.is_dir():
                 summary = summarize_linked_project(target, repair_agents=False)
@@ -2902,6 +2907,7 @@ class HivePlannerApp:
             self.config.add_recent_project(link_path or path)
             save_config(self.config)
             prepare_linked_project_root(link_path or path, repair_agents=True)
+            self._queue_handoff_repair_warning(state)
             self._show_dashboard()
             return True
 
