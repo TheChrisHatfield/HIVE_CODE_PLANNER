@@ -9,7 +9,7 @@ import shutil
 import sqlite3
 import subprocess
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import unquote, urlparse
@@ -1412,13 +1412,25 @@ def cartridge_load_needs_feature(mode: str, *, will_promote: bool) -> bool:
     return False
 
 
-def _run_cartridge_promote(project_root: Path, feature: str, *, promote: bool, force: bool = False) -> dict | None:
+def _run_cartridge_promote(
+    project_root: Path,
+    feature: str,
+    *,
+    promote: bool,
+    force: bool = False,
+    only_cartridge_paths: Iterable[Path] | None = None,
+) -> dict | None:
     if not promote:
         return None
     from hive_planner.cartridge_promote import promote_cartridge_drafts
 
     paths = RepoPaths(root=project_root.resolve())
-    return promote_cartridge_drafts(paths, feature.strip(), force=force).to_dict()
+    return promote_cartridge_drafts(
+        paths,
+        feature.strip(),
+        force=force,
+        only_cartridge_paths=only_cartridge_paths,
+    ).to_dict()
 
 
 def run_cartridge_load_sources(
@@ -1478,7 +1490,13 @@ def run_cartridge_load_sources(
 
     return _merge_cartridge_promote(
         payload,
-        _run_cartridge_promote(target, feature, promote=promote, force=force_promote),
+        _run_cartridge_promote(
+            target,
+            feature,
+            promote=promote,
+            force=force_promote,
+            only_cartridge_paths=outputs.values(),
+        ),
     )
 
 

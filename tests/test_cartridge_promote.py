@@ -55,6 +55,30 @@ def _unified_project(root: Path) -> Path:
     return root
 
 
+def test_promote_skips_stale_draft_layers_not_in_emit_outputs(tmp_path: Path) -> None:
+    project = _unified_project(tmp_path / "proj")
+    feature = "example-feature"
+    paths = RepoPaths(root=project)
+    holistic = paths.cartridge / "holistic.md"
+    micro = paths.cartridge / "micro" / f"{feature}.md"
+    holistic.parent.mkdir(parents=True, exist_ok=True)
+    micro.parent.mkdir(parents=True, exist_ok=True)
+    holistic.write_text(f"{DRAFT_BANNER}\n\n# Fresh holistic\n", encoding="utf-8")
+    micro.write_text(f"{DRAFT_BANNER}\n\n# Stale micro\n", encoding="utf-8")
+
+    result = promote_cartridge_drafts(
+        paths,
+        feature,
+        run_spec_drift=False,
+        only_cartridge_paths=[holistic],
+    )
+
+    assert result.promotions["holistic"] == "written"
+    assert result.promotions["micro"] == "skipped (not emitted)"
+    assert (project / "docs" / "delta" / "00_holistic.md").is_file()
+    assert not (project / "docs" / "delta" / "20_micro" / f"{feature}.md").exists()
+
+
 def test_promote_strips_draft_and_auto_sync_banners(tmp_path: Path) -> None:
     from hive_planner.delta_emit import AUTO_SYNC_PREFIX
 

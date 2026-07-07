@@ -406,6 +406,7 @@ def main(argv: list[str] | None = None) -> int:
                 paths,
                 args.feature,
                 force=args.force_promote,
+                only_cartridge_paths=outputs.values(),
             )
             payload["promote"] = promote.to_dict()
             if promote.candidates_path:

@@ -108,7 +108,7 @@ def mark_cartridge_layers_draft(
     only_paths: Iterable[Path] | None = None,
 ) -> dict[str, str]:
     """Prepend the standard draft banner on promote-eligible cartridge files."""
-    allowed = {path.resolve() for path in only_paths} if only_paths is not None else None
+    allowed = _resolved_path_set(only_paths)
     results: dict[str, str] = {}
     for name, path in cartridge_promote_layer_paths(paths, feature).items():
         if allowed is not None and path.resolve() not in allowed:
@@ -124,6 +124,18 @@ def mark_cartridge_layers_draft(
         path.write_text(f"{DRAFT_BANNER}\n\n{content.lstrip()}", encoding="utf-8")
         results[name] = "marked draft"
     return results
+
+
+def _resolved_path_set(paths: Iterable[Path] | None) -> set[Path] | None:
+    if paths is None:
+        return None
+    return {path.resolve() for path in paths}
+
+
+def _cartridge_source_emitted(path: Path, allowed: set[Path] | None) -> bool:
+    if allowed is None:
+        return True
+    return path.resolve() in allowed
 
 
 def _is_cartridge_draft(path: Path) -> bool:
@@ -319,6 +331,7 @@ def promote_cartridge_drafts(
     write_memory_candidates: bool = True,
     run_spec_drift: bool = True,
     repair_agents: bool = True,
+    only_cartridge_paths: Iterable[Path] | None = None,
 ) -> CartridgePromoteResult:
     from hive_planner.project_profile import resolve_project_integrations
 
@@ -334,6 +347,7 @@ def promote_cartridge_drafts(
         return result
 
     layer_paths = cartridge_promote_layer_paths(paths, feature)
+    allowed_sources = _resolved_path_set(only_cartridge_paths)
     layers = {
         "holistic": (
             layer_paths["holistic"],
@@ -349,6 +363,9 @@ def promote_cartridge_drafts(
         ),
     }
     for name, (src, dest) in layers.items():
+        if not _cartridge_source_emitted(src, allowed_sources):
+            result.promotions[name] = "skipped (not emitted)"
+            continue
         status, _path = _promote_to_target(paths, src, dest, force=force)
         result.promotions[name] = status
         if status.startswith("skipped") and src.exists() and _is_cartridge_draft(src):
@@ -356,7 +373,9 @@ def promote_cartridge_drafts(
 
     specseed = layer_paths["specseed"]
     spec_path = paths.root / "docs" / "specs" / feature / "spec.md"
-    if specseed.is_file() and _is_cartridge_draft(specseed):
+    if not _cartridge_source_emitted(specseed, allowed_sources):
+        result.promotions["spec"] = "skipped (not emitted)"
+    elif specseed.is_file() and _is_cartridge_draft(specseed):
         status, promoted = _promote_to_target(paths, specseed, spec_path, force=force)
         result.promotions["spec"] = status
         if not promoted and status.startswith("skipped"):
@@ -367,7 +386,9 @@ def promote_cartridge_drafts(
         result.promotions["spec"] = "skipped (missing specseed)"
 
     memory_path = layer_paths["memory"]
-    if write_memory_candidates and memory_path.is_file() and _is_cartridge_draft(memory_path):
+    if not _cartridge_source_emitted(memory_path, allowed_sources):
+        result.promotions["memory_candidates"] = "skipped (not emitted)"
+    elif write_memory_candidates and memory_path.is_file() and _is_cartridge_draft(memory_path):
         bullets = _extract_bullets(_promote_body(memory_path))
         candidates = _write_memory_candidates(paths, feature, bullets)
         if candidates:
