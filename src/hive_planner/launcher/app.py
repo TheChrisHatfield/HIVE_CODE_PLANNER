@@ -2600,8 +2600,16 @@ class HivePlannerApp:
         self.config.add_recent_project(target)
         save_config(self.config)
         _, repair = prepare_linked_project_root(target, repair_agents=True)
+        if state.needs_handoff_repair:
+            missing_preview = ", ".join(state.handoff_missing[:3])
+            if len(state.handoff_missing) > 3:
+                missing_preview += f", +{len(state.handoff_missing) - 3} more"
+            self._queue_home_log(
+                f"Warning: unified handoff incomplete — missing: {missing_preview}. "
+                "Use Deploy agent handoff or re-link with repair.",
+            )
         if notify:
-            if workspace.hive_ready and hive_folder.is_dir():
+            if state.hive_ready and bootstrap_target.is_dir():
                 summary = summarize_linked_project(target, repair_agents=False)
                 profile = summary.bootstrap_profile or "—"
                 feature_line = summary.active_feature or "—"

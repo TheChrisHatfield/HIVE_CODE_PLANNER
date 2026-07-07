@@ -3691,6 +3691,51 @@ def test_note_stale_bg_result_refreshes_dashboard_for_cartridge() -> None:
     assert any("dashboard refresh" in line for line in app._pending_home_log)
 
 
+def test_link_workspace_warns_handoff_on_silent_relink(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    project = tmp_path / "repo"
+    project.mkdir()
+    (project / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    resolved = str(project.resolve())
+    cfg = LauncherConfig(recent_projects=[resolved], hive_planner_root=str(Path(__file__).resolve().parents[1]))
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.config = cfg
+    app._pending_home_log = []
+    app._show_dashboard = lambda: None  # type: ignore[method-assign]
+
+    import hive_planner.launcher.app as app_mod
+
+    monkeypatch.setattr(app_mod, "load_config", lambda: cfg)
+    monkeypatch.setattr(app_mod, "save_config", lambda _cfg: None)
+    monkeypatch.setattr(app_mod, "prepare_linked_project_root", lambda *_a, **_k: (project, None))
+    monkeypatch.setattr(app_mod.messagebox, "showinfo", lambda *a, **k: None)
+    monkeypatch.setattr(
+        app_mod,
+        "summarize_bootstrap_state",
+        lambda _target: type(
+            "S",
+            (),
+            {
+                "is_empty": False,
+                "needs_handoff_repair": True,
+                "hive_ready": True,
+                "handoff_missing": ["docs/cl-spec-integration.md"],
+                "has_partial_hive": True,
+                "has_existing_hive_files": True,
+                "allows_add_missing": True,
+            },
+        )(),
+    )
+
+    assert app._link_workspace(project, notify=False) is True
+    joined = "\n".join(app._pending_home_log)
+    assert "unified handoff incomplete" in joined
+
+
 def test_load_config_reads_default_agent_handoff(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from hive_planner.launcher.config import config_path, load_config, save_config
 
