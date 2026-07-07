@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -100,10 +101,19 @@ def cartridge_promote_layer_paths(paths: RepoPaths, feature: str) -> dict[str, P
     }
 
 
-def mark_cartridge_layers_draft(paths: RepoPaths, feature: str) -> dict[str, str]:
+def mark_cartridge_layers_draft(
+    paths: RepoPaths,
+    feature: str,
+    *,
+    only_paths: Iterable[Path] | None = None,
+) -> dict[str, str]:
     """Prepend the standard draft banner on promote-eligible cartridge files."""
+    allowed = {path.resolve() for path in only_paths} if only_paths is not None else None
     results: dict[str, str] = {}
     for name, path in cartridge_promote_layer_paths(paths, feature).items():
+        if allowed is not None and path.resolve() not in allowed:
+            results[name] = "skipped (not emitted)"
+            continue
         if not path.is_file():
             results[name] = "skipped (missing)"
             continue

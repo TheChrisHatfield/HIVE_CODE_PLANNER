@@ -296,6 +296,28 @@ def test_promote_nothing_written_guidance_for_import_style_cartridge(tmp_path: P
     assert "Import with Promote adapts" in guidance
 
 
+def test_mark_cartridge_layers_draft_skips_not_emitted_layers(tmp_path: Path) -> None:
+    from hive_planner.cartridge_promote import mark_cartridge_layers_draft
+    from hive_planner.delta_emit import AUTO_SYNC_PREFIX, MANUAL_MARKER
+
+    project = _unified_project(tmp_path / "proj")
+    feature = "example-feature"
+    paths = RepoPaths(root=project)
+    holistic = paths.cartridge / "holistic.md"
+    micro = paths.cartridge / "micro" / f"{feature}.md"
+    holistic.parent.mkdir(parents=True, exist_ok=True)
+    micro.parent.mkdir(parents=True, exist_ok=True)
+    holistic.write_text(f"{MANUAL_MARKER} review -->\n\n# Stale holistic\n", encoding="utf-8")
+    micro.write_text(f"{AUTO_SYNC_PREFIX} from docs/delta -->\n\n# Fresh micro\n", encoding="utf-8")
+
+    results = mark_cartridge_layers_draft(paths, feature, only_paths=[micro])
+
+    assert results["holistic"] == "skipped (not emitted)"
+    assert "Stale holistic" in holistic.read_text(encoding="utf-8")
+    assert results["micro"] == "marked draft"
+    assert micro.read_text(encoding="utf-8").startswith(DRAFT_BANNER)
+
+
 def test_mark_cartridge_layers_draft_prepends_banner(tmp_path: Path) -> None:
     from hive_planner.cartridge_promote import mark_cartridge_layers_draft
     from hive_planner.delta_emit import AUTO_SYNC_PREFIX

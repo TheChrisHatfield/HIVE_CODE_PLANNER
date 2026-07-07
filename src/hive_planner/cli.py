@@ -392,7 +392,11 @@ def main(argv: list[str] | None = None) -> int:
         if args.mark_draft:
             from hive_planner.cartridge_promote import mark_cartridge_layers_draft
 
-            payload["mark_draft"] = mark_cartridge_layers_draft(paths, args.feature)
+            payload["mark_draft"] = mark_cartridge_layers_draft(
+                paths,
+                args.feature,
+                only_paths=outputs.values(),
+            )
             for layer, status in sorted(payload["mark_draft"].items()):
                 print(f"Mark draft {layer}: {status}")
         if args.promote:

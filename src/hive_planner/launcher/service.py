@@ -1457,7 +1457,11 @@ def run_cartridge_load_sources(
     if mark_emitted_draft:
         from hive_planner.cartridge_promote import mark_cartridge_layers_draft
 
-        mark_draft = mark_cartridge_layers_draft(paths, feature.strip())
+        mark_draft = mark_cartridge_layers_draft(
+            paths,
+            feature.strip(),
+            only_paths=outputs.values(),
+        )
 
     payload = {
         "ok": True,
