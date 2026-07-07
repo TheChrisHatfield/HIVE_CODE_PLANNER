@@ -28,6 +28,7 @@ from hive_planner.launcher.service import (
     run_cartridge_load_sources,
     run_cartridge_translate,
     cartridge_load_needs_feature,
+    cartridge_load_mark_draft_default,
     cartridge_load_will_promote,
     candidates_path_in_project,
     find_staged_candidates,
@@ -2006,6 +2007,14 @@ class HivePlannerApp:
         handoff_unified = handoff_status.mode == "unified"
         promote_var = tk.BooleanVar(value=handoff_unified)
         force_promote_var = tk.BooleanVar(value=False)
+        mark_draft_var = tk.BooleanVar(
+            value=cartridge_load_mark_draft_default(
+                mode="sources",
+                promote_checked=handoff_unified,
+                handoff_unified=handoff_unified,
+                config_default=self.config.default_cartridge_mark_draft,
+            ),
+        )
         promote_row = tk.Frame(body, bg=COLORS["bg"])
         promote_row.pack(fill="x", padx=16, pady=(0, 4))
         promote_cb = tk.Checkbutton(
@@ -2046,6 +2055,25 @@ class HivePlannerApp:
         )
         force_cb.pack(anchor="w")
 
+        mark_draft_row = tk.Frame(body, bg=COLORS["bg"])
+        mark_draft_row.pack(fill="x", padx=16, pady=(0, 4))
+        mark_draft_cb = tk.Checkbutton(
+            mark_draft_row,
+            text="Mark emitted layers as draft (enables promote after Sources ingest)",
+            variable=mark_draft_var,
+            bg=COLORS["bg"],
+            fg=COLORS["fg"],
+            activebackground=COLORS["bg"],
+            activeforeground=COLORS["fg"],
+            selectcolor=COLORS["card"],
+            anchor="w",
+            font=FONT,
+            wraplength=470,
+            justify="left",
+            state="disabled",
+        )
+        mark_draft_cb.pack(anchor="w")
+
         overwrite_var = tk.BooleanVar(value=False)
         overwrite_row = tk.Frame(body, bg=COLORS["bg"])
         overwrite_row.pack(fill="x", padx=16, pady=(0, 4))
@@ -2070,14 +2098,19 @@ class HivePlannerApp:
             if not handoff_unified:
                 force_cb.configure(state="disabled")
                 force_promote_var.set(False)
+                mark_draft_cb.configure(state="disabled")
+                mark_draft_var.set(False)
                 return
             if promote_var.get():
                 force_cb.configure(state="normal")
             else:
                 force_cb.configure(state="disabled")
                 force_promote_var.set(False)
+            sources_promote = mode_var.get() == "sources" and promote_var.get()
+            mark_draft_cb.configure(state="normal" if sources_promote else "disabled")
 
         promote_var.trace_add("write", sync_promote_controls)
+        mode_var.trace_add("write", sync_promote_controls)
         sync_promote_controls()
 
         def sync_import_controls(*_args: object) -> None:
@@ -2193,7 +2226,16 @@ class HivePlannerApp:
             do_promote = will_promote
             do_feature = feature.strip() if feature.strip() else None
             do_force = force_promote_var.get()
+            do_mark_draft = (
+                mark_draft_var.get()
+                if mode == "sources" and will_promote
+                else False
+            )
             do_overwrite = overwrite_var.get() if mode == "import" else False
+
+            if mode == "sources" and will_promote:
+                self.config.default_cartridge_mark_draft = mark_draft_var.get()
+                save_config(self.config)
 
             dialog.destroy()
             if mode == "sources":
@@ -2207,6 +2249,7 @@ class HivePlannerApp:
                         do_feature,
                         promote=do_promote,
                         force_promote=do_force,
+                        mark_emitted_draft=do_mark_draft,
                     ),
                     self._cartridge_load_done,
                 )
@@ -2288,6 +2331,11 @@ class HivePlannerApp:
                 self._queue_home_log(f"  copied: {rel}")
             for name, rel in (result.get("outputs") or {}).items():
                 self._queue_home_log(f"  wrote {name}: {rel}")
+            mark_draft = result.get("mark_draft")
+            if mark_draft:
+                self._queue_home_log("Marked emitted cartridge layers as draft:")
+                for layer, status in sorted(mark_draft.items()):
+                    self._queue_home_log(f"  {layer}: {status}")
         elif mode == "translate":
             self._queue_home_log(
                 f"Draft cartridge written for '{result.get('feature')}' ({len(result.get('files_written', []))} file(s)).",

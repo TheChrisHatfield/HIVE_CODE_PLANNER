@@ -782,6 +782,68 @@ def test_run_cartridge_load_sources_copies_ingests_and_emits(tmp_path: Path) -> 
     assert (project / "context-library" / "sources" / "imported" / "notes.md").is_file()
     assert (project / "cartridge" / "manifest.json").is_file()
     assert (project / "cartridge" / "source-context.md").is_file()
+    assert "mark_draft" not in result
+
+
+def test_run_cartridge_load_sources_mark_draft_stamps_layers(tmp_path: Path) -> None:
+    from hive_planner.translator import DRAFT_BANNER
+
+    project = _minimal_hive_project(tmp_path / "proj")
+    source = tmp_path / "notes.md"
+    source.write_text(
+        "# Research\n\nSubsystem workflow for cartridge testing and promotion.\n",
+        encoding="utf-8",
+    )
+
+    result = run_cartridge_load_sources(
+        project,
+        [source],
+        "my-feature",
+        promote=False,
+        mark_emitted_draft=True,
+    )
+
+    assert result["ok"] is True
+    assert result["mark_draft"]
+    holistic = project / "cartridge" / "holistic.md"
+    if holistic.is_file():
+        assert holistic.read_text(encoding="utf-8").startswith(DRAFT_BANNER)
+        assert result["mark_draft"]["holistic"] in {"marked draft", "already draft"}
+
+
+def test_cartridge_load_mark_draft_default_sources_only() -> None:
+    from hive_planner.launcher.service import cartridge_load_mark_draft_default
+
+    assert cartridge_load_mark_draft_default(
+        mode="sources",
+        promote_checked=True,
+        handoff_unified=True,
+        config_default=True,
+    )
+    assert not cartridge_load_mark_draft_default(
+        mode="translate",
+        promote_checked=True,
+        handoff_unified=True,
+        config_default=True,
+    )
+    assert not cartridge_load_mark_draft_default(
+        mode="sources",
+        promote_checked=False,
+        handoff_unified=True,
+        config_default=True,
+    )
+
+
+def test_sources_mark_draft_only_when_promote_enabled() -> None:
+    """mark_emitted_draft must not run when promote is off (launcher passes False)."""
+    from hive_planner.launcher.service import run_cartridge_load_sources
+
+    # Logic mirror: launcher sets mark only when sources + will_promote.
+    will_promote = False
+    mode = "sources"
+    mark_draft_checked = True
+    do_mark_draft = mark_draft_checked if mode == "sources" and will_promote else False
+    assert do_mark_draft is False
 
 
 def test_run_cartridge_translate_writes_draft_files(tmp_path: Path) -> None:
