@@ -493,12 +493,20 @@ def promote_nothing_written_guidance(promote: CartridgePromoteResult | dict) -> 
     if promote_wrote_layers(promotions):
         return None
     feature = str(data.get("feature") or "your-feature-id")
+    layer_keys = ("holistic", "macro", "micro", "spec", "memory_candidates")
+    layer_statuses = [str(promotions.get(key, "")) for key in layer_keys if key in promotions]
+    if layer_statuses and all(status == "skipped (not emitted)" for status in layer_statuses):
+        return (
+            f"No cartridge layers were promoted for '{feature}' — emit did not rewrite any "
+            "promote-eligible cartridge files this run. Clear draft/manual locks or enable "
+            "Overwrite existing cartridge files, then reload with Mark emitted as draft."
+        )
     return (
         f"No cartridge layers were promoted for feature '{feature}'. "
         "Promote looks for draft files (starting with <!-- DRAFT: -->) at "
         f"cartridge/holistic.md, macro.md, micro/{feature}.md, "
         f"specs/{feature}.specseed.md, and optionally memory.md. "
-        "After Sources ingest, enable **Mark emitted as draft** in Load cartridge "
+        "After Sources ingest, enable Mark emitted as draft in Load cartridge "
         "(or add the draft banner manually). Translate mode adds drafts automatically. "
         "Import with Promote adapts custom filenames into that layout first; "
         "set Feature id or add layer_map / features to manifest.json to steer mapping."

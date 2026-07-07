@@ -320,6 +320,26 @@ def test_promote_nothing_written_guidance_for_import_style_cartridge(tmp_path: P
     assert "Import with Promote adapts" in guidance
 
 
+def test_promote_nothing_written_guidance_for_not_emitted_layers() -> None:
+    from hive_planner.cartridge_promote import CartridgePromoteResult, promote_nothing_written_guidance
+
+    result = CartridgePromoteResult(
+        feature="example-feature",
+        promotions={
+            "holistic": "skipped (not emitted)",
+            "macro": "skipped (not emitted)",
+            "micro": "skipped (not emitted)",
+            "spec": "skipped (not emitted)",
+            "memory_candidates": "skipped (not emitted)",
+        },
+    )
+    guidance = promote_nothing_written_guidance(result)
+
+    assert guidance is not None
+    assert "emit did not rewrite" in guidance
+    assert "Overwrite existing cartridge" in guidance
+
+
 def test_mark_cartridge_layers_draft_skips_not_emitted_layers(tmp_path: Path) -> None:
     from hive_planner.cartridge_promote import mark_cartridge_layers_draft
     from hive_planner.delta_emit import AUTO_SYNC_PREFIX, MANUAL_MARKER
