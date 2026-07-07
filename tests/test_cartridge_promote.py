@@ -55,6 +55,39 @@ def _unified_project(root: Path) -> Path:
     return root
 
 
+def test_promote_strips_draft_and_auto_sync_banners(tmp_path: Path) -> None:
+    from hive_planner.delta_emit import AUTO_SYNC_PREFIX
+
+    project = _unified_project(tmp_path / "proj")
+    feature = "emit-feature"
+    paths = RepoPaths(root=project)
+    holistic = paths.cartridge / "holistic.md"
+    holistic.parent.mkdir(parents=True, exist_ok=True)
+    holistic.write_text(
+        "\n".join(
+            [
+                DRAFT_BANNER,
+                "",
+                f"{AUTO_SYNC_PREFIX} from docs/delta/00_holistic.md -->",
+                "",
+                "# Holistic mission",
+                "",
+                "Subsystem workflow for promotion.",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = promote_cartridge_drafts(paths, feature, run_spec_drift=False)
+
+    assert result.promotions["holistic"] == "written"
+    delta_text = (project / "docs" / "delta" / "00_holistic.md").read_text(encoding="utf-8")
+    assert AUTO_SYNC_PREFIX not in delta_text
+    assert "Holistic mission" in delta_text
+    assert DRAFT_BANNER not in delta_text
+
+
 def test_promote_micro_and_spec_scaffold_from_draft(tmp_path: Path) -> None:
     project = _unified_project(tmp_path / "proj")
     feature = "my-feature"

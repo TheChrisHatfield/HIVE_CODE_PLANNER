@@ -52,7 +52,7 @@ def main(argv: list[str] | None = None) -> int:
     emit_parser.add_argument(
         "--mark-draft",
         action="store_true",
-        help="With --promote, prepend draft banners on emitted cartridge layers before promoting",
+        help="Prepend draft banners on emitted cartridge layers (use before --promote for Sources emit)",
     )
     emit_parser.add_argument(
         "--force-promote",

@@ -159,8 +159,13 @@ def _strip_draft_banner(content: str) -> str:
 
 def _promote_body(cartridge_path: Path) -> str:
     raw = cartridge_path.read_text(encoding="utf-8", errors="replace")
-    body = _strip_leading_banner(raw)
-    return _strip_draft_banner(body)
+    body = raw
+    for _ in range(8):
+        stripped = _strip_draft_banner(_strip_leading_banner(body))
+        if stripped == body:
+            break
+        body = stripped
+    return body
 
 
 def _promote_to_target(
