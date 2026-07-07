@@ -389,11 +389,13 @@ def main(argv: list[str] | None = None) -> int:
         for name, path in outputs.items():
             print(f"Wrote {name}: {path.relative_to(root)}")
         payload = {"outputs": {name: str(path.relative_to(root)) for name, path in outputs.items()}}
-        if args.promote:
-            if args.mark_draft:
-                from hive_planner.cartridge_promote import mark_cartridge_layers_draft
+        if args.mark_draft:
+            from hive_planner.cartridge_promote import mark_cartridge_layers_draft
 
-                payload["mark_draft"] = mark_cartridge_layers_draft(paths, args.feature)
+            payload["mark_draft"] = mark_cartridge_layers_draft(paths, args.feature)
+            for layer, status in sorted(payload["mark_draft"].items()):
+                print(f"Mark draft {layer}: {status}")
+        if args.promote:
             from hive_planner.cartridge_promote import promote_cartridge_drafts
 
             promote = promote_cartridge_drafts(

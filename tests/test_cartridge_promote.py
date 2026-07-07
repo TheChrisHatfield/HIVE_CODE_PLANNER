@@ -331,3 +331,34 @@ def test_promote_cli_exit_code_spec_drift_failure(tmp_path: Path) -> None:
 
     payload = {"ok": False, "promotions": {"micro": "written"}}
     assert promote_cli_exit_code(payload) == 1
+
+
+def test_emit_cli_mark_draft_without_promote(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from hive_planner.cli import main
+    from hive_planner.delta_emit import AUTO_SYNC_PREFIX
+
+    project = _unified_project(tmp_path / "proj")
+    paths = RepoPaths(root=project)
+    holistic = paths.cartridge / "holistic.md"
+    holistic.parent.mkdir(parents=True, exist_ok=True)
+    holistic.write_text(f"{AUTO_SYNC_PREFIX} from docs/delta -->\n\n# Holistic\n", encoding="utf-8")
+
+    promote_called: list[str] = []
+
+    def fake_emit(_paths, feature, **kwargs):
+        return {"holistic": holistic}, []
+
+    def fake_promote(_paths, feature, **kwargs):
+        promote_called.append(feature)
+        raise AssertionError("promote should not run without --promote")
+
+    monkeypatch.setattr("hive_planner.emitter.emit_cartridge", fake_emit)
+    monkeypatch.setattr("hive_planner.cartridge_promote.promote_cartridge_drafts", fake_promote)
+
+    code = main(
+        ["--root", str(project), "emit", "--feature", "example-feature", "--mark-draft"],
+    )
+
+    assert code == 0
+    assert promote_called == []
+    assert holistic.read_text(encoding="utf-8").startswith(DRAFT_BANNER)
