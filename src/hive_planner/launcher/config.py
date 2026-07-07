@@ -18,6 +18,22 @@ def default_hive_root() -> Path:
     return _portable_hive_root()
 
 
+def _read_config_bool(value: object, *, default: bool) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in {"1", "true", "yes", "on"}:
+            return True
+        if lowered in {"0", "false", "no", "off"}:
+            return False
+    return default
+
+
 def normalize_project_path(path: str | Path) -> str:
     raw = str(path).strip()
     if not raw:
@@ -223,7 +239,10 @@ def load_config() -> LauncherConfig:
             default="unified",
         ),
         theme=str(data.get("theme") or "light"),
-        default_cartridge_mark_draft=bool(data.get("default_cartridge_mark_draft", True)),
+        default_cartridge_mark_draft=_read_config_bool(
+            data.get("default_cartridge_mark_draft"),
+            default=True,
+        ),
         active_project=active,
         recent_projects=recent,
         project_profiles=profiles,

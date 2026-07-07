@@ -3933,6 +3933,29 @@ def test_load_config_reads_default_agent_handoff(tmp_path: Path, monkeypatch: py
     assert loaded.default_agent_handoff == "off"
 
 
+def test_load_config_reads_default_cartridge_mark_draft_bool(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from hive_planner.launcher.config import config_path, load_config
+
+    cfg_dir = tmp_path / "cfg"
+    cfg_dir.mkdir()
+    monkeypatch.setattr("hive_planner.launcher.config.default_config_dir", lambda: cfg_dir)
+    monkeypatch.setattr("hive_planner.launcher.service.auto_complete_onboarding_if_ready", lambda _cfg: False)
+    config_path().write_text(
+        json.dumps(
+            {
+                "onboarding_complete": True,
+                "hive_planner_root": str(tmp_path),
+                "default_cartridge_mark_draft": "false",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    loaded = load_config()
+
+    assert loaded.default_cartridge_mark_draft is False
+
+
 def test_cartridge_load_feature_requirements() -> None:
     assert cartridge_load_will_promote(promote_checked=True, handoff_unified=True) is True
     assert cartridge_load_will_promote(promote_checked=True, handoff_unified=False) is False
