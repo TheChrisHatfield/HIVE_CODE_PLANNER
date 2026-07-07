@@ -79,6 +79,7 @@ class LauncherConfig:
     default_profile: str = "full"
     default_agent_handoff: str = "unified"
     theme: str = "light"
+    default_cartridge_mark_draft: bool = True
     active_project: str = ""
     recent_projects: list[str] = field(default_factory=list)
     project_profiles: dict[str, str] = field(default_factory=dict)
@@ -222,6 +223,7 @@ def load_config() -> LauncherConfig:
             default="unified",
         ),
         theme=str(data.get("theme") or "light"),
+        default_cartridge_mark_draft=bool(data.get("default_cartridge_mark_draft", True)),
         active_project=active,
         recent_projects=recent,
         project_profiles=profiles,

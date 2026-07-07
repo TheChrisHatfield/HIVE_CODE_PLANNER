@@ -260,7 +260,40 @@ def test_promote_nothing_written_guidance_for_import_style_cartridge(tmp_path: P
     assert guidance is not None
     assert "example-feature" in guidance
     assert "DRAFT" in guidance
-    assert "Import with Promote now adapts" in guidance
+    assert "Import with Promote adapts" in guidance
+
+
+def test_mark_cartridge_layers_draft_prepends_banner(tmp_path: Path) -> None:
+    from hive_planner.cartridge_promote import mark_cartridge_layers_draft
+    from hive_planner.delta_emit import AUTO_SYNC_PREFIX
+
+    project = _unified_project(tmp_path / "proj")
+    feature = "example-feature"
+    paths = RepoPaths(root=project)
+    holistic = paths.cartridge / "holistic.md"
+    holistic.parent.mkdir(parents=True, exist_ok=True)
+    holistic.write_text(f"{AUTO_SYNC_PREFIX} from docs/delta -->\n\n# Holistic\n", encoding="utf-8")
+
+    results = mark_cartridge_layers_draft(paths, feature)
+
+    assert results["holistic"] == "marked draft"
+    assert holistic.read_text(encoding="utf-8").startswith(DRAFT_BANNER)
+    assert results["macro"] == "skipped (missing)"
+
+
+def test_mark_cartridge_layers_draft_skips_already_draft(tmp_path: Path) -> None:
+    from hive_planner.cartridge_promote import mark_cartridge_layers_draft
+
+    project = _unified_project(tmp_path / "proj")
+    feature = "example-feature"
+    paths = RepoPaths(root=project)
+    micro = paths.cartridge / "micro" / f"{feature}.md"
+    micro.parent.mkdir(parents=True, exist_ok=True)
+    micro.write_text(f"{DRAFT_BANNER}\n\n# Micro\n", encoding="utf-8")
+
+    results = mark_cartridge_layers_draft(paths, feature)
+
+    assert results["micro"] == "already draft"
 
 
 def test_promote_does_not_warn_for_autosync_cartridge_layers(tmp_path: Path) -> None:

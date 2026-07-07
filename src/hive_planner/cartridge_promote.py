@@ -29,6 +29,7 @@ from hive_planner.rosetta_nav import (
     spec_navigation_block,
     tasks_navigation_block,
 )
+from hive_planner.translator import DRAFT_BANNER
 
 PROMOTED_BANNER = "<!-- PROMOTED: from cartridge — review before handoff -->"
 HANDOFF_INCOMPLETE_MSG = (
@@ -86,6 +87,33 @@ class CartridgePromoteResult:
             "spec_drift": self.spec_drift,
             "warnings": self.warnings,
         }
+
+
+def cartridge_promote_layer_paths(paths: RepoPaths, feature: str) -> dict[str, Path]:
+    validate_feature_id(feature)
+    return {
+        "holistic": paths.cartridge / "holistic.md",
+        "macro": paths.cartridge / "macro.md",
+        "micro": paths.cartridge / "micro" / f"{feature}.md",
+        "specseed": paths.cartridge / "specs" / f"{feature}.specseed.md",
+        "memory": paths.cartridge / "memory.md",
+    }
+
+
+def mark_cartridge_layers_draft(paths: RepoPaths, feature: str) -> dict[str, str]:
+    """Prepend the standard draft banner on promote-eligible cartridge files."""
+    results: dict[str, str] = {}
+    for name, path in cartridge_promote_layer_paths(paths, feature).items():
+        if not path.is_file():
+            results[name] = "skipped (missing)"
+            continue
+        if _is_cartridge_draft(path):
+            results[name] = "already draft"
+            continue
+        content = path.read_text(encoding="utf-8", errors="replace")
+        path.write_text(f"{DRAFT_BANNER}\n\n{content.lstrip()}", encoding="utf-8")
+        results[name] = "marked draft"
+    return results
 
 
 def _is_cartridge_draft(path: Path) -> bool:
@@ -290,17 +318,18 @@ def promote_cartridge_drafts(
         )
         return result
 
+    layer_paths = cartridge_promote_layer_paths(paths, feature)
     layers = {
         "holistic": (
-            paths.cartridge / "holistic.md",
+            layer_paths["holistic"],
             paths.root / "docs" / "delta" / "00_holistic.md",
         ),
         "macro": (
-            paths.cartridge / "macro.md",
+            layer_paths["macro"],
             paths.root / "docs" / "delta" / "10_macro.md",
         ),
         "micro": (
-            paths.cartridge / "micro" / f"{feature}.md",
+            layer_paths["micro"],
             paths.root / "docs" / "delta" / "20_micro" / f"{feature}.md",
         ),
     }
@@ -310,7 +339,7 @@ def promote_cartridge_drafts(
         if status.startswith("skipped") and src.exists() and _is_cartridge_draft(src):
             result.warnings.append(f"{name}: {status}")
 
-    specseed = paths.cartridge / "specs" / f"{feature}.specseed.md"
+    specseed = layer_paths["specseed"]
     spec_path = paths.root / "docs" / "specs" / feature / "spec.md"
     if specseed.is_file() and _is_cartridge_draft(specseed):
         status, promoted = _promote_to_target(paths, specseed, spec_path, force=force)
@@ -322,7 +351,7 @@ def promote_cartridge_drafts(
     else:
         result.promotions["spec"] = "skipped (missing specseed)"
 
-    memory_path = paths.cartridge / "memory.md"
+    memory_path = layer_paths["memory"]
     if write_memory_candidates and memory_path.is_file() and _is_cartridge_draft(memory_path):
         bullets = _extract_bullets(_promote_body(memory_path))
         candidates = _write_memory_candidates(paths, feature, bullets)
@@ -433,7 +462,9 @@ def promote_nothing_written_guidance(promote: CartridgePromoteResult | dict) -> 
         "Promote looks for draft files (starting with <!-- DRAFT: -->) at "
         f"cartridge/holistic.md, macro.md, micro/{feature}.md, "
         f"specs/{feature}.specseed.md, and optionally memory.md. "
-        "Import with Promote now adapts custom filenames into that layout first; "
+        "After Sources ingest, enable **Mark emitted as draft** in Load cartridge "
+        "(or add the draft banner manually). Translate mode adds drafts automatically. "
+        "Import with Promote adapts custom filenames into that layout first; "
         "set Feature id or add layer_map / features to manifest.json to steer mapping."
     )
 

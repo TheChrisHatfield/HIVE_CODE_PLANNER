@@ -1394,6 +1394,18 @@ def cartridge_load_will_promote(*, promote_checked: bool, handoff_unified: bool)
     return promote_checked and handoff_unified
 
 
+def cartridge_load_mark_draft_default(
+    *,
+    mode: str,
+    promote_checked: bool,
+    handoff_unified: bool,
+    config_default: bool,
+) -> bool:
+    if mode != "sources" or not promote_checked or not handoff_unified:
+        return False
+    return config_default
+
+
 def cartridge_load_needs_feature(mode: str, *, will_promote: bool) -> bool:
     if mode in ("sources", "translate"):
         return True
@@ -1417,6 +1429,7 @@ def run_cartridge_load_sources(
     embed: bool = False,
     promote: bool = True,
     force_promote: bool = False,
+    mark_emitted_draft: bool = False,
 ) -> dict:
     target = project_root.resolve()
     summary = summarize_project(target)
@@ -1440,17 +1453,27 @@ def run_cartridge_load_sources(
     except ValueError as exc:
         return {"ok": False, "error": str(exc), "copied": copied, "warnings": warnings}
 
+    mark_draft: dict[str, str] | None = None
+    if mark_emitted_draft:
+        from hive_planner.cartridge_promote import mark_cartridge_layers_draft
+
+        mark_draft = mark_cartridge_layers_draft(paths, feature.strip())
+
+    payload = {
+        "ok": True,
+        "mode": "sources",
+        "feature": feature.strip(),
+        "copied": copied,
+        "processed": ingest_report.processed,
+        "skipped": ingest_report.skipped,
+        "outputs": {name: path.relative_to(target).as_posix() for name, path in outputs.items()},
+        "warnings": warnings + list(ingest_report.warnings) + list(emit_warnings),
+    }
+    if mark_draft is not None:
+        payload["mark_draft"] = mark_draft
+
     return _merge_cartridge_promote(
-        {
-            "ok": True,
-            "mode": "sources",
-            "feature": feature.strip(),
-            "copied": copied,
-            "processed": ingest_report.processed,
-            "skipped": ingest_report.skipped,
-            "outputs": {name: path.relative_to(target).as_posix() for name, path in outputs.items()},
-            "warnings": warnings + list(ingest_report.warnings) + list(emit_warnings),
-        },
+        payload,
         _run_cartridge_promote(target, feature, promote=promote, force=force_promote),
     )
 

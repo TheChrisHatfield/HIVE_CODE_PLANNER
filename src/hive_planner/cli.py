@@ -50,6 +50,11 @@ def main(argv: list[str] | None = None) -> int:
         help="After emit, run cartridge promote + spec-drift (spec-drift/handoff when no drafts to merge)",
     )
     emit_parser.add_argument(
+        "--mark-draft",
+        action="store_true",
+        help="With --promote, prepend draft banners on emitted cartridge layers before promoting",
+    )
+    emit_parser.add_argument(
         "--force-promote",
         action="store_true",
         help="With --promote, overwrite existing non-bootstrap Delta/spec targets",
@@ -385,6 +390,10 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Wrote {name}: {path.relative_to(root)}")
         payload = {"outputs": {name: str(path.relative_to(root)) for name, path in outputs.items()}}
         if args.promote:
+            if args.mark_draft:
+                from hive_planner.cartridge_promote import mark_cartridge_layers_draft
+
+                payload["mark_draft"] = mark_cartridge_layers_draft(paths, args.feature)
             from hive_planner.cartridge_promote import promote_cartridge_drafts
 
             promote = promote_cartridge_drafts(
