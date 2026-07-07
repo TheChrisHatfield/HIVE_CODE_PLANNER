@@ -3736,6 +3736,34 @@ def test_link_workspace_warns_handoff_on_silent_relink(
     assert "unified handoff incomplete" in joined
 
 
+def test_open_cursor_queues_home_log_for_dashboard_rebuild(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    project = tmp_path / "repo"
+    project.mkdir()
+    cfg = LauncherConfig(active_project=str(project.resolve()), hive_planner_root=str(Path(__file__).resolve().parents[1]))
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.config = cfg
+    app._pending_home_log = []
+    app.home_log = object()
+
+    import hive_planner.launcher.app as app_mod
+
+    monkeypatch.setattr(
+        app_mod,
+        "open_in_cursor",
+        lambda *_a, **_k: {"ok": True, "hive_ready": True},
+    )
+    monkeypatch.setattr(app_mod, "_linked_path_exists", lambda _p: True)
+
+    app._on_open_cursor()
+    assert app._pending_home_log
+    assert "Opened in Cursor" in app._pending_home_log[0]
+
+
 def test_load_config_reads_default_agent_handoff(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from hive_planner.launcher.config import config_path, load_config, save_config
 

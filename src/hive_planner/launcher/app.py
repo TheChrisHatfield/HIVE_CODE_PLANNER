@@ -2424,7 +2424,7 @@ class HivePlannerApp:
             messagebox.showerror("Open in Explorer", result.get("error", "Failed to open folder"))
             return
         if hasattr(self, "home_log"):
-            self._append_log(self.home_log, f"Opened in Explorer: {result.get('path')}")
+            self._queue_home_log(f"Opened in Explorer: {result.get('path')}")
 
     def _on_open_user_guide(self) -> None:
         path = user_guide_path(self.config)
@@ -2965,10 +2965,7 @@ class HivePlannerApp:
         if hasattr(self, "home_log"):
             name = _linked_display_name(root)
             hive_note = "hive ready" if result.get("hive_ready") else "cursor workspace"
-            self._append_log(
-                self.home_log,
-                f"Opened in Cursor: {name} ({hive_note})",
-            )
+            self._queue_home_log(f"Opened in Cursor: {name} ({hive_note})")
 
     def _on_create_project(self) -> None:
         target = self.new_target.get().strip()
