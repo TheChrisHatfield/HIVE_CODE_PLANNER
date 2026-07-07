@@ -3748,7 +3748,9 @@ def test_open_cursor_queues_home_log_for_dashboard_rebuild(
     app = HivePlannerApp.__new__(HivePlannerApp)
     app.config = cfg
     app._pending_home_log = []
-    app.home_log = object()
+    lines: list[str] = []
+    app.home_log = type("L", (), {"configure": lambda *a, **k: None})()
+    app._append_log = lambda _w, text: lines.append(text)  # type: ignore[method-assign]
 
     import hive_planner.launcher.app as app_mod
 
@@ -3760,8 +3762,88 @@ def test_open_cursor_queues_home_log_for_dashboard_rebuild(
     monkeypatch.setattr(app_mod, "_linked_path_exists", lambda _p: True)
 
     app._on_open_cursor()
-    assert app._pending_home_log
-    assert "Opened in Cursor" in app._pending_home_log[0]
+    assert lines
+    assert "Opened in Cursor" in lines[0]
+    assert not app._pending_home_log
+
+
+def test_link_workspace_link_only_warns_handoff(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+    from hive_planner.launcher.bootstrap_state import LinkBootstrapChoice
+
+    project = tmp_path / "repo"
+    project.mkdir()
+    (project / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    cfg = LauncherConfig(hive_planner_root=str(Path(__file__).resolve().parents[1]))
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.config = cfg
+    app._pending_home_log = []
+    app._show_dashboard = lambda: None  # type: ignore[method-assign]
+    app.root = type("R", (), {})()
+
+    import hive_planner.launcher.app as app_mod
+
+    monkeypatch.setattr(app_mod, "load_config", lambda: cfg)
+    monkeypatch.setattr(app_mod, "save_config", lambda _cfg: None)
+    monkeypatch.setattr(app_mod, "prepare_linked_project_root", lambda *_a, **_k: (project, None))
+    monkeypatch.setattr(app_mod.messagebox, "showinfo", lambda *a, **k: None)
+    app._prompt_link_bootstrap_setup = lambda *_a, **_k: LinkBootstrapChoice(  # type: ignore[method-assign]
+        action="link_only",
+        profile="minimal",
+        agent_handoff="unified",
+        cl_runtime="cursor",
+    )
+    monkeypatch.setattr(
+        app_mod,
+        "summarize_bootstrap_state",
+        lambda _target: type(
+            "S",
+            (),
+            {
+                "is_empty": False,
+                "needs_handoff_repair": True,
+                "hive_ready": True,
+                "handoff_missing": ["docs/cl-spec-integration.md"],
+                "has_partial_hive": True,
+                "has_existing_hive_files": True,
+                "allows_add_missing": True,
+            },
+        )(),
+    )
+
+    assert app._link_workspace(project, notify=True) is True
+    assert any("unified handoff incomplete" in line for line in app._pending_home_log)
+
+
+def test_bootstrap_and_activate_failure_queues_home_log(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    target = tmp_path / "fail"
+    target.mkdir()
+    cfg = LauncherConfig(hive_planner_root=str(Path(__file__).resolve().parents[1]))
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app._pending_home_log = []
+    refreshed = {"value": False}
+    app._refresh_home_dashboard = lambda: refreshed.__setitem__("value", True)  # type: ignore[method-assign]
+
+    import hive_planner.launcher.app as app_mod
+
+    monkeypatch.setattr(app_mod, "load_config", lambda: cfg)
+    monkeypatch.setattr(app_mod, "save_config", lambda _cfg: None)
+    monkeypatch.setattr(app_mod.messagebox, "showerror", lambda *a, **k: None)
+    monkeypatch.setattr(
+        app_mod,
+        "run_project_init",
+        lambda *_a, **_k: {"ok": False, "error": "Target not empty"},
+    )
+
+    assert app._bootstrap_and_activate(target, notify=False, setup_action="create") is False
+    assert refreshed["value"] is True
+    assert app._pending_home_log == ["Target not empty"]
 
 
 def test_load_config_reads_default_agent_handoff(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

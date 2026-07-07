@@ -493,6 +493,11 @@ class HivePlannerApp:
             self._pending_home_log = []
         self._pending_home_log.append(text)
 
+    def _emit_home_log(self, message: str) -> None:
+        """Write to Output now and keep queued for the next dashboard rebuild."""
+        self._queue_home_log(message)
+        self._flush_pending_home_log()
+
     def _refresh_home_dashboard(self) -> None:
         """Rebuild dashboard; queued Output lines are flushed in _build_home_tab."""
         self._show_dashboard()
@@ -2424,7 +2429,7 @@ class HivePlannerApp:
             messagebox.showerror("Open in Explorer", result.get("error", "Failed to open folder"))
             return
         if hasattr(self, "home_log"):
-            self._queue_home_log(f"Opened in Explorer: {result.get('path')}")
+            self._emit_home_log(f"Opened in Explorer: {result.get('path')}")
 
     def _on_open_user_guide(self) -> None:
         path = user_guide_path(self.config)
@@ -2965,7 +2970,7 @@ class HivePlannerApp:
         if hasattr(self, "home_log"):
             name = _linked_display_name(root)
             hive_note = "hive ready" if result.get("hive_ready") else "cursor workspace"
-            self._queue_home_log(f"Opened in Cursor: {name} ({hive_note})")
+            self._emit_home_log(f"Opened in Cursor: {name} ({hive_note})")
 
     def _on_create_project(self) -> None:
         target = self.new_target.get().strip()
