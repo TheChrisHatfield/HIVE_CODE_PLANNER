@@ -28,7 +28,6 @@ from hive_planner.launcher.service import (
     run_cartridge_load_sources,
     run_cartridge_translate,
     cartridge_load_needs_feature,
-    cartridge_load_mark_draft_default,
     cartridge_load_will_promote,
     candidates_path_in_project,
     find_staged_candidates,
@@ -2007,14 +2006,7 @@ class HivePlannerApp:
         handoff_unified = handoff_status.mode == "unified"
         promote_var = tk.BooleanVar(value=handoff_unified)
         force_promote_var = tk.BooleanVar(value=False)
-        mark_draft_var = tk.BooleanVar(
-            value=cartridge_load_mark_draft_default(
-                mode="sources",
-                promote_checked=handoff_unified,
-                handoff_unified=handoff_unified,
-                config_default=self.config.default_cartridge_mark_draft,
-            ),
-        )
+        mark_draft_var = tk.BooleanVar(value=self.config.default_cartridge_mark_draft)
         promote_row = tk.Frame(body, bg=COLORS["bg"])
         promote_row.pack(fill="x", padx=16, pady=(0, 4))
         promote_cb = tk.Checkbutton(
@@ -2099,7 +2091,6 @@ class HivePlannerApp:
                 force_cb.configure(state="disabled")
                 force_promote_var.set(False)
                 mark_draft_cb.configure(state="disabled")
-                mark_draft_var.set(False)
                 return
             if promote_var.get():
                 force_cb.configure(state="normal")

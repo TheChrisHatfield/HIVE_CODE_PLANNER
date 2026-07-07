@@ -832,6 +832,12 @@ def test_cartridge_load_mark_draft_default_sources_only() -> None:
         handoff_unified=True,
         config_default=True,
     )
+    assert not cartridge_load_mark_draft_default(
+        mode="sources",
+        promote_checked=True,
+        handoff_unified=False,
+        config_default=True,
+    )
 
 
 def test_sources_mark_draft_only_when_promote_enabled() -> None:
