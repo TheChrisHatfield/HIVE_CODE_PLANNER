@@ -2104,9 +2104,10 @@ class HivePlannerApp:
             elif result.get("copied"):
                 self._queue_home_log("Load Sources incomplete — see warnings below.")
         else:
+            indexed = result.get("indexed_staged", len(result.get("copied", [])))
             self._queue_home_log(
                 f"Sources loaded — staged {len(result.get('copied', []))} file(s), "
-                f"indexed {result.get('processed', 0)} document(s).",
+                f"indexed {indexed} staged file(s).",
             )
         for rel in result.get("copied", []):
             self._queue_home_log(f"  staged: {rel}")

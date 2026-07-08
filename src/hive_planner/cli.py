@@ -422,7 +422,8 @@ def main(argv: list[str] | None = None) -> int:
         for rel in result.copied:
             print(f"Staged: {rel}")
         print(
-            f"Ingest: processed={result.processed}, skipped={result.skipped}, pruned={result.pruned}"
+            f"Ingest: processed={result.processed}, skipped={result.skipped}, pruned={result.pruned}, "
+            f"indexed_staged={result.indexed_staged}"
         )
         for warning in result.warnings:
             print(f"Warning: {warning}")

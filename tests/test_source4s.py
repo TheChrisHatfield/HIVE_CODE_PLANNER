@@ -54,6 +54,7 @@ def test_run_source4s_ingest_only(tmp_path: Path) -> None:
     result = run_source4s(paths, [doc], feature=None, update_cartridge=False)
     assert result.ok
     assert result.copied
+    assert result.indexed_staged == 1
     assert result.processed >= 1
     assert result.source_context_path is None
     assert list_source4s_files(paths)

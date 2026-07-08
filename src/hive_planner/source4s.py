@@ -21,6 +21,7 @@ class Source4sResult:
     processed: int = 0
     skipped: int = 0
     pruned: int = 0
+    indexed_staged: int = 0
     feature: str | None = None
     cartridge_outputs: dict[str, str] = field(default_factory=dict)
     source_context_path: str | None = None
@@ -36,6 +37,7 @@ class Source4sResult:
             "processed": self.processed,
             "skipped": self.skipped,
             "pruned": self.pruned,
+            "indexed_staged": self.indexed_staged,
             "feature": self.feature,
             "cartridge_outputs": self.cartridge_outputs,
             "source_context_path": self.source_context_path,
@@ -126,6 +128,8 @@ def run_source4s(
             + " — see warnings (PDF may require pip install -e '.[pdf]')."
         )
         return result
+
+    result.indexed_staged = len(copied)
 
     if not update_cartridge:
         return result
