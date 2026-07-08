@@ -2131,9 +2131,10 @@ class HivePlannerApp:
             elif result.get("copied"):
                 self._queue_home_log("Load Sources incomplete — see warnings below.")
             indexed = result.get("indexed_staged", 0)
-            if indexed:
+            copied_count = len(result.get("copied", []))
+            if indexed and copied_count and indexed < copied_count:
                 self._queue_home_log(
-                    f"  partial: {indexed} of {len(result.get('copied', []))} staged file(s) indexed before failure."
+                    f"  partial: {indexed} of {copied_count} staged file(s) indexed before failure."
                 )
         else:
             indexed = result.get("indexed_staged", len(result.get("copied", [])))

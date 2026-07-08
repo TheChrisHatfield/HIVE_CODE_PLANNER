@@ -136,6 +136,24 @@ def test_run_source4s_fails_when_selected_file_types_unsupported(tmp_path: Path)
     assert "1 of 2 selected file(s)" in result.error
 
 
+def test_load_sources_partial_log_not_shown_for_unsupported_mix(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    paths.ensure_dirs()
+    good = tmp_path / "good.txt"
+    good.write_text("# Good\n\nIndexed reference content.\n", encoding="utf-8")
+    docx = tmp_path / "notes.docx"
+    docx.write_bytes(b"not docx")
+
+    result = run_source4s(
+        paths,
+        [good, docx],
+        feature="load-sources-v1",
+        update_cartridge=False,
+    )
+    assert not result.ok
+    assert result.indexed_staged == len(result.copied)
+
+
 def test_load_sources_prefers_newly_staged_docs_in_source_context(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     paths.ensure_dirs()
