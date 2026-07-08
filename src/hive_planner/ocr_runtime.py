@@ -214,6 +214,7 @@ def ocr_pdf_pages(
     *,
     dpi: int = DEFAULT_OCR_DPI,
     lang: str = DEFAULT_OCR_LANG,
+    page_indices: list[int] | None = None,
 ) -> list[tuple[int, str]]:
     try:
         import fitz  # pymupdf
@@ -226,7 +227,10 @@ def ocr_pdf_pages(
             raise RuntimeError("Password-protected PDF is not supported")
         with tempfile.TemporaryDirectory(prefix="hive-ocr-") as tmp:
             tmp_dir = Path(tmp)
-            for page_num in range(len(doc)):
+            indices = page_indices if page_indices is not None else list(range(len(doc)))
+            for page_num in indices:
+                if page_num < 0 or page_num >= len(doc):
+                    continue
                 page = doc[page_num]
                 pix = page.get_pixmap(dpi=dpi)
                 png_path = tmp_dir / f"page-{page_num + 1}.png"

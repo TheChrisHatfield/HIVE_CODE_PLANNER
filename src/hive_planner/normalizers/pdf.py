@@ -25,26 +25,37 @@ def normalize_pdf(file_path: Path) -> NormalizeResult:
         if doc.needs_pass:
             raise EmptySourceError("Password-protected PDF is not supported")
 
-        pages_text: list[tuple[int, str]] = []
-        for page_num in range(len(doc)):
-            page = doc[page_num]
-            text = page.get_text("text").strip()
+        page_count = len(doc)
+        embedded: dict[int, str] = {}
+        for page_num in range(page_count):
+            text = doc[page_num].get_text("text").strip()
             if text:
-                pages_text.append((page_num + 1, text))
+                embedded[page_num + 1] = text
 
         extraction = "text"
         ocr_install = None
-        if not pages_text and ocr_pdf_enabled.get():
+        missing_indices = [i for i in range(page_count) if (i + 1) not in embedded]
+        had_embedded_text = bool(embedded)
+
+        if missing_indices and ocr_pdf_enabled.get():
             status = ocr_runtime_status()
             if status.available and status.install is not None:
                 try:
-                    pages_text = ocr_pdf_pages(file_path, status.install)
-                    extraction = "ocr"
-                    ocr_install = status.install
+                    ocr_pages = ocr_pdf_pages(
+                        file_path,
+                        status.install,
+                        page_indices=missing_indices,
+                    )
+                    if ocr_pages:
+                        ocr_install = status.install
+                        extraction = "mixed" if had_embedded_text else "ocr"
+                        for page_num, text in ocr_pages:
+                            embedded[page_num] = text
                 except Exception as exc:
-                    raise EmptySourceError(f"PDF OCR failed: {exc}") from exc
+                    if not embedded:
+                        raise EmptySourceError(f"PDF OCR failed: {exc}") from exc
 
-        if not pages_text:
+        if not embedded:
             if ocr_pdf_enabled.get():
                 raise EmptySourceError(
                     "PDF has no extractable text (image-only or empty). "
@@ -53,9 +64,12 @@ def normalize_pdf(file_path: Path) -> NormalizeResult:
                 )
             raise EmptySourceError("PDF has no extractable text (image-only or empty); OCR disabled")
 
+        pages_text = sorted(embedded.items())
         lines = [f"# {title}", ""]
         if extraction == "ocr":
             lines.extend(["> Extracted via Tesseract OCR", ""])
+        elif extraction == "mixed":
+            lines.extend(["> Mixed PDF: embedded text plus Tesseract OCR on image pages", ""])
         raw_parts: list[str] = []
         for page_num, text in pages_text:
             lines.extend([f"## Page {page_num}", "", text, ""])
@@ -63,7 +77,7 @@ def normalize_pdf(file_path: Path) -> NormalizeResult:
 
         normalized_body = "\n".join(lines).strip() + "\n"
         raw_text = "\n\n".join(raw_parts)
-        extra = {"page_count": len(pages_text), "format": "pdf", "extraction": extraction}
+        extra = {"page_count": page_count, "format": "pdf", "extraction": extraction}
         if ocr_install is not None:
             extra["ocr_engine"] = ocr_install.source
         return NormalizeResult(

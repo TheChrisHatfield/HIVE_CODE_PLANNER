@@ -76,6 +76,40 @@ def test_normalize_pdf_ocr_fallback(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     assert result.extra_metadata.get("extraction") == "ocr"
 
 
+def test_normalize_pdf_mixed_embedded_and_ocr(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    pytest.importorskip("fitz")
+    import fitz
+
+    pdf_path = tmp_path / "mixed.pdf"
+    doc = fitz.open()
+    page = doc.new_page()
+    page.insert_text((72, 72), "Embedded page one text")
+    doc.new_page()
+    doc.save(pdf_path)
+    doc.close()
+
+    fake_install = TesseractInstall(
+        exe=tmp_path / "tesseract.exe",
+        tessdata_dir=tmp_path / "tessdata",
+        source="test",
+    )
+
+    monkeypatch.setattr(
+        "hive_planner.normalizers.pdf.ocr_runtime_status",
+        lambda: type("S", (), {"available": True, "install": fake_install})(),
+    )
+    monkeypatch.setattr(
+        "hive_planner.normalizers.pdf.ocr_pdf_pages",
+        lambda *_a, **kwargs: [(2, "OCR text from scanned page two")],
+    )
+
+    result = normalize_pdf(pdf_path)
+    assert "Embedded page one" in result.normalized_body
+    assert "OCR text from scanned page two" in result.normalized_body
+    assert result.extra_metadata.get("extraction") == "mixed"
+    assert result.extra_metadata.get("page_count") == 2
+
+
 def test_normalize_pdf_skips_ocr_when_disabled(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     pytest.importorskip("fitz")
     import fitz
