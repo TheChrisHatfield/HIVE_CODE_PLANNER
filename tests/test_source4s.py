@@ -108,7 +108,7 @@ def test_run_source4s_fails_when_staged_file_not_indexed(tmp_path: Path) -> None
     assert "could not be indexed" in result.error
 
 
-def test_load_sources_reports_skipped_source_context(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_load_sources_reports_skipped_source_context(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     paths.ensure_dirs()
     feature = "load-sources-v1"
@@ -120,9 +120,10 @@ def test_load_sources_reports_skipped_source_context(tmp_path: Path, monkeypatch
     source_context.write_text("<!-- MANUAL: reviewed -->\n\n# Source Context\n", encoding="utf-8")
 
     result = run_source4s(paths, [doc], feature=feature, update_cartridge=True)
-    assert result.ok
+    assert not result.ok
     assert result.source_context_path is None
-    assert any("was not updated" in w for w in result.warnings)
+    assert result.error
+    assert "was not updated" in result.error
     manifest_path = paths.cartridge / "manifest.json"
     assert not manifest_path.is_file()
 
