@@ -77,6 +77,32 @@ def select_chunks(
     return selected
 
 
+def merge_preferred_chunks(
+    selected: list[ChunkRecord],
+    chunks: list[ChunkRecord],
+    prefer_doc_ids: set[str],
+    limit: int = MAX_SOURCE_EXCERPTS,
+) -> list[ChunkRecord]:
+    """Ensure chunks from preferred documents appear first in source-context excerpts."""
+    if not prefer_doc_ids:
+        return selected[:limit]
+    merged: list[ChunkRecord] = []
+    seen: set[str] = set()
+    for doc_id in prefer_doc_ids:
+        for chunk in chunks:
+            if chunk.doc_id == doc_id and chunk.chunk_id not in seen:
+                merged.append(chunk)
+                seen.add(chunk.chunk_id)
+                break
+    for chunk in selected:
+        if len(merged) >= limit:
+            break
+        if chunk.chunk_id not in seen:
+            merged.append(chunk)
+            seen.add(chunk.chunk_id)
+    return merged[:limit]
+
+
 def _load_cartridge_manifest(paths: RepoPaths) -> dict:
     manifest_path = paths.cartridge / "manifest.json"
     if not manifest_path.is_file():
@@ -110,6 +136,7 @@ def emit_source_context(
     feature: str,
     *,
     force: bool = False,
+    prefer_source_paths: list[str] | None = None,
 ) -> tuple[dict[str, Path], list[str]]:
     """Refresh cartridge/source-context.md and manifest stats without delta/pack sync."""
     validate_feature_id(feature)
@@ -134,6 +161,13 @@ def emit_source_context(
         embedding_vectors=vectors,
         embedding_model_id=embedding_model_id,
     )
+    if prefer_source_paths:
+        prefer_doc_ids = {
+            doc.doc_id
+            for doc in doc_index.documents
+            if doc.source_path in set(prefer_source_paths)
+        }
+        selected = merge_preferred_chunks(selected, chunk_index.chunks, prefer_doc_ids)
     if chunk_index.chunks and terms and selected:
         if vectors:
             query_vector = embed_query(feature, model_id=embedding_model_id)

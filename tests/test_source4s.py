@@ -136,6 +136,34 @@ def test_run_source4s_fails_when_selected_file_types_unsupported(tmp_path: Path)
     assert "1 of 2 selected file(s)" in result.error
 
 
+def test_load_sources_prefers_newly_staged_docs_in_source_context(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    paths.ensure_dirs()
+    feature = "load-sources-v1"
+
+    old = paths.sources / SOURCE4S_DIR_NAME / "old.txt"
+    old.parent.mkdir(parents=True, exist_ok=True)
+    old.write_text("# Old\n\nLegacy library content unrelated to feature.\n", encoding="utf-8")
+
+    from hive_planner.pipeline import ingest
+
+    ingest(paths)
+
+    new_upload = tmp_path / "new.txt"
+    new_upload.write_text(
+        "# New upload\n\nMission for load-sources-v1 newly uploaded reference.\n",
+        encoding="utf-8",
+    )
+
+    result = run_source4s(paths, [new_upload], feature=feature, update_cartridge=True)
+    assert result.ok
+    body = (paths.cartridge / "source-context.md").read_text(encoding="utf-8")
+    new_path = "context-library/sources/source4s/new.txt"
+    old_path = "context-library/sources/source4s/old.txt"
+    assert new_path in body
+    assert body.index(new_path) < body.index(old_path)
+
+
 def test_load_sources_reports_skipped_source_context(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     paths.ensure_dirs()

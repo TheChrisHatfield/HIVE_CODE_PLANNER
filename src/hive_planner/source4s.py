@@ -161,6 +161,7 @@ def run_source4s(
             paths,
             result.feature,
             force=force_delta,
+            prefer_source_paths=copied,
         )
     except ValueError as exc:
         result.ok = False
