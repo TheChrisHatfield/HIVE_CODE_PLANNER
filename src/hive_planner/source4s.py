@@ -189,5 +189,9 @@ def run_source4s(
         result.cartridge_outputs.pop("source_context", None)
     if selection_error:
         result.ok = False
-        result.error = selection_error
+        if result.error:
+            if selection_error not in result.error:
+                result.error = f"{result.error} Also: {selection_error}"
+        else:
+            result.error = selection_error
     return result

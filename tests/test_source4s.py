@@ -136,6 +136,29 @@ def test_run_source4s_fails_when_selected_file_types_unsupported(tmp_path: Path)
     assert "1 of 2 selected file(s)" in result.error
 
 
+def test_load_sources_keeps_cartridge_error_on_partial_selection(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    paths.ensure_dirs()
+    good = tmp_path / "good.txt"
+    good.write_text("# Good\n\nMission for load-sources-v1 partial selection.\n", encoding="utf-8")
+    docx = tmp_path / "notes.docx"
+    docx.write_bytes(b"not docx")
+
+    source_context = paths.cartridge / "source-context.md"
+    source_context.parent.mkdir(parents=True, exist_ok=True)
+    source_context.write_text("<!-- MANUAL: reviewed -->\n\n# Source Context\n", encoding="utf-8")
+
+    result = run_source4s(
+        paths,
+        [good, docx],
+        feature="load-sources-v1",
+        update_cartridge=True,
+    )
+    assert not result.ok
+    assert "was not updated" in result.error
+    assert "1 of 2 selected file(s)" in result.error
+
+
 def test_load_sources_still_links_cartridge_on_partial_selection(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     paths.ensure_dirs()
