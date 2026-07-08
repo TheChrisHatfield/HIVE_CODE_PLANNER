@@ -1645,6 +1645,37 @@ def run_cartridge_import_folder(
     return payload
 
 
+def run_source4s_upload(
+    project_root: Path,
+    source_files: list[Path],
+    feature: str | None,
+    *,
+    embed: bool = False,
+    update_cartridge: bool = True,
+    force_delta: bool = False,
+) -> dict:
+    """Upload txt/pdf reference files and link them to the active cartridge."""
+    from hive_planner.source4s import list_source4s_files, run_source4s
+
+    target = project_root.resolve()
+    summary = summarize_project(target)
+    if not summary.ok:
+        return {"ok": False, "error": summary.detail}
+
+    paths = RepoPaths(root=target)
+    result = run_source4s(
+        paths,
+        source_files,
+        feature=feature,
+        embed=embed,
+        update_cartridge=update_cartridge,
+        force_delta=force_delta,
+    )
+    payload = result.to_dict()
+    payload["existing_sources"] = list_source4s_files(paths)
+    return payload
+
+
 def cl_runtime_status_label(project_root: Path) -> str:
     from hive_planner.agent_handoff import resolve_agent_handoff_mode, AGENT_HANDOFF_UNIFIED
     from hive_planner.cl_runtime import requires_cursor_plugin, resolve_cl_runtime

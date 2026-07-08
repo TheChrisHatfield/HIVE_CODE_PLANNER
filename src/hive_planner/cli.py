@@ -32,6 +32,37 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Build/update embedding index for hybrid retrieval on emit",
     )
+    source4s_parser = sub.add_parser(
+        "source4s",
+        help="Upload txt/pdf reference files for cartridge-linked agent retrieval",
+    )
+    source4s_parser.add_argument(
+        "--files",
+        nargs="+",
+        required=True,
+        type=Path,
+        help="One or more .txt or .pdf files to stage under context-library/sources/source4s/",
+    )
+    source4s_parser.add_argument(
+        "--feature",
+        default=None,
+        help="Feature id for cartridge/source-context.md retrieval (required unless --ingest-only)",
+    )
+    source4s_parser.add_argument(
+        "--ingest-only",
+        action="store_true",
+        help="Index files only — do not refresh cartridge/source-context.md",
+    )
+    source4s_parser.add_argument(
+        "--embed",
+        action="store_true",
+        help="Build/update embedding index for hybrid retrieval",
+    )
+    source4s_parser.add_argument(
+        "--force-delta",
+        action="store_true",
+        help="Overwrite cartridge layers when refreshing source-context (same as emit --force-delta)",
+    )
     emit_parser = sub.add_parser("emit", help="Emit cartridge manifest and source-context.md")
     emit_parser.add_argument("--feature", required=True, help="Active feature name for retrieval")
     emit_parser.add_argument(
@@ -369,6 +400,38 @@ def main(argv: list[str] | None = None) -> int:
         summary = status_summary(paths)
         print(json.dumps(summary, indent=2))
         return 0
+
+    if args.command == "source4s":
+        from hive_planner.source4s import run_source4s
+
+        update_cartridge = not args.ingest_only
+        if update_cartridge and not args.feature:
+            print("Error: --feature is required unless --ingest-only is set.", file=sys.stderr)
+            return 1
+        result = run_source4s(
+            paths,
+            args.files,
+            feature=args.feature,
+            embed=args.embed,
+            update_cartridge=update_cartridge,
+            force_delta=args.force_delta,
+        )
+        print(f"Root: {root}")
+        if result.error:
+            print(f"Error: {result.error}", file=sys.stderr)
+        for rel in result.copied:
+            print(f"Staged: {rel}")
+        print(
+            f"Ingest: processed={result.processed}, skipped={result.skipped}, pruned={result.pruned}"
+        )
+        for warning in result.warnings:
+            print(f"Warning: {warning}")
+        if result.source_context_path:
+            print(f"Cartridge link: {result.source_context_path}")
+        for name, rel in result.cartridge_outputs.items():
+            print(f"Wrote {name}: {rel}")
+        print(json.dumps(result.to_dict(), indent=2))
+        return 0 if result.ok else 1
 
     if args.command == "emit":
         try:
