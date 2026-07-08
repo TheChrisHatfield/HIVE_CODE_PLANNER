@@ -94,6 +94,19 @@ def test_run_source4s_requires_files(tmp_path: Path) -> None:
     assert result.error
 
 
+def test_run_source4s_fails_when_staged_file_not_indexed(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    paths.ensure_dirs()
+    pdf = tmp_path / "broken.pdf"
+    pdf.write_bytes(b"%PDF-1.4\nnot a real pdf structure")
+
+    result = run_source4s(paths, [pdf], feature="load-sources-v1", update_cartridge=False)
+    assert not result.ok
+    assert result.copied
+    assert result.error
+    assert "could not be indexed" in result.error
+
+
 def test_load_sources_skips_delta_and_pack_sync(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     paths.ensure_dirs()

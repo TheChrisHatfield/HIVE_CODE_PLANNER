@@ -43,6 +43,7 @@ from hive_planner.launcher.service import (
     run_project_init,
     run_project_map_sync,
     run_set_cl_runtime,
+    run_source4s_upload,
     run_unified_verify,
     run_wiring_audit_check,
     run_wiring_audit_record,
@@ -589,6 +590,12 @@ class HivePlannerApp:
         secondary_button(actions, "Sync impact maps", self._on_map_sync)
         secondary_button(actions, "Deploy agent handoff", self._on_deploy_agent_handoff)
         secondary_button(actions, "Load cartridge…", self._on_load_cartridge)
+        secondary_button(
+            actions,
+            "Load Sources…",
+            self._on_load_sources,
+            tooltip="Upload .txt and .pdf reference files into context-library and link excerpts to the cartridge.",
+        )
         secondary_button(actions, "Open in Explorer", self._on_explore)
 
         handoff_actions = tk.Frame(body, bg=COLORS["bg"])
@@ -1920,6 +1927,199 @@ class HivePlannerApp:
             ),
             self._deploy_handoff_done,
         )
+
+    def _on_load_sources(self) -> None:
+        root = self._active_linked_root()
+        if not root:
+            messagebox.showwarning("No project", "Link a workspace first (Projects tab).")
+            return
+        summary = summarize_linked_project(Path(self.config.active_project))
+        default_feature = summary.active_feature or "example-feature"
+
+        from hive_planner.config import RepoPaths
+        from hive_planner.source4s import list_source4s_files
+
+        existing = list_source4s_files(RepoPaths(root=root))
+        existing_hint = (
+            f"{len(existing)} file(s) already in context-library/sources/source4s/"
+            if existing
+            else "No reference sources staged yet in this project."
+        )
+
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Load Sources")
+        dialog.configure(bg=COLORS["bg"])
+        dialog.transient(self.root)
+        dialog.grab_set()
+        dialog.geometry("520x420")
+        dialog.minsize(480, 380)
+
+        body = tk.Frame(dialog, bg=COLORS["bg"])
+        body.pack(fill="both", expand=True, padx=16, pady=16)
+
+        tk.Label(
+            body,
+            text=(
+                "Upload .txt and .pdf files for agents to reference during planning. "
+                "Files are indexed in context-library and linked to your cartridge via source-context.md."
+            ),
+            wraplength=480,
+            justify="left",
+            bg=COLORS["bg"],
+            fg=COLORS["muted"],
+            font=FONT,
+        ).pack(anchor="w", pady=(0, 8))
+
+        tk.Label(
+            body,
+            text=existing_hint,
+            wraplength=480,
+            justify="left",
+            bg=COLORS["bg"],
+            fg=COLORS["muted"],
+            font=FONT_SUBTITLE,
+        ).pack(anchor="w", pady=(0, 12))
+
+        feature_row = tk.Frame(body, bg=COLORS["bg"])
+        feature_row.pack(fill="x", pady=(0, 8))
+        tk.Label(
+            feature_row,
+            text="Feature id",
+            width=12,
+            anchor="w",
+            bg=COLORS["bg"],
+            fg=COLORS["fg"],
+            font=FONT,
+        ).pack(side="left")
+        feature_var = tk.StringVar(value=default_feature)
+        tk.Entry(feature_row, textvariable=feature_var, font=FONT).pack(side="left", fill="x", expand=True)
+
+        link_var = tk.BooleanVar(value=True)
+        tk.Checkbutton(
+            body,
+            text="Update cartridge source-context.md (link excerpts to active feature)",
+            variable=link_var,
+            bg=COLORS["bg"],
+            fg=COLORS["fg"],
+            activebackground=COLORS["bg"],
+            activeforeground=COLORS["fg"],
+            selectcolor=COLORS["card"],
+            anchor="w",
+            font=FONT,
+            wraplength=470,
+        ).pack(anchor="w", pady=4)
+
+        embed_var = tk.BooleanVar(value=False)
+        tk.Checkbutton(
+            body,
+            text="Build embeddings (hybrid retrieval — slower, optional)",
+            variable=embed_var,
+            bg=COLORS["bg"],
+            fg=COLORS["fg"],
+            activebackground=COLORS["bg"],
+            activeforeground=COLORS["fg"],
+            selectcolor=COLORS["card"],
+            anchor="w",
+            font=FONT,
+            wraplength=470,
+        ).pack(anchor="w", pady=4)
+
+        selection_var = tk.StringVar(value="(none selected)")
+        tk.Label(
+            body,
+            textvariable=selection_var,
+            bg=COLORS["bg"],
+            fg=COLORS["muted"],
+            font=FONT_SUBTITLE,
+            wraplength=480,
+            justify="left",
+        ).pack(anchor="w", pady=(12, 4))
+
+        selected_files: list[Path] = []
+
+        def browse() -> None:
+            paths = filedialog.askopenfilenames(
+                title="Choose .txt or .pdf reference files",
+                parent=dialog,
+                filetypes=[
+                    ("Text and PDF", "*.txt *.pdf"),
+                    ("Text", "*.txt"),
+                    ("PDF", "*.pdf"),
+                    ("All files", "*.*"),
+                ],
+            )
+            if not paths:
+                return
+            selected_files[:] = [Path(p) for p in paths]
+            if len(selected_files) == 1:
+                selection_var.set(str(selected_files[0]))
+            else:
+                selection_var.set(f"{len(selected_files)} files selected")
+
+        browse_row = tk.Frame(body, bg=COLORS["bg"])
+        browse_row.pack(fill="x", pady=(0, 8))
+        secondary_button(browse_row, "Browse files…", browse)
+
+        action_row = tk.Frame(dialog, bg=COLORS["bg"])
+        action_row.pack(side="bottom", fill="x", padx=16, pady=(8, 16))
+
+        def run_upload() -> None:
+            if not selected_files:
+                messagebox.showwarning("Nothing selected", "Choose one or more .txt or .pdf files.", parent=dialog)
+                return
+            feature = feature_var.get().strip()
+            if link_var.get():
+                try:
+                    validate_feature_id(feature)
+                except ValueError as exc:
+                    messagebox.showerror("Invalid feature id", str(exc), parent=dialog)
+                    return
+            dialog.destroy()
+            self._start_home_action(
+                f"Loading {len(selected_files)} source file(s)"
+                + (f" for '{feature}'…" if link_var.get() else " (ingest only)…"),
+            )
+            self._run_bg(
+                lambda: run_source4s_upload(
+                    root,
+                    selected_files,
+                    feature if link_var.get() else None,
+                    embed=embed_var.get(),
+                    update_cartridge=link_var.get(),
+                ),
+                self._load_sources_done,
+            )
+
+        primary_button(action_row, "Load Sources", run_upload)
+        secondary_button(action_row, "Cancel", dialog.destroy)
+
+    def _load_sources_done(self, result: dict) -> None:
+        if self._is_bg_error(result):
+            self._queue_home_log(self._result_detail(result))
+            self._refresh_home_dashboard()
+            return
+        if not result.get("ok"):
+            if result.get("error"):
+                self._queue_home_log(f"Load Sources failed: {result['error']}")
+            elif result.get("copied"):
+                self._queue_home_log("Load Sources incomplete — see warnings below.")
+        else:
+            self._queue_home_log(
+                f"Sources loaded — staged {len(result.get('copied', []))} file(s), "
+                f"indexed {result.get('processed', 0)} document(s).",
+            )
+        for rel in result.get("copied", []):
+            self._queue_home_log(f"  staged: {rel}")
+        if result.get("source_context_path"):
+            self._queue_home_log(f"  cartridge link: {result['source_context_path']}")
+        for warning in result.get("warnings", []):
+            self._queue_home_log(f"Warning: {warning}")
+        existing = result.get("existing_sources") or []
+        if existing:
+            self._queue_home_log(
+                f"Reference library: {len(existing)} file(s) in context-library/sources/source4s/"
+            )
+        self._refresh_home_dashboard()
 
     def _on_load_cartridge(self) -> None:
         root = self._active_linked_root()

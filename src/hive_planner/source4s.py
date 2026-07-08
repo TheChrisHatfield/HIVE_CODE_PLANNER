@@ -8,6 +8,7 @@ from pathlib import Path
 
 from hive_planner.config import RepoPaths, validate_feature_id
 from hive_planner.emitter import emit_source_context
+from hive_planner.indexer import load_document_index
 from hive_planner.pipeline import ingest
 
 SOURCE4S_DIR_NAME = "source4s"
@@ -70,7 +71,7 @@ def stage_source4s_files(paths: RepoPaths, source_files: list[Path]) -> tuple[li
             continue
         suffix = src.suffix.lower()
         if suffix not in SOURCE4S_EXTENSIONS:
-            warnings.append(f"Skipped (Source4s accepts .txt and .pdf only): {src.name}")
+            warnings.append(f"Skipped (Load Sources accepts .txt and .pdf only): {src.name}")
             continue
         dest = dest_dir / src.name
         if dest.exists():
@@ -114,6 +115,17 @@ def run_source4s(
     result.skipped = ingest_report.skipped
     result.pruned = ingest_report.pruned
     result.warnings.extend(ingest_report.warnings)
+
+    indexed_paths = {doc.source_path for doc in load_document_index(paths.document_index).documents}
+    not_indexed = [rel for rel in copied if rel not in indexed_paths]
+    if not_indexed:
+        result.ok = False
+        result.error = (
+            "Staged file(s) could not be indexed: "
+            + ", ".join(not_indexed)
+            + " — see warnings (PDF may require pip install -e '.[pdf]')."
+        )
+        return result
 
     if not update_cartridge:
         return result
