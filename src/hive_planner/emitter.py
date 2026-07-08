@@ -77,6 +77,167 @@ def select_chunks(
     return selected
 
 
+def _load_cartridge_manifest(paths: RepoPaths) -> dict:
+    manifest_path = paths.cartridge / "manifest.json"
+    if not manifest_path.is_file():
+        return {}
+    try:
+        return json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _merge_source_context_manifest(existing: dict, patch: dict) -> dict:
+    if not existing:
+        return patch
+    merged = dict(existing)
+    merged["source_context"] = patch["source_context"]
+    merged["stats"] = {**existing.get("stats", {}), **patch.get("stats", {})}
+    features = list(existing.get("features") or [])
+    for feature in patch.get("features") or []:
+        if feature not in features:
+            features.append(feature)
+    if features:
+        merged["features"] = features
+    files = set(existing.get("files") or [])
+    files.update(patch.get("files") or [])
+    merged["files"] = sorted(files)
+    return merged
+
+
+def emit_source_context(
+    paths: RepoPaths,
+    feature: str,
+    *,
+    force: bool = False,
+) -> tuple[dict[str, Path], list[str]]:
+    """Refresh cartridge/source-context.md and manifest stats without delta/pack sync."""
+    validate_feature_id(feature)
+    paths.ensure_dirs()
+    paths.cartridge.mkdir(parents=True, exist_ok=True)
+    warnings: list[str] = []
+
+    doc_index = load_document_index(paths.document_index)
+    chunk_index = load_chunk_index(paths.chunk_index)
+    if not doc_index.documents:
+        warnings.append("No documents indexed — run ingest before emit.")
+    if not chunk_index.chunks:
+        warnings.append("No chunks indexed — source-context will be empty.")
+
+    terms = [t for t in feature.lower().replace("-", " ").split() if t]
+    embed_index = load_embedding_index(paths.embedding_index)
+    vectors = embedding_lookup(embed_index) if embed_index.embeddings else None
+    embedding_model_id = embed_index.model_id if vectors else None
+    selected = select_chunks(
+        chunk_index.chunks,
+        feature,
+        embedding_vectors=vectors,
+        embedding_model_id=embedding_model_id,
+    )
+    if chunk_index.chunks and terms and selected:
+        if vectors:
+            query_vector = embed_query(feature, model_id=embedding_model_id)
+            if max(_hybrid_score(c, terms, query_vector, vectors) for c in selected) <= 0:
+                warnings.append(
+                    f"No chunks matched feature terms/embeddings for '{feature}' — using best available excerpts."
+                )
+        elif max(keyword_score(c, terms) for c in selected) == 0:
+            warnings.append(f"No chunks matched feature terms for '{feature}' — using best available excerpts.")
+
+    created_at = datetime.now(timezone.utc).isoformat()
+    manifest_patch = {
+        "schema_version": "cartridge.v1",
+        "cartridge_id": f"ctx-{datetime.now(timezone.utc).strftime('%Y-%m-%d')}-{feature}",
+        "title": f"Cartridge context for {feature}",
+        "created_at": created_at,
+        "source": {"type": "context-library", "compiler": "hive_planner", "version": COMPILER_VERSION},
+        "features": [feature],
+        "status": "draft",
+        "source_context": {
+            "enabled": True,
+            "library_root": "context-library/sources",
+            "normalized_root": "context-library/normalized",
+            "mode": "supplemental",
+            "max_documents": MAX_SOURCE_DOCUMENTS,
+            "max_excerpts": MAX_SOURCE_EXCERPTS,
+        },
+        "stats": {
+            "documents": len(doc_index.documents),
+            "chunks": len(chunk_index.chunks),
+            "embeddings": len(embed_index.embeddings),
+            "selected_chunks": len(selected),
+            "selected_documents": len({c.doc_id for c in selected}),
+            "retrieval_mode": "hybrid" if vectors else "keyword",
+            "source_context_updated_at": created_at,
+        },
+    }
+
+    lines = [
+        "# Source Context",
+        "",
+        f"**Feature:** `{feature}`",
+        f"**Generated:** {created_at}",
+        f"**Limits:** max {MAX_SOURCE_DOCUMENTS} documents, max {MAX_SOURCE_EXCERPTS} excerpts",
+        "",
+        "## Active documents",
+    ]
+    doc_ids = {c.doc_id for c in selected}
+    for doc in doc_index.documents:
+        if doc.doc_id in doc_ids:
+            lines.append(f"- {doc.source_path} — {doc.title}")
+
+    lines.extend(["", "## Retrieved excerpts", ""])
+    for chunk in selected:
+        doc = next((d for d in doc_index.documents if d.doc_id == chunk.doc_id), None)
+        source_label = doc.source_path if doc else chunk.doc_id
+        page_note = f", page {chunk.page}" if chunk.page is not None else ""
+        lines.append(f"### Source: {source_label} ({chunk.heading_path}{page_note})")
+        summary = chunk.text.strip().replace("\n", " ")
+        if len(summary) > 400:
+            summary = summary[:397] + "..."
+        lines.append(f"- {summary}")
+        lines.append("")
+
+    lines.extend(
+        [
+            "## Why relevant",
+            "- Tertiary context retrieved by "
+            + ("hybrid keyword/embedding match" if vectors else "keyword match")
+            + " for the active feature.",
+            "- Does not override Delta docs, spec, plan, or tasks.",
+            "",
+            "## Hooks",
+            "- `planning.rosetta`",
+            "- `compiler.pipeline`",
+            "- `context.document_sourcing`",
+        ]
+    )
+
+    from hive_planner.delta_emit import _auto_sync_banner, _should_skip_existing
+
+    source_context_path = paths.cartridge / "source-context.md"
+    context_body = "\n".join(lines) + "\n"
+    skip_context, context_reason = _should_skip_existing(source_context_path, force=force)
+    if skip_context:
+        warnings.append(f"Skipped cartridge/source-context.md ({context_reason})")
+        outputs: dict[str, Path] = (
+            {"source_context": source_context_path} if source_context_path.exists() else {}
+        )
+    else:
+        banner = _auto_sync_banner(paths.chunk_index, paths)
+        source_context_path.write_text(f"{banner}\n\n{context_body}", encoding="utf-8")
+        outputs = {"source_context": source_context_path}
+
+    rel_files = [path.relative_to(paths.root).as_posix() for path in outputs.values()]
+    rel_files.append("cartridge/manifest.json")
+    manifest_patch["files"] = sorted(set(rel_files))
+    manifest = _merge_source_context_manifest(_load_cartridge_manifest(paths), manifest_patch)
+    manifest_path = paths.cartridge / "manifest.json"
+    manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    outputs["manifest"] = manifest_path
+    return outputs, warnings
+
+
 def emit_cartridge(
     paths: RepoPaths,
     feature: str,
