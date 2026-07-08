@@ -122,14 +122,17 @@ def run_source4s(
     indexed_copied = [rel for rel in copied if rel in indexed_paths]
     not_indexed = [rel for rel in copied if rel not in indexed_paths]
     result.indexed_staged = len(indexed_copied)
+    index_error: str | None = None
     if not_indexed:
-        result.ok = False
-        result.error = (
+        index_error = (
             f"{len(not_indexed)} of {len(copied)} staged file(s) could not be indexed: "
             + ", ".join(not_indexed)
             + " — see warnings (PDF may require pip install -e '.[pdf]')."
         )
-        return result
+        if not indexed_copied:
+            result.ok = False
+            result.error = index_error
+            return result
 
     selection_error: str | None = None
     if len(copied) < len(source_files):
@@ -142,6 +145,9 @@ def run_source4s(
         if selection_error:
             result.ok = False
             result.error = selection_error
+        elif index_error:
+            result.ok = False
+            result.error = index_error
         return result
 
     if not feature or not feature.strip():
@@ -162,7 +168,7 @@ def run_source4s(
             paths,
             result.feature,
             force=force_delta,
-            prefer_source_paths=copied,
+            prefer_source_paths=indexed_copied,
         )
     except ValueError as exc:
         result.ok = False
@@ -186,6 +192,13 @@ def run_source4s(
         )
         result.source_context_path = None
         result.cartridge_outputs.pop("source_context", None)
+    if index_error:
+        result.ok = False
+        if result.error:
+            if index_error not in result.error:
+                result.error = f"{result.error} Also: {index_error}"
+        else:
+            result.error = index_error
     if selection_error:
         result.ok = False
         if result.error:
