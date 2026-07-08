@@ -131,15 +131,17 @@ def run_source4s(
         )
         return result
 
+    selection_error: str | None = None
     if len(copied) < len(source_files):
-        result.ok = False
-        result.error = (
+        selection_error = (
             f"Only {len(copied)} of {len(source_files)} selected file(s) were staged — "
             "Load Sources accepts .txt and .pdf only."
         )
-        return result
 
     if not update_cartridge:
+        if selection_error:
+            result.ok = False
+            result.error = selection_error
         return result
 
     if not feature or not feature.strip():
@@ -185,4 +187,7 @@ def run_source4s(
         )
         result.source_context_path = None
         result.cartridge_outputs.pop("source_context", None)
+    if selection_error:
+        result.ok = False
+        result.error = selection_error
     return result
