@@ -64,9 +64,45 @@ def main(argv: list[str] | None = None) -> int:
         help="Overwrite cartridge/source-context.md when draft or manual banners exist",
     )
     source4s_parser.add_argument(
+        "--no-ocr",
+        action="store_true",
+        help="Do not OCR image-only PDFs during ingest (text extraction only)",
+    )
+    source4s_parser.add_argument(
         "--force-delta",
         action="store_true",
         help=argparse.SUPPRESS,
+    )
+    ocr_status_parser = sub.add_parser(
+        "ocr-status",
+        help="Report Tesseract OCR discovery for image-only PDF conversion",
+    )
+    ocr_status_parser.add_argument(
+        "--scan-d-drive",
+        action="store_true",
+        help="Deep-scan D: drive for tesseract.exe (slower)",
+    )
+    ocr_convert_parser = sub.add_parser(
+        "ocr-convert",
+        help="OCR image-only PDFs to searchable markdown sidecars",
+    )
+    ocr_convert_parser.add_argument(
+        "--files",
+        nargs="+",
+        required=True,
+        type=Path,
+        help="One or more PDF files to OCR",
+    )
+    ocr_convert_parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=None,
+        help="Directory for .ocr.md output (default: next to each PDF)",
+    )
+    ocr_convert_parser.add_argument(
+        "--scan-d-drive",
+        action="store_true",
+        help="Deep-scan D: drive for tesseract.exe before converting",
     )
     emit_parser = sub.add_parser("emit", help="Emit cartridge manifest and source-context.md")
     emit_parser.add_argument("--feature", required=True, help="Active feature name for retrieval")
@@ -420,6 +456,7 @@ def main(argv: list[str] | None = None) -> int:
             embed=args.embed,
             update_cartridge=update_cartridge,
             force_delta=args.force or args.force_delta,
+            ocr_pdf=not args.no_ocr,
         )
         print(f"Root: {root}")
         if result.error:
@@ -438,6 +475,42 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Wrote {name}: {rel}")
         print(json.dumps(result.to_dict(), indent=2))
         return 0 if result.ok else 1
+
+    if args.command == "ocr-status":
+        from hive_planner.ocr_runtime import ocr_runtime_status
+
+        status = ocr_runtime_status(scan_d_drive=args.scan_d_drive, refresh=True)
+        print(f"Root: {root}")
+        print(f"OCR available: {status.available}")
+        print(status.detail)
+        if status.install is not None:
+            print(f"Tesseract: {status.install.exe}")
+            print(f"Tessdata: {status.install.tessdata_dir}")
+            print(f"Source: {status.install.source}")
+        print(json.dumps(status.to_dict(), indent=2))
+        return 0 if status.available else 1
+
+    if args.command == "ocr-convert":
+        from hive_planner.ocr_runtime import convert_pdf_to_markdown, ocr_runtime_status
+
+        status = ocr_runtime_status(scan_d_drive=args.scan_d_drive, refresh=True)
+        if not status.available or status.install is None:
+            print(f"Error: {status.detail}", file=sys.stderr)
+            return 1
+        failed = 0
+        for pdf in args.files:
+            try:
+                out = args.output_dir / f"{pdf.stem}.ocr.md" if args.output_dir else None
+                dest = convert_pdf_to_markdown(
+                    pdf,
+                    out,
+                    install=status.install,
+                )
+                print(f"OCR: {pdf} -> {dest}")
+            except Exception as exc:
+                failed += 1
+                print(f"Error: {pdf}: {exc}", file=sys.stderr)
+        return 1 if failed else 0
 
     if args.command == "emit":
         try:

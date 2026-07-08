@@ -38,6 +38,7 @@ npm-debug.log*
 *.temp
 .cache/
 packaging/version_info.txt
+vendor/tesseract/
 
 # Generated Windows shortcut (machine-specific paths; run CreateHivePlannerShortcut.ps1)
 scripts/HivePlanner.lnk

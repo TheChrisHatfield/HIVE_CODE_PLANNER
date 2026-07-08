@@ -9,6 +9,7 @@ from pathlib import Path
 from hive_planner.config import RepoPaths, validate_feature_id
 from hive_planner.emitter import emit_source_context
 from hive_planner.indexer import load_document_index
+from hive_planner.ocr_runtime import ocr_pdf_enabled
 from hive_planner.pipeline import ingest
 
 SOURCE4S_DIR_NAME = "source4s"
@@ -95,6 +96,7 @@ def run_source4s(
     embed: bool = False,
     update_cartridge: bool = True,
     force_delta: bool = False,
+    ocr_pdf: bool = True,
 ) -> Source4sResult:
     """Stage txt/pdf uploads, ingest into context-library, optionally refresh cartridge source-context."""
     result = Source4sResult()
@@ -112,7 +114,11 @@ def run_source4s(
         result.error = "No supported files were staged (.txt and .pdf only)."
         return result
 
-    ingest_report = ingest(paths, embed=embed)
+    token = ocr_pdf_enabled.set(ocr_pdf)
+    try:
+        ingest_report = ingest(paths, embed=embed)
+    finally:
+        ocr_pdf_enabled.reset(token)
     result.processed = ingest_report.processed
     result.skipped = ingest_report.skipped
     result.pruned = ingest_report.pruned
@@ -127,7 +133,7 @@ def run_source4s(
         index_error = (
             f"{len(not_indexed)} of {len(copied)} staged file(s) could not be indexed: "
             + ", ".join(not_indexed)
-            + " — see warnings (PDF may require pip install -e '.[pdf]')."
+            + " — see warnings (PDF may require pip install -e '.[pdf]' or Tesseract OCR)."
         )
         if not indexed_copied:
             result.ok = False

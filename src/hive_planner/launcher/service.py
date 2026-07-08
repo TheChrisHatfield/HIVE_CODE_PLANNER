@@ -1653,6 +1653,7 @@ def run_source4s_upload(
     embed: bool = False,
     update_cartridge: bool = True,
     force_delta: bool = False,
+    ocr_pdf: bool = True,
 ) -> dict:
     """Upload txt/pdf reference files and link them to the active cartridge."""
     from hive_planner.source4s import list_source4s_files, run_source4s
@@ -1670,6 +1671,7 @@ def run_source4s_upload(
         embed=embed,
         update_cartridge=update_cartridge,
         force_delta=force_delta,
+        ocr_pdf=ocr_pdf,
     )
     payload = result.to_dict()
     payload["existing_sources"] = list_source4s_files(paths)

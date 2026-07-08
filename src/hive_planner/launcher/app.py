@@ -1951,8 +1951,8 @@ class HivePlannerApp:
         dialog.configure(bg=COLORS["bg"])
         dialog.transient(self.root)
         dialog.grab_set()
-        dialog.geometry("520x460")
-        dialog.minsize(480, 420)
+        dialog.geometry("520x500")
+        dialog.minsize(480, 460)
 
         body = tk.Frame(dialog, bg=COLORS["bg"])
         body.pack(fill="both", expand=True, padx=16, pady=16)
@@ -2040,6 +2040,34 @@ class HivePlannerApp:
             wraplength=470,
         ).pack(anchor="w", pady=4)
 
+        from hive_planner.ocr_runtime import ocr_runtime_status
+
+        ocr_status = ocr_runtime_status()
+        ocr_default = ocr_status.available
+        ocr_var = tk.BooleanVar(value=ocr_default)
+        ocr_hint = (
+            "OCR image-only PDFs with Tesseract (scanned documents)"
+            if ocr_status.available
+            else "OCR unavailable — install Tesseract or set HIVE_TESSERACT_EXE"
+        )
+        ocr_cb = tk.Checkbutton(
+            body,
+            text=ocr_hint,
+            variable=ocr_var,
+            bg=COLORS["bg"],
+            fg=COLORS["fg"],
+            activebackground=COLORS["bg"],
+            activeforeground=COLORS["fg"],
+            selectcolor=COLORS["card"],
+            anchor="w",
+            font=FONT,
+            wraplength=470,
+        )
+        ocr_cb.pack(anchor="w", pady=4)
+        if not ocr_status.available:
+            ocr_cb.configure(state="disabled")
+            ocr_var.set(False)
+
         def sync_force_control(*_args: object) -> None:
             if link_var.get():
                 force_cb.configure(state="normal")
@@ -2113,6 +2141,7 @@ class HivePlannerApp:
                     embed=embed_var.get(),
                     update_cartridge=link_var.get(),
                     force_delta=force_var.get(),
+                    ocr_pdf=ocr_var.get(),
                 ),
                 self._load_sources_done,
             )

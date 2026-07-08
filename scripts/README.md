@@ -114,7 +114,7 @@ The **active project** is the folder Hive Planner is “pointing at” right now
 | **Sync impact maps** | Updates planning “impact map” files after you change code |
 | **Deploy agent handoff** | Writes unified Spec Kit + Continual Learning overlays (`.hive/spec-kit/`, `.cursor/plugins/hive-continual-learning/`, `.hive/upstream-pins.json`). Re-run after Hive upgrades. |
 | **Load cartridge…** | Add reference docs, translate research markdown into draft `cartridge/`, or import an existing cartridge folder. With **unified handoff**, optionally **promote drafts** (force overwrite optional), write CL candidate files, and run **spec-drift**. Import + promote requires a valid feature id. |
-| **Load Sources…** | Upload `.txt` and `.pdf` reference files into `context-library/sources/source4s/`, index them for retrieval, and refresh `cartridge/source-context.md` for the active feature. |
+| **Load Sources…** | Upload `.txt` and `.pdf` reference files into `context-library/sources/source4s/`, index them for retrieval, and refresh `cartridge/source-context.md` for the active feature. Image-only PDFs are OCR'd via bundled or system Tesseract when available. |
 | **Open in Explorer** | Opens the project folder in Windows File Explorer |
 
 The **Output** area at the bottom shows what just ran — read it if something fails.

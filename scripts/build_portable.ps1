@@ -77,6 +77,10 @@ if ($Sign) {
 Copy-Item -Force (Join-Path $RepoRoot "packaging\PORTABLE_README.md") (Join-Path $Dist "README-PORTABLE.md")
 Copy-Item -Force (Join-Path $RepoRoot "packaging\DEFENDER.md") (Join-Path $Dist "DEFENDER.md")
 
+Write-Host "Staging portable Tesseract OCR (if installed)..."
+$VendorTess = Join-Path $Dist "vendor\tesseract"
+& (Join-Path $RepoRoot "scripts\stage_tesseract.ps1") -TargetDir $VendorTess -ScanDDrive
+
 $CliBat = Join-Path $Dist "HivePlanner-cli.bat"
 @'
 @echo off
