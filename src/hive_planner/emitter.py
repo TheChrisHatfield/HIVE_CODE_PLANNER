@@ -223,10 +223,11 @@ def emit_source_context(
         outputs: dict[str, Path] = (
             {"source_context": source_context_path} if source_context_path.exists() else {}
         )
-    else:
-        banner = _auto_sync_banner(paths.chunk_index, paths)
-        source_context_path.write_text(f"{banner}\n\n{context_body}", encoding="utf-8")
-        outputs = {"source_context": source_context_path}
+        return outputs, warnings
+
+    banner = _auto_sync_banner(paths.chunk_index, paths)
+    source_context_path.write_text(f"{banner}\n\n{context_body}", encoding="utf-8")
+    outputs = {"source_context": source_context_path}
 
     rel_files = [path.relative_to(paths.root).as_posix() for path in outputs.values()]
     rel_files.append("cartridge/manifest.json")

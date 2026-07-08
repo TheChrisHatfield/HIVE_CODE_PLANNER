@@ -122,6 +122,8 @@ def test_load_sources_reports_skipped_source_context(tmp_path: Path, monkeypatch
     assert result.ok
     assert result.source_context_path is None
     assert any("was not updated" in w for w in result.warnings)
+    manifest_path = paths.cartridge / "manifest.json"
+    assert not manifest_path.is_file()
 
 
 def test_load_sources_skips_delta_and_pack_sync(tmp_path: Path) -> None:
