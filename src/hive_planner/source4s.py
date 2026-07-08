@@ -119,17 +119,17 @@ def run_source4s(
     result.warnings.extend(ingest_report.warnings)
 
     indexed_paths = {doc.source_path for doc in load_document_index(paths.document_index).documents}
+    indexed_copied = [rel for rel in copied if rel in indexed_paths]
     not_indexed = [rel for rel in copied if rel not in indexed_paths]
+    result.indexed_staged = len(indexed_copied)
     if not_indexed:
         result.ok = False
         result.error = (
-            "Staged file(s) could not be indexed: "
+            f"{len(not_indexed)} of {len(copied)} staged file(s) could not be indexed: "
             + ", ".join(not_indexed)
             + " — see warnings (PDF may require pip install -e '.[pdf]')."
         )
         return result
-
-    result.indexed_staged = len(copied)
 
     if not update_cartridge:
         return result

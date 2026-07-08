@@ -98,14 +98,22 @@ def test_run_source4s_requires_files(tmp_path: Path) -> None:
 def test_run_source4s_fails_when_staged_file_not_indexed(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     paths.ensure_dirs()
+    good = tmp_path / "good.txt"
+    good.write_text("# Good\n\nIndexed reference content.\n", encoding="utf-8")
     pdf = tmp_path / "broken.pdf"
     pdf.write_bytes(b"%PDF-1.4\nnot a real pdf structure")
 
-    result = run_source4s(paths, [pdf], feature="load-sources-v1", update_cartridge=False)
+    result = run_source4s(
+        paths,
+        [good, pdf],
+        feature="load-sources-v1",
+        update_cartridge=False,
+    )
     assert not result.ok
-    assert result.copied
+    assert len(result.copied) == 2
+    assert result.indexed_staged == 1
     assert result.error
-    assert "could not be indexed" in result.error
+    assert "1 of 2 staged file(s)" in result.error
 
 
 def test_load_sources_reports_skipped_source_context(tmp_path: Path) -> None:
