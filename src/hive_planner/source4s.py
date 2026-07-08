@@ -145,9 +145,8 @@ def run_source4s(
         return result
 
     if not feature or not feature.strip():
-        result.warnings.append(
-            "Cartridge link skipped — provide a feature id to refresh cartridge/source-context.md."
-        )
+        result.ok = False
+        result.error = "Feature id is required to update cartridge source-context.md."
         return result
 
     try:

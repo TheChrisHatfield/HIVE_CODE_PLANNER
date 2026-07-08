@@ -88,6 +88,18 @@ def test_run_source4s_links_cartridge(tmp_path: Path, monkeypatch: pytest.Monkey
     assert emitted == [feature]
 
 
+def test_run_source4s_requires_feature_when_updating_cartridge(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    paths.ensure_dirs()
+    doc = tmp_path / "ref.txt"
+    doc.write_text("# Reference\n\nMission content.\n", encoding="utf-8")
+
+    result = run_source4s(paths, [doc], feature=None, update_cartridge=True)
+    assert not result.ok
+    assert result.indexed_staged == 1
+    assert "Feature id is required" in result.error
+
+
 def test_run_source4s_requires_files(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     result = run_source4s(paths, [], feature="x-v1")
