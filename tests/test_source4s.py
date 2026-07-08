@@ -202,6 +202,28 @@ def test_load_sources_prefers_newly_staged_docs_in_source_context(tmp_path: Path
     assert body.index(new_path) < body.index(old_path)
 
 
+def test_load_sources_preserves_upload_order_in_source_context(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    paths.ensure_dirs()
+    feature = "load-sources-v1"
+    first = tmp_path / "aaa-first.txt"
+    second = tmp_path / "bbb-second.txt"
+    first.write_text("# First\n\nFirst uploaded reference.\n", encoding="utf-8")
+    second.write_text("# Second\n\nSecond uploaded reference.\n", encoding="utf-8")
+
+    result = run_source4s(
+        paths,
+        [first, second],
+        feature=feature,
+        update_cartridge=True,
+    )
+    assert result.ok
+    body = (paths.cartridge / "source-context.md").read_text(encoding="utf-8")
+    first_path = "context-library/sources/source4s/aaa-first.txt"
+    second_path = "context-library/sources/source4s/bbb-second.txt"
+    assert body.index(first_path) < body.index(second_path)
+
+
 def test_load_sources_reports_skipped_source_context(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     paths.ensure_dirs()

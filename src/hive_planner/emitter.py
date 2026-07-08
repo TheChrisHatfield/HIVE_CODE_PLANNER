@@ -80,7 +80,7 @@ def select_chunks(
 def merge_preferred_chunks(
     selected: list[ChunkRecord],
     chunks: list[ChunkRecord],
-    prefer_doc_ids: set[str],
+    prefer_doc_ids: list[str],
     limit: int = MAX_SOURCE_EXCERPTS,
 ) -> list[ChunkRecord]:
     """Ensure chunks from preferred documents appear first in source-context excerpts."""
@@ -161,12 +161,16 @@ def emit_source_context(
         embedding_vectors=vectors,
         embedding_model_id=embedding_model_id,
     )
+    prefer_doc_ids: list[str] = []
     if prefer_source_paths:
-        prefer_doc_ids = {
+        path_order = {path: index for index, path in enumerate(prefer_source_paths)}
+        prefer_doc_ids = [
             doc.doc_id
-            for doc in doc_index.documents
-            if doc.source_path in set(prefer_source_paths)
-        }
+            for doc in sorted(
+                (doc for doc in doc_index.documents if doc.source_path in path_order),
+                key=lambda doc: path_order[doc.source_path],
+            )
+        ]
         selected = merge_preferred_chunks(selected, chunk_index.chunks, prefer_doc_ids)
     if chunk_index.chunks and terms and selected:
         if vectors:
@@ -216,9 +220,19 @@ def emit_source_context(
         "## Active documents",
     ]
     doc_ids = {c.doc_id for c in selected}
+    listed_docs: list = []
+    seen_doc_ids: set[str] = set()
+    for doc_id in prefer_doc_ids:
+        doc = next((d for d in doc_index.documents if d.doc_id == doc_id), None)
+        if doc and doc.doc_id in doc_ids and doc.doc_id not in seen_doc_ids:
+            listed_docs.append(doc)
+            seen_doc_ids.add(doc.doc_id)
     for doc in doc_index.documents:
-        if doc.doc_id in doc_ids:
-            lines.append(f"- {doc.source_path} — {doc.title}")
+        if doc.doc_id in doc_ids and doc.doc_id not in seen_doc_ids:
+            listed_docs.append(doc)
+            seen_doc_ids.add(doc.doc_id)
+    for doc in listed_docs:
+        lines.append(f"- {doc.source_path} — {doc.title}")
 
     lines.extend(["", "## Retrieved excerpts", ""])
     for chunk in selected:
