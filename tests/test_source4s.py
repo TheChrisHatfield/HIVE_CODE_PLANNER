@@ -132,6 +132,7 @@ def test_load_sources_reports_skipped_source_context(tmp_path: Path) -> None:
     assert result.source_context_path is None
     assert result.error
     assert "was not updated" in result.error
+    assert result.error not in result.warnings
     manifest_path = paths.cartridge / "manifest.json"
     assert not manifest_path.is_file()
 

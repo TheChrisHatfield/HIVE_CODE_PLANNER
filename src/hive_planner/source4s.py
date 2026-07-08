@@ -174,7 +174,6 @@ def run_source4s(
         result.error = (
             "Cartridge source-context was not updated — remove draft/manual banner or use force."
         )
-        result.warnings.append(result.error)
         result.source_context_path = None
         result.cartridge_outputs.pop("source_context", None)
     return result
