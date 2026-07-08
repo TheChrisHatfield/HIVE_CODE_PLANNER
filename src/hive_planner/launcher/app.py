@@ -1951,8 +1951,8 @@ class HivePlannerApp:
         dialog.configure(bg=COLORS["bg"])
         dialog.transient(self.root)
         dialog.grab_set()
-        dialog.geometry("520x420")
-        dialog.minsize(480, 380)
+        dialog.geometry("520x460")
+        dialog.minsize(480, 420)
 
         body = tk.Frame(dialog, bg=COLORS["bg"])
         body.pack(fill="both", expand=True, padx=16, pady=16)
@@ -2009,6 +2009,22 @@ class HivePlannerApp:
             wraplength=470,
         ).pack(anchor="w", pady=4)
 
+        force_var = tk.BooleanVar(value=False)
+        force_cb = tk.Checkbutton(
+            body,
+            text="Force overwrite source-context (ignore draft/manual banners)",
+            variable=force_var,
+            bg=COLORS["bg"],
+            fg=COLORS["fg"],
+            activebackground=COLORS["bg"],
+            activeforeground=COLORS["fg"],
+            selectcolor=COLORS["card"],
+            anchor="w",
+            font=FONT,
+            wraplength=470,
+        )
+        force_cb.pack(anchor="w", pady=4)
+
         embed_var = tk.BooleanVar(value=False)
         tk.Checkbutton(
             body,
@@ -2023,6 +2039,16 @@ class HivePlannerApp:
             font=FONT,
             wraplength=470,
         ).pack(anchor="w", pady=4)
+
+        def sync_force_control(*_args: object) -> None:
+            if link_var.get():
+                force_cb.configure(state="normal")
+            else:
+                force_cb.configure(state="disabled")
+                force_var.set(False)
+
+        link_var.trace_add("write", sync_force_control)
+        sync_force_control()
 
         selection_var = tk.StringVar(value="(none selected)")
         tk.Label(
@@ -2086,6 +2112,7 @@ class HivePlannerApp:
                     feature if link_var.get() else None,
                     embed=embed_var.get(),
                     update_cartridge=link_var.get(),
+                    force_delta=force_var.get(),
                 ),
                 self._load_sources_done,
             )

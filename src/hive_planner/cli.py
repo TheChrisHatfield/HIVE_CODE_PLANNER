@@ -59,9 +59,14 @@ def main(argv: list[str] | None = None) -> int:
         help="Build/update embedding index for hybrid retrieval",
     )
     source4s_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite cartridge/source-context.md when draft or manual banners exist",
+    )
+    source4s_parser.add_argument(
         "--force-delta",
         action="store_true",
-        help="Overwrite cartridge layers when refreshing source-context (same as emit --force-delta)",
+        help=argparse.SUPPRESS,
     )
     emit_parser = sub.add_parser("emit", help="Emit cartridge manifest and source-context.md")
     emit_parser.add_argument("--feature", required=True, help="Active feature name for retrieval")
@@ -414,7 +419,7 @@ def main(argv: list[str] | None = None) -> int:
             feature=args.feature,
             embed=args.embed,
             update_cartridge=update_cartridge,
-            force_delta=args.force_delta,
+            force_delta=args.force or args.force_delta,
         )
         print(f"Root: {root}")
         if result.error:

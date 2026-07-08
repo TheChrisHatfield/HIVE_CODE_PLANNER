@@ -128,6 +128,25 @@ def test_load_sources_reports_skipped_source_context(tmp_path: Path) -> None:
     assert not manifest_path.is_file()
 
 
+def test_load_sources_force_overwrites_manual_source_context(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    paths.ensure_dirs()
+    feature = "load-sources-v1"
+    doc = tmp_path / "ref.txt"
+    doc.write_text("# Reference\n\nMission for force overwrite test.\n", encoding="utf-8")
+
+    source_context = paths.cartridge / "source-context.md"
+    source_context.parent.mkdir(parents=True, exist_ok=True)
+    source_context.write_text("<!-- MANUAL: reviewed -->\n\n# Source Context\n", encoding="utf-8")
+
+    result = run_source4s(paths, [doc], feature=feature, update_cartridge=True, force_delta=True)
+    assert result.ok
+    assert result.source_context_path == "cartridge/source-context.md"
+    body = source_context.read_text(encoding="utf-8")
+    assert "MANUAL" not in body.splitlines()[0]
+    assert "Mission for force overwrite test" in body or "Reference" in body
+
+
 def test_load_sources_skips_delta_and_pack_sync(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     paths.ensure_dirs()
