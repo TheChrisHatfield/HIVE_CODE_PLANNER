@@ -131,6 +131,14 @@ def run_source4s(
         )
         return result
 
+    if len(copied) < len(source_files):
+        result.ok = False
+        result.error = (
+            f"Only {len(copied)} of {len(source_files)} selected file(s) were staged — "
+            "Load Sources accepts .txt and .pdf only."
+        )
+        return result
+
     if not update_cartridge:
         return result
 
