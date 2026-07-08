@@ -5,8 +5,10 @@ from pathlib import Path
 import pytest
 
 from hive_planner.ocr_runtime import (
+    OcrRuntimeStatus,
     TesseractInstall,
     discover_tesseract,
+    ensure_ocr_runtime,
     ocr_pdf_enabled,
     ocr_runtime_status,
 )
@@ -63,7 +65,7 @@ def test_normalize_pdf_ocr_fallback(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     )
 
     monkeypatch.setattr(
-        "hive_planner.normalizers.pdf.ocr_runtime_status",
+        "hive_planner.normalizers.pdf.ensure_ocr_runtime",
         lambda: type("S", (), {"available": True, "install": fake_install})(),
     )
     monkeypatch.setattr(
@@ -95,7 +97,7 @@ def test_normalize_pdf_mixed_embedded_and_ocr(tmp_path: Path, monkeypatch: pytes
     )
 
     monkeypatch.setattr(
-        "hive_planner.normalizers.pdf.ocr_runtime_status",
+        "hive_planner.normalizers.pdf.ensure_ocr_runtime",
         lambda: type("S", (), {"available": True, "install": fake_install})(),
     )
     monkeypatch.setattr(
@@ -126,6 +128,29 @@ def test_normalize_pdf_skips_ocr_when_disabled(tmp_path: Path, monkeypatch: pyte
             normalize_pdf(pdf_path)
     finally:
         ocr_pdf_enabled.reset(token)
+
+
+def test_ensure_ocr_runtime_refreshes_when_unavailable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    install = TesseractInstall(
+        exe=tmp_path / "tesseract.exe",
+        tessdata_dir=tmp_path / "tessdata",
+        source="test",
+    )
+    unavailable = OcrRuntimeStatus(False, None, [], "missing")
+    available = OcrRuntimeStatus(True, install, [], "found")
+    calls: list[bool] = []
+
+    def fake_discover(*, scan_d_drive: bool | None = None, refresh: bool = False):
+        calls.append(refresh)
+        return unavailable if not refresh else available
+
+    monkeypatch.setattr("hive_planner.ocr_runtime.discover_tesseract", fake_discover)
+    status = ensure_ocr_runtime()
+    assert calls == [False, True]
+    assert status.available
+    assert status.install is install
 
 
 def test_ocr_runtime_status_to_dict(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

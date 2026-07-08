@@ -4,7 +4,7 @@ from pathlib import Path
 
 from hive_planner.models import NormalizeResult
 from hive_planner.normalizers import EmptySourceError, MissingDependencyError
-from hive_planner.ocr_runtime import ocr_pdf_enabled, ocr_pdf_pages, ocr_runtime_status
+from hive_planner.ocr_runtime import ensure_ocr_runtime, ocr_pdf_enabled, ocr_pdf_pages
 
 
 def normalize_pdf(file_path: Path) -> NormalizeResult:
@@ -38,7 +38,7 @@ def normalize_pdf(file_path: Path) -> NormalizeResult:
         had_embedded_text = bool(embedded)
 
         if missing_indices and ocr_pdf_enabled.get():
-            status = ocr_runtime_status()
+            status = ensure_ocr_runtime()
             if status.available and status.install is not None:
                 try:
                     ocr_pages = ocr_pdf_pages(

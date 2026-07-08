@@ -2040,9 +2040,9 @@ class HivePlannerApp:
             wraplength=470,
         ).pack(anchor="w", pady=4)
 
-        from hive_planner.ocr_runtime import ocr_runtime_status
+        from hive_planner.ocr_runtime import ensure_ocr_runtime
 
-        ocr_status = ocr_runtime_status()
+        ocr_status = ensure_ocr_runtime()
         ocr_default = ocr_status.available
         ocr_var = tk.BooleanVar(value=ocr_default)
         ocr_hint = (

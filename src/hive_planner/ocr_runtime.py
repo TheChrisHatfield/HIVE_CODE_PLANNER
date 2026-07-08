@@ -183,6 +183,14 @@ def ocr_runtime_status(*, scan_d_drive: bool | None = None, refresh: bool = Fals
     return discover_tesseract(scan_d_drive=scan_d_drive, refresh=refresh)
 
 
+def ensure_ocr_runtime(*, scan_d_drive: bool | None = None) -> OcrRuntimeStatus:
+    """Return OCR runtime status, re-scanning once when the cached result was unavailable."""
+    status = discover_tesseract(scan_d_drive=scan_d_drive)
+    if status.available:
+        return status
+    return discover_tesseract(scan_d_drive=scan_d_drive, refresh=True)
+
+
 def _run_tesseract_on_png(install: TesseractInstall, png_path: Path, *, lang: str = DEFAULT_OCR_LANG) -> str:
     env = os.environ.copy()
     env["TESSDATA_PREFIX"] = str(install.tessdata_dir.parent)
@@ -254,7 +262,7 @@ def convert_pdf_to_markdown(
     if not pdf_path.is_file():
         raise FileNotFoundError(pdf_path)
     if install is None:
-        status = ocr_runtime_status()
+        status = ensure_ocr_runtime()
         if not status.available or status.install is None:
             raise RuntimeError(status.detail)
         install = status.install
