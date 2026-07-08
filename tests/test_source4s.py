@@ -107,7 +107,21 @@ def test_run_source4s_fails_when_staged_file_not_indexed(tmp_path: Path) -> None
     assert "could not be indexed" in result.error
 
 
-def test_load_sources_skips_delta_and_pack_sync(tmp_path: Path) -> None:
+def test_load_sources_reports_skipped_source_context(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    paths = RepoPaths(root=tmp_path)
+    paths.ensure_dirs()
+    feature = "load-sources-v1"
+    doc = tmp_path / "ref.txt"
+    doc.write_text("# Reference\n\nMission for skipped source-context test.\n", encoding="utf-8")
+
+    source_context = paths.cartridge / "source-context.md"
+    source_context.parent.mkdir(parents=True, exist_ok=True)
+    source_context.write_text("<!-- MANUAL: reviewed -->\n\n# Source Context\n", encoding="utf-8")
+
+    result = run_source4s(paths, [doc], feature=feature, update_cartridge=True)
+    assert result.ok
+    assert result.source_context_path is None
+    assert any("was not updated" in w for w in result.warnings)
     paths = RepoPaths(root=tmp_path)
     paths.ensure_dirs()
     feature = "load-sources-v1"

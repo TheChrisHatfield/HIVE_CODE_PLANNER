@@ -162,4 +162,12 @@ def run_source4s(
     source_ctx = outputs.get("source_context")
     if source_ctx is not None:
         result.source_context_path = source_ctx.relative_to(paths.root).as_posix()
+    skipped_context = any(
+        w.startswith("Skipped cartridge/source-context.md") for w in emit_warnings
+    )
+    if skipped_context:
+        result.warnings.append(
+            "Cartridge source-context was not updated — remove draft/manual banner or use force."
+        )
+        result.source_context_path = None
     return result
