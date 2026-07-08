@@ -122,6 +122,9 @@ def test_load_sources_reports_skipped_source_context(tmp_path: Path, monkeypatch
     assert result.ok
     assert result.source_context_path is None
     assert any("was not updated" in w for w in result.warnings)
+
+
+def test_load_sources_skips_delta_and_pack_sync(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     paths.ensure_dirs()
     feature = "load-sources-v1"
