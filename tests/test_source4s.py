@@ -59,6 +59,18 @@ def test_stage_source4s_reuses_existing_library_file_without_duplicate(tmp_path:
     assert not (paths.sources / SOURCE4S_DIR_NAME / "brief-2.pdf").exists()
 
 
+def test_stage_source4s_dedupes_duplicate_selection(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    paths.ensure_dirs()
+    incoming = tmp_path / "once.txt"
+    incoming.write_text("single upload", encoding="utf-8")
+
+    copied, warnings = stage_source4s_files(paths, [incoming, incoming])
+    assert copied == ["context-library/sources/source4s/once.txt"]
+    assert warnings == []
+    assert not (paths.sources / SOURCE4S_DIR_NAME / "once-2.txt").exists()
+
+
 def test_run_source4s_ingest_only(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     paths.ensure_dirs()

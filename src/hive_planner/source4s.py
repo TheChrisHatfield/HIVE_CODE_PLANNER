@@ -112,8 +112,12 @@ def stage_source4s_files(paths: RepoPaths, source_files: list[Path]) -> tuple[li
     dest_resolved = dest_dir.resolve()
     copied: list[str] = []
     warnings: list[str] = []
+    seen_sources: set[Path] = set()
     for raw in source_files:
         src = raw.resolve()
+        if src in seen_sources:
+            continue
+        seen_sources.add(src)
         if not src.is_file():
             warnings.append(f"Skipped (not a file): {src}")
             continue
