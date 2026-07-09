@@ -590,13 +590,16 @@ class HivePlannerApp:
         secondary_button(actions, "Sync impact maps", self._on_map_sync)
         secondary_button(actions, "Deploy agent handoff", self._on_deploy_agent_handoff)
         secondary_button(actions, "Load cartridge…", self._on_load_cartridge)
+        secondary_button(actions, "Open in Explorer", self._on_explore)
+
+        source_actions = tk.Frame(body, bg=COLORS["bg"])
+        source_actions.pack(fill="x", padx=16, pady=(0, 8))
         secondary_button(
-            actions,
+            source_actions,
             "Load Sources…",
             self._on_load_sources,
             tooltip="Upload .txt and .pdf reference files into context-library and link excerpts to the cartridge.",
         )
-        secondary_button(actions, "Open in Explorer", self._on_explore)
 
         handoff_actions = tk.Frame(body, bg=COLORS["bg"])
         handoff_actions.pack(fill="x", padx=16, pady=(0, 8))
