@@ -90,10 +90,15 @@ def list_source4s_files(paths: RepoPaths) -> list[str]:
 
 
 def source4s_needs_pdf_support(paths: RepoPaths, source_files: list[Path]) -> bool:
-    """True when ingest will touch a PDF under source4s (upload or existing library)."""
+    """True when ingest will touch any PDF under context-library/sources."""
     if any(path.suffix.lower() == ".pdf" for path in source_files):
         return True
-    return any(rel.lower().endswith(".pdf") for rel in list_source4s_files(paths))
+    sources_root = paths.sources
+    if not sources_root.is_dir():
+        return False
+    return any(
+        path.suffix.lower() == ".pdf" for path in sources_root.rglob("*") if path.is_file()
+    )
 
 
 def stage_source4s_files(paths: RepoPaths, source_files: list[Path]) -> tuple[list[str], list[str]]:

@@ -73,6 +73,17 @@ def test_source4s_needs_pdf_support_when_library_has_pdf(tmp_path: Path) -> None
     assert source4s_needs_pdf_support(paths, [txt.with_suffix(".md")]) is True
 
 
+def test_source4s_needs_pdf_support_when_pdf_outside_source4s(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    paths.ensure_dirs()
+    pdf = paths.sources / "reference.pdf"
+    pdf.write_bytes(b"%PDF-1.4 stub")
+    txt = tmp_path / "notes.txt"
+    txt.write_text("notes only", encoding="utf-8")
+
+    assert source4s_needs_pdf_support(paths, [txt]) is True
+
+
 def test_run_source4s_fails_fast_when_library_has_pdf_without_pymupdf(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
