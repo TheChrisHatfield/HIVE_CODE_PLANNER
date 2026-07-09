@@ -10,6 +10,7 @@ from hive_planner.discovery import doc_id_for_path
 from hive_planner.source4s import (
     SOURCE4S_DIR_NAME,
     discover_source4s_files_in_folder,
+    expand_source4s_inputs,
     list_source4s_files,
     merge_source4s_selection,
     pdf_ocr_quality_warnings,
@@ -163,6 +164,52 @@ def test_source4s_selection_error_flags_missing_and_unsupported(tmp_path: Path) 
     assert mixed is not None
     assert "no longer exist" in mixed
     assert "unsupported type(s)" in mixed
+
+
+def test_expand_source4s_inputs_expands_folders_and_dedupes(tmp_path: Path) -> None:
+    folder = tmp_path / "refs"
+    folder.mkdir()
+    txt = folder / "a.txt"
+    txt.write_text("a", encoding="utf-8")
+
+    expanded = expand_source4s_inputs([folder, txt])
+    assert expanded == [txt]
+
+
+def test_run_source4s_expands_folder_argument(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    paths.ensure_dirs()
+    folder = tmp_path / "refs"
+    folder.mkdir()
+    (folder / "brief.txt").write_text(
+        "# Brief\n\nReference content for folder upload.\n",
+        encoding="utf-8",
+    )
+
+    result = run_source4s(
+        paths,
+        [folder],
+        feature="load-sources-v1",
+        update_cartridge=False,
+    )
+    assert result.ok
+    assert result.copied == ["context-library/sources/source4s/brief.txt"]
+
+
+def test_run_source4s_reports_empty_folder_argument(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    paths.ensure_dirs()
+    folder = tmp_path / "empty"
+    folder.mkdir()
+
+    result = run_source4s(
+        paths,
+        [folder],
+        feature="load-sources-v1",
+        update_cartridge=False,
+    )
+    assert not result.ok
+    assert "No .txt or .pdf files found in the selected folder(s)" in (result.error or "")
 
 
 def test_run_source4s_rejects_all_unsupported_selection(tmp_path: Path) -> None:

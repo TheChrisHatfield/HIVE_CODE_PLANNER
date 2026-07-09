@@ -46,7 +46,7 @@ def main(argv: list[str] | None = None) -> int:
         nargs="+",
         required=True,
         type=Path,
-        help="One or more .txt or .pdf files to stage under context-library/sources/source4s/",
+        help="One or more .txt/.pdf files or folders to stage under context-library/sources/source4s/",
     )
     source4s_parser.add_argument(
         "--feature",

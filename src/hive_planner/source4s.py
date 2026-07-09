@@ -47,6 +47,17 @@ def merge_source4s_selection(existing: list[Path], added: list[Path]) -> list[Pa
     return _unique_source_files([*existing, *added])
 
 
+def expand_source4s_inputs(source_files: list[Path]) -> list[Path]:
+    """Expand folder paths to supported files; keep files and missing paths as-is."""
+    expanded: list[Path] = []
+    for path in source_files:
+        if path.is_dir():
+            expanded.extend(discover_source4s_files_in_folder(path))
+        else:
+            expanded.append(path)
+    return _unique_source_files(expanded)
+
+
 def source4s_selection_error(source_files: list[Path]) -> str | None:
     """Return a user-facing error when nothing in the selection can be staged."""
     if not source_files:
@@ -314,7 +325,16 @@ def run_source4s(
         result.error = "Choose at least one .txt or .pdf file."
         return result
 
-    source_files = _unique_source_files(source_files)
+    had_directories = any(path.is_dir() for path in source_files)
+    source_files = expand_source4s_inputs(source_files)
+    if not source_files:
+        result.ok = False
+        result.error = (
+            "No .txt or .pdf files found in the selected folder(s)."
+            if had_directories
+            else "Choose at least one .txt or .pdf file."
+        )
+        return result
 
     selection_problem = source4s_selection_error(source_files)
     if selection_problem:
