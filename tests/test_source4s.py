@@ -370,6 +370,18 @@ def test_run_source4s_fails_when_selected_file_types_unsupported(tmp_path: Path)
     assert "1 of 2 selected file(s)" in result.error
 
 
+def test_run_source4s_reports_stage_warning_when_nothing_staged(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    paths.ensure_dirs()
+    docx = tmp_path / "notes.docx"
+    docx.write_bytes(b"not docx")
+
+    result = run_source4s(paths, [docx], feature="load-sources-v1", update_cartridge=False)
+    assert not result.ok
+    assert result.copied == []
+    assert "Load Sources accepts .txt and .pdf only" in result.error
+
+
 def test_load_sources_keeps_cartridge_error_on_partial_selection(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     paths.ensure_dirs()

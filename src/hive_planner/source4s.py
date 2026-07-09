@@ -235,7 +235,10 @@ def run_source4s(
     result.warnings.extend(stage_warnings)
     if not copied:
         result.ok = False
-        result.error = "No supported files were staged (.txt and .pdf only)."
+        if stage_warnings:
+            result.error = stage_warnings[0]
+        else:
+            result.error = "No supported files were staged (.txt and .pdf only)."
         return result
 
     token = ocr_pdf_enabled.set(ocr_pdf)
