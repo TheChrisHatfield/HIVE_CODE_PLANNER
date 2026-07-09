@@ -2265,7 +2265,12 @@ class HivePlannerApp:
                 messagebox.showwarning("Nothing selected", hint, parent=dialog)
                 return
             from hive_planner.config import RepoPaths
-            from hive_planner.source4s import source4s_needs_pdf_support
+            from hive_planner.source4s import source4s_needs_pdf_support, source4s_selection_error
+
+            selection_problem = source4s_selection_error(selected_files)
+            if selection_problem:
+                messagebox.showwarning("Invalid selection", selection_problem, parent=dialog)
+                return
 
             repo_paths = RepoPaths(root=root)
             if not pdf_ok and source4s_needs_pdf_support(repo_paths, selected_files):

@@ -15,6 +15,7 @@ from hive_planner.source4s import (
     pdf_ocr_quality_warnings,
     run_source4s,
     source4s_needs_pdf_support,
+    source4s_selection_error,
     stage_source4s_files,
     staged_pdf_ocr_warnings,
 )
@@ -124,6 +125,31 @@ def test_merge_source4s_selection_dedupes_paths(tmp_path: Path) -> None:
 
     merged = merge_source4s_selection([first, second], [first, second])
     assert merged == [first, second]
+
+
+def test_source4s_selection_error_flags_missing_and_unsupported(tmp_path: Path) -> None:
+    good = tmp_path / "good.txt"
+    good.write_text("ok", encoding="utf-8")
+    bad = tmp_path / "notes.docx"
+    bad.write_text("nope", encoding="utf-8")
+    missing = tmp_path / "gone.txt"
+
+    assert source4s_selection_error([]) == "Choose at least one .txt or .pdf file."
+    assert source4s_selection_error([good]) is None
+    assert source4s_selection_error([good, bad]) is None
+    assert "no longer exist" in (source4s_selection_error([missing]) or "")
+    assert "Unsupported file type" in (source4s_selection_error([bad]) or "")
+
+
+def test_run_source4s_rejects_all_unsupported_selection(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    paths.ensure_dirs()
+    doc = tmp_path / "notes.docx"
+    doc.write_text("unsupported", encoding="utf-8")
+
+    result = run_source4s(paths, [doc], feature="load-sources-v1", update_cartridge=False)
+    assert not result.ok
+    assert "Unsupported file type" in (result.error or "")
 
 def test_pdf_index_failure_hint_omits_pip_on_portable(monkeypatch: pytest.MonkeyPatch) -> None:
     from hive_planner.source4s import _pdf_index_failure_hint

@@ -47,6 +47,31 @@ def merge_source4s_selection(existing: list[Path], added: list[Path]) -> list[Pa
     return _unique_source_files([*existing, *added])
 
 
+def source4s_selection_error(source_files: list[Path]) -> str | None:
+    """Return a user-facing error when nothing in the selection can be staged."""
+    if not source_files:
+        return "Choose at least one .txt or .pdf file."
+    supported = [
+        path
+        for path in source_files
+        if path.is_file() and path.suffix.lower() in SOURCE4S_EXTENSIONS
+    ]
+    if supported:
+        return None
+    missing = [path for path in source_files if not path.is_file()]
+    if missing:
+        return f"{len(missing)} selected file(s) no longer exist."
+    unsupported = [
+        path for path in source_files if path.suffix.lower() not in SOURCE4S_EXTENSIONS
+    ]
+    sample = ", ".join(path.name for path in unsupported[:3])
+    if len(unsupported) > 3:
+        sample = f"{sample} (+{len(unsupported) - 3} more)"
+    return (
+        f"Unsupported file type(s): {sample}. Load Sources accepts .txt and .pdf only."
+    )
+
+
 def _combine_errors(*parts: str | None) -> str | None:
     messages: list[str] = []
     for part in parts:
@@ -273,6 +298,12 @@ def run_source4s(
         return result
 
     source_files = _unique_source_files(source_files)
+
+    selection_problem = source4s_selection_error(source_files)
+    if selection_problem:
+        result.ok = False
+        result.error = selection_problem
+        return result
 
     if source4s_needs_pdf_support(paths, source_files) and not pdf_support_available():
         result.ok = False
