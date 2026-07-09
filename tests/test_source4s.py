@@ -9,7 +9,9 @@ from hive_planner.config import RepoPaths
 from hive_planner.discovery import doc_id_for_path
 from hive_planner.source4s import (
     SOURCE4S_DIR_NAME,
+    discover_source4s_files_in_folder,
     list_source4s_files,
+    merge_source4s_selection,
     pdf_ocr_quality_warnings,
     run_source4s,
     source4s_needs_pdf_support,
@@ -91,6 +93,37 @@ def test_stage_source4s_warns_on_duplicate_basename_in_batch(tmp_path: Path) -> 
         "second version"
     )
 
+
+def test_discover_source4s_files_in_folder_finds_txt_and_pdf_recursively(tmp_path: Path) -> None:
+    folder = tmp_path / "refs"
+    (folder / "sub").mkdir(parents=True)
+    (folder / "a.txt").write_text("a", encoding="utf-8")
+    (folder / "b.pdf").write_bytes(b"%PDF-1.4")
+    (folder / "sub" / "c.txt").write_text("c", encoding="utf-8")
+    (folder / "skip.md").write_text("skip", encoding="utf-8")
+
+    found = discover_source4s_files_in_folder(folder)
+    assert {path.name for path in found} == {"a.txt", "b.pdf", "c.txt"}
+
+
+def test_discover_source4s_files_in_folder_non_recursive(tmp_path: Path) -> None:
+    folder = tmp_path / "refs"
+    (folder / "sub").mkdir(parents=True)
+    (folder / "top.txt").write_text("top", encoding="utf-8")
+    (folder / "sub" / "nested.txt").write_text("nested", encoding="utf-8")
+
+    found = discover_source4s_files_in_folder(folder, recursive=False)
+    assert [path.name for path in found] == ["top.txt"]
+
+
+def test_merge_source4s_selection_dedupes_paths(tmp_path: Path) -> None:
+    first = tmp_path / "a.txt"
+    second = tmp_path / "b.pdf"
+    first.write_text("a", encoding="utf-8")
+    second.write_bytes(b"%PDF")
+
+    merged = merge_source4s_selection([first, second], [first, second])
+    assert merged == [first, second]
 
 def test_pdf_index_failure_hint_omits_pip_on_portable(monkeypatch: pytest.MonkeyPatch) -> None:
     from hive_planner.source4s import _pdf_index_failure_hint

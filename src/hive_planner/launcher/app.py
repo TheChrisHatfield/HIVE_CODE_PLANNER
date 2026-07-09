@@ -1954,8 +1954,8 @@ class HivePlannerApp:
         dialog.configure(bg=COLORS["bg"])
         dialog.transient(self.root)
         dialog.grab_set()
-        dialog.geometry("520x500")
-        dialog.minsize(480, 460)
+        dialog.geometry("520x580")
+        dialog.minsize(480, 520)
 
         body = tk.Frame(dialog, bg=COLORS["bg"])
         body.pack(fill="both", expand=True, padx=16, pady=16)
@@ -2095,6 +2095,41 @@ class HivePlannerApp:
         link_var.trace_add("write", sync_force_control)
         sync_force_control()
 
+        selection_mode_var = tk.StringVar(value="multiple")
+        mode_row = tk.Frame(body, bg=COLORS["bg"])
+        mode_row.pack(fill="x", pady=(0, 4))
+        tk.Label(
+            mode_row,
+            text="Add via",
+            width=12,
+            anchor="w",
+            bg=COLORS["bg"],
+            fg=COLORS["fg"],
+            font=FONT,
+        ).pack(side="left", anchor="n")
+        mode_col = tk.Frame(mode_row, bg=COLORS["bg"])
+        mode_col.pack(side="left", fill="x", expand=True)
+        for value, label in (
+            ("folder", "Folder — all .txt and .pdf files in a directory (recursive)"),
+            ("single", "Single file"),
+            ("multiple", "Multiple files — pick from one or more directories"),
+        ):
+            tk.Radiobutton(
+                mode_col,
+                text=label,
+                variable=selection_mode_var,
+                value=value,
+                bg=COLORS["bg"],
+                fg=COLORS["fg"],
+                activebackground=COLORS["bg"],
+                activeforeground=COLORS["fg"],
+                selectcolor=COLORS["card"],
+                anchor="w",
+                justify="left",
+                font=FONT,
+                wraplength=400,
+            ).pack(anchor="w", pady=1)
+
         selection_var = tk.StringVar(value="(none selected)")
         tk.Label(
             body,
@@ -2107,36 +2142,127 @@ class HivePlannerApp:
         ).pack(anchor="w", pady=(12, 4))
 
         selected_files: list[Path] = []
+        selected_folder: Path | None = None
 
-        def browse() -> None:
-            paths = filedialog.askopenfilenames(
-                title="Choose .txt or .pdf reference files",
-                parent=dialog,
-                filetypes=[
-                    ("Text and PDF", "*.txt *.pdf"),
-                    ("Text", "*.txt"),
-                    ("PDF", "*.pdf"),
-                    ("All files", "*.*"),
-                ],
-            )
-            if not paths:
-                return
-            selected_files[:] = [Path(p) for p in paths]
-            if len(selected_files) == 1:
+        def refresh_selection_label() -> None:
+            if not selected_files:
+                selection_var.set("(none selected)")
+            elif len(selected_files) == 1:
                 selection_var.set(str(selected_files[0]))
+            elif selected_folder is not None:
+                selection_var.set(
+                    f"{len(selected_files)} file(s) from folder {selected_folder}"
+                )
             else:
                 selection_var.set(f"{len(selected_files)} files selected")
 
+        def clear_selection(*_args: object) -> None:
+            nonlocal selected_folder
+            selected_files.clear()
+            selected_folder = None
+            selection_var.set("(none selected)")
+
+        def set_selection(
+            files: list[Path],
+            *,
+            folder: Path | None = None,
+            append: bool = False,
+        ) -> None:
+            nonlocal selected_folder
+            from hive_planner.source4s import merge_source4s_selection
+
+            if append and files:
+                selected_files[:] = merge_source4s_selection(selected_files, files)
+                selected_folder = None
+            else:
+                selected_files[:] = files
+                selected_folder = folder
+            refresh_selection_label()
+
+        selection_mode_var.trace_add("write", clear_selection)
+
+        from hive_planner.source4s import SOURCE4S_FILETYPES, discover_source4s_files_in_folder
+
+        def browse(*, append: bool = False) -> None:
+            mode = selection_mode_var.get()
+            if mode == "folder":
+                folder = filedialog.askdirectory(
+                    title="Choose folder with .txt or .pdf reference files",
+                    parent=dialog,
+                )
+                if not folder:
+                    return
+                folder_path = Path(folder)
+                discovered = discover_source4s_files_in_folder(folder_path)
+                if not discovered:
+                    messagebox.showwarning(
+                        "No supported files",
+                        f"No .txt or .pdf files found under:\n{folder_path}",
+                        parent=dialog,
+                    )
+                    return
+                if append:
+                    set_selection(discovered, append=True)
+                else:
+                    set_selection(discovered, folder=folder_path)
+                return
+            if mode == "single":
+                path = filedialog.askopenfilename(
+                    title="Choose a .txt or .pdf reference file",
+                    parent=dialog,
+                    filetypes=SOURCE4S_FILETYPES,
+                )
+                if not path:
+                    return
+                set_selection([Path(path)])
+                return
+            paths = filedialog.askopenfilenames(
+                title="Choose .txt or .pdf reference files",
+                parent=dialog,
+                filetypes=SOURCE4S_FILETYPES,
+            )
+            if not paths:
+                return
+            picked = [Path(p) for p in paths]
+            if append:
+                set_selection(picked, append=True)
+            else:
+                set_selection(picked)
+
         browse_row = tk.Frame(body, bg=COLORS["bg"])
         browse_row.pack(fill="x", pady=(0, 8))
-        secondary_button(browse_row, "Browse files…", browse)
+        browse_btn = secondary_button(browse_row, "Choose files…", lambda: browse(append=False))
+        add_more_btn = secondary_button(browse_row, "Add more…", lambda: browse(append=True))
+        secondary_button(browse_row, "Clear", clear_selection)
+
+        def sync_selection_mode(*_args: object) -> None:
+            mode = selection_mode_var.get()
+            if mode == "folder":
+                browse_btn.configure(text="Choose folder…")
+                add_more_btn.configure(state="normal")
+            elif mode == "single":
+                browse_btn.configure(text="Choose file…")
+                add_more_btn.configure(state="disabled")
+            else:
+                browse_btn.configure(text="Choose files…")
+                add_more_btn.configure(state="normal")
+
+        selection_mode_var.trace_add("write", sync_selection_mode)
+        sync_selection_mode()
 
         action_row = tk.Frame(dialog, bg=COLORS["bg"])
         action_row.pack(side="bottom", fill="x", padx=16, pady=(8, 16))
 
         def run_upload() -> None:
             if not selected_files:
-                messagebox.showwarning("Nothing selected", "Choose one or more .txt or .pdf files.", parent=dialog)
+                mode = selection_mode_var.get()
+                if mode == "folder":
+                    hint = "Choose a folder containing .txt or .pdf files."
+                elif mode == "single":
+                    hint = "Choose one .txt or .pdf file."
+                else:
+                    hint = "Choose one or more .txt or .pdf files."
+                messagebox.showwarning("Nothing selected", hint, parent=dialog)
                 return
             from hive_planner.config import RepoPaths
             from hive_planner.source4s import source4s_needs_pdf_support

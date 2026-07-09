@@ -21,6 +21,30 @@ from hive_planner.pipeline import ingest
 
 SOURCE4S_DIR_NAME = "source4s"
 SOURCE4S_EXTENSIONS = {".txt", ".pdf"}
+SOURCE4S_FILETYPES = [
+    ("Text and PDF", "*.txt *.pdf"),
+    ("Text", "*.txt"),
+    ("PDF", "*.pdf"),
+    ("All files", "*.*"),
+]
+
+
+def discover_source4s_files_in_folder(folder: Path, *, recursive: bool = True) -> list[Path]:
+    """Return .txt/.pdf files under a folder (recursive by default)."""
+    root = folder.resolve()
+    if not root.is_dir():
+        return []
+    iterator = root.rglob("*") if recursive else root.iterdir()
+    found: list[Path] = []
+    for path in iterator:
+        if path.is_file() and path.suffix.lower() in SOURCE4S_EXTENSIONS:
+            found.append(path)
+    return sorted(found)
+
+
+def merge_source4s_selection(existing: list[Path], added: list[Path]) -> list[Path]:
+    """Append source paths while deduplicating by resolved path."""
+    return _unique_source_files([*existing, *added])
 
 
 def _combine_errors(*parts: str | None) -> str | None:
