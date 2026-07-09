@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import json
 import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from hive_planner.config import RepoPaths, validate_feature_id
+from hive_planner.discovery import doc_id_for_path
 from hive_planner.emitter import emit_source_context
 from hive_planner.indexer import load_document_index
 from hive_planner.ocr_runtime import ocr_pdf_enabled
@@ -88,6 +90,32 @@ def stage_source4s_files(paths: RepoPaths, source_files: list[Path]) -> tuple[li
     return copied, warnings
 
 
+def staged_pdf_ocr_warnings(paths: RepoPaths, copied: list[str]) -> list[str]:
+    """Surface OCR quality issues recorded during PDF normalization."""
+    warnings: list[str] = []
+    for rel in copied:
+        if not rel.lower().endswith(".pdf"):
+            continue
+        meta_path = paths.normalized_meta / f"{doc_id_for_path(rel)}.json"
+        if not meta_path.is_file():
+            continue
+        try:
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        unresolved = meta.get("ocr_unresolved_pages") or []
+        skipped = meta.get("ocr_skipped_pages") or []
+        if unresolved:
+            warnings.append(
+                f"PDF {rel}: OCR left {len(unresolved)} page(s) unresolved: {unresolved}"
+            )
+        if skipped:
+            warnings.append(
+                f"PDF {rel}: Tesseract unavailable — {len(skipped)} image page(s) not OCR'd: {skipped}"
+            )
+    return warnings
+
+
 def run_source4s(
     paths: RepoPaths,
     source_files: list[Path],
@@ -123,6 +151,7 @@ def run_source4s(
     result.skipped = ingest_report.skipped
     result.pruned = ingest_report.pruned
     result.warnings.extend(ingest_report.warnings)
+    result.warnings.extend(staged_pdf_ocr_warnings(paths, copied))
 
     selection_error: str | None = None
     if len(copied) < len(source_files):

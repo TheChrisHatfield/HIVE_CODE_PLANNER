@@ -6,11 +6,13 @@ from pathlib import Path
 import pytest
 
 from hive_planner.config import RepoPaths
+from hive_planner.discovery import doc_id_for_path
 from hive_planner.source4s import (
     SOURCE4S_DIR_NAME,
     list_source4s_files,
     run_source4s,
     stage_source4s_files,
+    staged_pdf_ocr_warnings,
 )
 
 
@@ -126,6 +128,23 @@ def test_run_source4s_fails_when_staged_file_not_indexed(tmp_path: Path) -> None
     assert result.indexed_staged == 1
     assert result.error
     assert "1 of 2 staged file(s)" in result.error
+
+
+def test_staged_pdf_ocr_warnings_reads_normalized_metadata(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    paths.ensure_dirs()
+    rel = "context-library/sources/source4s/mixed.pdf"
+    meta_path = paths.normalized_meta / f"{doc_id_for_path(rel)}.json"
+    meta_path.parent.mkdir(parents=True, exist_ok=True)
+    meta_path.write_text(
+        json.dumps({"ocr_unresolved_pages": [2, 3], "ocr_skipped_pages": [4]}),
+        encoding="utf-8",
+    )
+
+    warnings = staged_pdf_ocr_warnings(paths, [rel])
+    assert len(warnings) == 2
+    assert "unresolved" in warnings[0]
+    assert "Tesseract unavailable" in warnings[1]
 
 
 def test_run_source4s_ingest_only_reports_partial_index_and_selection(tmp_path: Path) -> None:
