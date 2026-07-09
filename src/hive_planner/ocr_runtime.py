@@ -189,8 +189,12 @@ def ocr_runtime_status(*, scan_d_drive: bool | None = None, refresh: bool = Fals
 def ensure_ocr_runtime(*, scan_d_drive: bool | None = None) -> OcrRuntimeStatus:
     """Return OCR runtime status, re-scanning once when the cached result was unavailable."""
     status = discover_tesseract(scan_d_drive=scan_d_drive)
-    if status.available:
-        return status
+    if status.available and status.install is not None:
+        if status.install.exe.is_file() and _validate_install(status.install.exe, status.install.source):
+            return status
+        global _cached_status
+        _cached_status = None
+        return discover_tesseract(scan_d_drive=scan_d_drive, refresh=True)
     return discover_tesseract(scan_d_drive=scan_d_drive, refresh=True)
 
 

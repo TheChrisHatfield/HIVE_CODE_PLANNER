@@ -234,6 +234,28 @@ def test_scan_drive_skips_invalid_tesseract(tmp_path: Path) -> None:
     assert found == (good / "tesseract.exe").resolve()
 
 
+def test_ensure_ocr_runtime_refreshes_when_cached_install_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    install = TesseractInstall(
+        exe=tmp_path / "tesseract.exe",
+        tessdata_dir=tmp_path / "tessdata",
+        source="test",
+    )
+    stale = OcrRuntimeStatus(True, install, [], "stale")
+    refreshed = OcrRuntimeStatus(False, None, [], "missing")
+    calls: list[bool] = []
+
+    def fake_discover(*, scan_d_drive: bool | None = None, refresh: bool = False):
+        calls.append(refresh)
+        return stale if not refresh else refreshed
+
+    monkeypatch.setattr("hive_planner.ocr_runtime.discover_tesseract", fake_discover)
+    status = ensure_ocr_runtime()
+    assert calls == [False, True]
+    assert not status.available
+
+
 def test_ensure_ocr_runtime_refreshes_when_unavailable(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
