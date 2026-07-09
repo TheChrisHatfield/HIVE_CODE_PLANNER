@@ -2331,16 +2331,10 @@ class HivePlannerApp:
         else:
             indexed = result.get("indexed_staged", len(result.get("copied", [])))
             copied_count = len(result.get("copied", []))
-            if ocr_warnings and indexed == copied_count:
-                self._queue_home_log(
-                    f"Sources loaded with PDF OCR warnings — staged {copied_count} file(s), "
-                    f"indexed {indexed} staged file(s).",
-                )
-            else:
-                self._queue_home_log(
-                    f"Sources loaded — staged {copied_count} file(s), "
-                    f"indexed {indexed} staged file(s).",
-                )
+            self._queue_home_log(
+                f"Sources loaded — staged {copied_count} file(s), "
+                f"indexed {indexed} staged file(s).",
+            )
         for rel in result.get("copied", []):
             self._queue_home_log(f"  staged: {rel}")
         if result.get("source_context_path"):
