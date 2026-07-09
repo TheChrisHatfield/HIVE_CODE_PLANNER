@@ -442,6 +442,40 @@ def test_convert_pdf_to_markdown_rejects_password_protected_pdf(tmp_path: Path) 
         convert_pdf_to_markdown(pdf_path, install=install)
 
 
+def test_convert_pdf_to_markdown_rejects_zero_page_document(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import fitz
+
+    from hive_planner.ocr_runtime import TesseractInstall, convert_pdf_to_markdown
+
+    class FakeDoc:
+        needs_pass = False
+
+        def __len__(self) -> int:
+            return 0
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+    monkeypatch.setattr(fitz, "open", lambda _path: FakeDoc())
+
+    pdf_path = tmp_path / "empty.pdf"
+    pdf_path.write_bytes(b"%PDF-1.4 stub")
+
+    install = TesseractInstall(
+        exe=tmp_path / "tesseract.exe",
+        tessdata_dir=tmp_path / "tessdata",
+        source="test",
+    )
+
+    with pytest.raises(RuntimeError, match="no pages"):
+        convert_pdf_to_markdown(pdf_path, install=install)
+
+
 def test_convert_pdf_to_markdown_warns_on_unresolved_pages(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

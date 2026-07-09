@@ -294,6 +294,8 @@ def convert_pdf_to_markdown(
         if doc.needs_pass:
             raise RuntimeError("Password-protected PDF is not supported")
         page_count = len(doc)
+        if page_count == 0:
+            raise RuntimeError("PDF has no pages")
 
     pages_text = ocr_pdf_pages(pdf_path, install, dpi=dpi, lang=lang)
     if not pages_text:
