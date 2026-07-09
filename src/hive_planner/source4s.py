@@ -203,7 +203,7 @@ def staged_pdf_ocr_warnings(paths: RepoPaths, copied: list[str]) -> list[str]:
         except (OSError, json.JSONDecodeError):
             continue
         meta_hash = meta.get("content_hash")
-        if meta_hash and meta_hash != doc.content_hash:
+        if not meta_hash or meta_hash != doc.content_hash:
             continue
         unresolved = meta.get("ocr_unresolved_pages") or []
         skipped = meta.get("ocr_skipped_pages") or []
