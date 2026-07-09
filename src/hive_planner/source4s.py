@@ -59,16 +59,21 @@ def source4s_selection_error(source_files: list[Path]) -> str | None:
     if supported:
         return None
     missing = [path for path in source_files if not path.is_file()]
-    if missing:
-        return f"{len(missing)} selected file(s) no longer exist."
     unsupported = [
         path for path in source_files if path.suffix.lower() not in SOURCE4S_EXTENSIONS
     ]
-    sample = ", ".join(path.name for path in unsupported[:3])
-    if len(unsupported) > 3:
-        sample = f"{sample} (+{len(unsupported) - 3} more)"
+    parts: list[str] = []
+    if missing:
+        parts.append(f"{len(missing)} selected file(s) no longer exist")
+    if unsupported:
+        sample = ", ".join(path.name for path in unsupported[:3])
+        if len(unsupported) > 3:
+            sample = f"{sample} (+{len(unsupported) - 3} more)"
+        parts.append(f"unsupported type(s): {sample}")
     return (
-        f"Unsupported file type(s): {sample}. Load Sources accepts .txt and .pdf only."
+        f"{'; '.join(parts)}. Load Sources accepts .txt and .pdf only."
+        if parts
+        else "Load Sources accepts .txt and .pdf only."
     )
 
 

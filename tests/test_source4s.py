@@ -158,7 +158,11 @@ def test_source4s_selection_error_flags_missing_and_unsupported(tmp_path: Path) 
     assert source4s_selection_error([good]) is None
     assert source4s_selection_error([good, bad]) is None
     assert "no longer exist" in (source4s_selection_error([missing]) or "")
-    assert "Unsupported file type" in (source4s_selection_error([bad]) or "")
+    assert "unsupported type(s)" in (source4s_selection_error([bad]) or "")
+    mixed = source4s_selection_error([missing, bad])
+    assert mixed is not None
+    assert "no longer exist" in mixed
+    assert "unsupported type(s)" in mixed
 
 
 def test_run_source4s_rejects_all_unsupported_selection(tmp_path: Path) -> None:
@@ -169,7 +173,7 @@ def test_run_source4s_rejects_all_unsupported_selection(tmp_path: Path) -> None:
 
     result = run_source4s(paths, [doc], feature="load-sources-v1", update_cartridge=False)
     assert not result.ok
-    assert "Unsupported file type" in (result.error or "")
+    assert "unsupported type(s)" in (result.error or "")
 
 def test_pdf_index_failure_hint_omits_pip_on_portable(monkeypatch: pytest.MonkeyPatch) -> None:
     from hive_planner.source4s import _pdf_index_failure_hint
