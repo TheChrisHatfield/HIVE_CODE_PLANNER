@@ -170,6 +170,37 @@ def test_ensure_ocr_runtime_refreshes_when_unavailable(
     assert status.install is install
 
 
+def test_ocr_pdf_pages_continues_after_page_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pytest.importorskip("fitz")
+    import fitz
+
+    from hive_planner.ocr_runtime import TesseractInstall, ocr_pdf_pages
+
+    pdf_path = tmp_path / "two-page.pdf"
+    doc = fitz.open()
+    doc.new_page()
+    doc.new_page()
+    doc.save(pdf_path)
+    doc.close()
+
+    install = TesseractInstall(
+        exe=tmp_path / "tesseract.exe",
+        tessdata_dir=tmp_path / "tessdata",
+        source="test",
+    )
+
+    def fake_tesseract(_install: TesseractInstall, png_path: Path, *, lang: str = "eng") -> str:
+        if "page-2" in png_path.name:
+            raise RuntimeError("simulated page 2 OCR failure")
+        return "recovered page one text"
+
+    monkeypatch.setattr("hive_planner.ocr_runtime._run_tesseract_on_png", fake_tesseract)
+    pages = ocr_pdf_pages(pdf_path, install)
+    assert pages == [(1, "recovered page one text")]
+
+
 def test_ocr_sidecar_basename_unique_per_path(tmp_path: Path) -> None:
     from hive_planner.ocr_runtime import ocr_sidecar_basename
 

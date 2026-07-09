@@ -246,7 +246,10 @@ def ocr_pdf_pages(
                 pix = page.get_pixmap(dpi=dpi)
                 png_path = tmp_dir / f"page-{page_num + 1}.png"
                 pix.save(str(png_path))
-                text = _run_tesseract_on_png(install, png_path, lang=lang)
+                try:
+                    text = _run_tesseract_on_png(install, png_path, lang=lang)
+                except RuntimeError:
+                    continue
                 if text:
                     pages_text.append((page_num + 1, text))
     return pages_text
