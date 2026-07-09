@@ -48,6 +48,21 @@ def test_discover_tesseract_bundled_vendor(tmp_path: Path, monkeypatch: pytest.M
     assert status.install.source == "portable:vendor/tesseract"
 
 
+def test_normalize_pdf_rejects_zero_page_document(tmp_path: Path) -> None:
+    pytest.importorskip("fitz")
+    import fitz
+
+    from hive_planner.normalizers import EmptySourceError
+
+    pdf_path = tmp_path / "empty.pdf"
+    doc = fitz.open()
+    doc.save(pdf_path)
+    doc.close()
+
+    with pytest.raises(EmptySourceError, match="no pages"):
+        normalize_pdf(pdf_path)
+
+
 def test_normalize_pdf_ocr_fallback(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     pytest.importorskip("fitz")
     import fitz

@@ -26,6 +26,9 @@ def normalize_pdf(file_path: Path) -> NormalizeResult:
             raise EmptySourceError("Password-protected PDF is not supported")
 
         page_count = len(doc)
+        if page_count == 0:
+            raise EmptySourceError("PDF has no pages")
+
         embedded: dict[int, str] = {}
         for page_num in range(page_count):
             text = doc[page_num].get_text("text").strip()
