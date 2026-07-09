@@ -100,7 +100,9 @@ def _scan_drive_for_tesseract(drive_root: Path, *, max_depth: int = 4) -> Path |
             dirs.clear()
             continue
         if TESSERACT_EXE_NAME in files:
-            return Path(root) / TESSERACT_EXE_NAME
+            candidate = Path(root) / TESSERACT_EXE_NAME
+            if _validate_install(candidate, "d-drive:scan") is not None:
+                return candidate
         dirs[:] = [name for name in dirs if name.lower() not in {"windows", "$recycle.bin", "system volume information"}]
     return None
 

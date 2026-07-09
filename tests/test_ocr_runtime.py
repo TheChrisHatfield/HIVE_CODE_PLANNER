@@ -130,6 +130,23 @@ def test_normalize_pdf_skips_ocr_when_disabled(tmp_path: Path, monkeypatch: pyte
         ocr_pdf_enabled.reset(token)
 
 
+def test_scan_drive_skips_invalid_tesseract(tmp_path: Path) -> None:
+    from hive_planner.ocr_runtime import _scan_drive_for_tesseract
+
+    bad = tmp_path / "bad" / "Tesseract-OCR"
+    bad.mkdir(parents=True)
+    (bad / "tesseract.exe").write_bytes(b"stub")
+
+    good = tmp_path / "good" / "Tesseract-OCR"
+    tessdata = good / "tessdata"
+    tessdata.mkdir(parents=True)
+    (tessdata / "eng.traineddata").write_bytes(b"x")
+    (good / "tesseract.exe").write_bytes(b"stub")
+
+    found = _scan_drive_for_tesseract(tmp_path)
+    assert found == (good / "tesseract.exe").resolve()
+
+
 def test_ensure_ocr_runtime_refreshes_when_unavailable(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
