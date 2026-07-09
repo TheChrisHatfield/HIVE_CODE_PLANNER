@@ -209,6 +209,8 @@ def _run_tesseract_on_png(install: TesseractInstall, png_path: Path, *, lang: st
         ],
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         env=env,
         timeout=180,
         check=False,

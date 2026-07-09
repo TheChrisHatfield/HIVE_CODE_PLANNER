@@ -288,6 +288,28 @@ def test_ocr_pdf_pages_continues_after_page_failure(
     assert pages == [(1, "recovered page one text")]
 
 
+def test_run_tesseract_on_png_tolerates_non_utf8_output(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from hive_planner.ocr_runtime import TesseractInstall, _run_tesseract_on_png
+
+    install = TesseractInstall(
+        exe=tmp_path / "tesseract.exe",
+        tessdata_dir=tmp_path / "tessdata",
+        source="test",
+    )
+    png_path = tmp_path / "page.png"
+    png_path.write_bytes(b"png")
+
+    class Completed:
+        returncode = 0
+        stdout = "caf\xe9 scan"
+        stderr = ""
+
+    monkeypatch.setattr("hive_planner.ocr_runtime.subprocess.run", lambda *a, **k: Completed())
+    assert _run_tesseract_on_png(install, png_path) == "caf\xe9 scan"
+
+
 def test_convert_pdf_to_markdown_warns_on_unresolved_pages(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
