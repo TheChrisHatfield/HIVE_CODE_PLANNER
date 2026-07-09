@@ -21,3 +21,12 @@ def pdf_support_message() -> str:
             "pip install -e \".[pdf]\""
         )
     return "PDF support requires pymupdf: pip install -e \".[pdf]\""
+
+
+def ingest_pdf_dependency_warnings(warnings: list[str]) -> list[str]:
+    """Ingest warnings caused by missing PDF support."""
+    return [
+        w
+        for w in warnings
+        if "pymupdf" in w.lower() or "pdf support" in w.lower()
+    ]

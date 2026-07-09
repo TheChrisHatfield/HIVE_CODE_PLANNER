@@ -436,6 +436,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if handoff_ok else 1
 
     if args.command == "ingest":
+        from hive_planner.format_deps import ingest_pdf_dependency_warnings
         from hive_planner.ocr_runtime import ocr_pdf_enabled
 
         token = ocr_pdf_enabled.set(not args.no_ocr)
@@ -451,7 +452,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Warning: {warning}")
         summary = status_summary(paths)
         print(json.dumps(summary, indent=2))
-        return 0
+        has_pdf_dep_warnings = bool(ingest_pdf_dependency_warnings(report.warnings))
+        return 0 if report.skipped == 0 and not has_pdf_dep_warnings else 1
 
     if args.command == "source4s":
         from hive_planner.source4s import pdf_ocr_quality_warnings, run_source4s

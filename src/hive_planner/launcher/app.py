@@ -2170,20 +2170,19 @@ class HivePlannerApp:
         secondary_button(action_row, "Cancel", dialog.destroy)
 
     def _load_sources_done(self, result: dict) -> None:
+        from hive_planner.source4s import pdf_ocr_quality_warnings
+
         if self._is_bg_error(result):
             self._queue_home_log(self._result_detail(result))
             self._refresh_home_dashboard()
             return
+        warnings = result.get("warnings", [])
+        ocr_warnings = pdf_ocr_quality_warnings(warnings)
         if not result.get("ok"):
             if result.get("error"):
                 self._queue_home_log(f"Load Sources failed: {result['error']}")
             elif result.get("copied"):
                 self._queue_home_log("Load Sources incomplete — see warnings below.")
-            ocr_warnings = [
-                w
-                for w in result.get("warnings", [])
-                if w.startswith("PDF ") and ("OCR" in w or "Tesseract" in w)
-            ]
             if ocr_warnings:
                 self._queue_home_log(
                     f"  PDF OCR warnings on {len(ocr_warnings)} staged file(s) — see warnings below."
@@ -2197,11 +2196,6 @@ class HivePlannerApp:
         else:
             indexed = result.get("indexed_staged", len(result.get("copied", [])))
             copied_count = len(result.get("copied", []))
-            ocr_warnings = [
-                w
-                for w in result.get("warnings", [])
-                if w.startswith("PDF ") and ("OCR" in w or "Tesseract" in w)
-            ]
             if ocr_warnings and indexed == copied_count:
                 self._queue_home_log(
                     f"Sources loaded with PDF OCR warnings — staged {copied_count} file(s), "

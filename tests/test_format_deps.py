@@ -20,6 +20,18 @@ def test_pdf_support_message_for_dev_install(monkeypatch: pytest.MonkeyPatch) ->
     assert "pip install" in pdf_support_message()
 
 
+def test_ingest_pdf_dependency_warnings_filters_missing_pdf_support() -> None:
+    from hive_planner.format_deps import ingest_pdf_dependency_warnings
+
+    warnings = [
+        "Skipped notes.pdf: PDF support requires pymupdf: pip install -e '.[pdf]'",
+        "Pruned 1 stale indexed document(s)",
+    ]
+    matched = ingest_pdf_dependency_warnings(warnings)
+    assert len(matched) == 1
+    assert "pymupdf" in matched[0]
+
+
 def test_pdf_support_message_for_portable(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("HIVE_PLANNER_PORTABLE", "1")
     message = pdf_support_message()
@@ -82,3 +94,22 @@ def test_run_source4s_fails_fast_when_library_has_pdf_without_pymupdf(
     assert not result.ok
     assert result.error == "PDF support requires pymupdf: pip install -e \".[pdf]\""
     assert result.copied == []
+
+
+def test_ingest_cli_exits_nonzero_when_pdf_dependency_skipped(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from hive_planner.cli import main
+    from hive_planner.pipeline import IngestReport
+
+    def fake_ingest(_paths, *, embed: bool = False) -> IngestReport:
+        return IngestReport(
+            processed=0,
+            skipped=1,
+            pruned=0,
+            warnings=["Skipped need.pdf: PDF support requires pymupdf"],
+        )
+
+    monkeypatch.setattr("hive_planner.cli.ingest", fake_ingest)
+    code = main(["--root", str(tmp_path), "ingest"])
+    assert code == 1

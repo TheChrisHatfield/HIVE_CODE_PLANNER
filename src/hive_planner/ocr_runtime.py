@@ -236,7 +236,9 @@ def ocr_pdf_pages(
     try:
         import fitz  # pymupdf
     except ImportError as exc:
-        raise RuntimeError("PDF OCR requires pymupdf: pip install -e '.[pdf]'") from exc
+        from hive_planner.format_deps import pdf_support_message
+
+        raise RuntimeError(pdf_support_message()) from exc
 
     pages_text: list[tuple[int, str]] = []
     with fitz.open(pdf_path) as doc:
@@ -288,7 +290,9 @@ def convert_pdf_to_markdown(
     try:
         import fitz  # pymupdf
     except ImportError as exc:
-        raise RuntimeError("PDF OCR requires pymupdf: pip install -e '.[pdf]'") from exc
+        from hive_planner.format_deps import pdf_support_message
+
+        raise RuntimeError(pdf_support_message()) from exc
 
     with fitz.open(pdf_path) as doc:
         if doc.needs_pass:
