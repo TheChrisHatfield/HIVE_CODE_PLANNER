@@ -518,7 +518,12 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Error: {status.detail}", file=sys.stderr)
             return 1
         failed = 0
+        seen_pdfs: set[Path] = set()
         for pdf in args.files:
+            pdf_key = pdf.resolve()
+            if pdf_key in seen_pdfs:
+                continue
+            seen_pdfs.add(pdf_key)
             try:
                 out = (
                     (args.output_dir / ocr_sidecar_basename(pdf))

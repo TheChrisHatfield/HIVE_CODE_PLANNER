@@ -620,3 +620,32 @@ def test_ocr_convert_cli_fails_before_tesseract_when_pymupdf_missing(
     code = main(["ocr-convert", "--files", str(pdf)])
     assert code == 1
     assert calls == []
+
+
+def test_ocr_convert_cli_ignores_duplicate_pdf_paths(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from hive_planner.cli import main
+
+    pdf = tmp_path / "scan.pdf"
+    pdf.write_bytes(b"%PDF-1.4 stub")
+    calls: list[Path] = []
+
+    def fake_convert(path: Path, _out: Path | None, *, install: object):
+        calls.append(path.resolve())
+        return tmp_path / "scan.pdf.ocr.md", []
+
+    monkeypatch.setattr("hive_planner.format_deps.pdf_support_available", lambda: True)
+    monkeypatch.setattr(
+        "hive_planner.ocr_runtime.ocr_runtime_status",
+        lambda **_kwargs: type(
+            "S",
+            (),
+            {"available": True, "install": object(), "detail": "ok"},
+        )(),
+    )
+    monkeypatch.setattr("hive_planner.ocr_runtime.convert_pdf_to_markdown", fake_convert)
+
+    code = main(["ocr-convert", "--files", str(pdf), str(pdf)])
+    assert code == 0
+    assert calls == [pdf.resolve()]
