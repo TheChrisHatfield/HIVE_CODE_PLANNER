@@ -105,6 +105,7 @@ def stage_source4s_files(paths: RepoPaths, source_files: list[Path]) -> tuple[li
     """Copy uploaded txt/pdf files into context-library/sources/source4s/."""
     dest_dir = source4s_dir(paths)
     dest_dir.mkdir(parents=True, exist_ok=True)
+    dest_resolved = dest_dir.resolve()
     copied: list[str] = []
     warnings: list[str] = []
     for raw in source_files:
@@ -115,6 +116,15 @@ def stage_source4s_files(paths: RepoPaths, source_files: list[Path]) -> tuple[li
         suffix = src.suffix.lower()
         if suffix not in SOURCE4S_EXTENSIONS:
             warnings.append(f"Skipped (Load Sources accepts .txt and .pdf only): {src.name}")
+            continue
+        try:
+            rel_under_dest = src.relative_to(dest_resolved)
+        except ValueError:
+            rel_under_dest = None
+        if rel_under_dest is not None:
+            rel = (dest_dir / rel_under_dest).relative_to(paths.root).as_posix()
+            if rel not in copied:
+                copied.append(rel)
             continue
         dest = dest_dir / src.name
         if dest.exists():

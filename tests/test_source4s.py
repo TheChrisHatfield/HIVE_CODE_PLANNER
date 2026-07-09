@@ -46,6 +46,19 @@ def test_stage_source4s_deduplicates_filename(tmp_path: Path) -> None:
     assert copied == ["context-library/sources/source4s/dup-2.txt"]
 
 
+def test_stage_source4s_reuses_existing_library_file_without_duplicate(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    paths.ensure_dirs()
+    existing = paths.sources / SOURCE4S_DIR_NAME / "brief.pdf"
+    existing.parent.mkdir(parents=True, exist_ok=True)
+    existing.write_bytes(b"%PDF-1.4 existing")
+
+    copied, warnings = stage_source4s_files(paths, [existing])
+    assert copied == ["context-library/sources/source4s/brief.pdf"]
+    assert warnings == []
+    assert not (paths.sources / SOURCE4S_DIR_NAME / "brief-2.pdf").exists()
+
+
 def test_run_source4s_ingest_only(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     paths.ensure_dirs()
