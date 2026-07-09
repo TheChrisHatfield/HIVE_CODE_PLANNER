@@ -148,6 +148,32 @@ def test_normalize_pdf_mixed_marks_unresolved_image_pages(
     assert "unresolved after OCR" in result.normalized_body
 
 
+def test_normalize_pdf_warns_when_ocr_unavailable_on_mixed_pdf(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pytest.importorskip("fitz")
+    import fitz
+
+    pdf_path = tmp_path / "mixed-no-tess.pdf"
+    doc = fitz.open()
+    page = doc.new_page()
+    page.insert_text((72, 72), "Embedded page one text")
+    doc.new_page()
+    doc.save(pdf_path)
+    doc.close()
+
+    monkeypatch.setattr(
+        "hive_planner.normalizers.pdf.ensure_ocr_runtime",
+        lambda: type("S", (), {"available": False, "install": None})(),
+    )
+
+    result = normalize_pdf(pdf_path)
+    assert "Embedded page one" in result.normalized_body
+    assert "Tesseract unavailable" in result.normalized_body
+    assert result.extra_metadata.get("ocr_skipped_pages") == [2]
+    assert result.extra_metadata.get("extraction") == "text"
+
+
 def test_normalize_pdf_mixed_without_ocr_keeps_text_extraction(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

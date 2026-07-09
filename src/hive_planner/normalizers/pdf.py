@@ -58,6 +58,7 @@ def normalize_pdf(file_path: Path) -> NormalizeResult:
                         raise EmptySourceError(f"PDF OCR failed: {exc}") from exc
 
         still_missing = [i + 1 for i in missing_indices if (i + 1) not in embedded]
+        ocr_unavailable = bool(missing_indices) and ocr_pdf_enabled.get() and not ocr_attempted
         if still_missing and had_embedded_text and extraction == "text" and ocr_attempted:
             extraction = "mixed"
 
@@ -72,6 +73,14 @@ def normalize_pdf(file_path: Path) -> NormalizeResult:
 
         pages_text = sorted(embedded.items())
         lines = [f"# {title}", ""]
+        if ocr_unavailable and still_missing:
+            skipped_label = ", ".join(str(n) for n in still_missing)
+            lines.extend(
+                [
+                    f"> Warning: Tesseract unavailable — {len(still_missing)} image page(s) not OCR'd: {skipped_label}",
+                    "",
+                ]
+            )
         if extraction == "ocr":
             lines.extend(["> Extracted via Tesseract OCR", ""])
         elif extraction == "mixed":
@@ -89,6 +98,8 @@ def normalize_pdf(file_path: Path) -> NormalizeResult:
         extra = {"page_count": page_count, "format": "pdf", "extraction": extraction}
         if still_missing and ocr_attempted:
             extra["ocr_unresolved_pages"] = still_missing
+        if still_missing and ocr_unavailable:
+            extra["ocr_skipped_pages"] = still_missing
         if ocr_install is not None:
             extra["ocr_engine"] = ocr_install.source
         return NormalizeResult(
