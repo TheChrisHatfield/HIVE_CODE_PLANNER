@@ -456,6 +456,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if report.skipped == 0 and not has_pdf_dep_warnings else 1
 
     if args.command == "source4s":
+        from hive_planner.format_deps import ingest_pdf_dependency_warnings
         from hive_planner.source4s import pdf_ocr_quality_warnings, run_source4s
 
         update_cartridge = not args.ingest_only
@@ -488,7 +489,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Wrote {name}: {rel}")
         print(json.dumps(result.to_dict(), indent=2))
         has_ocr_warnings = bool(pdf_ocr_quality_warnings(result.warnings))
-        return 0 if result.ok and not has_ocr_warnings else 1
+        has_pdf_dep_warnings = bool(ingest_pdf_dependency_warnings(result.warnings))
+        return 0 if result.ok and not has_ocr_warnings and not has_pdf_dep_warnings else 1
 
     if args.command == "ocr-status":
         from hive_planner.ocr_runtime import ocr_runtime_status

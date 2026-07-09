@@ -518,3 +518,25 @@ def test_source4s_cli_exits_zero_without_pdf_ocr_warnings(
     txt.write_text("reference", encoding="utf-8")
     code = main(["--root", str(tmp_path), "source4s", "--ingest-only", "--files", str(txt)])
     assert code == 0
+
+
+def test_source4s_cli_exits_nonzero_on_pdf_dependency_warnings(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from hive_planner.cli import main
+    from hive_planner.source4s import Source4sResult
+
+    def fake_run(*_args: object, **_kwargs: object) -> Source4sResult:
+        return Source4sResult(
+            ok=True,
+            copied=["context-library/sources/source4s/notes.txt"],
+            indexed_staged=1,
+            warnings=["Skipped need.pdf: PDF support requires pymupdf"],
+        )
+
+    monkeypatch.setattr("hive_planner.source4s.run_source4s", fake_run)
+
+    txt = tmp_path / "notes.txt"
+    txt.write_text("reference", encoding="utf-8")
+    code = main(["--root", str(tmp_path), "source4s", "--ingest-only", "--files", str(txt)])
+    assert code == 1
