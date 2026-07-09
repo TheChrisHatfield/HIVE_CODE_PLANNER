@@ -109,17 +109,29 @@ def _unique_source_files(source_files: list[Path]) -> list[Path]:
     return unique
 
 
-def _selection_error_message(
+def _staging_shortfall_error(
     source_files: list[Path], copied: list[str], stage_warnings: list[str]
 ) -> str | None:
-    if len(copied) >= len(source_files):
+    if any("Load Sources accepts .txt and .pdf only" in w for w in stage_warnings):
+        if len(copied) < len(source_files):
+            return (
+                f"Only {len(copied)} of {len(source_files)} selected file(s) were staged — "
+                "Load Sources accepts .txt and .pdf only."
+            )
         return None
-    if not any("Load Sources accepts .txt and .pdf only" in w for w in stage_warnings):
+    stageable = [
+        path
+        for path in source_files
+        if path.is_file() and path.suffix.lower() in SOURCE4S_EXTENSIONS
+    ]
+    if not stageable or len(copied) >= len(stageable):
         return None
-    return (
-        f"Only {len(copied)} of {len(source_files)} selected file(s) were staged — "
-        "Load Sources accepts .txt and .pdf only."
-    )
+    if any("duplicate basename" in w for w in stage_warnings):
+        return (
+            f"Only {len(copied)} of {len(stageable)} stageable file(s) were staged — "
+            "duplicate filenames collide when copied to source4s/ (see warnings)."
+        )
+    return None
 
 
 def _pdf_index_failure_hint(*, ocr_pdf: bool, pdf_failures: list[str]) -> str:
@@ -339,7 +351,7 @@ def run_source4s(
             else "Ingest skipped one or more PDF(s) — see warnings."
         )
 
-    selection_error: str | None = _selection_error_message(source_files, copied, stage_warnings)
+    selection_error: str | None = _staging_shortfall_error(source_files, copied, stage_warnings)
 
     indexed_paths = {doc.source_path for doc in load_document_index(paths.document_index).documents}
     indexed_copied = [rel for rel in copied if rel in indexed_paths]

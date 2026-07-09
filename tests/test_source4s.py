@@ -95,6 +95,26 @@ def test_stage_source4s_warns_on_duplicate_basename_in_batch(tmp_path: Path) -> 
     )
 
 
+def test_run_source4s_fails_on_duplicate_basename_shortfall(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    paths.ensure_dirs()
+    first = tmp_path / "dir_a" / "notes.txt"
+    second = tmp_path / "dir_b" / "notes.txt"
+    first.parent.mkdir()
+    second.parent.mkdir()
+    first.write_text("# First\n\nAlpha reference content.\n", encoding="utf-8")
+    second.write_text("# Second\n\nBeta reference content.\n", encoding="utf-8")
+
+    result = run_source4s(
+        paths,
+        [first, second],
+        feature="load-sources-v1",
+        update_cartridge=False,
+    )
+    assert not result.ok
+    assert "duplicate filenames collide" in (result.error or "")
+
+
 def test_discover_source4s_files_in_folder_finds_txt_and_pdf_recursively(tmp_path: Path) -> None:
     folder = tmp_path / "refs"
     (folder / "sub").mkdir(parents=True)
