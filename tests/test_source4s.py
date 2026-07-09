@@ -128,6 +128,25 @@ def test_run_source4s_fails_when_staged_file_not_indexed(tmp_path: Path) -> None
     assert "1 of 2 staged file(s)" in result.error
 
 
+def test_run_source4s_reports_selection_error_when_all_staged_fail_index(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    paths.ensure_dirs()
+    pdf = tmp_path / "broken.pdf"
+    pdf.write_bytes(b"%PDF-1.4\nnot a real pdf structure")
+    docx = tmp_path / "notes.docx"
+    docx.write_bytes(b"not docx")
+
+    result = run_source4s(
+        paths,
+        [pdf, docx],
+        feature="load-sources-v1",
+        update_cartridge=False,
+    )
+    assert not result.ok
+    assert "could not be indexed" in result.error
+    assert "1 of 2 selected file(s)" in result.error
+
+
 def test_run_source4s_index_error_omits_tesseract_when_ocr_disabled(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     paths.ensure_dirs()

@@ -124,6 +124,13 @@ def run_source4s(
     result.pruned = ingest_report.pruned
     result.warnings.extend(ingest_report.warnings)
 
+    selection_error: str | None = None
+    if len(copied) < len(source_files):
+        selection_error = (
+            f"Only {len(copied)} of {len(source_files)} selected file(s) were staged — "
+            "Load Sources accepts .txt and .pdf only."
+        )
+
     indexed_paths = {doc.source_path for doc in load_document_index(paths.document_index).documents}
     indexed_copied = [rel for rel in copied if rel in indexed_paths]
     not_indexed = [rel for rel in copied if rel not in indexed_paths]
@@ -139,14 +146,9 @@ def run_source4s(
         if not indexed_copied:
             result.ok = False
             result.error = index_error
+            if selection_error:
+                result.error = f"{index_error} Also: {selection_error}"
             return result
-
-    selection_error: str | None = None
-    if len(copied) < len(source_files):
-        selection_error = (
-            f"Only {len(copied)} of {len(source_files)} selected file(s) were staged — "
-            "Load Sources accepts .txt and .pdf only."
-        )
 
     if not update_cartridge:
         if selection_error:
