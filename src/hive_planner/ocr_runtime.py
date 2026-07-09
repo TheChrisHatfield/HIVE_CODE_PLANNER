@@ -310,7 +310,13 @@ def convert_pdf_to_markdown(
             [f"> Warning: {len(unresolved)} page(s) produced no OCR text: {unresolved_label}", ""]
         )
     raw_parts: list[str] = []
-    for page_num, text in pages_text:
+    page_placeholder = "_(No extractable text on this page.)_"
+    for page_num in range(1, page_count + 1):
+        text = next((body for num, body in pages_text if num == page_num), None)
+        if text is None and page_num in unresolved:
+            text = page_placeholder
+        if text is None:
+            continue
         lines.extend([f"## Page {page_num}", "", text, ""])
         raw_parts.append(text)
     body = "\n".join(lines).strip() + "\n"

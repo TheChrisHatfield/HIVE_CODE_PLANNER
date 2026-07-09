@@ -472,6 +472,8 @@ def test_convert_pdf_to_markdown_warns_on_unresolved_pages(
     body = dest.read_text(encoding="utf-8")
     assert "only page one recovered" in body
     assert "produced no OCR text: 2" in body
+    assert "## Page 2" in body
+    assert "No extractable text on this page" in body
 
 
 def test_ocr_sidecar_basename_unique_per_path(tmp_path: Path) -> None:
