@@ -279,12 +279,28 @@ def convert_pdf_to_markdown(
             raise RuntimeError(status.detail)
         install = status.install
 
+    try:
+        import fitz  # pymupdf
+    except ImportError as exc:
+        raise RuntimeError("PDF OCR requires pymupdf: pip install -e '.[pdf]'") from exc
+
+    with fitz.open(pdf_path) as doc:
+        page_count = len(doc)
+
     pages_text = ocr_pdf_pages(pdf_path, install, dpi=dpi, lang=lang)
     if not pages_text:
         raise RuntimeError("OCR produced no text")
 
+    ocr_page_nums = {page_num for page_num, _ in pages_text}
+    unresolved = [page_num for page_num in range(1, page_count + 1) if page_num not in ocr_page_nums]
+
     title = pdf_path.stem.replace("-", " ").title()
     lines = [f"# {title}", "", "> OCR extraction via Tesseract", ""]
+    if unresolved:
+        unresolved_label = ", ".join(str(n) for n in unresolved)
+        lines.extend(
+            [f"> Warning: {len(unresolved)} page(s) produced no OCR text: {unresolved_label}", ""]
+        )
     raw_parts: list[str] = []
     for page_num, text in pages_text:
         lines.extend([f"## Page {page_num}", "", text, ""])

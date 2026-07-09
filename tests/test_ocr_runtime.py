@@ -262,6 +262,38 @@ def test_ocr_pdf_pages_continues_after_page_failure(
     assert pages == [(1, "recovered page one text")]
 
 
+def test_convert_pdf_to_markdown_warns_on_unresolved_pages(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pytest.importorskip("fitz")
+    import fitz
+
+    from hive_planner.ocr_runtime import TesseractInstall, convert_pdf_to_markdown
+
+    pdf_path = tmp_path / "partial-ocr.pdf"
+    doc = fitz.open()
+    doc.new_page()
+    doc.new_page()
+    doc.save(pdf_path)
+    doc.close()
+
+    install = TesseractInstall(
+        exe=tmp_path / "tesseract.exe",
+        tessdata_dir=tmp_path / "tessdata",
+        source="test",
+    )
+
+    monkeypatch.setattr(
+        "hive_planner.ocr_runtime.ocr_pdf_pages",
+        lambda *_a, **_k: [(1, "only page one recovered")],
+    )
+
+    dest = convert_pdf_to_markdown(pdf_path, install=install)
+    body = dest.read_text(encoding="utf-8")
+    assert "only page one recovered" in body
+    assert "produced no OCR text: 2" in body
+
+
 def test_ocr_sidecar_basename_unique_per_path(tmp_path: Path) -> None:
     from hive_planner.ocr_runtime import ocr_sidecar_basename
 
