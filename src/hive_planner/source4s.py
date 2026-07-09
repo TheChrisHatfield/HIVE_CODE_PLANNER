@@ -9,6 +9,7 @@ from pathlib import Path
 
 from hive_planner.config import RepoPaths, validate_feature_id
 from hive_planner.discovery import doc_id_for_path
+from hive_planner.format_deps import pdf_support_available, pdf_support_message
 from hive_planner.emitter import emit_source_context
 from hive_planner.indexer import load_document_index
 from hive_planner.ocr_runtime import ocr_pdf_enabled
@@ -163,6 +164,11 @@ def run_source4s(
         result.error = "Choose at least one .txt or .pdf file."
         return result
 
+    if any(path.suffix.lower() == ".pdf" for path in source_files) and not pdf_support_available():
+        result.ok = False
+        result.error = pdf_support_message()
+        return result
+
     paths.ensure_dirs()
     copied, stage_warnings = stage_source4s_files(paths, source_files)
     result.copied = copied
@@ -196,11 +202,16 @@ def run_source4s(
     result.warnings.extend(staged_pdf_ocr_warnings(paths, indexed_copied))
     index_error: str | None = None
     if not_indexed:
-        ocr_hint = " or Tesseract OCR" if ocr_pdf else ""
+        pdf_failures = [rel for rel in not_indexed if rel.lower().endswith(".pdf")]
+        if pdf_failures and not pdf_support_available():
+            index_hint = pdf_support_message()
+        else:
+            ocr_hint = " or Tesseract OCR" if ocr_pdf else ""
+            index_hint = f"see warnings (PDF may require pip install -e '.[pdf]'{ocr_hint})"
         index_error = (
             f"{len(not_indexed)} of {len(copied)} staged file(s) could not be indexed: "
             + ", ".join(not_indexed)
-            + f" — see warnings (PDF may require pip install -e '.[pdf]'{ocr_hint})."
+            + f" — {index_hint}."
         )
         if not indexed_copied:
             result.ok = False

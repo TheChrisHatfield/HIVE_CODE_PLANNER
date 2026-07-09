@@ -29,7 +29,7 @@ function Run-Py {
 }
 
 Write-Host "Installing build dependencies..."
-Run-Py @("-m", "pip", "install", "-q", "-e", ".[dev,portable]")
+Run-Py @("-m", "pip", "install", "-q", "-e", ".[dev,portable,pdf]")
 
 Write-Host "Generating Windows version metadata..."
 Run-Py @("packaging/gen_version_info.py")

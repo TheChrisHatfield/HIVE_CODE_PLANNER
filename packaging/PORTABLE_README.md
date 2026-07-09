@@ -44,7 +44,8 @@ HivePlanner.exe --hive-cli ci-check --root D:\projects\my-app
 
 - Settings live in `config\config.json` next to the exe (not `%APPDATA%`).
 - Git is optional but recommended for project bootstrap with `--git-init`.
-- PDF/DOCX ingest and embedding features are not bundled; use a dev install for those extras.
+- PDF ingest and Load Sources (pymupdf) are bundled for `.txt` and `.pdf` reference files.
+- DOCX/HTML/PPTX ingest and embedding features are not bundled; use a dev install for those extras.
 - Health check in the portable app skips pytest (no test suite bundled).
 
 ## Windows Defender / SmartScreen

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from hive_planner.format_deps import pdf_support_message
 from hive_planner.models import NormalizeResult
 from hive_planner.normalizers import EmptySourceError, MissingDependencyError
 from hive_planner.ocr_runtime import ensure_ocr_runtime, ocr_pdf_enabled, ocr_pdf_pages
@@ -11,9 +12,7 @@ def normalize_pdf(file_path: Path) -> NormalizeResult:
     try:
         import fitz  # pymupdf
     except ImportError as exc:
-        raise MissingDependencyError(
-            "PDF support requires pymupdf: pip install -e '.[pdf]'"
-        ) from exc
+        raise MissingDependencyError(pdf_support_message()) from exc
 
     title = file_path.stem.replace("-", " ").title()
     try:

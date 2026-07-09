@@ -2071,6 +2071,20 @@ class HivePlannerApp:
             ocr_cb.configure(state="disabled")
             ocr_var.set(False)
 
+        from hive_planner.format_deps import pdf_support_available, pdf_support_message
+
+        pdf_ok = pdf_support_available()
+        if not pdf_ok:
+            tk.Label(
+                body,
+                text=pdf_support_message(),
+                bg=COLORS["bg"],
+                fg=COLORS.get("warn", "#c9a227"),
+                font=FONT_SUBTITLE,
+                wraplength=470,
+                justify="left",
+            ).pack(anchor="w", pady=(0, 8))
+
         def sync_force_control(*_args: object) -> None:
             if link_var.get():
                 force_cb.configure(state="normal")
@@ -2123,6 +2137,9 @@ class HivePlannerApp:
         def run_upload() -> None:
             if not selected_files:
                 messagebox.showwarning("Nothing selected", "Choose one or more .txt or .pdf files.", parent=dialog)
+                return
+            if not pdf_ok and any(path.suffix.lower() == ".pdf" for path in selected_files):
+                messagebox.showerror("PDF support missing", pdf_support_message(), parent=dialog)
                 return
             feature = feature_var.get().strip()
             if link_var.get():
