@@ -454,7 +454,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "source4s":
-        from hive_planner.source4s import run_source4s
+        from hive_planner.source4s import pdf_ocr_quality_warnings, run_source4s
 
         update_cartridge = not args.ingest_only
         if update_cartridge and not args.feature:
@@ -485,7 +485,8 @@ def main(argv: list[str] | None = None) -> int:
         for name, rel in result.cartridge_outputs.items():
             print(f"Wrote {name}: {rel}")
         print(json.dumps(result.to_dict(), indent=2))
-        return 0 if result.ok else 1
+        has_ocr_warnings = bool(pdf_ocr_quality_warnings(result.warnings))
+        return 0 if result.ok and not has_ocr_warnings else 1
 
     if args.command == "ocr-status":
         from hive_planner.ocr_runtime import ocr_runtime_status

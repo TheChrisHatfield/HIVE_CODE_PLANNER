@@ -10,6 +10,7 @@ from hive_planner.discovery import doc_id_for_path
 from hive_planner.source4s import (
     SOURCE4S_DIR_NAME,
     list_source4s_files,
+    pdf_ocr_quality_warnings,
     run_source4s,
     stage_source4s_files,
     staged_pdf_ocr_warnings,
@@ -186,6 +187,18 @@ def test_staged_pdf_ocr_warnings_reads_normalized_metadata(tmp_path: Path) -> No
     assert "unresolved" in warnings[0]
     assert "Tesseract unavailable" in warnings[1]
     assert "OCR disabled" in warnings[2]
+
+
+def test_pdf_ocr_quality_warnings_filters_pdf_ocr_messages() -> None:
+    warnings = [
+        "Skipped (not a file): x",
+        "PDF a.pdf: OCR left 1 page(s) unresolved: [2]",
+        "PDF b.pdf: OCR disabled — 1 image page(s) not OCR'd: [3]",
+        "PDF c.pdf: Tesseract unavailable — 1 image page(s) not OCR'd: [4]",
+    ]
+    matched = pdf_ocr_quality_warnings(warnings)
+    assert len(matched) == 3
+    assert all(w.startswith("PDF ") for w in matched)
 
 
 def test_run_source4s_ingest_only_reports_partial_index_and_selection(tmp_path: Path) -> None:
@@ -457,3 +470,50 @@ def test_load_sources_skips_delta_and_pack_sync(tmp_path: Path) -> None:
     assert "pack_sync" not in json.loads((paths.cartridge / "manifest.json").read_text(encoding="utf-8")).get(
         "stats", {}
     )
+
+
+def test_source4s_cli_exits_nonzero_on_pdf_ocr_warnings(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from hive_planner.cli import main
+    from hive_planner.source4s import Source4sResult
+
+    def fake_run(*_args: object, **_kwargs: object) -> Source4sResult:
+        return Source4sResult(
+            ok=True,
+            copied=["context-library/sources/source4s/mixed.pdf"],
+            indexed_staged=1,
+            warnings=[
+                "PDF context-library/sources/source4s/mixed.pdf: OCR disabled — "
+                "1 image page(s) not OCR'd: [2]"
+            ],
+        )
+
+    monkeypatch.setattr("hive_planner.source4s.run_source4s", fake_run)
+
+    txt = tmp_path / "notes.txt"
+    txt.write_text("reference", encoding="utf-8")
+    code = main(["--root", str(tmp_path), "source4s", "--ingest-only", "--files", str(txt)])
+    assert code == 1
+
+
+def test_source4s_cli_exits_zero_without_pdf_ocr_warnings(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from hive_planner.cli import main
+    from hive_planner.source4s import Source4sResult
+
+    def fake_run(*_args: object, **_kwargs: object) -> Source4sResult:
+        return Source4sResult(
+            ok=True,
+            copied=["context-library/sources/source4s/notes.txt"],
+            indexed_staged=1,
+            warnings=["Skipped (not a file): elsewhere"],
+        )
+
+    monkeypatch.setattr("hive_planner.source4s.run_source4s", fake_run)
+
+    txt = tmp_path / "notes.txt"
+    txt.write_text("reference", encoding="utf-8")
+    code = main(["--root", str(tmp_path), "source4s", "--ingest-only", "--files", str(txt)])
+    assert code == 0

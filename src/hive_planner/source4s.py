@@ -34,6 +34,15 @@ def _combine_errors(*parts: str | None) -> str | None:
     return combined
 
 
+def pdf_ocr_quality_warnings(warnings: list[str]) -> list[str]:
+    """Warnings from indexed PDFs with OCR quality issues (unresolved, skipped, or disabled)."""
+    return [
+        w
+        for w in warnings
+        if w.startswith("PDF ") and ("OCR" in w or "Tesseract" in w)
+    ]
+
+
 @dataclass
 class Source4sResult:
     copied: list[str] = field(default_factory=list)
