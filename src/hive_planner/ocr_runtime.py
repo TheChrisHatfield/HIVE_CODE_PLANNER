@@ -287,6 +287,8 @@ def convert_pdf_to_markdown(
         raise RuntimeError("PDF OCR requires pymupdf: pip install -e '.[pdf]'") from exc
 
     with fitz.open(pdf_path) as doc:
+        if doc.needs_pass:
+            raise RuntimeError("Password-protected PDF is not supported")
         page_count = len(doc)
 
     pages_text = ocr_pdf_pages(pdf_path, install, dpi=dpi, lang=lang)

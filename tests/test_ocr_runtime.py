@@ -341,6 +341,28 @@ def test_run_tesseract_on_png_tolerates_non_utf8_output(
     assert _run_tesseract_on_png(install, png_path) == "caf\xe9 scan"
 
 
+def test_convert_pdf_to_markdown_rejects_password_protected_pdf(tmp_path: Path) -> None:
+    pytest.importorskip("fitz")
+    import fitz
+
+    from hive_planner.ocr_runtime import TesseractInstall, convert_pdf_to_markdown
+
+    pdf_path = tmp_path / "locked.pdf"
+    doc = fitz.open()
+    doc.new_page()
+    doc.save(pdf_path, encryption=fitz.PDF_ENCRYPT_AES_256, owner_pw="secret", user_pw="secret")
+    doc.close()
+
+    install = TesseractInstall(
+        exe=tmp_path / "tesseract.exe",
+        tessdata_dir=tmp_path / "tessdata",
+        source="test",
+    )
+
+    with pytest.raises(RuntimeError, match="Password-protected"):
+        convert_pdf_to_markdown(pdf_path, install=install)
+
+
 def test_convert_pdf_to_markdown_warns_on_unresolved_pages(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
