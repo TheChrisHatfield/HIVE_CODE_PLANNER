@@ -288,6 +288,37 @@ def test_ocr_pdf_pages_continues_after_page_failure(
     assert pages == [(1, "recovered page one text")]
 
 
+def test_pdf_needs_ocr_detects_mixed_and_image_only_pdfs(tmp_path: Path) -> None:
+    pytest.importorskip("fitz")
+    import fitz
+
+    from hive_planner.ocr_runtime import pdf_needs_ocr
+
+    image_only = tmp_path / "scan.pdf"
+    doc = fitz.open()
+    doc.new_page()
+    doc.save(image_only)
+    doc.close()
+    assert pdf_needs_ocr(image_only)
+
+    mixed = tmp_path / "mixed.pdf"
+    doc = fitz.open()
+    page = doc.new_page()
+    page.insert_text((72, 72), "embedded text")
+    doc.new_page()
+    doc.save(mixed)
+    doc.close()
+    assert pdf_needs_ocr(mixed)
+
+    text_only = tmp_path / "text.pdf"
+    doc = fitz.open()
+    page = doc.new_page()
+    page.insert_text((72, 72), "all pages have text")
+    doc.save(text_only)
+    doc.close()
+    assert not pdf_needs_ocr(text_only)
+
+
 def test_run_tesseract_on_png_tolerates_non_utf8_output(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -322,9 +322,11 @@ def pdf_needs_ocr(pdf_path: Path) -> bool:
         return False
     try:
         with fitz.open(pdf_path) as doc:
+            if len(doc) == 0:
+                return False
             for page_num in range(len(doc)):
-                if doc[page_num].get_text("text").strip():
-                    return False
-            return len(doc) > 0
+                if not doc[page_num].get_text("text").strip():
+                    return True
+            return False
     except Exception:
         return False
