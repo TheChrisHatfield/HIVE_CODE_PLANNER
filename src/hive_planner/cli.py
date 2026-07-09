@@ -32,6 +32,11 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Build/update embedding index for hybrid retrieval on emit",
     )
+    ingest_parser.add_argument(
+        "--no-ocr",
+        action="store_true",
+        help="Do not OCR image-only PDFs during ingest (text extraction only)",
+    )
     source4s_parser = sub.add_parser(
         "source4s",
         help="Upload txt/pdf reference files for cartridge-linked agent retrieval",
@@ -431,7 +436,13 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if handoff_ok else 1
 
     if args.command == "ingest":
-        report = ingest(paths, embed=args.embed)
+        from hive_planner.ocr_runtime import ocr_pdf_enabled
+
+        token = ocr_pdf_enabled.set(not args.no_ocr)
+        try:
+            report = ingest(paths, embed=args.embed)
+        finally:
+            ocr_pdf_enabled.reset(token)
         print(f"Root: {root}")
         print(f"Processed: {report.processed}, skipped: {report.skipped}, pruned: {report.pruned}")
         for warning in report.warnings:

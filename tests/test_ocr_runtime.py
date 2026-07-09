@@ -434,6 +434,32 @@ def test_ocr_sidecar_basename_unique_per_path(tmp_path: Path) -> None:
     assert name_a.endswith(".ocr.md")
 
 
+def test_ingest_skips_image_pdf_when_ocr_disabled(tmp_path: Path) -> None:
+    pytest.importorskip("fitz")
+    import fitz
+
+    from hive_planner.config import RepoPaths
+    from hive_planner.ocr_runtime import ocr_pdf_enabled
+    from hive_planner.pipeline import ingest
+
+    paths = RepoPaths(root=tmp_path)
+    paths.sources.mkdir(parents=True)
+    pdf = paths.sources / "scan.pdf"
+    doc = fitz.open()
+    doc.new_page()
+    doc.save(pdf)
+    doc.close()
+
+    token = ocr_pdf_enabled.set(False)
+    try:
+        report = ingest(paths)
+    finally:
+        ocr_pdf_enabled.reset(token)
+
+    assert report.skipped == 1
+    assert any("OCR disabled" in w or "extractable" in w.lower() for w in report.warnings)
+
+
 def test_ocr_runtime_status_to_dict(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("HIVE_TESSERACT_EXE", raising=False)
     status = ocr_runtime_status(refresh=True)
