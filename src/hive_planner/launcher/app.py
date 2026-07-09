@@ -2138,7 +2138,11 @@ class HivePlannerApp:
             if not selected_files:
                 messagebox.showwarning("Nothing selected", "Choose one or more .txt or .pdf files.", parent=dialog)
                 return
-            if not pdf_ok and any(path.suffix.lower() == ".pdf" for path in selected_files):
+            from hive_planner.config import RepoPaths
+            from hive_planner.source4s import source4s_needs_pdf_support
+
+            repo_paths = RepoPaths(root=root)
+            if not pdf_ok and source4s_needs_pdf_support(repo_paths, selected_files):
                 messagebox.showerror("PDF support missing", pdf_support_message(), parent=dialog)
                 return
             feature = feature_var.get().strip()
