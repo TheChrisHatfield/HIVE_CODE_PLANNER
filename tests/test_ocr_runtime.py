@@ -51,7 +51,7 @@ def test_discover_tesseract_bundled_vendor(tmp_path: Path, monkeypatch: pytest.M
 def test_normalize_pdf_rejects_zero_page_document(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    pytest.importorskip("fitz")
+    import fitz
 
     from hive_planner.normalizers import EmptySourceError
 
@@ -64,10 +64,7 @@ def test_normalize_pdf_rejects_zero_page_document(
         def close(self) -> None:
             return None
 
-    monkeypatch.setattr(
-        "hive_planner.normalizers.pdf.fitz.open",
-        lambda _path: FakeDoc(),
-    )
+    monkeypatch.setattr(fitz, "open", lambda _path: FakeDoc())
 
     with pytest.raises(EmptySourceError, match="no pages"):
         normalize_pdf(tmp_path / "empty.pdf")
