@@ -112,6 +112,41 @@ def test_normalize_pdf_mixed_embedded_and_ocr(tmp_path: Path, monkeypatch: pytes
     assert result.extra_metadata.get("page_count") == 2
 
 
+def test_normalize_pdf_includes_placeholder_for_unresolved_pages(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pytest.importorskip("fitz")
+    import fitz
+
+    pdf_path = tmp_path / "mixed-gap.pdf"
+    doc = fitz.open()
+    page = doc.new_page()
+    page.insert_text((72, 72), "Embedded page one text")
+    doc.new_page()
+    doc.save(pdf_path)
+    doc.close()
+
+    fake_install = TesseractInstall(
+        exe=tmp_path / "tesseract.exe",
+        tessdata_dir=tmp_path / "tessdata",
+        source="test",
+    )
+
+    monkeypatch.setattr(
+        "hive_planner.normalizers.pdf.ensure_ocr_runtime",
+        lambda: type("S", (), {"available": True, "install": fake_install})(),
+    )
+    monkeypatch.setattr(
+        "hive_planner.normalizers.pdf.ocr_pdf_pages",
+        lambda *_a, **_k: [],
+    )
+
+    result = normalize_pdf(pdf_path)
+    assert "## Page 1" in result.normalized_body
+    assert "## Page 2" in result.normalized_body
+    assert "No extractable text on this page" in result.normalized_body
+
+
 def test_normalize_pdf_mixed_marks_unresolved_image_pages(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

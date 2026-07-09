@@ -71,7 +71,6 @@ def normalize_pdf(file_path: Path) -> NormalizeResult:
                 )
             raise EmptySourceError("PDF has no extractable text (image-only or empty); OCR disabled")
 
-        pages_text = sorted(embedded.items())
         lines = [f"# {title}", ""]
         if ocr_unavailable and still_missing:
             skipped_label = ", ".join(str(n) for n in still_missing)
@@ -89,7 +88,13 @@ def normalize_pdf(file_path: Path) -> NormalizeResult:
                 banner += f" ({len(still_missing)} page(s) unresolved after OCR)"
             lines.extend([banner, ""])
         raw_parts: list[str] = []
-        for page_num, text in pages_text:
+        page_placeholder = "_(No extractable text on this page.)_"
+        for page_num in range(1, page_count + 1):
+            text = embedded.get(page_num)
+            if text is None and page_num in still_missing:
+                text = page_placeholder
+            if text is None:
+                continue
             lines.extend([f"## Page {page_num}", "", text, ""])
             raw_parts.append(text)
 
