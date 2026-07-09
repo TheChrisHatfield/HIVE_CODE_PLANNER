@@ -595,3 +595,28 @@ def test_ocr_convert_cli_exits_nonzero_on_unresolved_pages(
 
     code = main(["ocr-convert", "--files", str(pdf)])
     assert code == 1
+
+
+def test_ocr_convert_cli_fails_before_tesseract_when_pymupdf_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from hive_planner.cli import main
+
+    pdf = tmp_path / "scan.pdf"
+    pdf.write_bytes(b"%PDF-1.4 stub")
+    calls: list[str] = []
+
+    def fake_status(*_args: object, **_kwargs: object):
+        calls.append("tesseract")
+        raise AssertionError("ocr-convert should not probe Tesseract when pymupdf is missing")
+
+    monkeypatch.setattr("hive_planner.format_deps.pdf_support_available", lambda: False)
+    monkeypatch.setattr(
+        "hive_planner.format_deps.pdf_support_message",
+        lambda: "PDF support requires pymupdf",
+    )
+    monkeypatch.setattr("hive_planner.ocr_runtime.ocr_runtime_status", fake_status)
+
+    code = main(["ocr-convert", "--files", str(pdf)])
+    assert code == 1
+    assert calls == []

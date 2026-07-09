@@ -507,8 +507,12 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if status.available else 1
 
     if args.command == "ocr-convert":
+        from hive_planner.format_deps import pdf_support_available, pdf_support_message
         from hive_planner.ocr_runtime import convert_pdf_to_markdown, ocr_runtime_status, ocr_sidecar_basename
 
+        if not pdf_support_available():
+            print(f"Error: {pdf_support_message()}", file=sys.stderr)
+            return 1
         status = ocr_runtime_status(scan_d_drive=args.scan_d_drive, refresh=True)
         if not status.available or status.install is None:
             print(f"Error: {status.detail}", file=sys.stderr)
