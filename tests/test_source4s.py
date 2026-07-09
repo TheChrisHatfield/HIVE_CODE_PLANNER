@@ -149,6 +149,21 @@ def test_run_source4s_fails_when_staged_file_not_indexed(tmp_path: Path) -> None
     assert "1 of 2 staged file(s)" in result.error
 
 
+def test_staged_pdf_ocr_warnings_ignores_unindexed_stale_metadata(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    paths.ensure_dirs()
+    rel = "context-library/sources/source4s/stale.pdf"
+    meta_path = paths.normalized_meta / f"{doc_id_for_path(rel)}.json"
+    meta_path.parent.mkdir(parents=True, exist_ok=True)
+    meta_path.write_text(
+        json.dumps({"ocr_unresolved_pages": [2]}),
+        encoding="utf-8",
+    )
+
+    warnings = staged_pdf_ocr_warnings(paths, [])
+    assert warnings == []
+
+
 def test_staged_pdf_ocr_warnings_reads_normalized_metadata(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     paths.ensure_dirs()

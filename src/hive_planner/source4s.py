@@ -167,7 +167,6 @@ def run_source4s(
     result.skipped = ingest_report.skipped
     result.pruned = ingest_report.pruned
     result.warnings.extend(ingest_report.warnings)
-    result.warnings.extend(staged_pdf_ocr_warnings(paths, copied))
 
     selection_error: str | None = None
     if len(copied) < len(source_files):
@@ -180,6 +179,7 @@ def run_source4s(
     indexed_copied = [rel for rel in copied if rel in indexed_paths]
     not_indexed = [rel for rel in copied if rel not in indexed_paths]
     result.indexed_staged = len(indexed_copied)
+    result.warnings.extend(staged_pdf_ocr_warnings(paths, indexed_copied))
     index_error: str | None = None
     if not_indexed:
         ocr_hint = " or Tesseract OCR" if ocr_pdf else ""
