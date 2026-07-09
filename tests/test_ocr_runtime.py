@@ -253,6 +253,8 @@ def test_normalize_pdf_mixed_without_ocr_keeps_text_extraction(
 
     assert result.extra_metadata.get("extraction") == "text"
     assert "ocr_unresolved_pages" not in result.extra_metadata
+    assert result.extra_metadata.get("ocr_disabled_pages") == [2]
+    assert "OCR disabled" in result.normalized_body
     assert "Embedded page one" in result.normalized_body
 
 

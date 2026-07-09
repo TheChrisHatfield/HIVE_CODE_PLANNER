@@ -171,14 +171,21 @@ def test_staged_pdf_ocr_warnings_reads_normalized_metadata(tmp_path: Path) -> No
     meta_path = paths.normalized_meta / f"{doc_id_for_path(rel)}.json"
     meta_path.parent.mkdir(parents=True, exist_ok=True)
     meta_path.write_text(
-        json.dumps({"ocr_unresolved_pages": [2, 3], "ocr_skipped_pages": [4]}),
+        json.dumps(
+            {
+                "ocr_unresolved_pages": [2, 3],
+                "ocr_skipped_pages": [4],
+                "ocr_disabled_pages": [5],
+            }
+        ),
         encoding="utf-8",
     )
 
     warnings = staged_pdf_ocr_warnings(paths, [rel])
-    assert len(warnings) == 2
+    assert len(warnings) == 3
     assert "unresolved" in warnings[0]
     assert "Tesseract unavailable" in warnings[1]
+    assert "OCR disabled" in warnings[2]
 
 
 def test_run_source4s_ingest_only_reports_partial_index_and_selection(tmp_path: Path) -> None:

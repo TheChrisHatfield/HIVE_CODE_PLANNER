@@ -62,6 +62,7 @@ def normalize_pdf(file_path: Path) -> NormalizeResult:
 
         still_missing = [i + 1 for i in missing_indices if (i + 1) not in embedded]
         ocr_unavailable = bool(missing_indices) and ocr_pdf_enabled.get() and not ocr_attempted
+        ocr_disabled_skips = bool(missing_indices) and not ocr_pdf_enabled.get() and still_missing
         if still_missing and had_embedded_text and extraction == "text" and ocr_attempted:
             extraction = "mixed"
 
@@ -75,6 +76,14 @@ def normalize_pdf(file_path: Path) -> NormalizeResult:
             raise EmptySourceError("PDF has no extractable text (image-only or empty); OCR disabled")
 
         lines = [f"# {title}", ""]
+        if ocr_disabled_skips:
+            skipped_label = ", ".join(str(n) for n in still_missing)
+            lines.extend(
+                [
+                    f"> Warning: OCR disabled — {len(still_missing)} image page(s) not OCR'd: {skipped_label}",
+                    "",
+                ]
+            )
         if ocr_unavailable and still_missing:
             skipped_label = ", ".join(str(n) for n in still_missing)
             lines.extend(
@@ -108,6 +117,8 @@ def normalize_pdf(file_path: Path) -> NormalizeResult:
             extra["ocr_unresolved_pages"] = still_missing
         if still_missing and ocr_unavailable:
             extra["ocr_skipped_pages"] = still_missing
+        if still_missing and ocr_disabled_skips:
+            extra["ocr_disabled_pages"] = still_missing
         if ocr_install is not None:
             extra["ocr_engine"] = ocr_install.source
         return NormalizeResult(

@@ -121,6 +121,7 @@ def staged_pdf_ocr_warnings(paths: RepoPaths, copied: list[str]) -> list[str]:
             continue
         unresolved = meta.get("ocr_unresolved_pages") or []
         skipped = meta.get("ocr_skipped_pages") or []
+        disabled = meta.get("ocr_disabled_pages") or []
         if unresolved:
             warnings.append(
                 f"PDF {rel}: OCR left {len(unresolved)} page(s) unresolved: {unresolved}"
@@ -128,6 +129,10 @@ def staged_pdf_ocr_warnings(paths: RepoPaths, copied: list[str]) -> list[str]:
         if skipped:
             warnings.append(
                 f"PDF {rel}: Tesseract unavailable — {len(skipped)} image page(s) not OCR'd: {skipped}"
+            )
+        if disabled:
+            warnings.append(
+                f"PDF {rel}: OCR disabled — {len(disabled)} image page(s) not OCR'd: {disabled}"
             )
     return warnings
 
