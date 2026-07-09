@@ -491,7 +491,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if status.available else 1
 
     if args.command == "ocr-convert":
-        from hive_planner.ocr_runtime import convert_pdf_to_markdown, ocr_runtime_status
+        from hive_planner.ocr_runtime import convert_pdf_to_markdown, ocr_runtime_status, ocr_sidecar_basename
 
         status = ocr_runtime_status(scan_d_drive=args.scan_d_drive, refresh=True)
         if not status.available or status.install is None:
@@ -500,7 +500,11 @@ def main(argv: list[str] | None = None) -> int:
         failed = 0
         for pdf in args.files:
             try:
-                out = args.output_dir / f"{pdf.stem}.ocr.md" if args.output_dir else None
+                out = (
+                    (args.output_dir / ocr_sidecar_basename(pdf))
+                    if args.output_dir
+                    else None
+                )
                 dest = convert_pdf_to_markdown(
                     pdf,
                     out,

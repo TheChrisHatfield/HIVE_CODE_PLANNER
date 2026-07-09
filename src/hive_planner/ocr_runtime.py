@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import hashlib
 import shutil
 import subprocess
 import tempfile
@@ -249,6 +250,12 @@ def ocr_pdf_pages(
                 if text:
                     pages_text.append((page_num + 1, text))
     return pages_text
+
+
+def ocr_sidecar_basename(pdf_path: Path) -> str:
+    """Unique sidecar filename for batch OCR (avoids stem collisions in one output dir)."""
+    digest = hashlib.sha256(str(pdf_path.resolve()).encode("utf-8")).hexdigest()[:8]
+    return f"{pdf_path.stem}-{digest}.ocr.md"
 
 
 def convert_pdf_to_markdown(

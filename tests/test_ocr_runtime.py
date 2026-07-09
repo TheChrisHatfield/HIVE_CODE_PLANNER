@@ -170,6 +170,23 @@ def test_ensure_ocr_runtime_refreshes_when_unavailable(
     assert status.install is install
 
 
+def test_ocr_sidecar_basename_unique_per_path(tmp_path: Path) -> None:
+    from hive_planner.ocr_runtime import ocr_sidecar_basename
+
+    a = tmp_path / "batch" / "scan.pdf"
+    b = tmp_path / "other" / "scan.pdf"
+    a.parent.mkdir(parents=True)
+    b.parent.mkdir(parents=True)
+    a.write_bytes(b"%PDF-1.4\n")
+    b.write_bytes(b"%PDF-1.4\n")
+
+    name_a = ocr_sidecar_basename(a)
+    name_b = ocr_sidecar_basename(b)
+    assert name_a != name_b
+    assert name_a.startswith("scan-")
+    assert name_a.endswith(".ocr.md")
+
+
 def test_ocr_runtime_status_to_dict(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("HIVE_TESSERACT_EXE", raising=False)
     status = ocr_runtime_status(refresh=True)
