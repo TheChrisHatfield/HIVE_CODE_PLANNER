@@ -48,6 +48,20 @@ def pdf_ocr_quality_warnings(warnings: list[str]) -> list[str]:
     ]
 
 
+def _pdf_index_failure_hint(*, ocr_pdf: bool, pdf_failures: list[str]) -> str:
+    if pdf_failures and not pdf_support_available():
+        return pdf_support_message()
+    ocr_hint = " or Tesseract OCR" if ocr_pdf else ""
+    from hive_planner.runtime_paths import is_portable_runtime
+
+    if pdf_failures and is_portable_runtime():
+        return (
+            "see warnings (PDF may be corrupt, password-protected, or image-only needing"
+            f"{ocr_hint})"
+        )
+    return f"see warnings (PDF may require pip install -e '.[pdf]'{ocr_hint})"
+
+
 @dataclass
 class Source4sResult:
     copied: list[str] = field(default_factory=list)
@@ -238,11 +252,7 @@ def run_source4s(
     index_error: str | None = None
     if not_indexed:
         pdf_failures = [rel for rel in not_indexed if rel.lower().endswith(".pdf")]
-        if pdf_failures and not pdf_support_available():
-            index_hint = pdf_support_message()
-        else:
-            ocr_hint = " or Tesseract OCR" if ocr_pdf else ""
-            index_hint = f"see warnings (PDF may require pip install -e '.[pdf]'{ocr_hint})"
+        index_hint = _pdf_index_failure_hint(ocr_pdf=ocr_pdf, pdf_failures=pdf_failures)
         index_error = (
             f"{len(not_indexed)} of {len(copied)} staged file(s) could not be indexed: "
             + ", ".join(not_indexed)

@@ -71,6 +71,20 @@ def test_stage_source4s_dedupes_duplicate_selection(tmp_path: Path) -> None:
     assert not (paths.sources / SOURCE4S_DIR_NAME / "once-2.txt").exists()
 
 
+def test_pdf_index_failure_hint_omits_pip_on_portable(monkeypatch: pytest.MonkeyPatch) -> None:
+    from hive_planner.source4s import _pdf_index_failure_hint
+
+    monkeypatch.setattr("hive_planner.runtime_paths.is_portable_runtime", lambda: True)
+    monkeypatch.setattr("hive_planner.source4s.pdf_support_available", lambda: True)
+
+    hint = _pdf_index_failure_hint(
+        ocr_pdf=True,
+        pdf_failures=["context-library/sources/source4s/broken.pdf"],
+    )
+    assert "pip install" not in hint
+    assert "Tesseract OCR" in hint
+
+
 def test_run_source4s_ingest_only(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     paths.ensure_dirs()
