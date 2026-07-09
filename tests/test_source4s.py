@@ -342,6 +342,31 @@ def test_pdf_ocr_quality_warnings_filters_pdf_ocr_messages() -> None:
     assert all(w.startswith("PDF ") for w in matched)
 
 
+def test_run_source4s_fails_when_staged_pdf_has_ocr_quality_warnings(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    paths = RepoPaths(root=tmp_path)
+    paths.ensure_dirs()
+    doc = tmp_path / "scan.pdf"
+    doc.write_bytes(b"%PDF-1.4 stub")
+
+    monkeypatch.setattr(
+        "hive_planner.source4s.staged_pdf_ocr_warnings",
+        lambda *_args, **_kwargs: [
+            "PDF context-library/sources/source4s/scan.pdf: OCR left 1 page(s) unresolved: [2]"
+        ],
+    )
+
+    result = run_source4s(
+        paths,
+        [doc],
+        feature="load-sources-v1",
+        update_cartridge=False,
+    )
+    assert not result.ok
+    assert "OCR quality issues" in (result.error or "")
+
+
 def test_run_source4s_ingest_only_reports_partial_index_and_selection(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     paths.ensure_dirs()

@@ -280,7 +280,13 @@ def run_source4s(
     indexed_copied = [rel for rel in copied if rel in indexed_paths]
     not_indexed = [rel for rel in copied if rel not in indexed_paths]
     result.indexed_staged = len(indexed_copied)
-    result.warnings.extend(staged_pdf_ocr_warnings(paths, indexed_copied))
+    ocr_staged_warnings = staged_pdf_ocr_warnings(paths, indexed_copied)
+    result.warnings.extend(ocr_staged_warnings)
+    ocr_quality_error: str | None = None
+    if ocr_staged_warnings:
+        ocr_quality_error = (
+            "One or more staged PDF(s) have OCR quality issues — see warnings."
+        )
     index_error: str | None = None
     if not_indexed:
         pdf_failures = [rel for rel in not_indexed if rel.lower().endswith(".pdf")]
@@ -292,11 +298,15 @@ def run_source4s(
         )
         if not indexed_copied:
             result.ok = False
-            result.error = _combine_errors(pdf_dep_error, index_error, selection_error)
+            result.error = _combine_errors(
+                pdf_dep_error, ocr_quality_error, index_error, selection_error
+            )
             return result
 
     if not update_cartridge:
-        final_error = _combine_errors(pdf_dep_error, index_error, selection_error)
+        final_error = _combine_errors(
+            pdf_dep_error, ocr_quality_error, index_error, selection_error
+        )
         if final_error:
             result.ok = False
             result.error = final_error
@@ -307,6 +317,7 @@ def run_source4s(
         result.error = _combine_errors(
             "Feature id is required to update cartridge source-context.md.",
             pdf_dep_error,
+            ocr_quality_error,
             index_error,
             selection_error,
         )
@@ -316,7 +327,9 @@ def run_source4s(
         validate_feature_id(feature.strip())
     except ValueError as exc:
         result.ok = False
-        result.error = _combine_errors(str(exc), pdf_dep_error, index_error, selection_error)
+        result.error = _combine_errors(
+            str(exc), pdf_dep_error, ocr_quality_error, index_error, selection_error
+        )
         return result
 
     result.feature = feature.strip()
@@ -329,7 +342,9 @@ def run_source4s(
         )
     except ValueError as exc:
         result.ok = False
-        result.error = _combine_errors(str(exc), pdf_dep_error, index_error, selection_error)
+        result.error = _combine_errors(
+            str(exc), pdf_dep_error, ocr_quality_error, index_error, selection_error
+        )
         return result
 
     result.warnings.extend(emit_warnings)
@@ -349,7 +364,9 @@ def run_source4s(
         )
         result.source_context_path = None
         result.cartridge_outputs.pop("source_context", None)
-    final_error = _combine_errors(context_error, pdf_dep_error, index_error, selection_error)
+    final_error = _combine_errors(
+        context_error, pdf_dep_error, ocr_quality_error, index_error, selection_error
+    )
     if final_error:
         result.ok = False
         result.error = final_error
