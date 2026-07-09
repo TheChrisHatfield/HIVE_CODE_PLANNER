@@ -90,6 +90,25 @@ def test_run_source4s_links_cartridge(tmp_path: Path, monkeypatch: pytest.Monkey
     assert emitted == [feature]
 
 
+def test_run_source4s_keeps_partial_index_error_when_feature_missing(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    paths.ensure_dirs()
+    good = tmp_path / "good.txt"
+    good.write_text("# Good\n\nIndexed reference content.\n", encoding="utf-8")
+    pdf = tmp_path / "broken.pdf"
+    pdf.write_bytes(b"%PDF-1.4\nnot a real pdf structure")
+
+    result = run_source4s(
+        paths,
+        [good, pdf],
+        feature=None,
+        update_cartridge=True,
+    )
+    assert not result.ok
+    assert "Feature id is required" in result.error
+    assert "could not be indexed" in result.error
+
+
 def test_run_source4s_requires_feature_when_updating_cartridge(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     paths.ensure_dirs()

@@ -18,6 +18,22 @@ SOURCE4S_DIR_NAME = "source4s"
 SOURCE4S_EXTENSIONS = {".txt", ".pdf"}
 
 
+def _combine_errors(*parts: str | None) -> str | None:
+    messages: list[str] = []
+    for part in parts:
+        if not part:
+            continue
+        if part not in messages:
+            messages.append(part)
+    if not messages:
+        return None
+    combined = messages[0]
+    for msg in messages[1:]:
+        if msg not in combined:
+            combined = f"{combined} Also: {msg}"
+    return combined
+
+
 @dataclass
 class Source4sResult:
     copied: list[str] = field(default_factory=list)
@@ -193,14 +209,18 @@ def run_source4s(
 
     if not feature or not feature.strip():
         result.ok = False
-        result.error = "Feature id is required to update cartridge source-context.md."
+        result.error = _combine_errors(
+            "Feature id is required to update cartridge source-context.md.",
+            index_error,
+            selection_error,
+        )
         return result
 
     try:
         validate_feature_id(feature.strip())
     except ValueError as exc:
         result.ok = False
-        result.error = str(exc)
+        result.error = _combine_errors(str(exc), index_error, selection_error)
         return result
 
     result.feature = feature.strip()
@@ -213,7 +233,7 @@ def run_source4s(
         )
     except ValueError as exc:
         result.ok = False
-        result.error = str(exc)
+        result.error = _combine_errors(str(exc), index_error, selection_error)
         return result
 
     result.warnings.extend(emit_warnings)
@@ -235,16 +255,8 @@ def run_source4s(
         result.cartridge_outputs.pop("source_context", None)
     if index_error:
         result.ok = False
-        if result.error:
-            if index_error not in result.error:
-                result.error = f"{result.error} Also: {index_error}"
-        else:
-            result.error = index_error
+        result.error = _combine_errors(result.error, index_error)
     if selection_error:
         result.ok = False
-        if result.error:
-            if selection_error not in result.error:
-                result.error = f"{result.error} Also: {selection_error}"
-        else:
-            result.error = selection_error
+        result.error = _combine_errors(result.error, selection_error)
     return result
