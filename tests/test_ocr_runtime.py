@@ -504,8 +504,9 @@ def test_convert_pdf_to_markdown_warns_on_unresolved_pages(
         lambda *_a, **_k: [(1, "only page one recovered")],
     )
 
-    dest = convert_pdf_to_markdown(pdf_path, install=install)
+    dest, unresolved = convert_pdf_to_markdown(pdf_path, install=install)
     body = dest.read_text(encoding="utf-8")
+    assert unresolved == [2]
     assert "only page one recovered" in body
     assert "produced no OCR text: 2" in body
     assert "## Page 2" in body
@@ -561,3 +562,36 @@ def test_ocr_runtime_status_to_dict(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     payload = status.to_dict()
     assert "available" in payload
     assert "searched" in payload
+
+
+def test_ocr_convert_cli_exits_nonzero_on_unresolved_pages(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from pathlib import Path as PathType
+
+    from hive_planner.cli import main
+    from hive_planner.ocr_runtime import TesseractInstall
+
+    pdf = tmp_path / "partial.pdf"
+    pdf.write_bytes(b"%PDF-1.4 stub")
+    install = TesseractInstall(
+        exe=tmp_path / "tesseract.exe",
+        tessdata_dir=tmp_path / "tessdata",
+        source="test",
+    )
+
+    def fake_status(*_args: object, **_kwargs: object):
+        return type(
+            "S",
+            (),
+            {"available": True, "install": install, "detail": "ok", "to_dict": lambda self: {}},
+        )()
+
+    def fake_convert(_pdf: PathType, _out: PathType | None, *, install: TesseractInstall):
+        return tmp_path / "partial.pdf.ocr.md", [2]
+
+    monkeypatch.setattr("hive_planner.ocr_runtime.ocr_runtime_status", fake_status)
+    monkeypatch.setattr("hive_planner.ocr_runtime.convert_pdf_to_markdown", fake_convert)
+
+    code = main(["ocr-convert", "--files", str(pdf)])
+    assert code == 1

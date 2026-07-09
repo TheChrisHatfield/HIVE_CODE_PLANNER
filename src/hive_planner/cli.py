@@ -521,12 +521,19 @@ def main(argv: list[str] | None = None) -> int:
                     if args.output_dir
                     else None
                 )
-                dest = convert_pdf_to_markdown(
+                dest, unresolved = convert_pdf_to_markdown(
                     pdf,
                     out,
                     install=status.install,
                 )
                 print(f"OCR: {pdf} -> {dest}")
+                if unresolved:
+                    label = ", ".join(str(page) for page in unresolved)
+                    print(
+                        f"Warning: {pdf}: {len(unresolved)} page(s) produced no OCR text: {label}",
+                        file=sys.stderr,
+                    )
+                    failed += 1
             except Exception as exc:
                 failed += 1
                 print(f"Error: {pdf}: {exc}", file=sys.stderr)

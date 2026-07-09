@@ -276,8 +276,11 @@ def convert_pdf_to_markdown(
     install: TesseractInstall | None = None,
     dpi: int = DEFAULT_OCR_DPI,
     lang: str = DEFAULT_OCR_LANG,
-) -> Path:
-    """OCR a PDF and write a searchable markdown sidecar (.ocr.md by default)."""
+) -> tuple[Path, list[int]]:
+    """OCR a PDF and write a searchable markdown sidecar (.ocr.md by default).
+
+    Returns the output path and any page numbers that produced no OCR text.
+    """
     pdf_path = pdf_path.resolve()
     if not pdf_path.is_file():
         raise FileNotFoundError(pdf_path)
@@ -330,7 +333,7 @@ def convert_pdf_to_markdown(
     dest = output_path or pdf_path.with_suffix(pdf_path.suffix + ".ocr.md")
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_text(body, encoding="utf-8")
-    return dest
+    return dest, unresolved
 
 
 def pdf_needs_ocr(pdf_path: Path) -> bool:
