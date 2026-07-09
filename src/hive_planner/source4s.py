@@ -154,6 +154,7 @@ def stage_source4s_files(paths: RepoPaths, source_files: list[Path]) -> tuple[li
     copied: list[str] = []
     warnings: list[str] = []
     seen_sources: set[Path] = set()
+    staged_from: dict[str, Path] = {}
     for raw in source_files:
         src = raw.resolve()
         if src in seen_sources:
@@ -176,8 +177,15 @@ def stage_source4s_files(paths: RepoPaths, source_files: list[Path]) -> tuple[li
                 copied.append(rel)
             continue
         dest = dest_dir / src.name
-        shutil.copy2(src, dest)
         rel = dest.relative_to(paths.root).as_posix()
+        prev = staged_from.get(rel)
+        if prev is not None and prev != src:
+            warnings.append(
+                f"Replaced staged {dest.name} — kept upload from {src} "
+                f"(skipped duplicate basename from {prev})"
+            )
+        shutil.copy2(src, dest)
+        staged_from[rel] = src
         if rel not in copied:
             copied.append(rel)
     return copied, warnings

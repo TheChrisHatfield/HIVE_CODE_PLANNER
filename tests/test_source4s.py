@@ -73,6 +73,25 @@ def test_stage_source4s_dedupes_duplicate_selection(tmp_path: Path) -> None:
     assert not (paths.sources / SOURCE4S_DIR_NAME / "once-2.txt").exists()
 
 
+def test_stage_source4s_warns_on_duplicate_basename_in_batch(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    paths.ensure_dirs()
+    first = tmp_path / "dir_a" / "notes.txt"
+    second = tmp_path / "dir_b" / "notes.txt"
+    first.parent.mkdir()
+    second.parent.mkdir()
+    first.write_text("first version", encoding="utf-8")
+    second.write_text("second version", encoding="utf-8")
+
+    copied, warnings = stage_source4s_files(paths, [first, second])
+    assert copied == ["context-library/sources/source4s/notes.txt"]
+    assert len(warnings) == 1
+    assert "duplicate basename" in warnings[0]
+    assert (paths.sources / SOURCE4S_DIR_NAME / "notes.txt").read_text(encoding="utf-8") == (
+        "second version"
+    )
+
+
 def test_pdf_index_failure_hint_omits_pip_on_portable(monkeypatch: pytest.MonkeyPatch) -> None:
     from hive_planner.source4s import _pdf_index_failure_hint
 
