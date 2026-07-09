@@ -60,6 +60,19 @@ def _unique_source_files(source_files: list[Path]) -> list[Path]:
     return unique
 
 
+def _selection_error_message(
+    source_files: list[Path], copied: list[str], stage_warnings: list[str]
+) -> str | None:
+    if len(copied) >= len(source_files):
+        return None
+    if not any("Load Sources accepts .txt and .pdf only" in w for w in stage_warnings):
+        return None
+    return (
+        f"Only {len(copied)} of {len(source_files)} selected file(s) were staged — "
+        "Load Sources accepts .txt and .pdf only."
+    )
+
+
 def _pdf_index_failure_hint(*, ocr_pdf: bool, pdf_failures: list[str]) -> str:
     if not pdf_failures:
         return "see warnings"
@@ -256,12 +269,7 @@ def run_source4s(
             "Ingest skipped one or more PDF(s) because PDF support is unavailable."
         )
 
-    selection_error: str | None = None
-    if len(copied) < len(source_files):
-        selection_error = (
-            f"Only {len(copied)} of {len(source_files)} selected file(s) were staged — "
-            "Load Sources accepts .txt and .pdf only."
-        )
+    selection_error: str | None = _selection_error_message(source_files, copied, stage_warnings)
 
     indexed_paths = {doc.source_path for doc in load_document_index(paths.document_index).documents}
     indexed_copied = [rel for rel in copied if rel in indexed_paths]

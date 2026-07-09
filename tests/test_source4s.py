@@ -114,6 +114,24 @@ def test_run_source4s_ignores_duplicate_selection_for_selection_error(tmp_path: 
     assert len(result.copied) == 1
 
 
+def test_run_source4s_skips_selection_error_for_missing_files(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    paths.ensure_dirs()
+    good = tmp_path / "good.txt"
+    good.write_text("# Good\n\nIndexed reference content.\n", encoding="utf-8")
+    missing = tmp_path / "missing.txt"
+
+    result = run_source4s(
+        paths,
+        [good, missing],
+        feature="load-sources-v1",
+        update_cartridge=False,
+    )
+    assert result.ok
+    assert result.error is None
+    assert any("not a file" in w for w in result.warnings)
+
+
 def test_run_source4s_ingest_only(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     paths.ensure_dirs()
