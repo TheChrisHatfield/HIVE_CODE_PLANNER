@@ -34,12 +34,14 @@ def normalize_pdf(file_path: Path) -> NormalizeResult:
 
         extraction = "text"
         ocr_install = None
+        ocr_attempted = False
         missing_indices = [i for i in range(page_count) if (i + 1) not in embedded]
         had_embedded_text = bool(embedded)
 
         if missing_indices and ocr_pdf_enabled.get():
             status = ensure_ocr_runtime()
             if status.available and status.install is not None:
+                ocr_attempted = True
                 try:
                     ocr_pages = ocr_pdf_pages(
                         file_path,
@@ -56,7 +58,7 @@ def normalize_pdf(file_path: Path) -> NormalizeResult:
                         raise EmptySourceError(f"PDF OCR failed: {exc}") from exc
 
         still_missing = [i + 1 for i in missing_indices if (i + 1) not in embedded]
-        if still_missing and had_embedded_text and extraction == "text":
+        if still_missing and had_embedded_text and extraction == "text" and ocr_attempted:
             extraction = "mixed"
 
         if not embedded:
@@ -85,7 +87,7 @@ def normalize_pdf(file_path: Path) -> NormalizeResult:
         normalized_body = "\n".join(lines).strip() + "\n"
         raw_text = "\n\n".join(raw_parts)
         extra = {"page_count": page_count, "format": "pdf", "extraction": extraction}
-        if still_missing:
+        if still_missing and ocr_attempted:
             extra["ocr_unresolved_pages"] = still_missing
         if ocr_install is not None:
             extra["ocr_engine"] = ocr_install.source

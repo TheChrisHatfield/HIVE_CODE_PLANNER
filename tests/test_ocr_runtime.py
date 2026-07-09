@@ -148,6 +148,31 @@ def test_normalize_pdf_mixed_marks_unresolved_image_pages(
     assert "unresolved after OCR" in result.normalized_body
 
 
+def test_normalize_pdf_mixed_without_ocr_keeps_text_extraction(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pytest.importorskip("fitz")
+    import fitz
+
+    pdf_path = tmp_path / "mixed-no-ocr.pdf"
+    doc = fitz.open()
+    page = doc.new_page()
+    page.insert_text((72, 72), "Embedded page one text")
+    doc.new_page()
+    doc.save(pdf_path)
+    doc.close()
+
+    token = ocr_pdf_enabled.set(False)
+    try:
+        result = normalize_pdf(pdf_path)
+    finally:
+        ocr_pdf_enabled.reset(token)
+
+    assert result.extra_metadata.get("extraction") == "text"
+    assert "ocr_unresolved_pages" not in result.extra_metadata
+    assert "Embedded page one" in result.normalized_body
+
+
 def test_normalize_pdf_skips_ocr_when_disabled(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     pytest.importorskip("fitz")
     import fitz
