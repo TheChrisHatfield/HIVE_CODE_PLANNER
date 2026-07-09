@@ -279,7 +279,9 @@ def run_source4s(
     pdf_dep_error: str | None = None
     if ingest_pdf_dependency_warnings(ingest_report.warnings):
         pdf_dep_error = (
-            "Ingest skipped one or more PDF(s) because PDF support is unavailable."
+            pdf_support_message()
+            if not pdf_support_available()
+            else "Ingest skipped one or more PDF(s) — see warnings."
         )
 
     selection_error: str | None = _selection_error_message(source_files, copied, stage_warnings)

@@ -165,5 +165,52 @@ def test_run_source4s_fails_when_ingest_reports_pdf_dependency_skip(
 
     result = run_source4s(paths, [doc], feature="example-feature", update_cartridge=False)
     assert not result.ok
-    assert "PDF support is unavailable" in result.error
+    assert result.error == "Ingest skipped one or more PDF(s) — see warnings."
+    assert result.indexed_staged == 1
+
+
+def test_run_source4s_uses_pdf_support_message_when_ingest_skips_pdf_without_pymupdf(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from hive_planner.models import DocumentIndex, SourceDocument
+    from hive_planner.pipeline import IngestReport
+
+    paths = RepoPaths(root=tmp_path)
+    paths.ensure_dirs()
+    doc = tmp_path / "ref.txt"
+    doc.write_text("# Reference\n\nIndexed text source.\n", encoding="utf-8")
+    staged = "context-library/sources/source4s/ref.txt"
+
+    def fake_ingest(_paths, *, embed: bool = False) -> IngestReport:
+        return IngestReport(
+            processed=1,
+            skipped=1,
+            pruned=0,
+            warnings=["Skipped stale.pdf: PDF support requires pymupdf"],
+        )
+
+    def fake_load_document_index(_path: Path) -> DocumentIndex:
+        return DocumentIndex(
+            documents=[
+                SourceDocument(
+                    doc_id="doc1",
+                    source_path=staged,
+                    format="txt",
+                    title="Reference",
+                    content_hash="abc123",
+                )
+            ]
+        )
+
+    monkeypatch.setattr("hive_planner.source4s.ingest", fake_ingest)
+    monkeypatch.setattr("hive_planner.source4s.load_document_index", fake_load_document_index)
+    monkeypatch.setattr("hive_planner.source4s.pdf_support_available", lambda: False)
+    monkeypatch.setattr(
+        "hive_planner.source4s.pdf_support_message",
+        lambda: "PDF support requires pymupdf: pip install -e \".[pdf]\"",
+    )
+
+    result = run_source4s(paths, [doc], feature="example-feature", update_cartridge=False)
+    assert not result.ok
+    assert result.error == 'PDF support requires pymupdf: pip install -e ".[pdf]"'
     assert result.indexed_staged == 1
