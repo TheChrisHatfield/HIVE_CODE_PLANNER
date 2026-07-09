@@ -320,6 +320,13 @@ def run_source4s(
             result.error = final_error
         return result
 
+    if ocr_quality_error:
+        result.ok = False
+        result.error = _combine_errors(
+            ocr_quality_error, pdf_dep_error, index_error, selection_error
+        )
+        return result
+
     if not feature or not feature.strip():
         result.ok = False
         result.error = _combine_errors(
