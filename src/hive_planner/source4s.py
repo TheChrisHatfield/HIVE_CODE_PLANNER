@@ -190,21 +190,14 @@ def run_source4s(
         )
         if not indexed_copied:
             result.ok = False
-            result.error = index_error
-            if selection_error:
-                result.error = f"{index_error} Also: {selection_error}"
+            result.error = _combine_errors(index_error, selection_error)
             return result
 
     if not update_cartridge:
-        if index_error and selection_error:
+        final_error = _combine_errors(index_error, selection_error)
+        if final_error:
             result.ok = False
-            result.error = f"{index_error} Also: {selection_error}"
-        elif selection_error:
-            result.ok = False
-            result.error = selection_error
-        elif index_error:
-            result.ok = False
-            result.error = index_error
+            result.error = final_error
         return result
 
     if not feature or not feature.strip():
@@ -246,17 +239,15 @@ def run_source4s(
     skipped_context = any(
         w.startswith("Skipped cartridge/source-context.md") for w in emit_warnings
     )
+    context_error: str | None = None
     if skipped_context:
-        result.ok = False
-        result.error = (
+        context_error = (
             "Cartridge source-context was not updated — remove draft/manual banner or use force."
         )
         result.source_context_path = None
         result.cartridge_outputs.pop("source_context", None)
-    if index_error:
+    final_error = _combine_errors(context_error, index_error, selection_error)
+    if final_error:
         result.ok = False
-        result.error = _combine_errors(result.error, index_error)
-    if selection_error:
-        result.ok = False
-        result.error = _combine_errors(result.error, selection_error)
+        result.error = final_error
     return result
