@@ -130,10 +130,11 @@ def run_source4s(
     result.indexed_staged = len(indexed_copied)
     index_error: str | None = None
     if not_indexed:
+        ocr_hint = " or Tesseract OCR" if ocr_pdf else ""
         index_error = (
             f"{len(not_indexed)} of {len(copied)} staged file(s) could not be indexed: "
             + ", ".join(not_indexed)
-            + " — see warnings (PDF may require pip install -e '.[pdf]' or Tesseract OCR)."
+            + f" — see warnings (PDF may require pip install -e '.[pdf]'{ocr_hint})."
         )
         if not indexed_copied:
             result.ok = False
