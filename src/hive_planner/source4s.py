@@ -151,7 +151,10 @@ def run_source4s(
             return result
 
     if not update_cartridge:
-        if selection_error:
+        if index_error and selection_error:
+            result.ok = False
+            result.error = f"{index_error} Also: {selection_error}"
+        elif selection_error:
             result.ok = False
             result.error = selection_error
         elif index_error:

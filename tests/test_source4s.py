@@ -128,6 +128,27 @@ def test_run_source4s_fails_when_staged_file_not_indexed(tmp_path: Path) -> None
     assert "1 of 2 staged file(s)" in result.error
 
 
+def test_run_source4s_ingest_only_reports_partial_index_and_selection(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    paths.ensure_dirs()
+    good = tmp_path / "good.txt"
+    good.write_text("# Good\n\nIndexed reference content.\n", encoding="utf-8")
+    pdf = tmp_path / "broken.pdf"
+    pdf.write_bytes(b"%PDF-1.4\nnot a real pdf structure")
+    docx = tmp_path / "notes.docx"
+    docx.write_bytes(b"not docx")
+
+    result = run_source4s(
+        paths,
+        [good, pdf, docx],
+        feature="load-sources-v1",
+        update_cartridge=False,
+    )
+    assert not result.ok
+    assert "could not be indexed" in result.error
+    assert "2 of 3 selected file(s)" in result.error
+
+
 def test_run_source4s_reports_selection_error_when_all_staged_fail_index(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     paths.ensure_dirs()
