@@ -176,14 +176,10 @@ def stage_source4s_files(paths: RepoPaths, source_files: list[Path]) -> tuple[li
                 copied.append(rel)
             continue
         dest = dest_dir / src.name
-        if dest.exists():
-            stem = dest.stem
-            counter = 2
-            while dest.exists():
-                dest = dest_dir / f"{stem}-{counter}{suffix}"
-                counter += 1
         shutil.copy2(src, dest)
-        copied.append(dest.relative_to(paths.root).as_posix())
+        rel = dest.relative_to(paths.root).as_posix()
+        if rel not in copied:
+            copied.append(rel)
     return copied, warnings
 
 

@@ -33,7 +33,7 @@ def test_stage_source4s_accepts_txt_and_pdf(tmp_path: Path) -> None:
     assert any("skip.md" in w for w in warnings)
 
 
-def test_stage_source4s_deduplicates_filename(tmp_path: Path) -> None:
+def test_stage_source4s_refreshes_existing_basename(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     paths.ensure_dirs()
     dest = paths.sources / SOURCE4S_DIR_NAME / "dup.txt"
@@ -43,7 +43,9 @@ def test_stage_source4s_deduplicates_filename(tmp_path: Path) -> None:
     incoming = tmp_path / "dup.txt"
     incoming.write_text("new content", encoding="utf-8")
     copied, _ = stage_source4s_files(paths, [incoming])
-    assert copied == ["context-library/sources/source4s/dup-2.txt"]
+    assert copied == ["context-library/sources/source4s/dup.txt"]
+    assert dest.read_text(encoding="utf-8") == "new content"
+    assert not (paths.sources / SOURCE4S_DIR_NAME / "dup-2.txt").exists()
 
 
 def test_stage_source4s_reuses_existing_library_file_without_duplicate(tmp_path: Path) -> None:
