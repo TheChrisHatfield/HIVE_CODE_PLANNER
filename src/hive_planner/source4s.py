@@ -190,8 +190,14 @@ def stage_source4s_files(paths: RepoPaths, source_files: list[Path]) -> tuple[li
 def staged_pdf_ocr_warnings(paths: RepoPaths, copied: list[str]) -> list[str]:
     """Surface OCR quality issues recorded during PDF normalization."""
     warnings: list[str] = []
+    indexed = {
+        doc.source_path: doc for doc in load_document_index(paths.document_index).documents
+    }
     for rel in copied:
         if not rel.lower().endswith(".pdf"):
+            continue
+        doc = indexed.get(rel)
+        if doc is None:
             continue
         meta_path = paths.normalized_meta / f"{doc_id_for_path(rel)}.json"
         if not meta_path.is_file():
@@ -199,6 +205,9 @@ def staged_pdf_ocr_warnings(paths: RepoPaths, copied: list[str]) -> list[str]:
         try:
             meta = json.loads(meta_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
+            continue
+        meta_hash = meta.get("content_hash")
+        if meta_hash and meta_hash != doc.content_hash:
             continue
         unresolved = meta.get("ocr_unresolved_pages") or []
         skipped = meta.get("ocr_skipped_pages") or []

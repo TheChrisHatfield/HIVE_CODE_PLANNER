@@ -252,6 +252,39 @@ def test_staged_pdf_ocr_warnings_ignores_unindexed_stale_metadata(tmp_path: Path
     assert warnings == []
 
 
+def test_staged_pdf_ocr_warnings_ignores_stale_metadata_hash(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    paths.ensure_dirs()
+    rel = "context-library/sources/source4s/mixed.pdf"
+    meta_path = paths.normalized_meta / f"{doc_id_for_path(rel)}.json"
+    meta_path.parent.mkdir(parents=True, exist_ok=True)
+    meta_path.write_text(
+        json.dumps({"content_hash": "stale-hash", "ocr_unresolved_pages": [2]}),
+        encoding="utf-8",
+    )
+    paths.document_index.parent.mkdir(parents=True, exist_ok=True)
+    paths.document_index.write_text(
+        json.dumps(
+            {
+                "documents": [
+                    {
+                        "doc_id": doc_id_for_path(rel),
+                        "source_path": rel,
+                        "format": "pdf",
+                        "title": "Mixed",
+                        "content_hash": "fresh-hash",
+                        "category": "source4s",
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    warnings = staged_pdf_ocr_warnings(paths, [rel])
+    assert warnings == []
+
+
 def test_staged_pdf_ocr_warnings_reads_normalized_metadata(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     paths.ensure_dirs()
@@ -261,9 +294,28 @@ def test_staged_pdf_ocr_warnings_reads_normalized_metadata(tmp_path: Path) -> No
     meta_path.write_text(
         json.dumps(
             {
+                "content_hash": "current-hash",
                 "ocr_unresolved_pages": [2, 3],
                 "ocr_skipped_pages": [4],
                 "ocr_disabled_pages": [5],
+            }
+        ),
+        encoding="utf-8",
+    )
+    paths.document_index.parent.mkdir(parents=True, exist_ok=True)
+    paths.document_index.write_text(
+        json.dumps(
+            {
+                "documents": [
+                    {
+                        "doc_id": doc_id_for_path(rel),
+                        "source_path": rel,
+                        "format": "pdf",
+                        "title": "Mixed",
+                        "content_hash": "current-hash",
+                        "category": "source4s",
+                    }
+                ]
             }
         ),
         encoding="utf-8",
