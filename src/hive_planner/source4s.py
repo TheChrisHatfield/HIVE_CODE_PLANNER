@@ -249,7 +249,7 @@ def run_source4s(
     if not copied:
         result.ok = False
         if stage_warnings:
-            result.error = stage_warnings[0]
+            result.error = "; ".join(stage_warnings)
         else:
             result.error = "No supported files were staged (.txt and .pdf only)."
         return result

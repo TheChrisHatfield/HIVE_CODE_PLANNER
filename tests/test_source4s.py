@@ -400,6 +400,22 @@ def test_run_source4s_reports_stage_warning_when_nothing_staged(tmp_path: Path) 
     assert "Load Sources accepts .txt and .pdf only" in result.error
 
 
+def test_run_source4s_reports_all_stage_warnings_when_nothing_staged(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    paths.ensure_dirs()
+    docx = tmp_path / "notes.docx"
+    docx.write_bytes(b"not docx")
+    md = tmp_path / "readme.md"
+    md.write_text("# Nope", encoding="utf-8")
+
+    result = run_source4s(paths, [docx, md], feature="load-sources-v1", update_cartridge=False)
+    assert not result.ok
+    assert result.copied == []
+    assert result.error is not None
+    assert "notes.docx" in result.error
+    assert "readme.md" in result.error
+
+
 def test_load_sources_keeps_cartridge_error_on_partial_selection(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     paths.ensure_dirs()
