@@ -48,8 +48,22 @@ def pdf_ocr_quality_warnings(warnings: list[str]) -> list[str]:
     ]
 
 
+def _unique_source_files(source_files: list[Path]) -> list[Path]:
+    seen: set[Path] = set()
+    unique: list[Path] = []
+    for path in source_files:
+        resolved = path.resolve()
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        unique.append(path)
+    return unique
+
+
 def _pdf_index_failure_hint(*, ocr_pdf: bool, pdf_failures: list[str]) -> str:
-    if pdf_failures and not pdf_support_available():
+    if not pdf_failures:
+        return "see warnings"
+    if not pdf_support_available():
         return pdf_support_message()
     ocr_hint = " or Tesseract OCR" if ocr_pdf else ""
     from hive_planner.runtime_paths import is_portable_runtime
@@ -207,6 +221,8 @@ def run_source4s(
         result.ok = False
         result.error = "Choose at least one .txt or .pdf file."
         return result
+
+    source_files = _unique_source_files(source_files)
 
     if source4s_needs_pdf_support(paths, source_files) and not pdf_support_available():
         result.ok = False

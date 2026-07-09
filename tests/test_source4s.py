@@ -85,6 +85,35 @@ def test_pdf_index_failure_hint_omits_pip_on_portable(monkeypatch: pytest.Monkey
     assert "Tesseract OCR" in hint
 
 
+def test_pdf_index_failure_hint_uses_generic_message_for_txt_failures(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from hive_planner.source4s import _pdf_index_failure_hint
+
+    monkeypatch.setattr("hive_planner.runtime_paths.is_portable_runtime", lambda: False)
+
+    hint = _pdf_index_failure_hint(ocr_pdf=True, pdf_failures=[])
+    assert hint == "see warnings"
+    assert "pip install" not in hint
+
+
+def test_run_source4s_ignores_duplicate_selection_for_selection_error(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    paths.ensure_dirs()
+    good = tmp_path / "good.txt"
+    good.write_text("# Good\n\nIndexed reference content.\n", encoding="utf-8")
+
+    result = run_source4s(
+        paths,
+        [good, good],
+        feature="load-sources-v1",
+        update_cartridge=False,
+    )
+    assert result.ok
+    assert result.error is None
+    assert len(result.copied) == 1
+
+
 def test_run_source4s_ingest_only(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     paths.ensure_dirs()
