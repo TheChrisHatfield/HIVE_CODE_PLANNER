@@ -89,6 +89,13 @@ def list_source4s_files(paths: RepoPaths) -> list[str]:
     return found
 
 
+def source4s_needs_pdf_support(paths: RepoPaths, source_files: list[Path]) -> bool:
+    """True when ingest will touch a PDF under source4s (upload or existing library)."""
+    if any(path.suffix.lower() == ".pdf" for path in source_files):
+        return True
+    return any(rel.lower().endswith(".pdf") for rel in list_source4s_files(paths))
+
+
 def stage_source4s_files(paths: RepoPaths, source_files: list[Path]) -> tuple[list[str], list[str]]:
     """Copy uploaded txt/pdf files into context-library/sources/source4s/."""
     dest_dir = source4s_dir(paths)
@@ -164,7 +171,7 @@ def run_source4s(
         result.error = "Choose at least one .txt or .pdf file."
         return result
 
-    if any(path.suffix.lower() == ".pdf" for path in source_files) and not pdf_support_available():
+    if source4s_needs_pdf_support(paths, source_files) and not pdf_support_available():
         result.ok = False
         result.error = pdf_support_message()
         return result

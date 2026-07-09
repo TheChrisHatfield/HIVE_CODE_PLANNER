@@ -12,6 +12,7 @@ from hive_planner.source4s import (
     list_source4s_files,
     pdf_ocr_quality_warnings,
     run_source4s,
+    source4s_needs_pdf_support,
     stage_source4s_files,
     staged_pdf_ocr_warnings,
 )
