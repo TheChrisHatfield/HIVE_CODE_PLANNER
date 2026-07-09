@@ -2162,6 +2162,15 @@ class HivePlannerApp:
                 self._queue_home_log(f"Load Sources failed: {result['error']}")
             elif result.get("copied"):
                 self._queue_home_log("Load Sources incomplete — see warnings below.")
+            ocr_warnings = [
+                w
+                for w in result.get("warnings", [])
+                if w.startswith("PDF ") and ("OCR" in w or "Tesseract" in w)
+            ]
+            if ocr_warnings:
+                self._queue_home_log(
+                    f"  PDF OCR warnings on {len(ocr_warnings)} staged file(s) — see warnings below."
+                )
             indexed = result.get("indexed_staged", 0)
             copied_count = len(result.get("copied", []))
             if indexed and copied_count and indexed < copied_count:
