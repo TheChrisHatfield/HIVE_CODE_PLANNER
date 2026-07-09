@@ -9,7 +9,11 @@ from pathlib import Path
 
 from hive_planner.config import RepoPaths, validate_feature_id
 from hive_planner.discovery import doc_id_for_path
-from hive_planner.format_deps import pdf_support_available, pdf_support_message
+from hive_planner.format_deps import (
+    ingest_pdf_dependency_warnings,
+    pdf_support_available,
+    pdf_support_message,
+)
 from hive_planner.emitter import emit_source_context
 from hive_planner.indexer import load_document_index
 from hive_planner.ocr_runtime import ocr_pdf_enabled
@@ -209,6 +213,11 @@ def run_source4s(
     result.skipped = ingest_report.skipped
     result.pruned = ingest_report.pruned
     result.warnings.extend(ingest_report.warnings)
+    pdf_dep_error: str | None = None
+    if ingest_pdf_dependency_warnings(ingest_report.warnings):
+        pdf_dep_error = (
+            "Ingest skipped one or more PDF(s) because PDF support is unavailable."
+        )
 
     selection_error: str | None = None
     if len(copied) < len(source_files):
@@ -237,11 +246,11 @@ def run_source4s(
         )
         if not indexed_copied:
             result.ok = False
-            result.error = _combine_errors(index_error, selection_error)
+            result.error = _combine_errors(pdf_dep_error, index_error, selection_error)
             return result
 
     if not update_cartridge:
-        final_error = _combine_errors(index_error, selection_error)
+        final_error = _combine_errors(pdf_dep_error, index_error, selection_error)
         if final_error:
             result.ok = False
             result.error = final_error
@@ -251,6 +260,7 @@ def run_source4s(
         result.ok = False
         result.error = _combine_errors(
             "Feature id is required to update cartridge source-context.md.",
+            pdf_dep_error,
             index_error,
             selection_error,
         )
@@ -260,7 +270,7 @@ def run_source4s(
         validate_feature_id(feature.strip())
     except ValueError as exc:
         result.ok = False
-        result.error = _combine_errors(str(exc), index_error, selection_error)
+        result.error = _combine_errors(str(exc), pdf_dep_error, index_error, selection_error)
         return result
 
     result.feature = feature.strip()
@@ -273,7 +283,7 @@ def run_source4s(
         )
     except ValueError as exc:
         result.ok = False
-        result.error = _combine_errors(str(exc), index_error, selection_error)
+        result.error = _combine_errors(str(exc), pdf_dep_error, index_error, selection_error)
         return result
 
     result.warnings.extend(emit_warnings)
@@ -293,7 +303,7 @@ def run_source4s(
         )
         result.source_context_path = None
         result.cartridge_outputs.pop("source_context", None)
-    final_error = _combine_errors(context_error, index_error, selection_error)
+    final_error = _combine_errors(context_error, pdf_dep_error, index_error, selection_error)
     if final_error:
         result.ok = False
         result.error = final_error
