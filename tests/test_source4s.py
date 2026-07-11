@@ -138,6 +138,17 @@ def test_discover_source4s_files_in_folder_non_recursive(tmp_path: Path) -> None
     assert [path.name for path in found] == ["top.txt"]
 
 
+def test_discover_source4s_files_in_folder_skips_common_vendor_dirs(tmp_path: Path) -> None:
+    folder = tmp_path / "refs"
+    (folder / "node_modules" / "pkg").mkdir(parents=True)
+    (folder / "good").mkdir()
+    (folder / "node_modules" / "pkg" / "bad.pdf").write_bytes(b"%PDF")
+    (folder / "good" / "keep.txt").write_text("keep", encoding="utf-8")
+
+    found = discover_source4s_files_in_folder(folder)
+    assert [path.name for path in found] == ["keep.txt"]
+
+
 def test_merge_source4s_selection_dedupes_paths(tmp_path: Path) -> None:
     first = tmp_path / "a.txt"
     second = tmp_path / "b.pdf"

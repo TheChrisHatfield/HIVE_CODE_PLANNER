@@ -27,6 +27,26 @@ SOURCE4S_FILETYPES = [
     ("PDF", "*.pdf"),
     ("All files", "*.*"),
 ]
+SOURCE4S_DISCOVER_SKIP_DIR_NAMES = {
+    ".git",
+    ".hg",
+    ".svn",
+    ".venv",
+    "node_modules",
+    "__pycache__",
+    "venv",
+    "dist",
+    "build",
+    ".hive",
+}
+
+
+def _discover_path_is_skipped(path: Path, root: Path) -> bool:
+    try:
+        rel = path.relative_to(root)
+    except ValueError:
+        return False
+    return any(part in SOURCE4S_DISCOVER_SKIP_DIR_NAMES for part in rel.parts[:-1])
 
 
 def discover_source4s_files_in_folder(folder: Path, *, recursive: bool = True) -> list[Path]:
@@ -37,8 +57,13 @@ def discover_source4s_files_in_folder(folder: Path, *, recursive: bool = True) -
     iterator = root.rglob("*") if recursive else root.iterdir()
     found: list[Path] = []
     for path in iterator:
-        if path.is_file() and path.suffix.lower() in SOURCE4S_EXTENSIONS:
-            found.append(path)
+        if not path.is_file():
+            continue
+        if path.suffix.lower() not in SOURCE4S_EXTENSIONS:
+            continue
+        if _discover_path_is_skipped(path, root):
+            continue
+        found.append(path)
     return sorted(found)
 
 
