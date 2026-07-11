@@ -58,14 +58,14 @@ def _packaged_contract_path() -> Path:
 
 
 def resolve_session_contract_path(repo_root: Path | None = None) -> Path | None:
-    """Prefer repo docs copy; fall back to packaged bootstrap template."""
-    candidates: list[Path] = []
+    """Prefer non-empty repo docs copy; fall back to packaged bootstrap template."""
     if repo_root is not None:
-        candidates.append(repo_root / "docs" / CONTRACT_FILENAME)
-    candidates.append(_packaged_contract_path())
-    for path in candidates:
-        if path.is_file():
-            return path
+        repo_contract = repo_root / "docs" / CONTRACT_FILENAME
+        if repo_contract.is_file() and repo_contract.stat().st_size > 0:
+            return repo_contract
+    packaged = _packaged_contract_path()
+    if packaged.is_file() and packaged.stat().st_size > 0:
+        return packaged
     return None
 
 

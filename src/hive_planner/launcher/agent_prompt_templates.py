@@ -13,6 +13,15 @@ class AgentPromptTemplate:
     prompt: str
 
 
+def external_rosetta_session_prompt() -> str:
+    from hive_planner.rosetta_eject import build_session_start_prompt
+
+    return (
+        build_session_start_prompt(project_name="<your project>").rstrip()
+        + "\n\nAfter the session, save the produced Planning Rosetta Stone to docs/planning-rosetta-stone.md in the Hive repo."
+    )
+
+
 def default_agent_prompt_templates() -> tuple[AgentPromptTemplate, ...]:
     """Curated starter prompts aligned with START_HERE, Rosetta, Spec Kit, and sources."""
     return (
@@ -183,22 +192,7 @@ Propose which bullets are accepted, rejected, and why — do not edit AGENTS.md 
             id="planning.external_rosetta",
             title="External planning — Rosetta session (Gemini / Perplexity)",
             description="Paste after uploading the ejected Rosetta contract in a non-Cursor planning AI.",
-            prompt="""I've uploaded the Rosetta Stone Planning Session Contract.
-
-Follow it for ALL documents you produce in this session:
-- HTML meta header on every file
-- [HOOK:...] section headings on major concepts
-- Inline `hook_id` references in body text
-- [CTX:...] context members in long sections with Promote to paths
-- <!-- ROSETTA-NAV --> on spec/plan/tasks/feature briefs
-- Deliver a Planning Rosetta Stone index at the end
-
-When scanning an existing chat or thread export, tag each major concept with hooks and
-[CTX:...] members as you distill it — do not leave concepts untagged in prose-only form.
-
-Project name: <your project>
-
-After the session, save the produced Planning Rosetta Stone to docs/planning-rosetta-stone.md in the Hive repo.""",
+            prompt=external_rosetta_session_prompt(),
         ),
         AgentPromptTemplate(
             id="feature.scaffold",

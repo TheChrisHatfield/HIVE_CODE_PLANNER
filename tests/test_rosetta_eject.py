@@ -29,6 +29,19 @@ def test_resolve_session_contract_prefers_repo_docs(tmp_path: Path) -> None:
     assert resolved == repo_contract
 
 
+def test_resolve_session_contract_skips_empty_repo_docs(tmp_path: Path) -> None:
+    root = tmp_path / "proj"
+    docs = root / "docs"
+    docs.mkdir(parents=True)
+    (docs / CONTRACT_FILENAME).write_text("", encoding="utf-8")
+
+    resolved = resolve_session_contract_path(root)
+    assert resolved is not None
+    assert resolved.name == CONTRACT_FILENAME
+    assert "bootstrap_templates" in resolved.as_posix()
+    assert resolved.read_text(encoding="utf-8").strip()
+
+
 def test_resolve_session_contract_falls_back_to_packaged() -> None:
     resolved = resolve_session_contract_path(None)
     assert resolved is not None
