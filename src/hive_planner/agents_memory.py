@@ -320,6 +320,12 @@ def _parse_candidates(text: str) -> list[str]:
     return [c for c in candidates if c]
 
 
+def _substantive_candidate_text(bullet: str) -> str:
+    cleaned = TAG_BEHAVIORAL.sub("", bullet.strip()).strip()
+    cleaned = TAG_OPERATIONAL.sub("", cleaned).strip()
+    return cleaned
+
+
 def _validate_candidate(bullet: str, existing: set[str]) -> str | None:
     if len(bullet) > MAX_BULLET_CHARS:
         return f"Candidate exceeds {MAX_BULLET_CHARS} characters"
@@ -349,6 +355,11 @@ def _evaluate_candidates(
     feature = _parse_active_feature_from_sections(sections)
 
     for candidate in raw_candidates:
+        if not _substantive_candidate_text(candidate):
+            rejected.append(
+                (candidate, "Candidate is a section tag only — add substantive bullet text")
+            )
+            continue
         classified = classify_bullet(candidate)
         if classified.kind == "ambiguous":
             rejected.append(

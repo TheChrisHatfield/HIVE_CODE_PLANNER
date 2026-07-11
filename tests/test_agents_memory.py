@@ -252,6 +252,19 @@ def test_propose_behavioral_rejection_ignores_placeholder_active_feature(tmp_pat
     assert "docs/specs/none/" not in reason
 
 
+def test_propose_rejects_tag_only_candidates(tmp_path: Path) -> None:
+    from hive_planner.agents_memory import _evaluate_candidates, parse_sections
+
+    sections = parse_sections(_minimal_agents())
+    accepted, rejected, _ = _evaluate_candidates(
+        sections,
+        ["# operational", "# behavioral", "Keep pytest in CI. # operational"],
+    )
+    assert accepted == ["Keep pytest in CI. # operational"]
+    assert len(rejected) == 2
+    assert all("section tag only" in reason for _, reason in rejected)
+
+
 def test_ingest_normalizes_transcript_export(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     source = paths.root / "export.txt"
