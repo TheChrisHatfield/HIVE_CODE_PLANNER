@@ -2200,6 +2200,8 @@ class HivePlannerApp:
                         f"No .txt or .pdf files found under:\n{folder_path}",
                         parent=dialog,
                     )
+                    if not append:
+                        clear_selection()
                     return
                 if append:
                     set_selection(discovered, append=True)
