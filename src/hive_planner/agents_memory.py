@@ -292,11 +292,11 @@ def lint_agents_md(paths: RepoPaths, agents_path: Path | None = None) -> AgentsL
 
 def _parse_section_header(stripped: str) -> str | None:
     lowered = stripped.lower()
-    if lowered.startswith("# operational") or lowered == "# operational":
+    if lowered == "# operational":
         return "# operational"
-    if lowered.startswith("# behavioral") or lowered == "# behavioral":
+    if lowered == "# behavioral":
         return "# behavioral"
-    if lowered.startswith("# ambiguous") or lowered == "# ambiguous":
+    if lowered == "# ambiguous":
         return "# ambiguous"
     return None
 
@@ -690,20 +690,9 @@ def normalize_candidates_text(text: str) -> str:
         stripped = line.strip()
         if not stripped:
             continue
-        if stripped.startswith("# operational") or stripped.lower() == "# operational":
-            current_tag = "# operational"
-            if lines_out and lines_out[-1] != "":
-                lines_out.append("")
-            lines_out.append(current_tag)
-            continue
-        if stripped.startswith("# behavioral") or stripped.lower() == "# behavioral":
-            current_tag = "# behavioral"
-            if lines_out and lines_out[-1] != "":
-                lines_out.append("")
-            lines_out.append(current_tag)
-            continue
-        if stripped.startswith("# ambiguous") or stripped.lower() == "# ambiguous":
-            current_tag = "# ambiguous"
+        section_tag = _parse_section_header(stripped)
+        if section_tag:
+            current_tag = section_tag
             if lines_out and lines_out[-1] != "":
                 lines_out.append("")
             lines_out.append(current_tag)
