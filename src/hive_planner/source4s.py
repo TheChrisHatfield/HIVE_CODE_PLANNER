@@ -46,14 +46,6 @@ SOURCE4S_DISCOVER_SKIP_DIR_NAMES = {
 }
 
 
-def _discover_path_is_skipped(path: Path, root: Path) -> bool:
-    try:
-        rel = path.relative_to(root)
-    except ValueError:
-        return False
-    return any(part in SOURCE4S_DISCOVER_SKIP_DIR_NAMES for part in rel.parts[:-1])
-
-
 def discover_source4s_files_in_folder(folder: Path, *, recursive: bool = True) -> list[Path]:
     """Return .txt/.pdf files under a folder (recursive by default)."""
     root = folder.resolve()
