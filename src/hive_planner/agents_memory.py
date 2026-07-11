@@ -498,11 +498,27 @@ def run_agents_memory(
         raise AgentsMemoryError("No candidate bullets found in candidates file")
 
     accepted, rejected, spec_actions = _evaluate_candidates(sections, raw_candidates)
-    if not accepted:
-        raise AgentsMemoryError("All candidate bullets were rejected by validation")
 
     current_key = _match_section(sections, EDITABLE_SECTION)
     current_facts = sections.get(current_key, "").strip() if current_key else ""
+
+    if not accepted:
+        reject_proposal = _write_proposal(
+            paths,
+            target=target,
+            current_facts=current_facts,
+            after_section=current_facts,
+            proposed_bullets="",
+            accepted=[],
+            rejected=rejected,
+            spec_actions=spec_actions,
+            applied=False,
+        )
+        rel = reject_proposal.relative_to(paths.root).as_posix()
+        raise AgentsMemoryError(
+            f"All candidate bullets were rejected by validation — see {rel} for per-bullet reasons"
+        )
+
     proposed_bullets = "\n".join(f"- {c}" for c in accepted)
     after_section = f"{current_facts}\n{proposed_bullets}".strip() if current_facts else proposed_bullets
 

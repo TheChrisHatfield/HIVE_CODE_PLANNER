@@ -1883,6 +1883,10 @@ def test_run_agents_memory_propose_hints_when_all_candidates_rejected(tmp_path: 
     result = run_agents_memory_propose(project, candidates)
     assert result["ok"] is False
     assert any("behavioral" in hint.lower() or "operational" in hint.lower() for hint in result.get("hints", []))
+    proposals = list((project / "docs" / "proposals").glob("agents-memory-*.md"))
+    assert proposals, "a proposal file with rejection reasons should be written"
+    text = proposals[0].read_text(encoding="utf-8")
+    assert "Rejected candidates" in text
 
 
 def test_run_unified_verify_on_bootstrapped_project(tmp_path: Path) -> None:
