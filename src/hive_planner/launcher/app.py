@@ -142,6 +142,8 @@ class HivePlannerApp:
         self._last_ci_report: dict | None = None
         self._pending_memory_candidates: Path | None = None
         self._pending_memory_link: str | None = None
+        self._memory_work_root: Path | None = None
+        self._memory_work_candidates_path: Path | None = None
         self._agent_prompt_expanded = False
         self._agent_prompt_saved_title: str | None = None
         self._home_guide_expanded = False
@@ -1705,10 +1707,18 @@ class HivePlannerApp:
 
     def _set_pending_memory_candidates(self, root: Path, candidates: Path) -> None:
         self._pending_memory_candidates = candidates
+        self._memory_work_root = root.resolve()
+        self._memory_work_candidates_path = candidates
         link = self.config.active_project
         self._pending_memory_link = (
             normalize_project_path(link) if link else normalize_project_path(str(root))
         )
+
+    def _clear_memory_work_context(self) -> None:
+        self._pending_memory_candidates = None
+        self._pending_memory_link = None
+        self._memory_work_root = None
+        self._memory_work_candidates_path = None
 
     def _pending_memory_for_root(self, root: Path) -> Path | None:
         if not self._pending_memory_candidates:
@@ -1722,7 +1732,17 @@ class HivePlannerApp:
             return None
         return self._pending_memory_candidates
 
+    def _memory_work_candidates(self) -> Path | None:
+        if self._memory_work_root and self._memory_work_candidates_path:
+            return self._memory_work_candidates_path
+        root = self._resolve_memory_work_root()
+        if root is None:
+            return None
+        return self._pending_memory_for_root(root)
+
     def _resolve_memory_work_root(self) -> Path | None:
+        if self._memory_work_root is not None:
+            return self._memory_work_root
         pending_link = getattr(self, "_pending_memory_link", None)
         pending_candidates = getattr(self, "_pending_memory_candidates", None)
         if pending_link and pending_candidates:
@@ -1763,16 +1783,26 @@ class HivePlannerApp:
             self._refresh_home_dashboard()
             return
         root = self._resolve_memory_work_root()
-        candidates = self._pending_memory_for_root(root) if root else None
+        candidates = self._memory_work_candidates()
         if accepted and root and candidates:
             if self._show_memory_proposal_preview(result, root=root):
                 self._start_home_action(f"Running agents-apply on {candidates.name}…")
+                generation = self._bg_generation
                 self._run_bg(
-                    lambda r=root, c=candidates: run_agents_memory_apply(r, c),
+                    lambda r=root, c=candidates, g=generation: self._run_memory_apply_if_current(r, c, g),
                     self._agents_apply_done,
                 )
                 return
         self._refresh_home_dashboard()
+
+    def _run_memory_apply_if_current(self, root: Path, candidates: Path, generation: int) -> dict:
+        if generation != self._bg_generation:
+            return {
+                "ok": False,
+                "error": "Memory apply cancelled — project or dashboard changed.",
+                "cancelled": True,
+            }
+        return run_agents_memory_apply(root, candidates)
 
     def _open_project_file(self, root: Path, rel_path: str) -> None:
         project_root = root.resolve()
@@ -2059,6 +2089,11 @@ class HivePlannerApp:
             self._queue_home_log(self._result_detail(result))
             self._refresh_home_dashboard()
             return
+        if result.get("cancelled"):
+            self._queue_home_log(self._result_detail(result))
+            self._clear_memory_work_context()
+            self._refresh_home_dashboard()
+            return
         if not result.get("ok"):
             self._queue_home_log(self._result_detail(result))
             for hint in result.get("hints", []):
@@ -2080,6 +2115,7 @@ class HivePlannerApp:
             self._queue_home_log(f"Rejected {len(rejected)} candidate(s) — see proposal file.")
         if result.get("applied"):
             self._queue_home_log("AGENTS.md updated.")
+        self._clear_memory_work_context()
         self._refresh_home_dashboard()
 
     def _agents_propose_done(self, result: dict) -> None:

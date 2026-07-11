@@ -2313,6 +2313,43 @@ def test_agents_apply_done_uses_pending_memory_work_root(monkeypatch: pytest.Mon
     assert app._pending_memory_link == normalize_project_path(workspace)
 
 
+def test_memory_work_root_persists_after_pending_cleared(tmp_path: Path) -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+    from hive_planner.launcher.config import LauncherConfig
+
+    folder = tmp_path / "app"
+    folder.mkdir()
+    candidates = folder / "docs" / "proposals" / "candidates.md"
+    candidates.parent.mkdir(parents=True)
+    candidates.write_text("- x\n", encoding="utf-8")
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.config = LauncherConfig(active_project=str(folder))
+    app._memory_work_root = None
+    app._memory_work_candidates_path = None
+    app._set_pending_memory_candidates(folder, candidates)
+    app._pending_memory_candidates = None
+    app._pending_memory_link = None
+
+    assert app._resolve_memory_work_root() == folder.resolve()
+    assert app._memory_work_candidates() == candidates
+
+
+def test_run_memory_apply_if_current_cancels_on_stale_generation(tmp_path: Path) -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app._bg_generation = 2
+    candidates = tmp_path / "docs" / "proposals" / "candidates.md"
+    candidates.parent.mkdir(parents=True)
+    candidates.write_text("- x\n", encoding="utf-8")
+
+    result = app._run_memory_apply_if_current(tmp_path, candidates, 1)
+
+    assert result["ok"] is False
+    assert result["cancelled"] is True
+
+
 def test_agents_propose_done_prompts_apply_without_name_error(monkeypatch: pytest.MonkeyPatch) -> None:
     from hive_planner.launcher.app import HivePlannerApp
 
