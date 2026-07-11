@@ -148,6 +148,7 @@ class HivePlannerApp:
         self._agent_prompt_saved_title: str | None = None
         self._home_guide_expanded = False
         self._rosetta_eject_expanded = False
+        self._rosetta_eject_saved_name: str | None = None
 
         root.title("Hive Planner")
         root.geometry("920x680")
@@ -3581,14 +3582,17 @@ class HivePlannerApp:
             name = self._rosetta_eject_name_var.get().strip()
             if name:
                 return name
-        root = self._active_project_root()
+        saved = (self._rosetta_eject_saved_name or "").strip()
+        if saved:
+            return saved
+        root = self._active_linked_root()
         return infer_project_name(root)
 
-    def _active_project_root(self) -> Path | None:
-        link = self.config.active_project
-        if not link:
-            return None
-        return resolve_linked_project_root(Path(link))
+    def _save_rosetta_eject_project_name(self) -> None:
+        if not hasattr(self, "_rosetta_eject_name_var"):
+            return
+        name = self._rosetta_eject_name_var.get().strip()
+        self._rosetta_eject_saved_name = name or None
 
     def _refresh_rosetta_eject_preview(self) -> None:
         if not hasattr(self, "_rosetta_eject_preview"):
@@ -3677,7 +3681,8 @@ class HivePlannerApp:
         name_row = tk.Frame(self._rosetta_eject_body, bg=COLORS["card"])
         name_row.pack(fill="x", padx=12, pady=(0, 8))
         tk.Label(name_row, text="Project name", font=FONT, bg=COLORS["card"], fg=COLORS["fg"]).pack(side="left")
-        default_name = infer_project_name(self._active_project_root())
+        saved_name = self._rosetta_eject_saved_name
+        default_name = saved_name.strip() if saved_name and saved_name.strip() else infer_project_name(self._active_linked_root())
         self._rosetta_eject_name_var = tk.StringVar(value=default_name)
         name_entry = tk.Entry(
             name_row,
@@ -3688,7 +3693,7 @@ class HivePlannerApp:
             relief="flat",
         )
         name_entry.pack(side="left", fill="x", expand=True, padx=(8, 0))
-        name_entry.bind("<KeyRelease>", lambda _e: self._refresh_rosetta_eject_preview())
+        name_entry.bind("<KeyRelease>", self._on_rosetta_eject_name_changed)
 
         self._rosetta_eject_preview = scrolledtext.ScrolledText(
             self._rosetta_eject_body,
@@ -3724,9 +3729,14 @@ class HivePlannerApp:
             tooltip="Write contract, prompt, and README under rosetta-eject/ in the chosen folder.",
         )
 
+    def _on_rosetta_eject_name_changed(self, _event=None) -> None:
+        self._save_rosetta_eject_project_name()
+        self._refresh_rosetta_eject_preview()
+
     def _on_copy_rosetta_session_prompt(self) -> None:
         from hive_planner.rosetta_eject import build_session_start_prompt
 
+        self._save_rosetta_eject_project_name()
         text = build_session_start_prompt(project_name=self._rosetta_eject_project_name())
         self._copy_text_to_clipboard(text)
         self._emit_home_log("Copied Rosetta session-start prompt to clipboard.")
@@ -3756,14 +3766,15 @@ class HivePlannerApp:
     def _on_export_rosetta_cartridge(self) -> None:
         from hive_planner.rosetta_eject import RosettaEjectError, eject_rosetta_cartridge
 
-        initial = self._active_project_root() or Path.home()
+        self._save_rosetta_eject_project_name()
+        initial = self._active_linked_root() or Path.home()
         folder = filedialog.askdirectory(
             title="Export Rosetta cartridge to folder",
             initialdir=str(initial),
         )
         if not folder:
             return
-        root = self._active_project_root()
+        root = self._active_linked_root()
         try:
             result = eject_rosetta_cartridge(
                 Path(folder),

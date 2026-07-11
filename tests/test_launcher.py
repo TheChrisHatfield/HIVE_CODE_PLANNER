@@ -2376,6 +2376,24 @@ def test_selected_agent_prompt_title_falls_back_to_saved_title() -> None:
     assert app._selected_agent_prompt_title() == "Implement one spec task"
 
 
+def test_rosetta_eject_project_name_falls_back_to_saved_name() -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app._rosetta_eject_saved_name = "Distilled App"
+    assert app._rosetta_eject_project_name() == "Distilled App"
+
+
+def test_save_rosetta_eject_project_name_persists_entry() -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app._rosetta_eject_saved_name = None
+    app._rosetta_eject_name_var = type("Var", (), {"get": lambda self: "  Saved Name  "})()
+    app._save_rosetta_eject_project_name()
+    assert app._rosetta_eject_saved_name == "Saved Name"
+
+
 def test_agents_propose_done_prompts_apply_without_name_error(monkeypatch: pytest.MonkeyPatch) -> None:
     from hive_planner.launcher.app import HivePlannerApp
 
