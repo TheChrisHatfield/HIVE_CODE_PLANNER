@@ -1204,7 +1204,8 @@ def run_agents_memory_propose(project_root: Path, candidates_path: Path, *, appl
             payload["rejected"] = exc.rejected
             payload["spec_actions"] = exc.spec_actions
             payload["current_facts"] = exc.current_facts
-            payload["after_section"] = exc.current_facts
+            payload["after_section"] = exc.after_section or exc.current_facts
+            payload["accepted"] = exc.accepted
         if "all candidate" in lowered:
             payload["all_rejected"] = True
             payload["hints"] = [
