@@ -148,7 +148,7 @@ class HivePlannerApp:
         self._agent_prompt_saved_title: str | None = None
         self._home_guide_expanded = False
         self._rosetta_eject_expanded = False
-        self._rosetta_eject_saved_name: str | None = None
+        self._rosetta_eject_project_names: dict[str, str] = {}
 
         root.title("Hive Planner")
         root.geometry("920x680")
@@ -3575,6 +3575,21 @@ class HivePlannerApp:
                 text="Collapsed — expand to eject Rosetta planning cartridge for external AIs.",
             )
 
+    def _rosetta_eject_scope_key(self) -> str:
+        from hive_planner.launcher.config import normalize_project_path
+
+        if not self.config.active_project:
+            return ""
+        return normalize_project_path(self.config.active_project)
+
+    def _saved_rosetta_eject_project_name(self) -> str | None:
+        key = self._rosetta_eject_scope_key()
+        if key:
+            saved = (self._rosetta_eject_project_names.get(key) or "").strip()
+            return saved or None
+        saved = (self._rosetta_eject_project_names.get("__default__") or "").strip()
+        return saved or None
+
     def _rosetta_eject_project_name(self) -> str:
         from hive_planner.rosetta_eject import infer_project_name
 
@@ -3582,7 +3597,7 @@ class HivePlannerApp:
             name = self._rosetta_eject_name_var.get().strip()
             if name:
                 return name
-        saved = (self._rosetta_eject_saved_name or "").strip()
+        saved = self._saved_rosetta_eject_project_name()
         if saved:
             return saved
         root = self._active_linked_root()
@@ -3592,7 +3607,11 @@ class HivePlannerApp:
         if not hasattr(self, "_rosetta_eject_name_var"):
             return
         name = self._rosetta_eject_name_var.get().strip()
-        self._rosetta_eject_saved_name = name or None
+        key = self._rosetta_eject_scope_key() or "__default__"
+        if name:
+            self._rosetta_eject_project_names[key] = name
+        else:
+            self._rosetta_eject_project_names.pop(key, None)
 
     def _refresh_rosetta_eject_preview(self) -> None:
         if not hasattr(self, "_rosetta_eject_preview"):
@@ -3681,8 +3700,8 @@ class HivePlannerApp:
         name_row = tk.Frame(self._rosetta_eject_body, bg=COLORS["card"])
         name_row.pack(fill="x", padx=12, pady=(0, 8))
         tk.Label(name_row, text="Project name", font=FONT, bg=COLORS["card"], fg=COLORS["fg"]).pack(side="left")
-        saved_name = self._rosetta_eject_saved_name
-        default_name = saved_name.strip() if saved_name and saved_name.strip() else infer_project_name(self._active_linked_root())
+        saved_name = self._saved_rosetta_eject_project_name()
+        default_name = saved_name if saved_name else infer_project_name(self._active_linked_root())
         self._rosetta_eject_name_var = tk.StringVar(value=default_name)
         name_entry = tk.Entry(
             name_row,

@@ -2378,20 +2378,40 @@ def test_selected_agent_prompt_title_falls_back_to_saved_title() -> None:
 
 def test_rosetta_eject_project_name_falls_back_to_saved_name() -> None:
     from hive_planner.launcher.app import HivePlannerApp
+    from hive_planner.launcher.config import normalize_project_path
 
     app = HivePlannerApp.__new__(HivePlannerApp)
-    app._rosetta_eject_saved_name = "Distilled App"
+    link = normalize_project_path("C:/projects/distilled-app")
+    app.config = type("Cfg", (), {"active_project": link})()
+    app._rosetta_eject_project_names = {link: "Distilled App"}
     assert app._rosetta_eject_project_name() == "Distilled App"
+
+
+def test_rosetta_eject_saved_name_is_scoped_per_linked_project() -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+    from hive_planner.launcher.config import normalize_project_path
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    link_a = normalize_project_path("C:/projects/app-a")
+    link_b = normalize_project_path("C:/projects/app-b")
+    app._rosetta_eject_project_names = {link_a: "Alpha", link_b: "Beta"}
+    app.config = type("Cfg", (), {"active_project": link_b})()
+    assert app._saved_rosetta_eject_project_name() == "Beta"
+    app.config = type("Cfg", (), {"active_project": link_a})()
+    assert app._saved_rosetta_eject_project_name() == "Alpha"
 
 
 def test_save_rosetta_eject_project_name_persists_entry() -> None:
     from hive_planner.launcher.app import HivePlannerApp
+    from hive_planner.launcher.config import normalize_project_path
 
     app = HivePlannerApp.__new__(HivePlannerApp)
-    app._rosetta_eject_saved_name = None
+    link = normalize_project_path("C:/projects/saved-app")
+    app.config = type("Cfg", (), {"active_project": link})()
+    app._rosetta_eject_project_names = {}
     app._rosetta_eject_name_var = type("Var", (), {"get": lambda self: "  Saved Name  "})()
     app._save_rosetta_eject_project_name()
-    assert app._rosetta_eject_saved_name == "Saved Name"
+    assert app._rosetta_eject_project_names[link] == "Saved Name"
 
 
 def test_agents_propose_done_prompts_apply_without_name_error(monkeypatch: pytest.MonkeyPatch) -> None:
