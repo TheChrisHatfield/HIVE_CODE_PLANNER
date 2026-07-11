@@ -1174,6 +1174,15 @@ def run_agents_memory_propose(project_root: Path, candidates_path: Path, *, appl
             "error": f"Candidates file must be inside project root: {paths.root}",
             "hints": ["Select a candidates file from the linked project docs/proposals folder."],
         }
+    if candidate_file.name.startswith("agents-memory-") and candidate_file.suffix.lower() == ".md":
+        return {
+            "ok": False,
+            "error": "Select a candidates file, not a generated agents-memory proposal.",
+            "hints": [
+                "Use docs/proposals/candidates.md, cl-candidates.md, or another source export.",
+                "Open the proposal file separately to review rejection reasons.",
+            ],
+        }
     if wiring_audit_enforced(paths):
         wiring = check_wiring_audit(paths)
         if not wiring.ok:

@@ -1871,6 +1871,19 @@ def test_run_agents_memory_propose_requires_wiring_audit(tmp_path: Path) -> None
     assert blocked.get("hints")
 
 
+def test_run_agents_memory_propose_rejects_generated_proposal_as_candidates(tmp_path: Path) -> None:
+    from hive_planner.launcher.service import run_agents_memory_propose
+
+    project = _minimal_unified_project(tmp_path)
+    proposal = project / "docs" / "proposals" / "agents-memory-20260626_120000.md"
+    proposal.parent.mkdir(parents=True, exist_ok=True)
+    proposal.write_text("# AGENTS.md Memory Proposal\n", encoding="utf-8")
+    result = run_agents_memory_propose(project, proposal)
+    assert result["ok"] is False
+    assert "not a generated agents-memory proposal" in result["error"]
+    assert result.get("hints")
+
+
 def test_run_agents_memory_propose_returns_rejection_preview_fields(tmp_path: Path) -> None:
     from hive_planner.launcher.service import run_agents_memory_propose
     from hive_planner.wiring_audit import record_wiring_audit
