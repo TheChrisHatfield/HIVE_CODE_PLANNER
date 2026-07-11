@@ -147,6 +147,7 @@ class HivePlannerApp:
         self._agent_prompt_expanded = False
         self._agent_prompt_saved_title: str | None = None
         self._home_guide_expanded = False
+        self._rosetta_eject_expanded = False
 
         root.title("Hive Planner")
         root.geometry("920x680")
@@ -558,6 +559,7 @@ class HivePlannerApp:
 
         self._build_home_guide_card(body)
         self._build_agent_prompt_templates_card(body)
+        self._build_rosetta_eject_card(body)
 
         stats = card(body)
         card_title(stats, "Status")
@@ -3555,6 +3557,220 @@ class HivePlannerApp:
         if initial_template:
             self._show_agent_prompt_template(initial_template)
         self._agent_prompt_combo.bind("<<ComboboxSelected>>", self._on_agent_prompt_selected)
+
+    def _toggle_rosetta_eject(self) -> None:
+        self._rosetta_eject_expanded = not self._rosetta_eject_expanded
+        if self._rosetta_eject_expanded:
+            self._rosetta_eject_body.pack(fill="x", padx=0, pady=0)
+            self._rosetta_eject_toggle_btn.configure(text="▼")
+            self._rosetta_eject_summary.configure(
+                text="Export the Rosetta session contract for Perplexity, Gemini, ChatGPT, or Claude.",
+            )
+            self._refresh_rosetta_eject_preview()
+        else:
+            self._rosetta_eject_body.pack_forget()
+            self._rosetta_eject_toggle_btn.configure(text="▶")
+            self._rosetta_eject_summary.configure(
+                text="Collapsed — expand to eject Rosetta planning cartridge for external AIs.",
+            )
+
+    def _rosetta_eject_project_name(self) -> str:
+        from hive_planner.rosetta_eject import infer_project_name
+
+        if hasattr(self, "_rosetta_eject_name_var"):
+            name = self._rosetta_eject_name_var.get().strip()
+            if name:
+                return name
+        root = self._active_project_root()
+        return infer_project_name(root)
+
+    def _active_project_root(self) -> Path | None:
+        link = self.config.active_project
+        if not link:
+            return None
+        return resolve_linked_project_root(Path(link))
+
+    def _refresh_rosetta_eject_preview(self) -> None:
+        if not hasattr(self, "_rosetta_eject_preview"):
+            return
+        from hive_planner.rosetta_eject import build_session_start_prompt
+
+        text = build_session_start_prompt(project_name=self._rosetta_eject_project_name())
+        self._rosetta_eject_preview.configure(state="normal")
+        self._rosetta_eject_preview.delete("1.0", "end")
+        self._rosetta_eject_preview.insert("1.0", text)
+        self._rosetta_eject_preview.configure(state="disabled")
+
+    def _build_rosetta_eject_card(self, parent: tk.Frame) -> None:
+        from hive_planner.rosetta_eject import CONTRACT_FILENAME, infer_project_name
+
+        eject_card = card(parent)
+        header = tk.Frame(eject_card, bg=COLORS["card"])
+        header.pack(fill="x", padx=12, pady=(12, 6))
+
+        self._rosetta_eject_toggle_btn = tk.Button(
+            header,
+            text="▼" if self._rosetta_eject_expanded else "▶",
+            command=self._toggle_rosetta_eject,
+            font=FONT,
+            bg=COLORS["secondary"],
+            fg=COLORS["fg"],
+            activebackground=COLORS["border"],
+            relief="flat",
+            padx=8,
+            pady=2,
+            cursor="hand2",
+            width=2,
+        )
+        self._rosetta_eject_toggle_btn.pack(side="left", padx=(0, 8))
+        attach_hover_tooltip(
+            self._rosetta_eject_toggle_btn,
+            "Expand or collapse Rosetta cartridge eject.",
+        )
+
+        title_block = tk.Frame(header, bg=COLORS["card"])
+        title_block.pack(side="left", fill="x", expand=True)
+        tk.Label(
+            title_block,
+            text="Rosetta cartridge eject",
+            font=FONT_BOLD,
+            bg=COLORS["card"],
+            fg=COLORS["fg"],
+            anchor="w",
+        ).pack(fill="x")
+        self._rosetta_eject_summary = tk.Label(
+            title_block,
+            text=(
+                "Export the Rosetta session contract for Perplexity, Gemini, ChatGPT, or Claude."
+                if self._rosetta_eject_expanded
+                else "Collapsed — expand to eject Rosetta planning cartridge for external AIs."
+            ),
+            wraplength=700,
+            justify="left",
+            bg=COLORS["card"],
+            fg=COLORS["muted"],
+            font=FONT_SUBTITLE,
+            anchor="w",
+        )
+        self._rosetta_eject_summary.pack(fill="x", pady=(2, 0))
+
+        self._rosetta_eject_body = tk.Frame(eject_card, bg=COLORS["card"])
+        if self._rosetta_eject_expanded:
+            self._rosetta_eject_body.pack(fill="x")
+
+        intro = tk.Label(
+            self._rosetta_eject_body,
+            text=(
+                f"Ejects {CONTRACT_FILENAME} plus a paste-ready session prompt. "
+                "Upload the contract to any planning AI so it tags chat output with HOOK_ID markers "
+                "and produces a Planning Rosetta Stone legend inline."
+            ),
+            wraplength=700,
+            justify="left",
+            bg=COLORS["card"],
+            fg=COLORS["muted"],
+            font=FONT_SUBTITLE,
+            anchor="w",
+        )
+        intro.pack(anchor="w", padx=12, pady=(0, 8))
+
+        name_row = tk.Frame(self._rosetta_eject_body, bg=COLORS["card"])
+        name_row.pack(fill="x", padx=12, pady=(0, 8))
+        tk.Label(name_row, text="Project name", font=FONT, bg=COLORS["card"], fg=COLORS["fg"]).pack(side="left")
+        default_name = infer_project_name(self._active_project_root())
+        self._rosetta_eject_name_var = tk.StringVar(value=default_name)
+        name_entry = tk.Entry(
+            name_row,
+            textvariable=self._rosetta_eject_name_var,
+            font=FONT,
+            bg=COLORS["secondary"],
+            fg=COLORS["fg"],
+            relief="flat",
+        )
+        name_entry.pack(side="left", fill="x", expand=True, padx=(8, 0))
+        name_entry.bind("<KeyRelease>", lambda _e: self._refresh_rosetta_eject_preview())
+
+        self._rosetta_eject_preview = scrolledtext.ScrolledText(
+            self._rosetta_eject_body,
+            height=8,
+            font=FONT,
+            bg=COLORS["secondary"],
+            fg=COLORS["fg"],
+            relief="flat",
+            wrap="word",
+        )
+        self._rosetta_eject_preview.pack(fill="both", expand=True, padx=12, pady=(0, 8))
+        bind_mousewheel(self._rosetta_eject_preview)
+        self._refresh_rosetta_eject_preview()
+
+        eject_actions = tk.Frame(self._rosetta_eject_body, bg=COLORS["card"])
+        eject_actions.pack(fill="x", padx=12, pady=(0, 12))
+        secondary_button(
+            eject_actions,
+            "Copy session prompt",
+            self._on_copy_rosetta_session_prompt,
+            tooltip="Copy the paste-ready prompt for after you upload the contract.",
+        )
+        secondary_button(
+            eject_actions,
+            "Copy contract",
+            self._on_copy_rosetta_contract,
+            tooltip="Copy the full Rosetta Planning Session Contract markdown to clipboard.",
+        )
+        secondary_button(
+            eject_actions,
+            "Export to folder…",
+            self._on_export_rosetta_cartridge,
+            tooltip="Write contract, prompt, and README under rosetta-eject/ in the chosen folder.",
+        )
+
+    def _on_copy_rosetta_session_prompt(self) -> None:
+        from hive_planner.rosetta_eject import build_session_start_prompt
+
+        text = build_session_start_prompt(project_name=self._rosetta_eject_project_name())
+        self._copy_text_to_clipboard(text)
+        self._queue_home_log("Copied Rosetta session-start prompt to clipboard.")
+
+    def _on_copy_rosetta_contract(self) -> None:
+        from hive_planner.rosetta_eject import RosettaEjectError, load_session_contract_text
+
+        root = self._active_project_root()
+        try:
+            text = load_session_contract_text(repo_root=root)
+        except RosettaEjectError as exc:
+            messagebox.showerror("Rosetta eject", str(exc))
+            return
+        self._copy_text_to_clipboard(text)
+        self._queue_home_log("Copied Rosetta Planning Session Contract to clipboard.")
+
+    def _on_export_rosetta_cartridge(self) -> None:
+        from hive_planner.rosetta_eject import RosettaEjectError, eject_rosetta_cartridge
+
+        initial = self._active_project_root() or Path.home()
+        folder = filedialog.askdirectory(
+            title="Export Rosetta cartridge to folder",
+            initialdir=str(initial),
+        )
+        if not folder:
+            return
+        root = self._active_project_root()
+        try:
+            result = eject_rosetta_cartridge(
+                Path(folder),
+                repo_root=root,
+                project_name=self._rosetta_eject_project_name(),
+            )
+        except RosettaEjectError as exc:
+            messagebox.showerror("Rosetta eject", str(exc))
+            return
+        self._queue_home_log(f"Rosetta cartridge ejected to {result.output_dir}")
+        for rel in result.files_written:
+            self._queue_home_log(f"  {rel}")
+        messagebox.showinfo(
+            "Rosetta eject",
+            f"Exported to:\n{result.output_dir}\n\nUpload {result.contract_path.name} to your planning AI, "
+            f"then paste {result.prompt_path.name}.",
+        )
 
     def _agent_prompt_template_by_title(self, title: str):
         return get_agent_prompt_template_by_title(title)

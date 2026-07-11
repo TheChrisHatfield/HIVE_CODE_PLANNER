@@ -357,6 +357,27 @@ def main(argv: list[str] | None = None) -> int:
         help="Do not scan existing Durable Workspace Facts in AGENTS.md",
     )
 
+    rosetta_eject_parser = sub.add_parser(
+        "rosetta-eject",
+        help="Export Rosetta planning session contract for Perplexity, Gemini, etc. (hook: planning.rosetta)",
+    )
+    rosetta_eject_parser.add_argument(
+        "--out",
+        type=Path,
+        default=None,
+        help="Output directory (default: repo root or current directory)",
+    )
+    rosetta_eject_parser.add_argument(
+        "--project-name",
+        default=None,
+        help="Project name for the session-start prompt (default: folder name)",
+    )
+    rosetta_eject_parser.add_argument(
+        "--prompt-only",
+        action="store_true",
+        help="Print session-start prompt to stdout instead of writing files",
+    )
+
     wiring_audit = sub.add_parser(
         "wiring-audit",
         help="Record or verify Integration wiring audit attestation (hook: integration.wiring_audit)",
@@ -896,5 +917,27 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Root: {root}")
         print(json.dumps(report.to_dict(), indent=2))
         return 0 if report.ok else 1
+
+    if args.command == "rosetta-eject":
+        from hive_planner.rosetta_eject import (
+            RosettaEjectError,
+            build_session_start_prompt,
+            eject_rosetta_cartridge,
+            infer_project_name,
+        )
+
+        project_name = args.project_name or infer_project_name(root)
+        if args.prompt_only:
+            print(build_session_start_prompt(project_name=project_name), end="")
+            return 0
+        out_dir = args.out or root
+        try:
+            result = eject_rosetta_cartridge(out_dir, repo_root=root, project_name=project_name)
+        except RosettaEjectError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        print(f"Root: {root}")
+        print(json.dumps(result.to_dict(), indent=2))
+        return 0
 
     return 1

@@ -180,6 +180,27 @@ Candidates file or bullets:
 Propose which bullets are accepted, rejected, and why — do not edit AGENTS.md directly unless I confirm after preview.""",
         ),
         AgentPromptTemplate(
+            id="planning.external_rosetta",
+            title="External planning — Rosetta session (Gemini / Perplexity)",
+            description="Paste after uploading the ejected Rosetta contract in a non-Cursor planning AI.",
+            prompt="""I've uploaded the Rosetta Stone Planning Session Contract.
+
+Follow it for ALL documents you produce in this session:
+- HTML meta header on every file
+- [HOOK:...] section headings on major concepts
+- Inline `hook_id` references in body text
+- [CTX:...] context members in long sections with Promote to paths
+- <!-- ROSETTA-NAV --> on spec/plan/tasks/feature briefs
+- Deliver a Planning Rosetta Stone index at the end
+
+When scanning an existing chat or thread export, tag each major concept with hooks and
+[CTX:...] members as you distill it — do not leave concepts untagged in prose-only form.
+
+Project name: <your project>
+
+After the session, save the produced Planning Rosetta Stone to docs/planning-rosetta-stone.md in the Hive repo.""",
+        ),
+        AgentPromptTemplate(
             id="feature.scaffold",
             title="New feature — Delta + spec scaffold",
             description="Start a new feature with holistic/macro/micro framing before Spec Kit tasks.",
