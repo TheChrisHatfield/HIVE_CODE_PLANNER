@@ -366,6 +366,16 @@ def test_parse_candidates_ignores_bullets_inside_code_fences() -> None:
     assert parsed == ["Real candidate."]
 
 
+def test_propose_rejects_generated_agents_memory_proposal_file(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    (paths.root / "AGENTS.md").write_text(_minimal_agents(), encoding="utf-8")
+    proposal = paths.root / "docs" / "proposals" / "agents-memory-20260626_120000.md"
+    proposal.parent.mkdir(parents=True, exist_ok=True)
+    proposal.write_text("# AGENTS.md Memory Proposal\n", encoding="utf-8")
+    with pytest.raises(AgentsMemoryError, match="not a generated agents-memory proposal"):
+        propose_agents_memory(paths, proposal)
+
+
 def test_propose_rejects_candidates_outside_project_root(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path / "project")
     paths.root.mkdir(parents=True)

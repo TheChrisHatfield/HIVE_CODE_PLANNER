@@ -511,6 +511,10 @@ def run_agents_memory(
         raise AgentsMemoryError(
             f"Candidates file must be inside project root: {paths.root}"
         ) from exc
+    if candidate_file.name.startswith("agents-memory-") and candidate_file.suffix.lower() == ".md":
+        raise AgentsMemoryError(
+            "Select a candidates file, not a generated agents-memory proposal.",
+        )
 
     agents_text = target.read_text(encoding="utf-8", errors="replace")
     sections = parse_sections(agents_text)
