@@ -38,6 +38,11 @@ SOURCE4S_DISCOVER_SKIP_DIR_NAMES = {
     "dist",
     "build",
     ".hive",
+    ".cursor",
+    "context-library",
+    "cartridge",
+    "tests",
+    "vendor",
 }
 
 
@@ -54,17 +59,22 @@ def discover_source4s_files_in_folder(folder: Path, *, recursive: bool = True) -
     root = folder.resolve()
     if not root.is_dir():
         return []
-    iterator = root.rglob("*") if recursive else root.iterdir()
     found: list[Path] = []
-    for path in iterator:
-        if not path.is_file():
-            continue
-        if path.suffix.lower() not in SOURCE4S_EXTENSIONS:
-            continue
-        if _discover_path_is_skipped(path, root):
-            continue
-        found.append(path)
-    return sorted(found)
+
+    def scan_dir(current: Path) -> None:
+        if current != root and current.name in SOURCE4S_DISCOVER_SKIP_DIR_NAMES:
+            return
+        for path in sorted(current.iterdir()):
+            if path.is_dir():
+                if recursive:
+                    scan_dir(path)
+                continue
+            if path.suffix.lower() not in SOURCE4S_EXTENSIONS:
+                continue
+            found.append(path)
+
+    scan_dir(root)
+    return found
 
 
 def merge_source4s_selection(existing: list[Path], added: list[Path]) -> list[Path]:

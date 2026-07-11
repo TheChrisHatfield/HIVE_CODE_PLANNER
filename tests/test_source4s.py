@@ -149,6 +149,31 @@ def test_discover_source4s_files_in_folder_skips_common_vendor_dirs(tmp_path: Pa
     assert [path.name for path in found] == ["keep.txt"]
 
 
+def test_discover_source4s_files_in_folder_skips_project_internals_from_repo_root(
+    tmp_path: Path,
+) -> None:
+    project = tmp_path / "project"
+    (project / "refs").mkdir(parents=True)
+    (project / "refs" / "external.txt").write_text("external", encoding="utf-8")
+    internal = project / "context-library" / "sources" / "source4s"
+    internal.mkdir(parents=True)
+    (internal / "stale.txt").write_text("stale", encoding="utf-8")
+
+    found = discover_source4s_files_in_folder(project)
+    assert [path.name for path in found] == ["external.txt"]
+
+
+def test_discover_source4s_files_in_folder_still_finds_files_under_context_library_root(
+    tmp_path: Path,
+) -> None:
+    library = tmp_path / "context-library" / "sources" / "source4s"
+    library.mkdir(parents=True)
+    (library / "pick.txt").write_text("pick me", encoding="utf-8")
+
+    found = discover_source4s_files_in_folder(library)
+    assert [path.name for path in found] == ["pick.txt"]
+
+
 def test_source4s_needs_pdf_support_when_folder_argument_contains_pdf(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     paths.ensure_dirs()
