@@ -383,7 +383,7 @@ def test_parse_candidates_skips_task_checkbox_lines(tmp_path: Path) -> None:
         ]
     )
     parsed = _parse_candidates(text)
-    assert parsed == ["Run ci-check before handoff."]
+    assert parsed == ["Run ci-check before handoff. # operational"]
 
 
 def test_parse_candidates_ignores_prose_lines() -> None:
@@ -401,7 +401,7 @@ def test_parse_candidates_ignores_prose_lines() -> None:
         ]
     )
     parsed = _parse_candidates(text)
-    assert parsed == ["Run ci-check before handoff."]
+    assert parsed == ["Run ci-check before handoff. # operational"]
 
 
 def test_parse_candidates_ignores_bullets_inside_code_fences() -> None:
@@ -421,7 +421,7 @@ def test_parse_candidates_ignores_bullets_inside_code_fences() -> None:
         ]
     )
     parsed = _parse_candidates(text)
-    assert parsed == ["Real candidate."]
+    assert parsed == ["Real candidate. # operational"]
 
 
 def test_propose_rejects_generated_agents_memory_proposal_file(tmp_path: Path) -> None:

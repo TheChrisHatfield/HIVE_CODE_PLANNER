@@ -1758,8 +1758,10 @@ class HivePlannerApp:
         return self._pending_memory_candidates
 
     def _resolve_memory_work_root(self) -> Path | None:
-        if self._pending_memory_link and self._pending_memory_candidates:
-            root = resolve_linked_project_root(Path(self._pending_memory_link))
+        pending_link = getattr(self, "_pending_memory_link", None)
+        pending_candidates = getattr(self, "_pending_memory_candidates", None)
+        if pending_link and pending_candidates:
+            root = resolve_linked_project_root(Path(pending_link))
             if root is not None:
                 return root
         return self._active_linked_root()
