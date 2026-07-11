@@ -1925,6 +1925,23 @@ def test_run_legacy_deployment_scan_reports_starter_kit_layout(tmp_path: Path) -
     assert "hints" not in result
 
 
+def test_run_agents_memory_propose_includes_preview_fields(tmp_path: Path) -> None:
+    from hive_planner.launcher.service import run_agents_memory_propose
+    from hive_planner.wiring_audit import record_wiring_audit
+
+    project = _minimal_unified_project(tmp_path)
+    record_wiring_audit(RepoPaths(root=project), evidence="pytest -q")
+    candidates = project / "docs" / "proposals" / "candidates.md"
+    candidates.parent.mkdir(parents=True, exist_ok=True)
+    candidates.write_text("- # operational\n- Keep launcher logs concise.\n", encoding="utf-8")
+
+    result = run_agents_memory_propose(project, candidates)
+    assert result["ok"] is True
+    assert "Keep launcher logs concise." in result["after_section"]
+    assert result["current_facts"] is not None
+    assert isinstance(result.get("spec_actions"), list)
+
+
 def test_run_agents_memory_apply_writes_agents_md(tmp_path: Path) -> None:
     from hive_planner.launcher.service import run_agents_memory_apply, run_agents_memory_propose
     from hive_planner.wiring_audit import record_wiring_audit
@@ -2004,6 +2021,26 @@ def test_agents_apply_done_refreshes_dashboard_on_failure(monkeypatch: pytest.Mo
     assert refreshed == [True]
 
 
+def test_format_memory_proposal_preview_includes_before_after_and_rejected() -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    text = app._format_memory_proposal_preview(
+        {
+            "accepted": ["Run pytest before handoff."],
+            "current_facts": "- Existing fact.",
+            "after_section": "- Existing fact.\n- Run pytest before handoff.",
+            "rejected": [{"candidate": "Must return 404", "reason": "behavioral — update spec.md"}],
+            "proposal_path": "docs/proposals/agents-memory-1.md",
+        }
+    )
+    assert "Current memory" in text
+    assert "Existing fact." in text
+    assert "Run pytest before handoff." in text
+    assert "Rejected (1)" in text
+    assert "Must return 404" in text
+
+
 def test_agents_propose_done_prompts_apply_without_name_error(monkeypatch: pytest.MonkeyPatch) -> None:
     from hive_planner.launcher.app import HivePlannerApp
 
@@ -2011,11 +2048,12 @@ def test_agents_propose_done_prompts_apply_without_name_error(monkeypatch: pytes
     app.root = None
     app._pending_home_log = []
     app._refresh_home_dashboard = lambda: None  # type: ignore[method-assign]
-    prompted: list[bool] = []
+    previewed: list[bool] = []
 
     monkeypatch.setattr(
-        "hive_planner.launcher.app.messagebox.askyesno",
-        lambda *args, **kwargs: prompted.append(True) or False,
+        app,
+        "_show_memory_proposal_preview",
+        lambda result, *, root: previewed.append(True) or False,
     )
     project = Path("C:/proj")
     app.config = type("Cfg", (), {"active_project": "C:/proj"})()
@@ -2029,11 +2067,49 @@ def test_agents_propose_done_prompts_apply_without_name_error(monkeypatch: pytes
             "accepted": ["Keep logs concise."],
             "rejected": [],
             "applied": False,
+            "current_facts": "- Old.",
+            "after_section": "- Old.\n- Keep logs concise.",
         }
     )
 
-    assert prompted == [True]
+    assert previewed == [True]
     assert not any("NameError" in line for line in app._pending_home_log)
+
+
+def test_agents_propose_done_apply_after_preview_accept(monkeypatch: pytest.MonkeyPatch) -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.root = None
+    app._pending_home_log = []
+    app._refresh_home_dashboard = lambda: None  # type: ignore[method-assign]
+    app._start_home_action = lambda _msg: None  # type: ignore[method-assign]
+    bg_calls: list[tuple] = []
+    app._run_bg = lambda fn, done: bg_calls.append((fn, done))  # type: ignore[method-assign]
+
+    monkeypatch.setattr(
+        app,
+        "_show_memory_proposal_preview",
+        lambda result, *, root: True,
+    )
+    project = Path("C:/proj")
+    app.config = type("Cfg", (), {"active_project": "C:/proj"})()
+    app._active_linked_root = lambda: project
+    app._set_pending_memory_candidates(project, Path("C:/proj/docs/proposals/candidates.md"))
+
+    app._agents_propose_done(
+        {
+            "ok": True,
+            "proposal_path": "docs/proposals/agents-memory-1.md",
+            "accepted": ["Keep logs concise."],
+            "rejected": [],
+            "applied": False,
+            "current_facts": "- Old.",
+            "after_section": "- Old.\n- Keep logs concise.",
+        }
+    )
+
+    assert len(bg_calls) == 1
 
 
 def test_pending_memory_survives_dashboard_when_linked_via_workspace_file(tmp_path: Path) -> None:

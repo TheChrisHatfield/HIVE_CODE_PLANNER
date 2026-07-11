@@ -74,6 +74,9 @@ class AgentsMemoryResult:
     applied: bool
     accepted: list[str] = field(default_factory=list)
     rejected: list[tuple[str, str]] = field(default_factory=list)
+    current_facts: str = ""
+    after_section: str = ""
+    spec_actions: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {
@@ -81,6 +84,9 @@ class AgentsMemoryResult:
             "applied": self.applied,
             "accepted": self.accepted,
             "rejected": [{"candidate": c, "reason": r} for c, r in self.rejected],
+            "current_facts": self.current_facts,
+            "after_section": self.after_section,
+            "spec_actions": self.spec_actions,
         }
 
 
@@ -527,6 +533,9 @@ def run_agents_memory(
         applied=applied,
         accepted=accepted,
         rejected=rejected,
+        current_facts=current_facts,
+        after_section=after_section,
+        spec_actions=spec_actions,
     )
 
 

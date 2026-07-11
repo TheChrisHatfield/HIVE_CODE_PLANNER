@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import sys
 import threading
 import tkinter as tk
 from pathlib import Path
@@ -664,7 +666,7 @@ class HivePlannerApp:
             handoff_actions,
             "Promote memory…",
             self._on_agents_propose,
-            tooltip="Review suggested updates to your project's long-term AI memory from recent work.",
+            tooltip="Review before/after memory changes, then apply approved updates to AGENTS.md.",
         )
         secondary_button(
             handoff_actions,
@@ -1746,6 +1748,138 @@ class HivePlannerApp:
             return None
         return self._pending_memory_candidates
 
+    def _open_project_file(self, root: Path, rel_path: str) -> None:
+        target = (root / rel_path).resolve()
+        if not target.is_file():
+            messagebox.showwarning("File not found", f"Could not find:\n{target}", parent=self.root)
+            return
+        if sys.platform == "win32":
+            os.startfile(target)  # noqa: S606
+        else:
+            open_path_in_explorer(target)
+
+    def _format_memory_proposal_preview(self, result: dict) -> str:
+        lines: list[str] = []
+        accepted = result.get("accepted") or []
+        if accepted:
+            lines.extend(["Proposed additions", ""])
+            for bullet in accepted:
+                lines.append(f"- {bullet}")
+            lines.append("")
+        before = (result.get("current_facts") or "").strip()
+        lines.extend(["Current memory (Durable Workspace Facts)", ""])
+        lines.append(before if before else "(section missing or empty)")
+        lines.append("")
+        after = (result.get("after_section") or "").strip()
+        lines.extend(["After apply", ""])
+        lines.append(after if after else before or "(unchanged)")
+        lines.append("")
+        rejected = result.get("rejected") or []
+        if rejected:
+            lines.extend([f"Rejected ({len(rejected)})", ""])
+            for item in rejected:
+                if isinstance(item, dict):
+                    candidate = item.get("candidate", "")
+                    reason = item.get("reason", "")
+                else:
+                    candidate, reason = item
+                lines.append(f"- {candidate}")
+                if reason:
+                    lines.append(f"  Reason: {reason}")
+            lines.append("")
+        spec_actions = result.get("spec_actions") or []
+        if spec_actions:
+            lines.extend(["Spec Kit actions required", ""])
+            for action in spec_actions:
+                lines.append(f"- {action}")
+            lines.append("")
+        proposal = result.get("proposal_path")
+        if proposal:
+            lines.append(f"Full proposal file: {proposal}")
+        return "\n".join(lines).rstrip() + "\n"
+
+    def _show_memory_proposal_preview(self, result: dict, *, root: Path) -> bool:
+        """Show before/after preview; return True when user chooses Apply."""
+        accepted = result.get("accepted") or []
+        if not accepted:
+            return False
+
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Memory proposal preview")
+        dialog.configure(bg=COLORS["bg"])
+        dialog.transient(self.root)
+        dialog.grab_set()
+        dialog.geometry("620x520")
+        dialog.minsize(520, 420)
+
+        body = tk.Frame(dialog, bg=COLORS["bg"])
+        body.pack(fill="both", expand=True, padx=16, pady=16)
+
+        tk.Label(
+            body,
+            text=(
+                "Review what would change in AGENTS.md before applying. "
+                "Behavioral requirements belong in spec.md, not memory."
+            ),
+            wraplength=560,
+            justify="left",
+            bg=COLORS["bg"],
+            fg=COLORS["muted"],
+            font=FONT,
+        ).pack(anchor="w", pady=(0, 8))
+
+        proposal_rel = result.get("proposal_path")
+        if proposal_rel:
+            tk.Label(
+                body,
+                text=f"Proposal: {proposal_rel}",
+                bg=COLORS["bg"],
+                fg=COLORS["muted"],
+                font=FONT_SUBTITLE,
+                wraplength=560,
+                justify="left",
+            ).pack(anchor="w", pady=(0, 8))
+
+        preview = scrolledtext.ScrolledText(
+            body,
+            height=18,
+            font=("Consolas", 9),
+            bg=COLORS["secondary"],
+            fg=COLORS["fg"],
+            relief="flat",
+            wrap="word",
+        )
+        preview.pack(fill="both", expand=True, pady=(0, 12))
+        preview.insert("1.0", self._format_memory_proposal_preview(result))
+        preview.configure(state="disabled")
+        bind_mousewheel(preview)
+
+        apply_choice = {"value": False}
+
+        def choose_apply() -> None:
+            apply_choice["value"] = True
+            dialog.destroy()
+
+        btn_row = tk.Frame(dialog, bg=COLORS["bg"])
+        btn_row.pack(side="bottom", fill="x", padx=16, pady=(0, 16))
+        primary_button(
+            btn_row,
+            f"Apply {len(accepted)} bullet(s) to AGENTS.md",
+            choose_apply,
+            tooltip="Merge accepted operational bullets into Durable Workspace Facts.",
+        )
+        if proposal_rel:
+            secondary_button(
+                btn_row,
+                "Open proposal file",
+                lambda: self._open_project_file(root, proposal_rel),
+                tooltip="Open the saved proposal markdown in your default editor.",
+            )
+        secondary_button(btn_row, "Not now", dialog.destroy, tooltip="Close without changing AGENTS.md.")
+
+        dialog.wait_window()
+        return apply_choice["value"]
+
     def _on_agents_propose(self) -> None:
         root = self._active_linked_root()
         if not root:
@@ -1851,11 +1985,7 @@ class HivePlannerApp:
         else:
             root = self._active_linked_root()
             if accepted and root and self._pending_memory_for_root(root):
-                if messagebox.askyesno(
-                    "Apply memory?",
-                    f"Apply {len(accepted)} accepted bullet(s) to AGENTS.md now?",
-                    parent=self.root,
-                ):
+                if self._show_memory_proposal_preview(result, root=root):
                     candidates = self._pending_memory_for_root(root)
                     if candidates:
                         self._start_home_action(f"Running agents-apply on {candidates.name}…")
