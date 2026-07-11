@@ -1818,14 +1818,16 @@ class HivePlannerApp:
             lines.append(f"Full proposal file: {proposal}")
         return "\n".join(lines).rstrip() + "\n"
 
-    def _show_memory_proposal_preview(self, result: dict, *, root: Path) -> bool:
+    def _show_memory_proposal_preview(
+        self, result: dict, *, root: Path, allow_apply: bool = True
+    ) -> bool:
         """Show before/after preview; return True when user chooses Apply."""
         accepted = result.get("accepted") or []
         if not accepted:
             return False
 
         dialog = tk.Toplevel(self.root)
-        dialog.title("Memory proposal preview")
+        dialog.title("Memory proposal preview" if allow_apply else "Apply failed — review proposal")
         dialog.configure(bg=COLORS["bg"])
         dialog.transient(self.root)
         dialog.grab_set()
@@ -1882,12 +1884,13 @@ class HivePlannerApp:
 
         btn_row = tk.Frame(dialog, bg=COLORS["bg"])
         btn_row.pack(side="bottom", fill="x", padx=16, pady=(0, 16))
-        primary_button(
-            btn_row,
-            f"Apply {len(accepted)} bullet(s) to AGENTS.md",
-            choose_apply,
-            tooltip="Merge accepted operational bullets into Durable Workspace Facts.",
-        )
+        if allow_apply:
+            primary_button(
+                btn_row,
+                f"Apply {len(accepted)} bullet(s) to AGENTS.md",
+                choose_apply,
+                tooltip="Merge accepted operational bullets into Durable Workspace Facts.",
+            )
         if proposal_rel:
             secondary_button(
                 btn_row,
@@ -1895,7 +1898,12 @@ class HivePlannerApp:
                 lambda: self._open_project_file(root, proposal_rel),
                 tooltip="Open the saved proposal markdown in your default editor.",
             )
-        secondary_button(btn_row, "Not now", dialog.destroy, tooltip="Close without changing AGENTS.md.")
+        secondary_button(
+            btn_row,
+            "Close" if allow_apply else "Close",
+            dialog.destroy,
+            tooltip="Close without changing AGENTS.md." if allow_apply else "Return without retrying apply.",
+        )
 
         dialog.wait_window()
         return apply_choice["value"]
@@ -2030,14 +2038,20 @@ class HivePlannerApp:
             for hint in result.get("hints", []):
                 self._queue_home_log(f"Tip: {hint}")
             root = self._active_linked_root()
-            if root and result.get("proposal_path") and result.get("rejected"):
-                self._show_memory_rejection_preview(result, root=root)
+            if root and result.get("proposal_path"):
+                if result.get("accepted"):
+                    self._show_memory_proposal_preview(result, root=root, allow_apply=False)
+                elif result.get("rejected"):
+                    self._show_memory_rejection_preview(result, root=root)
             self._refresh_home_dashboard()
             return
         self._queue_home_log(f"Proposal: {result.get('proposal_path')}")
         accepted = result.get("accepted") or []
+        rejected = result.get("rejected") or []
         if accepted:
             self._queue_home_log(f"Applied {len(accepted)} bullet(s) to AGENTS.md.")
+        if rejected:
+            self._queue_home_log(f"Rejected {len(rejected)} candidate(s) — see proposal file.")
         if result.get("applied"):
             self._queue_home_log("AGENTS.md updated.")
         self._refresh_home_dashboard()
