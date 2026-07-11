@@ -1930,17 +1930,10 @@ class HivePlannerApp:
             )
             return
         self._set_pending_memory_candidates(root, candidates)
-        if not messagebox.askyesno(
-            "Apply memory",
-            "Apply accepted candidates from this file to AGENTS.md?\n\n"
-            "Run Promote memory first if you have not generated a proposal.",
-            parent=self.root,
-        ):
-            return
-        self._start_home_action(f"Running agents-apply on {candidates.name}…")
+        self._start_home_action(f"Previewing memory from {candidates.name}…")
         self._run_bg(
-            lambda r=root, c=candidates: run_agents_memory_apply(r, c),
-            self._agents_apply_done,
+            lambda r=root, c=candidates: run_agents_memory_propose(r, c, apply=False),
+            self._agents_propose_done,
         )
 
     def _agents_apply_done(self, result: dict) -> None:
