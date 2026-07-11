@@ -437,6 +437,27 @@ def test_parse_candidates_ignores_bullets_inside_code_fences() -> None:
     assert parsed == ["Real candidate. # operational"]
 
 
+def test_parse_candidates_recovers_after_unclosed_code_fence() -> None:
+    from hive_planner.agents_memory import _parse_candidates
+
+    text = "\n".join(
+        [
+            "# operational",
+            "- First valid candidate.",
+            "",
+            "```markdown",
+            "- Example inside fence only",
+            "- Second valid candidate after missing closing fence.",
+        ]
+    )
+    parsed = _parse_candidates(text)
+    assert parsed == [
+        "First valid candidate. # operational",
+        "Example inside fence only",
+        "Second valid candidate after missing closing fence.",
+    ]
+
+
 def test_ingest_ignores_bullets_inside_code_fences(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     source = paths.root / "export.md"

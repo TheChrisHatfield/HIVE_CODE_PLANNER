@@ -311,16 +311,16 @@ def _apply_section_tag(bullet: str, section_tag: str | None) -> str:
     return bullet
 
 
-def _parse_candidates(text: str) -> list[str]:
+def _parse_candidates_lines(text: str, *, respect_fences: bool = True) -> list[str]:
     candidates: list[str] = []
     current_tag: str | None = None
     in_fence = False
     for line in text.splitlines():
         stripped = line.strip()
-        if stripped.startswith("```"):
+        if respect_fences and stripped.startswith("```"):
             in_fence = not in_fence
             continue
-        if in_fence:
+        if respect_fences and in_fence:
             continue
         section_tag = _parse_section_header(stripped)
         if section_tag:
@@ -344,6 +344,27 @@ def _parse_candidates(text: str) -> list[str]:
                 continue
             candidates.append(_apply_section_tag(bullet, current_tag))
     return [c for c in candidates if c]
+
+
+def _parse_candidates(text: str) -> list[str]:
+    lines = text.splitlines()
+    fence_lines = [idx for idx, line in enumerate(lines) if line.strip().startswith("```")]
+    if len(fence_lines) % 2 == 1:
+        split_at = fence_lines[-1]
+        before = "\n".join(lines[:split_at])
+        after = "\n".join(lines[split_at + 1 :])
+        merged: list[str] = []
+        seen: set[str] = set()
+        for item in _parse_candidates_lines(before, respect_fences=True) + _parse_candidates_lines(
+            after,
+            respect_fences=False,
+        ):
+            if item in seen:
+                continue
+            seen.add(item)
+            merged.append(item)
+        return merged
+    return _parse_candidates_lines(text, respect_fences=True)
 
 
 def _substantive_candidate_text(bullet: str) -> str:
