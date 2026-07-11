@@ -2055,6 +2055,26 @@ def test_agents_apply_done_refreshes_dashboard_on_failure(monkeypatch: pytest.Mo
     assert refreshed == [True]
 
 
+def test_open_project_file_rejects_paths_outside_project(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+    import hive_planner.launcher.app as app_module
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.root = None
+    warned: list[str] = []
+    monkeypatch.setattr(
+        app_module.messagebox,
+        "showwarning",
+        lambda title, message, **kwargs: warned.append(message),
+    )
+
+    app._open_project_file(tmp_path, "..\\outside.md")
+    assert warned
+    assert "inside the linked project" in warned[0]
+
+
 def test_open_project_file_falls_back_to_folder_when_no_association(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

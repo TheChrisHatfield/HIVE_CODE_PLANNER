@@ -1749,7 +1749,17 @@ class HivePlannerApp:
         return self._pending_memory_candidates
 
     def _open_project_file(self, root: Path, rel_path: str) -> None:
-        target = (root / rel_path).resolve()
+        project_root = root.resolve()
+        target = (project_root / rel_path).resolve()
+        try:
+            target.relative_to(project_root)
+        except ValueError:
+            messagebox.showwarning(
+                "Invalid path",
+                "The proposal file must stay inside the linked project.",
+                parent=self.root,
+            )
+            return
         if not target.is_file():
             messagebox.showwarning("File not found", f"Could not find:\n{target}", parent=self.root)
             return
