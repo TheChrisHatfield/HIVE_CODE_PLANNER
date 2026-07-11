@@ -270,8 +270,14 @@ def lint_agents_md(paths: RepoPaths, agents_path: Path | None = None) -> AgentsL
 
 def _parse_candidates(text: str) -> list[str]:
     candidates: list[str] = []
+    in_fence = False
     for line in text.splitlines():
         stripped = line.strip()
+        if stripped.startswith("```"):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
         if not stripped or stripped.startswith("#"):
             continue
         if stripped.startswith("- "):

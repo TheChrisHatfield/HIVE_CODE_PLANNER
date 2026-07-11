@@ -346,6 +346,26 @@ def test_parse_candidates_ignores_prose_lines() -> None:
     assert parsed == ["Run ci-check before handoff."]
 
 
+def test_parse_candidates_ignores_bullets_inside_code_fences() -> None:
+    from hive_planner.agents_memory import _parse_candidates
+
+    text = "\n".join(
+        [
+            "# operational",
+            "",
+            "- Real candidate.",
+            "",
+            "## Before",
+            "",
+            "```markdown",
+            "- Existing fact inside fence.",
+            "```",
+        ]
+    )
+    parsed = _parse_candidates(text)
+    assert parsed == ["Real candidate."]
+
+
 def test_propose_rejects_candidates_outside_project_root(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path / "project")
     paths.root.mkdir(parents=True)
