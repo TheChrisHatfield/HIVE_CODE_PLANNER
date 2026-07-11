@@ -2230,12 +2230,18 @@ class HivePlannerApp:
         def refresh_selection_label() -> None:
             if not selected_files:
                 selection_var.set("(none selected)")
+            elif len(selected_files) == 1 and selected_files[0].is_dir():
+                folder_path = selected_files[0]
+                count = len(discover_source4s_files_in_folder(folder_path))
+                selection_var.set(f"{count} file(s) from folder {folder_path}")
             elif len(selected_files) == 1:
                 selection_var.set(str(selected_files[0]))
             elif selected_folder is not None:
                 selection_var.set(
                     f"{len(selected_files)} file(s) from folder {selected_folder}"
                 )
+            elif all(path.is_dir() for path in selected_files):
+                selection_var.set(f"{len(selected_files)} folder(s) selected")
             else:
                 selection_var.set(f"{len(selected_files)} files selected")
 
@@ -2287,9 +2293,9 @@ class HivePlannerApp:
                         clear_selection()
                     return
                 if append:
-                    set_selection(discovered, append=True)
+                    set_selection([folder_path], append=True)
                 else:
-                    set_selection(discovered, folder=folder_path)
+                    set_selection([folder_path], folder=folder_path)
                 return
             if mode == "single":
                 path = filedialog.askopenfilename(
@@ -2389,17 +2395,19 @@ class HivePlannerApp:
                 except ValueError as exc:
                     messagebox.showerror("Invalid feature id", str(exc), parent=dialog)
                     return
-            dialog.destroy()
             upload_root = root
-            upload_files = list(check_files)
+            upload_files = list(selected_files)
             upload_feature = feature if link_var.get() else None
             upload_embed = embed_var.get()
             upload_cartridge = link_var.get()
             upload_force = force_var.get()
             upload_ocr = ocr_var.get()
+            file_count = len(check_files)
+            ingest_only = not upload_cartridge
+            dialog.destroy()
             self._start_home_action(
-                f"Loading {len(upload_files)} source file(s)"
-                + (f" for '{feature}'…" if link_var.get() else " (ingest only)…"),
+                f"Loading {file_count} source file(s)"
+                + (f" for '{feature}'…" if not ingest_only else " (ingest only)…"),
             )
             self._run_bg(
                 lambda: run_source4s_upload(

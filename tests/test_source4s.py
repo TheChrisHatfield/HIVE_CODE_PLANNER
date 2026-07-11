@@ -278,6 +278,23 @@ def test_run_source4s_expands_folder_argument(tmp_path: Path) -> None:
     assert result.copied == ["context-library/sources/source4s/brief.txt"]
 
 
+def test_run_source4s_rediscover_folder_files_on_each_run(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    paths.ensure_dirs()
+    folder = tmp_path / "refs"
+    folder.mkdir()
+    (folder / "a.txt").write_text("# A\n\nFirst reference upload.\n", encoding="utf-8")
+
+    first = run_source4s(paths, [folder], feature="load-sources-v1", update_cartridge=False)
+    assert first.ok
+    assert first.copied == ["context-library/sources/source4s/a.txt"]
+
+    (folder / "b.txt").write_text("# B\n\nAdded after the first browse.\n", encoding="utf-8")
+    second = run_source4s(paths, [folder], feature="load-sources-v1", update_cartridge=False)
+    assert second.ok
+    assert sorted(Path(rel).name for rel in second.copied) == ["a.txt", "b.txt"]
+
+
 def test_run_source4s_reports_empty_folder_argument(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     paths.ensure_dirs()
