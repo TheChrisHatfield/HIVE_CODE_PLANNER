@@ -685,9 +685,15 @@ def _strip_inline_tag(bullet: str) -> tuple[str, str | None]:
 def normalize_candidates_text(text: str) -> str:
     lines_out: list[str] = []
     current_tag = "# operational"
+    in_fence = False
 
     for line in text.splitlines():
         stripped = line.strip()
+        if stripped.startswith("```"):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
         if not stripped:
             continue
         section_tag = _parse_section_header(stripped)
@@ -705,7 +711,7 @@ def normalize_candidates_text(text: str) -> str:
             bullet = stripped[2:].strip()
         else:
             bullet = stripped
-        if not bullet or bullet.startswith("```"):
+        if not bullet:
             continue
         if CHECKBOX_BULLET_RE.match(bullet):
             continue

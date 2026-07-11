@@ -437,6 +437,24 @@ def test_parse_candidates_ignores_bullets_inside_code_fences() -> None:
     assert parsed == ["Real candidate. # operational"]
 
 
+def test_ingest_ignores_bullets_inside_code_fences(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    source = paths.root / "export.md"
+    source.write_text(
+        "# operational\n"
+        "- Real candidate.\n"
+        "```markdown\n"
+        "- Example candidate inside fence.\n"
+        "```\n",
+        encoding="utf-8",
+    )
+
+    out = ingest_agents_candidates(paths, source)
+    text = out.read_text(encoding="utf-8")
+    assert "Real candidate." in text
+    assert "Example candidate inside fence." not in text
+
+
 def test_propose_rejects_generated_agents_memory_proposal_file(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     (paths.root / "AGENTS.md").write_text(_minimal_agents(), encoding="utf-8")
