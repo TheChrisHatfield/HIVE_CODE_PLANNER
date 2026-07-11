@@ -703,6 +703,8 @@ def normalize_candidates_text(text: str) -> str:
                 lines_out.append("")
             lines_out.append(current_tag)
             continue
+        if stripped.startswith("#"):
+            continue
         if any(p.search(stripped) for p in TRANSCRIPT_NOISE):
             continue
         if stripped.startswith(("- ", "* ")):

@@ -455,6 +455,23 @@ def test_ingest_ignores_bullets_inside_code_fences(tmp_path: Path) -> None:
     assert "Example candidate inside fence." not in text
 
 
+def test_ingest_ignores_markdown_headings(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    source = paths.root / "export.md"
+    source.write_text(
+        "## Before\n"
+        "- Run ci-check before handoff.\n"
+        "## Notes\n",
+        encoding="utf-8",
+    )
+
+    out = ingest_agents_candidates(paths, source)
+    text = out.read_text(encoding="utf-8")
+    assert "Run ci-check before handoff." in text
+    assert "## Before" not in text
+    assert "## Notes" not in text
+
+
 def test_propose_rejects_generated_agents_memory_proposal_file(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     (paths.root / "AGENTS.md").write_text(_minimal_agents(), encoding="utf-8")
