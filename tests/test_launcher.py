@@ -3937,6 +3937,24 @@ def test_note_stale_bg_result_queues_home_log_message() -> None:
     assert "dashboard refresh" in joined
 
 
+def test_note_stale_bg_result_delivers_memory_propose_preview() -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app._pending_home_log = []
+    delivered: list[bool] = []
+    app._deliver_memory_propose_result = lambda result, stale=False: delivered.append(stale)  # type: ignore[method-assign]
+    app._note_stale_bg_result(
+        {
+            "ok": True,
+            "proposal_path": "docs/proposals/agents-memory-1.md",
+            "accepted": ["Run pytest before handoff."],
+            "rejected": [],
+        }
+    )
+    assert delivered == [True]
+
+
 def test_note_stale_bg_result_preserves_cartridge_details() -> None:
     from hive_planner.launcher.app import HivePlannerApp
 

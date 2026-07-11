@@ -465,6 +465,9 @@ class HivePlannerApp:
     _PAGE_WHEEL_SKIP = (tk.Listbox, tk.Text, scrolledtext.ScrolledText, tk.Scrollbar)
 
     def _note_stale_bg_result(self, result: object) -> None:
+        if isinstance(result, dict) and self._is_memory_propose_result(result):
+            self._deliver_memory_propose_result(result, stale=True)
+            return
         if isinstance(result, dict) and result.get("mode") in ("sources", "import", "translate"):
             self._queue_cartridge_result_log(result)
             self._queue_home_log("(Cartridge load finished after dashboard refresh — output preserved above.)")
@@ -1754,6 +1757,56 @@ class HivePlannerApp:
             return None
         return self._pending_memory_candidates
 
+    def _resolve_memory_work_root(self) -> Path | None:
+        if self._pending_memory_link and self._pending_memory_candidates:
+            root = resolve_linked_project_root(Path(self._pending_memory_link))
+            if root is not None:
+                return root
+        return self._active_linked_root()
+
+    @staticmethod
+    def _is_memory_propose_result(result: dict) -> bool:
+        return isinstance(result.get("proposal_path"), str) and (
+            "accepted" in result or "rejected" in result or result.get("all_rejected")
+        )
+
+    def _deliver_memory_propose_result(self, result: dict, *, stale: bool = False) -> None:
+        if stale:
+            self._queue_home_log(
+                "Memory propose finished after dashboard refresh — showing result below.",
+            )
+        if not result.get("ok"):
+            self._queue_home_log(self._result_detail(result))
+            for hint in result.get("hints", []):
+                self._queue_home_log(f"Tip: {hint}")
+            root = self._resolve_memory_work_root()
+            if root and result.get("proposal_path") and result.get("rejected"):
+                self._show_memory_rejection_preview(result, root=root)
+            self._refresh_home_dashboard()
+            return
+        self._queue_home_log(f"Wrote proposal: {result.get('proposal_path')}")
+        accepted = result.get("accepted") or []
+        rejected = result.get("rejected") or []
+        if accepted:
+            self._queue_home_log(f"Accepted {len(accepted)} candidate(s).")
+        if rejected:
+            self._queue_home_log(f"Rejected {len(rejected)} candidate(s) — see proposal file.")
+        if result.get("applied"):
+            self._queue_home_log("Applied to AGENTS.md.")
+            self._refresh_home_dashboard()
+            return
+        root = self._resolve_memory_work_root()
+        candidates = self._pending_memory_for_root(root) if root else None
+        if accepted and root and candidates:
+            if self._show_memory_proposal_preview(result, root=root):
+                self._start_home_action(f"Running agents-apply on {candidates.name}…")
+                self._run_bg(
+                    lambda r=root, c=candidates: run_agents_memory_apply(r, c),
+                    self._agents_apply_done,
+                )
+                return
+        self._refresh_home_dashboard()
+
     def _open_project_file(self, root: Path, rel_path: str) -> None:
         project_root = root.resolve()
         target = (project_root / rel_path).resolve()
@@ -2067,37 +2120,7 @@ class HivePlannerApp:
             self._queue_home_log(self._result_detail(result))
             self._refresh_home_dashboard()
             return
-        if not result.get("ok"):
-            self._queue_home_log(self._result_detail(result))
-            for hint in result.get("hints", []):
-                self._queue_home_log(f"Tip: {hint}")
-            root = self._active_linked_root()
-            if root and result.get("proposal_path") and result.get("rejected"):
-                self._show_memory_rejection_preview(result, root=root)
-            self._refresh_home_dashboard()
-            return
-        self._queue_home_log(f"Wrote proposal: {result.get('proposal_path')}")
-        accepted = result.get("accepted") or []
-        rejected = result.get("rejected") or []
-        if accepted:
-            self._queue_home_log(f"Accepted {len(accepted)} candidate(s).")
-        if rejected:
-            self._queue_home_log(f"Rejected {len(rejected)} candidate(s) — see proposal file.")
-        if result.get("applied"):
-            self._queue_home_log("Applied to AGENTS.md.")
-        else:
-            root = self._active_linked_root()
-            if accepted and root and self._pending_memory_for_root(root):
-                if self._show_memory_proposal_preview(result, root=root):
-                    candidates = self._pending_memory_for_root(root)
-                    if candidates:
-                        self._start_home_action(f"Running agents-apply on {candidates.name}…")
-                        self._run_bg(
-                            lambda r=root, c=candidates: run_agents_memory_apply(r, c),
-                            self._agents_apply_done,
-                        )
-                        return
-        self._refresh_home_dashboard()
+        self._deliver_memory_propose_result(result)
 
     def _on_unified_verify(self) -> None:
         root = self._active_linked_root()
