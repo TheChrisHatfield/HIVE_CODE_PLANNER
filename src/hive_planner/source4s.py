@@ -56,7 +56,11 @@ def discover_source4s_files_in_folder(folder: Path, *, recursive: bool = True) -
     def scan_dir(current: Path) -> None:
         if current != root and current.name in SOURCE4S_DISCOVER_SKIP_DIR_NAMES:
             return
-        for path in sorted(current.iterdir()):
+        try:
+            entries = sorted(current.iterdir())
+        except OSError:
+            return
+        for path in entries:
             if path.is_dir():
                 if recursive:
                     scan_dir(path)

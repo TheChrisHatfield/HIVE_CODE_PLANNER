@@ -174,6 +174,27 @@ def test_discover_source4s_files_in_folder_still_finds_files_under_context_libra
     assert [path.name for path in found] == ["pick.txt"]
 
 
+def test_discover_source4s_files_in_folder_skips_unreadable_subdirs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    folder = tmp_path / "refs"
+    (folder / "ok").mkdir(parents=True)
+    (folder / "ok" / "keep.txt").write_text("keep", encoding="utf-8")
+    blocked = folder / "locked"
+
+    real_iterdir = Path.iterdir
+
+    def fake_iterdir(self: Path):
+        if self == blocked:
+            raise PermissionError("access denied")
+        return real_iterdir(self)
+
+    monkeypatch.setattr(Path, "iterdir", fake_iterdir)
+
+    found = discover_source4s_files_in_folder(folder)
+    assert [path.name for path in found] == ["keep.txt"]
+
+
 def test_source4s_needs_pdf_support_when_folder_argument_contains_pdf(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     paths.ensure_dirs()
