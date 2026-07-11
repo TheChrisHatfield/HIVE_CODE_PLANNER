@@ -1428,15 +1428,6 @@ def test_load_user_guide_fallback_when_missing(tmp_path: Path) -> None:
     text = load_user_guide(cfg)
     assert "Hive Planner" in text
     assert "First time?" in text
-
-
-def test_load_user_guide_fallback_when_missing(tmp_path: Path) -> None:
-    from hive_planner.launcher.user_guide import load_user_guide
-
-    cfg = LauncherConfig(hive_planner_root=str(tmp_path / "missing"))
-    text = load_user_guide(cfg)
-    assert "Hive Planner" in text
-    assert "First time?" in text
     assert "unified-verify" in text
 
 
@@ -1583,6 +1574,53 @@ def test_load_user_guide_does_not_duplicate_unified_section(tmp_path: Path) -> N
     text = load_user_guide(cfg)
 
     assert text.count("## Unified vendor path") == 1
+
+
+def test_default_agent_prompt_templates_are_non_empty_and_unique() -> None:
+    from hive_planner.launcher.agent_prompt_templates import default_agent_prompt_templates
+
+    templates = default_agent_prompt_templates()
+    assert len(templates) >= 5
+    ids = [template.id for template in templates]
+    titles = [template.title for template in templates]
+    assert len(ids) == len(set(ids))
+    assert len(titles) == len(set(titles))
+    for template in templates:
+        assert template.id.strip()
+        assert template.title.strip()
+        assert template.description.strip()
+        assert len(template.prompt.strip()) > 40
+        assert "@" in template.prompt or "HOOK" in template.prompt or "spec" in template.prompt.lower()
+
+
+def test_get_agent_prompt_template_by_id() -> None:
+    from hive_planner.launcher.agent_prompt_templates import get_agent_prompt_template
+
+    found = get_agent_prompt_template("session.start")
+    assert found is not None
+    assert found.title == "Start a coding session"
+    assert get_agent_prompt_template("missing.id") is None
+
+
+def test_format_agent_prompt_templates_markdown_includes_all_titles() -> None:
+    from hive_planner.launcher.agent_prompt_templates import (
+        default_agent_prompt_templates,
+        format_agent_prompt_templates_markdown,
+    )
+
+    text = format_agent_prompt_templates_markdown()
+    assert text.startswith("# Agent prompt templates")
+    for template in default_agent_prompt_templates():
+        assert f"## {template.title}" in text
+        assert template.prompt.strip() in text
+
+
+def test_load_user_guide_fallback_mentions_agent_prompt_templates(tmp_path: Path) -> None:
+    from hive_planner.launcher.user_guide import load_user_guide
+
+    cfg = LauncherConfig(hive_planner_root=str(tmp_path / "missing"))
+    text = load_user_guide(cfg)
+    assert "Agent prompt templates" in text
 
 
 def test_ci_check_hints_parses_vendor_missing_from_profile_step(tmp_path: Path) -> None:

@@ -73,6 +73,7 @@ from hive_planner.launcher.theme import (
     bind_mousewheel,
 )
 from hive_planner.launcher import console_win
+from hive_planner.launcher.agent_prompt_templates import default_agent_prompt_templates
 from hive_planner.launcher.user_guide import load_user_guide, user_guide_path
 from hive_planner.project_profile import read_project_profile
 
@@ -577,6 +578,8 @@ class HivePlannerApp:
             self._on_reset_onboarding,
             tooltip="Walk through first-time setup again. Your linked projects stay as they are.",
         )
+
+        self._build_agent_prompt_templates_card(body)
 
         stats = card(body)
         card_title(stats, "Status")
@@ -3270,6 +3273,138 @@ class HivePlannerApp:
             return
         if hasattr(self, "home_log"):
             self._emit_home_log(f"Opened in Explorer: {result.get('path')}")
+
+    def _build_agent_prompt_templates_card(self, parent: tk.Frame) -> None:
+        templates = default_agent_prompt_templates()
+        prompt_card = card(parent)
+        card_title(prompt_card, "Agent prompt templates")
+        tk.Label(
+            prompt_card,
+            text="Copy-paste prompts into Cursor so agents use Rosetta, specs, sources, and cartridges correctly.",
+            wraplength=760,
+            justify="left",
+            bg=COLORS["card"],
+            fg=COLORS["muted"],
+            font=FONT_SUBTITLE,
+        ).pack(anchor="w", padx=12, pady=(0, 6))
+
+        picker_row = tk.Frame(prompt_card, bg=COLORS["card"])
+        picker_row.pack(fill="x", padx=12, pady=(0, 6))
+        tk.Label(
+            picker_row,
+            text="Template",
+            bg=COLORS["card"],
+            fg=COLORS["fg"],
+            font=FONT,
+        ).pack(side="left", padx=(0, 8))
+        titles = [template.title for template in templates]
+        self._agent_prompt_var = tk.StringVar(value=titles[0] if titles else "")
+        self._agent_prompt_combo = ttk.Combobox(
+            picker_row,
+            textvariable=self._agent_prompt_var,
+            values=titles,
+            state="readonly",
+            width=52,
+        )
+        self._agent_prompt_combo.pack(side="left", fill="x", expand=True)
+        attach_combobox_tooltip(
+            self._agent_prompt_combo,
+            "Pick a scenario — session start, implement task, Load Sources, memory promotion, etc.",
+        )
+
+        self._agent_prompt_desc = tk.Label(
+            prompt_card,
+            text=templates[0].description if templates else "",
+            wraplength=760,
+            justify="left",
+            bg=COLORS["card"],
+            fg=COLORS["muted"],
+            font=FONT_SUBTITLE,
+        )
+        self._agent_prompt_desc.pack(anchor="w", padx=12, pady=(0, 6))
+
+        self._agent_prompt_preview = scrolledtext.ScrolledText(
+            prompt_card,
+            height=10,
+            font=("Consolas", 9),
+            bg=COLORS["secondary"],
+            fg=COLORS["fg"],
+            relief="flat",
+            wrap="word",
+        )
+        self._agent_prompt_preview.pack(fill="both", expand=True, padx=12, pady=(0, 8))
+        bind_mousewheel(self._agent_prompt_preview)
+
+        prompt_actions = tk.Frame(prompt_card, bg=COLORS["card"])
+        prompt_actions.pack(fill="x", padx=12, pady=(0, 12))
+        primary_button(
+            prompt_actions,
+            "Copy prompt",
+            self._on_copy_agent_prompt,
+            tooltip="Copy the selected prompt to the clipboard — paste into Cursor chat.",
+        )
+        secondary_button(
+            prompt_actions,
+            "Copy all templates",
+            self._on_copy_all_agent_prompts,
+            tooltip="Copy every template as markdown for docs or sharing.",
+        )
+
+        if templates:
+            self._show_agent_prompt_template(templates[0])
+        self._agent_prompt_combo.bind("<<ComboboxSelected>>", self._on_agent_prompt_selected)
+
+    def _agent_prompt_template_by_title(self, title: str):
+        for template in default_agent_prompt_templates():
+            if template.title == title:
+                return template
+        templates = default_agent_prompt_templates()
+        return templates[0] if templates else None
+
+    def _show_agent_prompt_template(self, template) -> None:
+        if template is None:
+            return
+        self._agent_prompt_desc.configure(text=template.description)
+        self._agent_prompt_preview.configure(state="normal")
+        self._agent_prompt_preview.delete("1.0", "end")
+        self._agent_prompt_preview.insert("1.0", template.prompt)
+        self._agent_prompt_preview.configure(state="disabled")
+
+    def _on_agent_prompt_selected(self, _event=None) -> None:
+        title = self._agent_prompt_var.get()
+        self._show_agent_prompt_template(self._agent_prompt_template_by_title(title))
+
+    def _copy_text_to_clipboard(self, text: str) -> None:
+        self.root.clipboard_clear()
+        self.root.clipboard_append(text)
+        self.root.update_idletasks()
+
+    def _on_copy_agent_prompt(self) -> None:
+        title = self._agent_prompt_var.get()
+        template = self._agent_prompt_template_by_title(title)
+        if template is None:
+            messagebox.showwarning("Agent prompts", "No template selected.", parent=self.root)
+            return
+        self._copy_text_to_clipboard(template.prompt)
+        self._emit_home_log(f"Copied agent prompt: {template.title}")
+        messagebox.showinfo(
+            "Copied",
+            f"Prompt copied — paste into Cursor chat.\n\n{template.title}",
+            parent=self.root,
+        )
+
+    def _on_copy_all_agent_prompts(self) -> None:
+        from hive_planner.launcher.agent_prompt_templates import format_agent_prompt_templates_markdown
+
+        text = format_agent_prompt_templates_markdown()
+        self._copy_text_to_clipboard(text)
+        count = len(default_agent_prompt_templates())
+        self._emit_home_log(f"Copied all {count} agent prompt templates (markdown)")
+        messagebox.showinfo(
+            "Copied",
+            f"All {count} templates copied as markdown.",
+            parent=self.root,
+        )
 
     def _on_open_user_guide(self) -> None:
         path = user_guide_path(self.config)

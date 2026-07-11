@@ -16,6 +16,7 @@ First time?
 
 Daily use:
   Projects → Open project… (or Create project)
+  Home → Agent prompt templates — copy-paste into Cursor chat
   Home → Run health check before handoff
   Home → Verify vendor pins / Scan legacy deployment (unified handoff)
   Home → Open in Cursor
