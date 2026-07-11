@@ -3801,15 +3801,16 @@ class HivePlannerApp:
                 project_name=self._rosetta_eject_project_name(),
             )
         except RosettaEjectError as exc:
-            messagebox.showerror("Rosetta eject", str(exc))
+            messagebox.showerror("Rosetta eject", str(exc), parent=self.root)
             return
-        self._queue_home_log(f"Rosetta cartridge ejected to {result.output_dir}")
+        self._emit_home_log(f"Rosetta cartridge ejected to {result.output_dir}")
         for rel in result.files_written:
-            self._queue_home_log(f"  {rel}")
+            self._emit_home_log(f"  {rel}")
         messagebox.showinfo(
             "Rosetta eject",
             f"Exported to:\n{result.output_dir}\n\nUpload {result.contract_path.name} to your planning AI, "
             f"then paste {result.prompt_path.name}.",
+            parent=self.root,
         )
 
     def _agent_prompt_template_by_title(self, title: str):
