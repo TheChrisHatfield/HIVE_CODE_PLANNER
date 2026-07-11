@@ -2391,7 +2391,7 @@ class HivePlannerApp:
                     return
             dialog.destroy()
             upload_root = root
-            upload_files = list(selected_files)
+            upload_files = list(check_files)
             upload_feature = feature if link_var.get() else None
             upload_embed = embed_var.get()
             upload_cartridge = link_var.get()
