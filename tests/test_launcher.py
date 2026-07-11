@@ -2103,6 +2103,33 @@ def test_format_memory_proposal_preview_includes_before_after_and_rejected() -> 
     assert "Must return 404" in text
 
 
+def test_agents_apply_done_shows_rejection_preview_on_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.root = None
+    app._pending_home_log = []
+    app._refresh_home_dashboard = lambda: None  # type: ignore[method-assign]
+    previewed: list[bool] = []
+    app._active_linked_root = lambda: Path("C:/proj")
+    monkeypatch.setattr(
+        app,
+        "_show_memory_rejection_preview",
+        lambda result, *, root: previewed.append(True),
+    )
+
+    app._agents_apply_done(
+        {
+            "ok": False,
+            "error": "All candidate bullets were rejected by validation",
+            "proposal_path": "docs/proposals/agents-memory-1.md",
+            "rejected": [{"candidate": "bad", "reason": "behavioral"}],
+        }
+    )
+
+    assert previewed == [True]
+
+
 def test_agents_propose_done_prompts_apply_without_name_error(monkeypatch: pytest.MonkeyPatch) -> None:
     from hive_planner.launcher.app import HivePlannerApp
 

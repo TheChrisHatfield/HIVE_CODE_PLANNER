@@ -2019,6 +2019,9 @@ class HivePlannerApp:
             self._queue_home_log(self._result_detail(result))
             for hint in result.get("hints", []):
                 self._queue_home_log(f"Tip: {hint}")
+            root = self._active_linked_root()
+            if root and result.get("proposal_path") and result.get("rejected"):
+                self._show_memory_rejection_preview(result, root=root)
             self._refresh_home_dashboard()
             return
         self._queue_home_log(f"Proposal: {result.get('proposal_path')}")
