@@ -2050,6 +2050,7 @@ def test_agents_apply_done_refreshes_dashboard_on_failure(monkeypatch: pytest.Mo
     app = HivePlannerApp.__new__(HivePlannerApp)
     refreshed: list[bool] = []
     app._refresh_home_dashboard = lambda: refreshed.append(True)  # type: ignore[method-assign]
+    app._active_linked_root = lambda: None  # type: ignore[method-assign]
 
     app._agents_apply_done({"ok": False, "error": "Wiring audit required", "hints": ["Record wiring audit"]})
     assert refreshed == [True]
