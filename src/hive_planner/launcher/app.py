@@ -1890,6 +1890,70 @@ class HivePlannerApp:
         dialog.wait_window()
         return apply_choice["value"]
 
+    def _show_memory_rejection_preview(self, result: dict, *, root: Path) -> None:
+        """Show why every candidate was rejected (no apply path)."""
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Memory promotion rejected")
+        dialog.configure(bg=COLORS["bg"])
+        dialog.transient(self.root)
+        dialog.grab_set()
+        dialog.geometry("620x520")
+        dialog.minsize(520, 420)
+
+        body = tk.Frame(dialog, bg=COLORS["bg"])
+        body.pack(fill="both", expand=True, padx=16, pady=16)
+
+        tk.Label(
+            body,
+            text=(
+                "Every candidate was rejected. Nothing will be written to AGENTS.md. "
+                "Fix the candidates file or update spec.md for behavioral requirements."
+            ),
+            wraplength=560,
+            justify="left",
+            bg=COLORS["bg"],
+            fg=COLORS["muted"],
+            font=FONT,
+        ).pack(anchor="w", pady=(0, 8))
+
+        proposal_rel = result.get("proposal_path")
+        if proposal_rel:
+            tk.Label(
+                body,
+                text=f"Proposal: {proposal_rel}",
+                bg=COLORS["bg"],
+                fg=COLORS["muted"],
+                font=FONT_SUBTITLE,
+                wraplength=560,
+                justify="left",
+            ).pack(anchor="w", pady=(0, 8))
+
+        preview = scrolledtext.ScrolledText(
+            body,
+            height=18,
+            font=("Consolas", 9),
+            bg=COLORS["secondary"],
+            fg=COLORS["fg"],
+            relief="flat",
+            wrap="word",
+        )
+        preview.pack(fill="both", expand=True, pady=(0, 12))
+        preview.insert("1.0", self._format_memory_proposal_preview(result))
+        preview.configure(state="disabled")
+        bind_mousewheel(preview)
+
+        btn_row = tk.Frame(dialog, bg=COLORS["bg"])
+        btn_row.pack(side="bottom", fill="x", padx=16, pady=(0, 16))
+        if proposal_rel:
+            secondary_button(
+                btn_row,
+                "Open proposal file",
+                lambda: self._open_project_file(root, proposal_rel),
+                tooltip="Open the saved rejection report in your default editor.",
+            )
+        secondary_button(btn_row, "Close", dialog.destroy, tooltip="Return without changing AGENTS.md.")
+        dialog.wait_window()
+
     def _on_agents_propose(self) -> None:
         root = self._active_linked_root()
         if not root:
@@ -1974,6 +2038,9 @@ class HivePlannerApp:
             self._queue_home_log(self._result_detail(result))
             for hint in result.get("hints", []):
                 self._queue_home_log(f"Tip: {hint}")
+            root = self._active_linked_root()
+            if root and result.get("proposal_path") and result.get("rejected"):
+                self._show_memory_rejection_preview(result, root=root)
             self._refresh_home_dashboard()
             return
         self._queue_home_log(f"Wrote proposal: {result.get('proposal_path')}")

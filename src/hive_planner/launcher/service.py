@@ -1190,7 +1190,14 @@ def run_agents_memory_propose(project_root: Path, candidates_path: Path, *, appl
         msg = str(exc)
         payload: dict = {"ok": False, "error": msg}
         lowered = msg.lower()
+        if exc.proposal_path:
+            payload["proposal_path"] = exc.proposal_path
+            payload["rejected"] = exc.rejected
+            payload["spec_actions"] = exc.spec_actions
+            payload["current_facts"] = exc.current_facts
+            payload["after_section"] = exc.current_facts
         if "all candidate" in lowered:
+            payload["all_rejected"] = True
             payload["hints"] = [
                 "Add `# operational` or `# behavioral` tags to ambiguous bullets.",
                 "Behavioral bullets belong in the active spec.md, not AGENTS.md.",

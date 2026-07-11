@@ -43,6 +43,21 @@ CHECKBOX_BULLET_RE = re.compile(r"^\[[ xX]\]\s*")
 class AgentsMemoryError(Exception):
     """AGENTS.md lint or proposal failed."""
 
+    def __init__(
+        self,
+        message: str,
+        *,
+        proposal_path: str | None = None,
+        rejected: list[dict[str, str]] | None = None,
+        spec_actions: list[str] | None = None,
+        current_facts: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.proposal_path = proposal_path
+        self.rejected = rejected or []
+        self.spec_actions = spec_actions or []
+        self.current_facts = current_facts or ""
+
 
 @dataclass
 class LintIssue:
@@ -516,7 +531,11 @@ def run_agents_memory(
         )
         rel = reject_proposal.relative_to(paths.root).as_posix()
         raise AgentsMemoryError(
-            f"All candidate bullets were rejected by validation — see {rel} for per-bullet reasons"
+            f"All candidate bullets were rejected by validation — see {rel} for per-bullet reasons",
+            proposal_path=rel,
+            rejected=[{"candidate": c, "reason": r} for c, r in rejected],
+            spec_actions=spec_actions,
+            current_facts=current_facts,
         )
 
     proposed_bullets = "\n".join(f"- {c}" for c in accepted)

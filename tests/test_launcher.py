@@ -1871,6 +1871,23 @@ def test_run_agents_memory_propose_requires_wiring_audit(tmp_path: Path) -> None
     assert blocked.get("hints")
 
 
+def test_run_agents_memory_propose_returns_rejection_preview_fields(tmp_path: Path) -> None:
+    from hive_planner.launcher.service import run_agents_memory_propose
+    from hive_planner.wiring_audit import record_wiring_audit
+
+    project = _minimal_unified_project(tmp_path)
+    record_wiring_audit(RepoPaths(root=project), evidence="pytest -q")
+    candidates = project / "docs" / "proposals" / "candidates.md"
+    candidates.parent.mkdir(parents=True, exist_ok=True)
+    candidates.write_text("- API must validate manifest schema version.\n", encoding="utf-8")
+    result = run_agents_memory_propose(project, candidates)
+    assert result["ok"] is False
+    assert result.get("all_rejected") is True
+    assert result.get("proposal_path")
+    assert result.get("rejected")
+    assert any("behavioral" in item.get("reason", "").lower() for item in result["rejected"])
+
+
 def test_run_agents_memory_propose_hints_when_all_candidates_rejected(tmp_path: Path) -> None:
     from hive_planner.launcher.service import run_agents_memory_propose
     from hive_planner.wiring_audit import record_wiring_audit
