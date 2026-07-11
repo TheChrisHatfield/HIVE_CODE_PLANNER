@@ -93,12 +93,10 @@ def source4s_selection_error(source_files: list[Path]) -> str | None:
     """Return a user-facing error when nothing in the selection can be staged."""
     if not source_files:
         return "Choose at least one .txt or .pdf file."
-    supported = [
-        path
-        for path in source_files
-        if path.is_file() and path.suffix.lower() in SOURCE4S_EXTENSIONS
-    ]
-    if supported:
+    expanded = expand_source4s_inputs(source_files)
+    if any(
+        path.is_file() and path.suffix.lower() in SOURCE4S_EXTENSIONS for path in expanded
+    ):
         return None
     dirs = [path for path in source_files if path.is_dir()]
     missing = [path for path in source_files if not path.is_file() and not path.is_dir()]
@@ -108,8 +106,6 @@ def source4s_selection_error(source_files: list[Path]) -> str | None:
         if path.is_file() and path.suffix.lower() not in SOURCE4S_EXTENSIONS
     ]
     if dirs and not missing and not unsupported:
-        if any(discover_source4s_files_in_folder(path) for path in dirs):
-            return None
         return "No .txt or .pdf files found in the selected folder(s)."
     parts: list[str] = []
     if missing:

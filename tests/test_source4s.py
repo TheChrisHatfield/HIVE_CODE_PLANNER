@@ -208,6 +208,15 @@ def test_source4s_selection_error_none_when_folder_has_supported_files(tmp_path:
     assert source4s_selection_error([folder]) is None
 
 
+def test_source4s_selection_error_allows_folder_with_unsupported_sibling(tmp_path: Path) -> None:
+    folder = tmp_path / "refs"
+    folder.mkdir()
+    (folder / "brief.txt").write_text("hello", encoding="utf-8")
+    bad = tmp_path / "notes.docx"
+    bad.write_text("nope", encoding="utf-8")
+    assert source4s_selection_error([folder, bad]) is None
+
+
 def test_source4s_needs_pdf_support_when_folder_argument_contains_pdf(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     paths.ensure_dirs()
