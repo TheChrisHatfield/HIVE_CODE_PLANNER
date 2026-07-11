@@ -301,12 +301,17 @@ class HivePlannerApp:
                 tk.Label(row, text=detail, bg=COLORS["card"], fg=badge, font=FONT_BOLD).pack(side="left")
             secondary_button(actions, "← Back", lambda: self._advance_wizard(0))
             if not self._is_portable_mode():
-                secondary_button(actions, "Scan for Python", self._on_scan_python)
+                secondary_button(
+                    actions,
+                    "Scan for Python",
+                    self._on_scan_python,
+                    tooltip="Search this computer for a suitable Python installation.",
+                )
             install_label = "Verify install" if self._is_portable_mode() else "Install / update"
             install_tip = (
-                "Deploy or repair Spec Kit + Continual Learning beside this portable app."
+                "Make sure the built-in planning and memory tools are installed next to this app."
                 if self._is_portable_mode()
-                else "Install or refresh the hive_planner Python package from the repo root above."
+                else "Install or update Hive Planner from the folder you chose above."
             )
             secondary_button(actions, install_label, self._on_install, tooltip=install_tip)
             ready = self.setup.python_ok and self.setup.hive_installed and self.setup.hive_root_ok
@@ -558,8 +563,18 @@ class HivePlannerApp:
         bind_mousewheel(self.home_guide)
         guide_actions = tk.Frame(guide_card, bg=COLORS["card"])
         guide_actions.pack(fill="x", padx=12, pady=(0, 12))
-        secondary_button(guide_actions, "Open guide in Explorer", self._on_open_user_guide)
-        secondary_button(guide_actions, "Run setup wizard", self._on_reset_onboarding)
+        secondary_button(
+            guide_actions,
+            "Open guide in Explorer",
+            self._on_open_user_guide,
+            tooltip="Open the user guide folder in Windows File Explorer.",
+        )
+        secondary_button(
+            guide_actions,
+            "Run setup wizard",
+            self._on_reset_onboarding,
+            tooltip="Walk through first-time setup again. Your linked projects stay as they are.",
+        )
 
         stats = card(body)
         card_title(stats, "Status")
@@ -585,12 +600,42 @@ class HivePlannerApp:
 
         actions = tk.Frame(body, bg=COLORS["bg"])
         actions.pack(fill="x", padx=16, pady=8)
-        primary_button(actions, "Run health check", self._on_ci_check)
-        secondary_button(actions, "Open in Cursor", self._on_open_cursor)
-        secondary_button(actions, "Sync impact maps", self._on_map_sync)
-        secondary_button(actions, "Deploy agent handoff", self._on_deploy_agent_handoff)
-        secondary_button(actions, "Load cartridge…", self._on_load_cartridge)
-        secondary_button(actions, "Open in Explorer", self._on_explore)
+        primary_button(
+            actions,
+            "Run health check",
+            self._on_ci_check,
+            tooltip="Check that plans, specs, and code maps match before you hand work to an AI agent.",
+        )
+        secondary_button(
+            actions,
+            "Open in Cursor",
+            self._on_open_cursor,
+            tooltip="Open your active linked project in the Cursor editor.",
+        )
+        secondary_button(
+            actions,
+            "Sync impact maps",
+            self._on_map_sync,
+            tooltip="Refresh the lists that link source files to tests so you know what to re-test after edits.",
+        )
+        secondary_button(
+            actions,
+            "Deploy agent handoff",
+            self._on_deploy_agent_handoff,
+            tooltip="Copy planning and memory tools into your project so AI agents can follow your workflow.",
+        )
+        secondary_button(
+            actions,
+            "Load cartridge…",
+            self._on_load_cartridge,
+            tooltip="Bring planning documents and reference files into your project (import, translate, or add sources).",
+        )
+        secondary_button(
+            actions,
+            "Open in Explorer",
+            self._on_explore,
+            tooltip="Open your active project folder in Windows File Explorer.",
+        )
 
         source_actions = tk.Frame(body, bg=COLORS["bg"])
         source_actions.pack(fill="x", padx=16, pady=(0, 8))
@@ -598,7 +643,7 @@ class HivePlannerApp:
             source_actions,
             "Load Sources…",
             self._on_load_sources,
-            tooltip="Upload .txt and .pdf reference files into context-library and link excerpts to the cartridge.",
+            tooltip="Add PDF or text files (notes, papers, specs) for AI agents to reference while planning.",
         )
 
         handoff_actions = tk.Frame(body, bg=COLORS["bg"])
@@ -607,25 +652,25 @@ class HivePlannerApp:
             handoff_actions,
             "Check wiring audit",
             self._on_wiring_audit_check,
-            tooltip="Verify .hive/wiring-audit.json and tasks.md wiring checklist (unified handoff).",
+            tooltip="See whether required integration checks were completed before agent handoff.",
         )
         secondary_button(
             handoff_actions,
             "Record wiring audit…",
             self._on_wiring_audit_record,
-            tooltip="Record integration validation evidence after completing the wiring audit checklist.",
+            tooltip="Mark integration checks as done after you verify agents and tools are connected correctly.",
         )
         secondary_button(
             handoff_actions,
             "Promote memory…",
             self._on_agents_propose,
-            tooltip="Run agents-propose on staged CL candidates (requires wiring audit attestation).",
+            tooltip="Review suggested updates to your project's long-term AI memory from recent work.",
         )
         secondary_button(
             handoff_actions,
             "Apply memory…",
             self._on_agents_apply,
-            tooltip="Apply accepted CL candidates to AGENTS.md (agents-apply; requires prior propose).",
+            tooltip="Save approved memory updates into your project's agent instructions (AGENTS.md).",
         )
 
         verify_actions = tk.Frame(body, bg=COLORS["bg"])
@@ -634,25 +679,25 @@ class HivePlannerApp:
             verify_actions,
             "Verify vendor pins",
             self._on_unified_verify,
-            tooltip="Check .hive/upstream-pins.json and vendored Spec Kit + CL overlay revs.",
+            tooltip="Confirm bundled planning tool versions match what this Hive release expects.",
         )
         secondary_button(
             verify_actions,
             "Scan legacy deployment",
             self._on_legacy_deployment_scan,
-            tooltip="Detect marketplace CL, missing pins, or starter-kit-only layouts from pre-unified deploy.",
+            tooltip="Find older project setups that may need upgrading to the current agent handoff format.",
         )
         secondary_button(
             verify_actions,
             "Set CL runtime…",
             self._on_set_cl_runtime,
-            tooltip="Choose Cursor plugin vs headless CLI memory loop (.hive/project.json cl_runtime).",
+            tooltip="Choose how AI memory runs: inside Cursor, or through a separate command-line tool.",
         )
         secondary_button(
             verify_actions,
             "Migrate marketplace CL…",
             self._on_cl_migrate,
-            tooltip="Merge Learned Workspace Facts into Durable Workspace Facts; optionally remove marketplace plugin.",
+            tooltip="Move learned facts from the Cursor plugin into your project's own memory file.",
         )
 
         log_card = card(body)
@@ -704,8 +749,18 @@ class HivePlannerApp:
         ).pack(anchor="w", padx=12, pady=(0, 8))
         hub_actions = tk.Frame(hub, bg=COLORS["card"])
         hub_actions.pack(fill="x", padx=12, pady=(0, 12))
-        primary_button(hub_actions, "Open in Cursor", self._on_open_cursor)
-        secondary_button(hub_actions, "Add link…", self._on_link_workspace)
+        primary_button(
+            hub_actions,
+            "Open in Cursor",
+            self._on_open_cursor,
+            tooltip="Open the active linked project in Cursor.",
+        )
+        secondary_button(
+            hub_actions,
+            "Add link…",
+            self._on_link_workspace,
+            tooltip="Connect a folder you already use in Cursor to Hive Planner.",
+        )
 
         form = card(form_host)
         card_title(form, "New project")
@@ -790,7 +845,12 @@ class HivePlannerApp:
         ).pack(anchor="w")
         btn_row = tk.Frame(form, bg=COLORS["card"])
         btn_row.pack(fill="x", padx=12, pady=(0, 12))
-        primary_button(btn_row, "Create project", self._on_create_project)
+        primary_button(
+            btn_row,
+            "Create project",
+            self._on_create_project,
+            tooltip="Create a new project folder with Hive planning templates and optional Git setup.",
+        )
 
         recent_card = card(parent)
         card_title(recent_card, "Linked workspaces")
@@ -830,10 +890,30 @@ class HivePlannerApp:
         self._populate_recent_list()
         btn_row2 = tk.Frame(recent_card, bg=COLORS["card"])
         btn_row2.pack(fill="x", padx=12, pady=(0, 12))
-        primary_button(btn_row2, "Add link…", self._on_link_workspace)
-        secondary_button(btn_row2, "Set as active", self._on_select_recent)
-        secondary_button(btn_row2, "Remove link", self._on_remove_recent)
-        secondary_button(btn_row2, "Delete profile…", self._on_delete_profile)
+        primary_button(
+            btn_row2,
+            "Add link…",
+            self._on_link_workspace,
+            tooltip="Add an existing folder to Hive's linked workspace list.",
+        )
+        secondary_button(
+            btn_row2,
+            "Set as active",
+            self._on_select_recent,
+            tooltip="Make the selected folder the project Home uses for health checks and actions.",
+        )
+        secondary_button(
+            btn_row2,
+            "Remove link",
+            self._on_remove_recent,
+            tooltip="Remove the selected folder from Hive's list (does not delete files on disk).",
+        )
+        secondary_button(
+            btn_row2,
+            "Delete profile…",
+            self._on_delete_profile,
+            tooltip="Remove Hive planning files from the selected folder (use with care).",
+        )
 
     def _build_settings_tab(self, parent: tk.Frame) -> None:
         form = card(parent)
@@ -864,24 +944,24 @@ class HivePlannerApp:
                 "Hive planner root",
                 self.cfg_hive,
                 browse=True,
-                tooltip="Folder containing this Hive Planner checkout (pyproject.toml, src/hive_planner).",
-                browse_tooltip="Pick the Hive Planner repo folder on disk.",
+                tooltip="Folder where Hive Planner is installed (contains pyproject.toml).",
+                browse_tooltip="Browse to the Hive Planner install folder.",
             )
             self._field(
                 form,
                 "Python command",
                 self.cfg_python,
                 scan_python=True,
-                tooltip="Command used to run Hive (for example py -3.11 or a full python.exe path).",
-                scan_tooltip="Search this PC for Python 3.11+ installations.",
+                tooltip="Command that runs Python for Hive (for example py -3.11).",
+                scan_tooltip="Search this computer for Python 3.11 or newer.",
             )
         self._field(
             form,
             "Cursor executable",
             self.cfg_cursor,
             browse_exe=True,
-            tooltip="Path to Cursor.exe for Open in Cursor. Leave blank to auto-detect.",
-            browse_tooltip="Browse to Cursor.exe if auto-detect fails.",
+            tooltip="Path to Cursor.exe. Leave blank and Hive will try to find it automatically.",
+            browse_tooltip="Browse to Cursor.exe if automatic detection fails.",
         )
         profile_row = tk.Frame(form, bg=COLORS["card"])
         profile_row.pack(fill="x", padx=12, pady=4)
@@ -897,7 +977,7 @@ class HivePlannerApp:
         profile_label.pack(side="left")
         attach_hover_tooltip(
             profile_label,
-            "Bootstrap profile for new projects: full adds Spec Kit scaffolding; minimal is lighter.",
+            "Full = richer planning templates for new projects. Minimal = lighter, faster setup.",
         )
         profile_combo = ttk.Combobox(
             profile_row,
@@ -907,7 +987,10 @@ class HivePlannerApp:
             width=28,
         )
         profile_combo.pack(side="left", fill="x", expand=True)
-        attach_combobox_tooltip(profile_combo, "Used when creating or bootstrapping a new linked project.")
+        attach_combobox_tooltip(
+            profile_combo,
+            "Default template size when you create a new linked project.",
+        )
         handoff_row = tk.Frame(form, bg=COLORS["card"])
         handoff_row.pack(fill="x", padx=12, pady=4)
         handoff_label = tk.Label(
@@ -922,7 +1005,7 @@ class HivePlannerApp:
         handoff_label.pack(side="left")
         attach_hover_tooltip(
             handoff_label,
-            "Unified deploys Spec Kit + Continual Learning together; off skips agent handoff scaffolding.",
+            "Unified = install AI planning and memory tools with new projects. Off = skip that step.",
         )
         handoff_combo = ttk.Combobox(
             handoff_row,
@@ -934,7 +1017,7 @@ class HivePlannerApp:
         handoff_combo.pack(side="left", fill="x", expand=True)
         attach_combobox_tooltip(
             handoff_combo,
-            "Default for New project and when bootstrapping a linked workspace.",
+            "Default agent tool setup for new projects and when bootstrapping a workspace.",
         )
         btn_row = tk.Frame(form, bg=COLORS["card"])
         btn_row.pack(fill="x", padx=12, pady=(8, 12))
@@ -942,23 +1025,23 @@ class HivePlannerApp:
             btn_row,
             "Save settings",
             self._on_save_settings,
-            tooltip="Write these paths and defaults to your Hive Planner config file.",
+            tooltip="Save these paths and defaults for next time you open Hive Planner.",
         )
         secondary_button(
             btn_row,
             "Verify install" if portable else "Install / update Hive",
             self._on_install,
             tooltip=(
-                "Deploy or repair Spec Kit + Continual Learning beside this portable app."
+                "Make sure built-in planning and memory tools are installed next to this app."
                 if portable
-                else "Install or refresh the hive_planner Python package from the repo root above."
+                else "Install or update Hive Planner from the folder above."
             ),
         )
         secondary_button(
             btn_row,
             "Reset onboarding",
             self._on_reset_onboarding,
-            tooltip="Show the first-time setup wizard again. Your links and settings are kept.",
+            tooltip="Show the welcome setup wizard again. Your links and saved settings are kept.",
         )
         if console_win.console_available():
             self.console_btn = tk.Button(
@@ -977,7 +1060,7 @@ class HivePlannerApp:
             self.console_btn.pack(side="left", padx=(0, 8), pady=4)
             attach_hover_tooltip(
                 self.console_btn,
-                "Show or hide the debug console window for launcher output.",
+                "Show or hide an extra window with technical log messages (for troubleshooting).",
             )
             if console_win.is_console_visible():
                 self.console_btn.config(text="Hide console")
@@ -1022,21 +1105,21 @@ class HivePlannerApp:
                 row,
                 "Browse…",
                 lambda: self._browse_into(variable),
-                tooltip=browse_tooltip or "Choose a folder.",
+                tooltip=browse_tooltip or "Browse to choose a folder on your computer.",
             )
         if browse_exe:
             secondary_button(
                 row,
                 "Browse…",
                 lambda: self._browse_exe_into(variable),
-                tooltip=browse_tooltip or "Choose an executable file.",
+                tooltip=browse_tooltip or "Browse to choose a program file (.exe).",
             )
         if scan_python:
             secondary_button(
                 row,
                 "Scan…",
                 lambda: self._on_scan_python(variable),
-                tooltip=scan_tooltip or "Search for Python installations.",
+                tooltip=scan_tooltip or "Search this computer for Python installations.",
             )
 
     def _browse_exe_into(self, variable: tk.StringVar) -> None:
@@ -2233,9 +2316,24 @@ class HivePlannerApp:
 
         browse_row = tk.Frame(body, bg=COLORS["bg"])
         browse_row.pack(fill="x", pady=(0, 8))
-        browse_btn = secondary_button(browse_row, "Choose files…", lambda: browse(append=False))
-        add_more_btn = secondary_button(browse_row, "Add more…", lambda: browse(append=True))
-        secondary_button(browse_row, "Clear", clear_selection)
+        browse_btn = secondary_button(
+            browse_row,
+            "Choose files…",
+            lambda: browse(append=False),
+            tooltip="Pick reference files or a folder, depending on the mode you selected above.",
+        )
+        add_more_btn = secondary_button(
+            browse_row,
+            "Add more…",
+            lambda: browse(append=True),
+            tooltip="Add more files or another folder to the current selection.",
+        )
+        secondary_button(
+            browse_row,
+            "Clear",
+            clear_selection,
+            tooltip="Clear the file list and start over.",
+        )
 
         def sync_selection_mode(*_args: object) -> None:
             mode = selection_mode_var.get()
@@ -2316,8 +2414,18 @@ class HivePlannerApp:
                 self._load_sources_done,
             )
 
-        primary_button(action_row, "Load Sources", run_upload)
-        secondary_button(action_row, "Cancel", dialog.destroy)
+        primary_button(
+            action_row,
+            "Load Sources",
+            run_upload,
+            tooltip="Copy your selected files into the project and index them for AI agents.",
+        )
+        secondary_button(
+            action_row,
+            "Cancel",
+            dialog.destroy,
+            tooltip="Close without uploading anything.",
+        )
 
     def _load_sources_done(self, result: dict) -> None:
         from hive_planner.source4s import pdf_ocr_quality_warnings
@@ -2718,9 +2826,14 @@ class HivePlannerApp:
             action_row,
             "Load cartridge",
             run_load,
-            tooltip="Run the selected load mode on the linked project.",
+            tooltip="Run the option you picked above: add sources, translate research, or import a folder.",
         )
-        secondary_button(action_row, "Cancel", dialog.destroy)
+        secondary_button(
+            action_row,
+            "Cancel",
+            dialog.destroy,
+            tooltip="Close without loading anything.",
+        )
 
     def _queue_cartridge_result_log(self, result: dict) -> None:
         worked = bool(
