@@ -265,6 +265,19 @@ def test_propose_rejects_tag_only_candidates(tmp_path: Path) -> None:
     assert all("section tag only" in reason for _, reason in rejected)
 
 
+def test_parse_candidates_honors_behavioral_section_header() -> None:
+    from hive_planner.agents_memory import _evaluate_candidates, _parse_candidates, parse_sections
+
+    text = "# behavioral\n- The landing page shows a welcome banner.\n"
+    raw = _parse_candidates(text)
+    assert raw == ["The landing page shows a welcome banner. # behavioral"]
+    sections = parse_sections(_minimal_agents())
+    accepted, rejected, _ = _evaluate_candidates(sections, raw)
+    assert not accepted
+    assert rejected
+    assert "spec.md" in rejected[0][1]
+
+
 def test_ingest_normalizes_transcript_export(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     source = paths.root / "export.txt"

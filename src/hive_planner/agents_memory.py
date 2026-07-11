@@ -290,8 +290,30 @@ def lint_agents_md(paths: RepoPaths, agents_path: Path | None = None) -> AgentsL
     return report
 
 
+def _parse_section_header(stripped: str) -> str | None:
+    lowered = stripped.lower()
+    if lowered.startswith("# operational") or lowered == "# operational":
+        return "# operational"
+    if lowered.startswith("# behavioral") or lowered == "# behavioral":
+        return "# behavioral"
+    if lowered.startswith("# ambiguous") or lowered == "# ambiguous":
+        return "# ambiguous"
+    return None
+
+
+def _apply_section_tag(bullet: str, section_tag: str | None) -> str:
+    if not section_tag or TAG_BEHAVIORAL.search(bullet) or TAG_OPERATIONAL.search(bullet):
+        return bullet
+    if section_tag == "# behavioral":
+        return f"{bullet} # behavioral"
+    if section_tag == "# operational":
+        return f"{bullet} # operational"
+    return bullet
+
+
 def _parse_candidates(text: str) -> list[str]:
     candidates: list[str] = []
+    current_tag: str | None = None
     in_fence = False
     for line in text.splitlines():
         stripped = line.strip()
@@ -300,23 +322,27 @@ def _parse_candidates(text: str) -> list[str]:
             continue
         if in_fence:
             continue
+        section_tag = _parse_section_header(stripped)
+        if section_tag:
+            current_tag = section_tag
+            continue
         if not stripped or stripped.startswith("#"):
             continue
         if stripped.startswith("- "):
             bullet = stripped[2:].strip()
             if CHECKBOX_BULLET_RE.match(bullet):
                 continue
-            candidates.append(bullet)
+            candidates.append(_apply_section_tag(bullet, current_tag))
         elif stripped.startswith("* "):
             bullet = stripped[2:].strip()
             if CHECKBOX_BULLET_RE.match(bullet):
                 continue
-            candidates.append(bullet)
+            candidates.append(_apply_section_tag(bullet, current_tag))
         elif stripped.startswith("• "):
             bullet = stripped[2:].strip()
             if CHECKBOX_BULLET_RE.match(bullet):
                 continue
-            candidates.append(bullet)
+            candidates.append(_apply_section_tag(bullet, current_tag))
     return [c for c in candidates if c]
 
 
