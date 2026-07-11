@@ -278,6 +278,19 @@ def test_parse_candidates_honors_behavioral_section_header() -> None:
     assert "spec.md" in rejected[0][1]
 
 
+def test_parse_candidates_honors_ambiguous_section_header() -> None:
+    from hive_planner.agents_memory import _evaluate_candidates, _parse_candidates, parse_sections
+
+    text = "# ambiguous\n- Run ci-check before handoff.\n"
+    raw = _parse_candidates(text)
+    assert raw == ["Run ci-check before handoff. # ambiguous"]
+    sections = parse_sections(_minimal_agents())
+    accepted, rejected, _ = _evaluate_candidates(sections, raw)
+    assert not accepted
+    assert rejected
+    assert "Classification ambiguous" in rejected[0][1]
+
+
 def test_parse_candidates_does_not_treat_heading_prose_as_section_tag() -> None:
     from hive_planner.agents_memory import _evaluate_candidates, _parse_candidates, parse_sections
 

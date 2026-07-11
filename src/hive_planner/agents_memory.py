@@ -30,6 +30,7 @@ LOW_SIGNAL_PATTERNS = (
 
 TAG_BEHAVIORAL = re.compile(r"(?:^|\s)#\s*behavioral\s*$", re.IGNORECASE)
 TAG_OPERATIONAL = re.compile(r"(?:^|\s)#\s*operational\s*$", re.IGNORECASE)
+TAG_AMBIGUOUS = re.compile(r"(?:^|\s)#\s*ambiguous\s*$", re.IGNORECASE)
 
 TRANSCRIPT_NOISE = (
     re.compile(r"^user:\s*", re.IGNORECASE),
@@ -131,6 +132,7 @@ def _normalize_bullet(text: str) -> str:
     cleaned = re.sub(r"^[-*]\s+", "", text.strip())
     cleaned = TAG_BEHAVIORAL.sub("", cleaned).strip()
     cleaned = TAG_OPERATIONAL.sub("", cleaned).strip()
+    cleaned = TAG_AMBIGUOUS.sub("", cleaned).strip()
     cleaned = re.sub(r"\*\*([^*]+)\*\*", r"\1", cleaned)
     cleaned = re.sub(r"`([^`]+)`", r"\1", cleaned)
     return re.sub(r"\s+", " ", cleaned).strip().lower()
@@ -302,12 +304,19 @@ def _parse_section_header(stripped: str) -> str | None:
 
 
 def _apply_section_tag(bullet: str, section_tag: str | None) -> str:
-    if not section_tag or TAG_BEHAVIORAL.search(bullet) or TAG_OPERATIONAL.search(bullet):
+    if (
+        not section_tag
+        or TAG_BEHAVIORAL.search(bullet)
+        or TAG_OPERATIONAL.search(bullet)
+        or TAG_AMBIGUOUS.search(bullet)
+    ):
         return bullet
     if section_tag == "# behavioral":
         return f"{bullet} # behavioral"
     if section_tag == "# operational":
         return f"{bullet} # operational"
+    if section_tag == "# ambiguous":
+        return f"{bullet} # ambiguous"
     return bullet
 
 
@@ -370,6 +379,7 @@ def _parse_candidates(text: str) -> list[str]:
 def _substantive_candidate_text(bullet: str) -> str:
     cleaned = TAG_BEHAVIORAL.sub("", bullet.strip()).strip()
     cleaned = TAG_OPERATIONAL.sub("", cleaned).strip()
+    cleaned = TAG_AMBIGUOUS.sub("", cleaned).strip()
     return cleaned
 
 
@@ -405,6 +415,14 @@ def _evaluate_candidates(
         if not _substantive_candidate_text(candidate):
             rejected.append(
                 (candidate, "Candidate is a section tag only — add substantive bullet text")
+            )
+            continue
+        if TAG_AMBIGUOUS.search(candidate):
+            rejected.append(
+                (
+                    candidate,
+                    "Classification ambiguous — append `# operational` or `# behavioral` tag (tagged # ambiguous)",
+                )
             )
             continue
         classified = classify_bullet(candidate)
