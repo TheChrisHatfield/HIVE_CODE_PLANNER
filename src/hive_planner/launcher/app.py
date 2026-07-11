@@ -2286,19 +2286,26 @@ class HivePlannerApp:
                     messagebox.showerror("Invalid feature id", str(exc), parent=dialog)
                     return
             dialog.destroy()
+            upload_root = root
+            upload_files = list(selected_files)
+            upload_feature = feature if link_var.get() else None
+            upload_embed = embed_var.get()
+            upload_cartridge = link_var.get()
+            upload_force = force_var.get()
+            upload_ocr = ocr_var.get()
             self._start_home_action(
-                f"Loading {len(selected_files)} source file(s)"
+                f"Loading {len(upload_files)} source file(s)"
                 + (f" for '{feature}'…" if link_var.get() else " (ingest only)…"),
             )
             self._run_bg(
                 lambda: run_source4s_upload(
-                    root,
-                    selected_files,
-                    feature if link_var.get() else None,
-                    embed=embed_var.get(),
-                    update_cartridge=link_var.get(),
-                    force_delta=force_var.get(),
-                    ocr_pdf=ocr_var.get(),
+                    upload_root,
+                    upload_files,
+                    upload_feature,
+                    embed=upload_embed,
+                    update_cartridge=upload_cartridge,
+                    force_delta=upload_force,
+                    ocr_pdf=upload_ocr,
                 ),
                 self._load_sources_done,
             )
