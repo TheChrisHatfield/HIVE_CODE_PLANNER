@@ -178,6 +178,38 @@ def test_propose_rejects_ambiguous_candidate(tmp_path: Path) -> None:
         propose_agents_memory(paths, candidates)
 
 
+def test_agents_memory_error_detail_includes_proposal_metadata() -> None:
+    from hive_planner.agents_memory import AgentsMemoryError, agents_memory_error_detail
+
+    exc = AgentsMemoryError(
+        "All candidate bullets were rejected by validation",
+        proposal_path="docs/proposals/agents-memory-1.md",
+        rejected=[{"candidate": "bad", "reason": "behavioral"}],
+        spec_actions=["Update docs/specs/x/spec.md"],
+        current_facts="- Existing.",
+        after_section="- Existing.",
+        accepted=[],
+    )
+    detail = agents_memory_error_detail(exc)
+    assert detail["proposal_path"] == "docs/proposals/agents-memory-1.md"
+    assert detail["rejected"][0]["reason"] == "behavioral"
+
+
+def test_apply_rolls_back_writes_proposal_on_lint_failure(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    broken = _minimal_agents().replace("## Planning Rosetta Stone", "## Missing Rosetta")
+    (paths.root / "AGENTS.md").write_text(broken, encoding="utf-8")
+    candidates = paths.root / "candidates.md"
+    candidates.write_text("- Valid operational candidate bullet.\n", encoding="utf-8")
+    original = (paths.root / "AGENTS.md").read_text(encoding="utf-8")
+    with pytest.raises(AgentsMemoryError, match="Apply rolled back") as exc_info:
+        run_agents_memory(paths, candidates, apply=True)
+    assert exc_info.value.proposal_path
+    assert (paths.root / "AGENTS.md").read_text(encoding="utf-8") == original
+    proposals = list((paths.root / "docs" / "proposals").glob("agents-memory-*.md"))
+    assert proposals
+
+
 def test_apply_rejects_behavioral_candidate(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     (paths.root / "AGENTS.md").write_text(_minimal_agents(), encoding="utf-8")

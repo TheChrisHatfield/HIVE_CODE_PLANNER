@@ -51,12 +51,34 @@ class AgentsMemoryError(Exception):
         rejected: list[dict[str, str]] | None = None,
         spec_actions: list[str] | None = None,
         current_facts: str | None = None,
+        accepted: list[str] | None = None,
+        after_section: str | None = None,
     ) -> None:
         super().__init__(message)
         self.proposal_path = proposal_path
         self.rejected = rejected or []
         self.spec_actions = spec_actions or []
         self.current_facts = current_facts or ""
+        self.accepted = accepted or []
+        self.after_section = after_section or ""
+
+
+def agents_memory_error_detail(exc: AgentsMemoryError) -> dict:
+    """Structured CLI/launcher detail for a failed memory promotion."""
+    detail: dict = {"error": str(exc)}
+    if exc.proposal_path:
+        detail["proposal_path"] = exc.proposal_path
+    if exc.accepted:
+        detail["accepted"] = exc.accepted
+    if exc.rejected:
+        detail["rejected"] = exc.rejected
+    if exc.spec_actions:
+        detail["spec_actions"] = exc.spec_actions
+    if exc.current_facts:
+        detail["current_facts"] = exc.current_facts
+    if exc.after_section:
+        detail["after_section"] = exc.after_section
+    return detail
 
 
 @dataclass
@@ -546,6 +568,7 @@ def run_agents_memory(
             rejected=[{"candidate": c, "reason": r} for c, r in rejected],
             spec_actions=spec_actions,
             current_facts=current_facts,
+            after_section=current_facts,
         )
 
     proposed_bullets = "\n".join(f"- {c}" for c in accepted)
@@ -559,7 +582,27 @@ def run_agents_memory(
         if not lint.ok:
             target.write_text(agents_text, encoding="utf-8")
             errors = [i.message for i in lint.issues if i.severity == "error"]
-            raise AgentsMemoryError(f"Apply rolled back — AGENTS.md lint failed: {'; '.join(errors)}")
+            rollback_proposal = _write_proposal(
+                paths,
+                target=target,
+                current_facts=current_facts,
+                after_section=after_section,
+                proposed_bullets=proposed_bullets,
+                accepted=accepted,
+                rejected=rejected,
+                spec_actions=spec_actions,
+                applied=False,
+            )
+            rel = rollback_proposal.relative_to(paths.root).as_posix()
+            raise AgentsMemoryError(
+                f"Apply rolled back — AGENTS.md lint failed: {'; '.join(errors)}",
+                proposal_path=rel,
+                rejected=[{"candidate": c, "reason": r} for c, r in rejected],
+                spec_actions=spec_actions,
+                current_facts=current_facts,
+                accepted=accepted,
+                after_section=after_section,
+            )
         applied = True
 
     out_path = _write_proposal(

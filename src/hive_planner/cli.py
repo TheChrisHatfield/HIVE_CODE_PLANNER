@@ -5,7 +5,13 @@ import json
 import sys
 from pathlib import Path
 
-from hive_planner.agents_memory import AgentsMemoryError, ingest_agents_candidates, lint_agents_md, run_agents_memory
+from hive_planner.agents_memory import (
+    AgentsMemoryError,
+    agents_memory_error_detail,
+    ingest_agents_candidates,
+    lint_agents_md,
+    run_agents_memory,
+)
 from hive_planner.ci_handoff import run_ci_check
 from hive_planner.config import RepoPaths, resolve_repo_file_path, is_repo_root, resolve_root
 from hive_planner.roadmap_status import validate_roadmap
@@ -742,6 +748,10 @@ def main(argv: list[str] | None = None) -> int:
             )
         except AgentsMemoryError as exc:
             print(f"Error: {exc}", file=sys.stderr)
+            detail = agents_memory_error_detail(exc)
+            if detail.get("proposal_path"):
+                print(f"Proposal: {detail['proposal_path']}", file=sys.stderr)
+            print(json.dumps(detail, indent=2), file=sys.stderr)
             return 1
         print(f"Root: {root}")
         print(f"Wrote proposal: {result.proposal_path.relative_to(root)}")
@@ -763,6 +773,10 @@ def main(argv: list[str] | None = None) -> int:
             )
         except AgentsMemoryError as exc:
             print(f"Error: {exc}", file=sys.stderr)
+            detail = agents_memory_error_detail(exc)
+            if detail.get("proposal_path"):
+                print(f"Proposal: {detail['proposal_path']}", file=sys.stderr)
+            print(json.dumps(detail, indent=2), file=sys.stderr)
             return 1
         print(f"Root: {root}")
         print(f"Wrote proposal: {result.proposal_path.relative_to(root)}")
