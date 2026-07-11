@@ -470,6 +470,11 @@ class HivePlannerApp:
     _PAGE_WHEEL_SKIP = (tk.Listbox, tk.Text, scrolledtext.ScrolledText, tk.Scrollbar)
 
     def _note_stale_bg_result(self, result: object) -> None:
+        if isinstance(result, dict) and result.get("cancelled"):
+            self._queue_home_log(self._result_detail(result))
+            self._clear_memory_work_context()
+            self._refresh_home_dashboard()
+            return
         if isinstance(result, dict) and self._is_memory_propose_result(result):
             self._deliver_memory_propose_result(result, stale=True)
             return

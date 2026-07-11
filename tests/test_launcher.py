@@ -4133,6 +4133,30 @@ def test_note_stale_bg_result_delivers_memory_propose_preview() -> None:
     assert delivered == [True]
 
 
+def test_note_stale_bg_result_clears_memory_work_context_on_cancelled() -> None:
+    from pathlib import Path
+
+    from hive_planner.launcher.app import HivePlannerApp
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app._pending_home_log = []
+    app._memory_work_root = Path("C:/proj")
+    app._memory_work_candidates_path = Path("C:/proj/docs/proposals/candidates.md")
+    app._pending_memory_candidates = app._memory_work_candidates_path
+    app._pending_memory_link = "C:/proj"
+    app._refresh_home_dashboard = lambda: None  # type: ignore[method-assign]
+    app._note_stale_bg_result(
+        {
+            "ok": False,
+            "cancelled": True,
+            "error": "Memory apply cancelled — project or dashboard changed.",
+        }
+    )
+    assert app._memory_work_root is None
+    assert app._memory_work_candidates_path is None
+    assert app._pending_memory_candidates is None
+
+
 def test_note_stale_bg_result_preserves_cartridge_details() -> None:
     from hive_planner.launcher.app import HivePlannerApp
 
