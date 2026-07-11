@@ -239,6 +239,18 @@ def test_merge_source4s_selection_dedupes_paths(tmp_path: Path) -> None:
     assert merged == [first, second]
 
 
+def test_merge_source4s_selection_drops_files_covered_by_added_folder(tmp_path: Path) -> None:
+    folder = tmp_path / "refs"
+    folder.mkdir()
+    inside = folder / "brief.txt"
+    inside.write_text("hello", encoding="utf-8")
+    outside = tmp_path / "other.txt"
+    outside.write_text("other", encoding="utf-8")
+
+    merged = merge_source4s_selection([inside, outside], [folder])
+    assert merged == [outside, folder]
+
+
 def test_source4s_selection_error_flags_missing_and_unsupported(tmp_path: Path) -> None:
     good = tmp_path / "good.txt"
     good.write_text("ok", encoding="utf-8")
