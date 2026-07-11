@@ -1733,16 +1733,19 @@ class HivePlannerApp:
         return self._pending_memory_candidates
 
     def _memory_work_candidates(self) -> Path | None:
-        if self._memory_work_root and self._memory_work_candidates_path:
-            return self._memory_work_candidates_path
+        work_root = getattr(self, "_memory_work_root", None)
+        work_candidates = getattr(self, "_memory_work_candidates_path", None)
+        if work_root and work_candidates:
+            return work_candidates
         root = self._resolve_memory_work_root()
         if root is None:
             return None
         return self._pending_memory_for_root(root)
 
     def _resolve_memory_work_root(self) -> Path | None:
-        if self._memory_work_root is not None:
-            return self._memory_work_root
+        work_root = getattr(self, "_memory_work_root", None)
+        if work_root is not None:
+            return work_root
         pending_link = getattr(self, "_pending_memory_link", None)
         pending_candidates = getattr(self, "_pending_memory_candidates", None)
         if pending_link and pending_candidates:
@@ -1780,6 +1783,7 @@ class HivePlannerApp:
             self._queue_home_log(f"Rejected {len(rejected)} candidate(s) — see proposal file.")
         if result.get("applied"):
             self._queue_home_log("Applied to AGENTS.md.")
+            self._clear_memory_work_context()
             self._refresh_home_dashboard()
             return
         root = self._resolve_memory_work_root()
@@ -1787,7 +1791,7 @@ class HivePlannerApp:
         if accepted and root and candidates:
             if self._show_memory_proposal_preview(result, root=root):
                 self._start_home_action(f"Running agents-apply on {candidates.name}…")
-                generation = self._bg_generation
+                generation = getattr(self, "_bg_generation", 0)
                 self._run_bg(
                     lambda r=root, c=candidates, g=generation: self._run_memory_apply_if_current(r, c, g),
                     self._agents_apply_done,
@@ -3568,13 +3572,23 @@ class HivePlannerApp:
         self._agent_prompt_saved_title = title
         self._show_agent_prompt_template(self._agent_prompt_template_by_title(title))
 
+    def _selected_agent_prompt_title(self) -> str:
+        if hasattr(self, "_agent_prompt_var"):
+            try:
+                title = self._agent_prompt_var.get().strip()
+            except tk.TclError:
+                title = ""
+            if title:
+                return title
+        return (self._agent_prompt_saved_title or "").strip()
+
     def _copy_text_to_clipboard(self, text: str) -> None:
         self.root.clipboard_clear()
         self.root.clipboard_append(text)
         self.root.update()
 
     def _on_copy_agent_prompt(self) -> None:
-        title = self._agent_prompt_var.get().strip()
+        title = self._selected_agent_prompt_title()
         template = self._agent_prompt_template_by_title(title)
         if template is None:
             messagebox.showwarning(

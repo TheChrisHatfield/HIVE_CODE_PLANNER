@@ -2350,6 +2350,32 @@ def test_run_memory_apply_if_current_cancels_on_stale_generation(tmp_path: Path)
     assert result["cancelled"] is True
 
 
+def test_deliver_memory_propose_result_clears_work_context_after_apply() -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app._pending_home_log = []
+    app._memory_work_root = Path("C:/proj")
+    app._memory_work_candidates_path = Path("C:/proj/docs/proposals/candidates.md")
+    app._pending_memory_candidates = app._memory_work_candidates_path
+    app._pending_memory_link = "C:/proj"
+    app._refresh_home_dashboard = lambda: None  # type: ignore[method-assign]
+
+    app._deliver_memory_propose_result({"ok": True, "applied": True, "accepted": ["x"], "rejected": []})
+
+    assert app._memory_work_root is None
+    assert app._memory_work_candidates_path is None
+    assert app._pending_memory_candidates is None
+
+
+def test_selected_agent_prompt_title_falls_back_to_saved_title() -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app._agent_prompt_saved_title = "Implement one spec task"
+    assert app._selected_agent_prompt_title() == "Implement one spec task"
+
+
 def test_agents_propose_done_prompts_apply_without_name_error(monkeypatch: pytest.MonkeyPatch) -> None:
     from hive_planner.launcher.app import HivePlannerApp
 
