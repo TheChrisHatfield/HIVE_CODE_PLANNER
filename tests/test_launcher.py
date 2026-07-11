@@ -1615,6 +1615,15 @@ def test_format_agent_prompt_templates_markdown_includes_all_titles() -> None:
         assert template.prompt.strip() in text
 
 
+def test_get_agent_prompt_template_by_title_rejects_unknown() -> None:
+    from hive_planner.launcher.agent_prompt_templates import get_agent_prompt_template_by_title
+
+    assert get_agent_prompt_template_by_title("Start a coding session") is not None
+    assert get_agent_prompt_template_by_title("  Start a coding session  ") is not None
+    assert get_agent_prompt_template_by_title("") is None
+    assert get_agent_prompt_template_by_title("Not a real template") is None
+
+
 def test_load_user_guide_fallback_mentions_agent_prompt_templates(tmp_path: Path) -> None:
     from hive_planner.launcher.user_guide import load_user_guide
 

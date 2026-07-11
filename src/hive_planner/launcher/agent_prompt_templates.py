@@ -213,6 +213,16 @@ def get_agent_prompt_template(template_id: str) -> AgentPromptTemplate | None:
     return None
 
 
+def get_agent_prompt_template_by_title(title: str) -> AgentPromptTemplate | None:
+    stripped = title.strip()
+    if not stripped:
+        return None
+    for template in default_agent_prompt_templates():
+        if template.title == stripped:
+            return template
+    return None
+
+
 def format_agent_prompt_templates_markdown() -> str:
     """Export all templates as a single markdown doc (for docs/ or project bootstrap)."""
     lines = [

@@ -73,7 +73,10 @@ from hive_planner.launcher.theme import (
     bind_mousewheel,
 )
 from hive_planner.launcher import console_win
-from hive_planner.launcher.agent_prompt_templates import default_agent_prompt_templates
+from hive_planner.launcher.agent_prompt_templates import (
+    default_agent_prompt_templates,
+    get_agent_prompt_template_by_title,
+)
 from hive_planner.launcher.user_guide import load_user_guide, user_guide_path
 from hive_planner.project_profile import read_project_profile
 
@@ -3355,14 +3358,14 @@ class HivePlannerApp:
         self._agent_prompt_combo.bind("<<ComboboxSelected>>", self._on_agent_prompt_selected)
 
     def _agent_prompt_template_by_title(self, title: str):
-        for template in default_agent_prompt_templates():
-            if template.title == title:
-                return template
-        templates = default_agent_prompt_templates()
-        return templates[0] if templates else None
+        return get_agent_prompt_template_by_title(title)
 
     def _show_agent_prompt_template(self, template) -> None:
         if template is None:
+            self._agent_prompt_desc.configure(text="")
+            self._agent_prompt_preview.configure(state="normal")
+            self._agent_prompt_preview.delete("1.0", "end")
+            self._agent_prompt_preview.configure(state="disabled")
             return
         self._agent_prompt_desc.configure(text=template.description)
         self._agent_prompt_preview.configure(state="normal")
@@ -3377,13 +3380,17 @@ class HivePlannerApp:
     def _copy_text_to_clipboard(self, text: str) -> None:
         self.root.clipboard_clear()
         self.root.clipboard_append(text)
-        self.root.update_idletasks()
+        self.root.update()
 
     def _on_copy_agent_prompt(self) -> None:
-        title = self._agent_prompt_var.get()
+        title = self._agent_prompt_var.get().strip()
         template = self._agent_prompt_template_by_title(title)
         if template is None:
-            messagebox.showwarning("Agent prompts", "No template selected.", parent=self.root)
+            messagebox.showwarning(
+                "Agent prompts",
+                "Select a template from the list before copying.",
+                parent=self.root,
+            )
             return
         self._copy_text_to_clipboard(template.prompt)
         self._emit_home_log(f"Copied agent prompt: {template.title}")
