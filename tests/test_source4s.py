@@ -149,6 +149,18 @@ def test_discover_source4s_files_in_folder_skips_common_vendor_dirs(tmp_path: Pa
     assert [path.name for path in found] == ["keep.txt"]
 
 
+def test_source4s_needs_pdf_support_when_folder_argument_contains_pdf(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    paths.ensure_dirs()
+    folder = tmp_path / "refs"
+    folder.mkdir()
+    (folder / "brief.txt").write_text("txt", encoding="utf-8")
+    (folder / "scan.pdf").write_bytes(b"%PDF")
+
+    assert source4s_needs_pdf_support(paths, [folder]) is True
+    assert source4s_needs_pdf_support(paths, [folder / "brief.txt"]) is False
+
+
 def test_merge_source4s_selection_dedupes_paths(tmp_path: Path) -> None:
     first = tmp_path / "a.txt"
     second = tmp_path / "b.pdf"
