@@ -142,6 +142,9 @@ class HivePlannerApp:
         self._last_ci_report: dict | None = None
         self._pending_memory_candidates: Path | None = None
         self._pending_memory_link: str | None = None
+        self._agent_prompt_expanded = False
+        self._agent_prompt_saved_title: str | None = None
+        self._home_guide_expanded = False
 
         root.title("Hive Planner")
         root.geometry("920x680")
@@ -546,45 +549,7 @@ class HivePlannerApp:
     def _build_home_tab(self, parent: tk.Frame) -> None:
         body, canvas = self._scrollable_tab(parent)
 
-        guide_card = card(body)
-        card_title(guide_card, "How to use Hive Planner")
-        tk.Label(
-            guide_card,
-            text="Plain-English guide — what this tool is and how to use it. Scroll to read.",
-            wraplength=760,
-            justify="left",
-            bg=COLORS["card"],
-            fg=COLORS["muted"],
-            font=FONT_SUBTITLE,
-        ).pack(anchor="w", padx=12, pady=(0, 6))
-        self.home_guide = scrolledtext.ScrolledText(
-            guide_card,
-            height=16,
-            font=FONT,
-            bg=COLORS["secondary"],
-            fg=COLORS["fg"],
-            relief="flat",
-            wrap="word",
-        )
-        self.home_guide.pack(fill="both", expand=True, padx=12, pady=(0, 8))
-        self.home_guide.insert("1.0", load_user_guide(self.config))
-        self.home_guide.configure(state="disabled")
-        bind_mousewheel(self.home_guide)
-        guide_actions = tk.Frame(guide_card, bg=COLORS["card"])
-        guide_actions.pack(fill="x", padx=12, pady=(0, 12))
-        secondary_button(
-            guide_actions,
-            "Open guide in Explorer",
-            self._on_open_user_guide,
-            tooltip="Open the user guide folder in Windows File Explorer.",
-        )
-        secondary_button(
-            guide_actions,
-            "Run setup wizard",
-            self._on_reset_onboarding,
-            tooltip="Walk through first-time setup again. Your linked projects stay as they are.",
-        )
-
+        self._build_home_guide_card(body)
         self._build_agent_prompt_templates_card(body)
 
         stats = card(body)
@@ -3302,21 +3267,186 @@ class HivePlannerApp:
         if hasattr(self, "home_log"):
             self._emit_home_log(f"Opened in Explorer: {result.get('path')}")
 
-    def _build_agent_prompt_templates_card(self, parent: tk.Frame) -> None:
-        templates = default_agent_prompt_templates()
-        prompt_card = card(parent)
-        card_title(prompt_card, "Agent prompt templates")
+    def _toggle_home_guide(self) -> None:
+        self._home_guide_expanded = not self._home_guide_expanded
+        if self._home_guide_expanded:
+            self._home_guide_body.pack(fill="x", padx=0, pady=0)
+            self._home_guide_toggle_btn.configure(text="▼")
+            self._home_guide_summary.configure(
+                text="Plain-English guide — what this tool is and how to use it. Scroll to read.",
+            )
+        else:
+            self._home_guide_body.pack_forget()
+            self._home_guide_toggle_btn.configure(text="▶")
+            self._home_guide_summary.configure(
+                text="Collapsed — expand to read the Hive Planner guide.",
+            )
+
+    def _build_home_guide_card(self, parent: tk.Frame) -> None:
+        guide_card = card(parent)
+        header = tk.Frame(guide_card, bg=COLORS["card"])
+        header.pack(fill="x", padx=12, pady=(12, 6))
+
+        self._home_guide_toggle_btn = tk.Button(
+            header,
+            text="▼" if self._home_guide_expanded else "▶",
+            command=self._toggle_home_guide,
+            font=FONT,
+            bg=COLORS["secondary"],
+            fg=COLORS["fg"],
+            activebackground=COLORS["border"],
+            relief="flat",
+            padx=8,
+            pady=2,
+            cursor="hand2",
+            width=2,
+        )
+        self._home_guide_toggle_btn.pack(side="left", padx=(0, 8))
+        attach_hover_tooltip(
+            self._home_guide_toggle_btn,
+            "Expand or collapse the Hive Planner guide.",
+        )
+
+        title_block = tk.Frame(header, bg=COLORS["card"])
+        title_block.pack(side="left", fill="x", expand=True)
         tk.Label(
-            prompt_card,
-            text="Copy-paste prompts into Cursor so agents use Rosetta, specs, sources, and cartridges correctly.",
-            wraplength=760,
+            title_block,
+            text="How to use Hive Planner",
+            font=FONT_BOLD,
+            bg=COLORS["card"],
+            fg=COLORS["fg"],
+            anchor="w",
+        ).pack(fill="x")
+        self._home_guide_summary = tk.Label(
+            title_block,
+            text=(
+                "Plain-English guide — what this tool is and how to use it. Scroll to read."
+                if self._home_guide_expanded
+                else "Collapsed — expand to read the Hive Planner guide."
+            ),
+            wraplength=700,
             justify="left",
             bg=COLORS["card"],
             fg=COLORS["muted"],
             font=FONT_SUBTITLE,
-        ).pack(anchor="w", padx=12, pady=(0, 6))
+            anchor="w",
+        )
+        self._home_guide_summary.pack(fill="x", pady=(2, 0))
 
-        picker_row = tk.Frame(prompt_card, bg=COLORS["card"])
+        self._home_guide_body = tk.Frame(guide_card, bg=COLORS["card"])
+        if self._home_guide_expanded:
+            self._home_guide_body.pack(fill="x")
+
+        self.home_guide = scrolledtext.ScrolledText(
+            self._home_guide_body,
+            height=12,
+            font=FONT,
+            bg=COLORS["secondary"],
+            fg=COLORS["fg"],
+            relief="flat",
+            wrap="word",
+        )
+        self.home_guide.pack(fill="both", expand=True, padx=12, pady=(0, 8))
+        self.home_guide.insert("1.0", load_user_guide(self.config))
+        self.home_guide.configure(state="disabled")
+        bind_mousewheel(self.home_guide)
+
+        guide_actions = tk.Frame(self._home_guide_body, bg=COLORS["card"])
+        guide_actions.pack(fill="x", padx=12, pady=(0, 12))
+        secondary_button(
+            guide_actions,
+            "Open guide in Explorer",
+            self._on_open_user_guide,
+            tooltip="Open the user guide folder in Windows File Explorer.",
+        )
+        secondary_button(
+            guide_actions,
+            "Run setup wizard",
+            self._on_reset_onboarding,
+            tooltip="Walk through first-time setup again. Your linked projects stay as they are.",
+        )
+
+    def _toggle_agent_prompt_templates(self) -> None:
+        self._agent_prompt_expanded = not self._agent_prompt_expanded
+        if self._agent_prompt_expanded:
+            self._agent_prompt_body.pack(fill="x", padx=0, pady=0)
+            self._agent_prompt_toggle_btn.configure(text="▼")
+            self._agent_prompt_summary.configure(
+                text="Copy-paste prompts into Cursor — Rosetta, specs, sources, and cartridges.",
+            )
+        else:
+            self._agent_prompt_body.pack_forget()
+            self._agent_prompt_toggle_btn.configure(text="▶")
+            self._agent_prompt_summary.configure(
+                text="Collapsed — expand to browse and copy agent prompts.",
+            )
+
+    def _build_agent_prompt_templates_card(self, parent: tk.Frame) -> None:
+        templates = default_agent_prompt_templates()
+        titles = [template.title for template in templates]
+        saved_title = self._agent_prompt_saved_title
+        initial_title = (
+            saved_title
+            if saved_title in titles
+            else (titles[0] if titles else "")
+        )
+        initial_template = get_agent_prompt_template_by_title(initial_title)
+
+        prompt_card = card(parent)
+        header = tk.Frame(prompt_card, bg=COLORS["card"])
+        header.pack(fill="x", padx=12, pady=(12, 6))
+
+        self._agent_prompt_toggle_btn = tk.Button(
+            header,
+            text="▼" if self._agent_prompt_expanded else "▶",
+            command=self._toggle_agent_prompt_templates,
+            font=FONT,
+            bg=COLORS["secondary"],
+            fg=COLORS["fg"],
+            activebackground=COLORS["border"],
+            relief="flat",
+            padx=8,
+            pady=2,
+            cursor="hand2",
+            width=2,
+        )
+        self._agent_prompt_toggle_btn.pack(side="left", padx=(0, 8))
+        attach_hover_tooltip(
+            self._agent_prompt_toggle_btn,
+            "Expand or collapse agent prompt templates.",
+        )
+
+        title_block = tk.Frame(header, bg=COLORS["card"])
+        title_block.pack(side="left", fill="x", expand=True)
+        tk.Label(
+            title_block,
+            text="Agent prompt templates",
+            font=FONT_BOLD,
+            bg=COLORS["card"],
+            fg=COLORS["fg"],
+            anchor="w",
+        ).pack(fill="x")
+        self._agent_prompt_summary = tk.Label(
+            title_block,
+            text=(
+                "Copy-paste prompts into Cursor — Rosetta, specs, sources, and cartridges."
+                if self._agent_prompt_expanded
+                else "Collapsed — expand to browse and copy agent prompts."
+            ),
+            wraplength=700,
+            justify="left",
+            bg=COLORS["card"],
+            fg=COLORS["muted"],
+            font=FONT_SUBTITLE,
+            anchor="w",
+        )
+        self._agent_prompt_summary.pack(fill="x", pady=(2, 0))
+
+        self._agent_prompt_body = tk.Frame(prompt_card, bg=COLORS["card"])
+        if self._agent_prompt_expanded:
+            self._agent_prompt_body.pack(fill="x")
+
+        picker_row = tk.Frame(self._agent_prompt_body, bg=COLORS["card"])
         picker_row.pack(fill="x", padx=12, pady=(0, 6))
         tk.Label(
             picker_row,
@@ -3325,8 +3455,7 @@ class HivePlannerApp:
             fg=COLORS["fg"],
             font=FONT,
         ).pack(side="left", padx=(0, 8))
-        titles = [template.title for template in templates]
-        self._agent_prompt_var = tk.StringVar(value=titles[0] if titles else "")
+        self._agent_prompt_var = tk.StringVar(value=initial_title)
         self._agent_prompt_combo = ttk.Combobox(
             picker_row,
             textvariable=self._agent_prompt_var,
@@ -3341,8 +3470,8 @@ class HivePlannerApp:
         )
 
         self._agent_prompt_desc = tk.Label(
-            prompt_card,
-            text=templates[0].description if templates else "",
+            self._agent_prompt_body,
+            text=initial_template.description if initial_template else "",
             wraplength=760,
             justify="left",
             bg=COLORS["card"],
@@ -3352,8 +3481,8 @@ class HivePlannerApp:
         self._agent_prompt_desc.pack(anchor="w", padx=12, pady=(0, 6))
 
         self._agent_prompt_preview = scrolledtext.ScrolledText(
-            prompt_card,
-            height=10,
+            self._agent_prompt_body,
+            height=7,
             font=("Consolas", 9),
             bg=COLORS["secondary"],
             fg=COLORS["fg"],
@@ -3363,7 +3492,7 @@ class HivePlannerApp:
         self._agent_prompt_preview.pack(fill="both", expand=True, padx=12, pady=(0, 8))
         bind_mousewheel(self._agent_prompt_preview)
 
-        prompt_actions = tk.Frame(prompt_card, bg=COLORS["card"])
+        prompt_actions = tk.Frame(self._agent_prompt_body, bg=COLORS["card"])
         prompt_actions.pack(fill="x", padx=12, pady=(0, 12))
         primary_button(
             prompt_actions,
@@ -3378,8 +3507,8 @@ class HivePlannerApp:
             tooltip="Copy every template as markdown for docs or sharing.",
         )
 
-        if templates:
-            self._show_agent_prompt_template(templates[0])
+        if initial_template:
+            self._show_agent_prompt_template(initial_template)
         self._agent_prompt_combo.bind("<<ComboboxSelected>>", self._on_agent_prompt_selected)
 
     def _agent_prompt_template_by_title(self, title: str):
@@ -3400,6 +3529,7 @@ class HivePlannerApp:
 
     def _on_agent_prompt_selected(self, _event=None) -> None:
         title = self._agent_prompt_var.get()
+        self._agent_prompt_saved_title = title
         self._show_agent_prompt_template(self._agent_prompt_template_by_title(title))
 
     def _copy_text_to_clipboard(self, text: str) -> None:

@@ -1624,6 +1624,82 @@ def test_get_agent_prompt_template_by_title_rejects_unknown() -> None:
     assert get_agent_prompt_template_by_title("Not a real template") is None
 
 
+def test_agent_prompt_templates_collapsed_by_default() -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app._agent_prompt_expanded = False
+    app._agent_prompt_saved_title = None
+    assert app._agent_prompt_expanded is False
+    assert app._agent_prompt_saved_title is None
+
+
+def test_toggle_agent_prompt_templates_expands_and_collapses_body() -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app._agent_prompt_expanded = False
+    app._agent_prompt_body = type("Body", (), {"pack": lambda *a, **k: None, "pack_forget": lambda: None})()
+    packed: list[str] = []
+    forgotten: list[bool] = []
+
+    def pack(*_args, **_kwargs) -> None:
+        packed.append("pack")
+
+    def pack_forget() -> None:
+        forgotten.append(True)
+
+    app._agent_prompt_body.pack = pack  # type: ignore[method-assign]
+    app._agent_prompt_body.pack_forget = pack_forget  # type: ignore[method-assign]
+    app._agent_prompt_toggle_btn = type("Btn", (), {"configure": lambda self, **k: None})()
+    app._agent_prompt_summary = type("Lbl", (), {"configure": lambda self, **k: None})()
+
+    app._toggle_agent_prompt_templates()
+    assert app._agent_prompt_expanded is True
+    assert packed == ["pack"]
+
+    app._toggle_agent_prompt_templates()
+    assert app._agent_prompt_expanded is False
+    assert forgotten == [True]
+
+
+def test_home_guide_collapsed_by_default() -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app._home_guide_expanded = False
+    assert app._home_guide_expanded is False
+
+
+def test_toggle_home_guide_expands_and_collapses_body() -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app._home_guide_expanded = False
+    app._home_guide_body = type("Body", (), {"pack": lambda *a, **k: None, "pack_forget": lambda: None})()
+    packed: list[str] = []
+    forgotten: list[bool] = []
+
+    def pack(*_args, **_kwargs) -> None:
+        packed.append("pack")
+
+    def pack_forget() -> None:
+        forgotten.append(True)
+
+    app._home_guide_body.pack = pack  # type: ignore[method-assign]
+    app._home_guide_body.pack_forget = pack_forget  # type: ignore[method-assign]
+    app._home_guide_toggle_btn = type("Btn", (), {"configure": lambda self, **k: None})()
+    app._home_guide_summary = type("Lbl", (), {"configure": lambda self, **k: None})()
+
+    app._toggle_home_guide()
+    assert app._home_guide_expanded is True
+    assert packed == ["pack"]
+
+    app._toggle_home_guide()
+    assert app._home_guide_expanded is False
+    assert forgotten == [True]
+
+
 def test_load_user_guide_fallback_mentions_agent_prompt_templates(tmp_path: Path) -> None:
     from hive_planner.launcher.user_guide import load_user_guide
 
