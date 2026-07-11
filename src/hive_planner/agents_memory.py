@@ -320,9 +320,23 @@ def _apply_section_tag(bullet: str, section_tag: str | None) -> str:
     return bullet
 
 
-def _parse_candidates_lines(text: str, *, respect_fences: bool = True) -> list[str]:
+def _active_section_tag(text: str) -> str | None:
+    tag: str | None = None
+    for line in text.splitlines():
+        section = _parse_section_header(line.strip())
+        if section:
+            tag = section
+    return tag
+
+
+def _parse_candidates_lines(
+    text: str,
+    *,
+    respect_fences: bool = True,
+    initial_tag: str | None = None,
+) -> list[str]:
     candidates: list[str] = []
-    current_tag: str | None = None
+    current_tag: str | None = initial_tag
     in_fence = False
     for line in text.splitlines():
         stripped = line.strip()
@@ -362,11 +376,13 @@ def _parse_candidates(text: str) -> list[str]:
         split_at = fence_lines[-1]
         before = "\n".join(lines[:split_at])
         after = "\n".join(lines[split_at + 1 :])
+        after_tag = _active_section_tag(before)
         merged: list[str] = []
         seen: set[str] = set()
         for item in _parse_candidates_lines(before, respect_fences=True) + _parse_candidates_lines(
             after,
             respect_fences=False,
+            initial_tag=after_tag,
         ):
             if item in seen:
                 continue
@@ -722,16 +738,48 @@ def _strip_inline_tag(bullet: str) -> tuple[str, str | None]:
 
 
 def normalize_candidates_text(text: str) -> str:
+    lines = text.splitlines()
+    fence_lines = [idx for idx, line in enumerate(lines) if line.strip().startswith("```")]
+    if len(fence_lines) % 2 == 1:
+        split_at = fence_lines[-1]
+        before = "\n".join(lines[:split_at])
+        after = "\n".join(lines[split_at + 1 :])
+        before_out = _normalize_candidates_body(before, respect_fences=True)
+        after_out = _normalize_candidates_body(
+            after,
+            respect_fences=False,
+            initial_tag=_active_section_tag(before) or "# operational",
+        )
+        lines_out = before_out
+        if before_out and after_out:
+            lines_out = before_out + [""] + after_out
+        elif after_out:
+            lines_out = after_out
+        if not lines_out:
+            raise AgentsMemoryError("No candidate bullets found after normalization")
+        return "\n".join(lines_out).strip() + "\n"
+    lines_out = _normalize_candidates_body(text, respect_fences=True)
+    if not lines_out:
+        raise AgentsMemoryError("No candidate bullets found after normalization")
+    return "\n".join(lines_out).strip() + "\n"
+
+
+def _normalize_candidates_body(
+    text: str,
+    *,
+    respect_fences: bool = True,
+    initial_tag: str = "# operational",
+) -> list[str]:
     lines_out: list[str] = []
-    current_tag = "# operational"
+    current_tag = initial_tag
     in_fence = False
 
     for line in text.splitlines():
         stripped = line.strip()
-        if stripped.startswith("```"):
+        if respect_fences and stripped.startswith("```"):
             in_fence = not in_fence
             continue
-        if in_fence:
+        if respect_fences and in_fence:
             continue
         if not stripped:
             continue
@@ -774,9 +822,7 @@ def normalize_candidates_text(text: str) -> str:
         _append_tagged_section(lines_out, current_tag)
         lines_out.append(f"- {bullet}")
 
-    if not lines_out:
-        raise AgentsMemoryError("No candidate bullets found after normalization")
-    return "\n".join(lines_out).strip() + "\n"
+    return lines_out
 
 
 def ingest_agents_candidates(

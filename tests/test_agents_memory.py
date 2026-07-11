@@ -466,9 +466,38 @@ def test_parse_candidates_recovers_after_unclosed_code_fence() -> None:
     parsed = _parse_candidates(text)
     assert parsed == [
         "First valid candidate. # operational",
-        "Example inside fence only",
-        "Second valid candidate after missing closing fence.",
+        "Example inside fence only # operational",
+        "Second valid candidate after missing closing fence. # operational",
     ]
+
+
+def test_parse_candidates_honors_behavioral_section_before_unclosed_fence() -> None:
+    from hive_planner.agents_memory import _evaluate_candidates, _parse_candidates, parse_sections
+
+    text = "# behavioral\n```markdown\n- The landing page shows a welcome banner.\n"
+    raw = _parse_candidates(text)
+    assert raw == ["The landing page shows a welcome banner. # behavioral"]
+    sections = parse_sections(_minimal_agents())
+    accepted, rejected, _ = _evaluate_candidates(sections, raw)
+    assert not accepted
+    assert rejected
+    assert "spec.md" in rejected[0][1]
+
+
+def test_ingest_recovers_unclosed_code_fence(tmp_path: Path) -> None:
+    from hive_planner.agents_memory import ingest_agents_candidates
+
+    paths = RepoPaths(root=tmp_path)
+    source = paths.root / "export.md"
+    source.write_text(
+        "```markdown\n"
+        "- Candidate inside unclosed opening fence.\n",
+        encoding="utf-8",
+    )
+
+    out = ingest_agents_candidates(paths, source)
+    text = out.read_text(encoding="utf-8")
+    assert "Candidate inside unclosed opening fence." in text
 
 
 def test_ingest_ignores_bullets_inside_code_fences(tmp_path: Path) -> None:
