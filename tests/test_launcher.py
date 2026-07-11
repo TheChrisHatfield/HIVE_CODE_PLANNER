@@ -2021,6 +2021,34 @@ def test_agents_apply_done_refreshes_dashboard_on_failure(monkeypatch: pytest.Mo
     assert refreshed == [True]
 
 
+def test_open_project_file_falls_back_to_folder_when_no_association(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import hive_planner.launcher.app as app_module
+    from hive_planner.launcher.app import HivePlannerApp
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.root = None
+    proposal = tmp_path / "docs" / "proposals" / "agents-memory-1.md"
+    proposal.parent.mkdir(parents=True)
+    proposal.write_text("# proposal\n", encoding="utf-8")
+
+    opened_folders: list[Path] = []
+    monkeypatch.setattr(app_module.sys, "platform", "win32")
+
+    def boom(_target: object) -> None:
+        raise OSError("no association")
+
+    monkeypatch.setattr(app_module.os, "startfile", boom, raising=False)
+    monkeypatch.setattr(
+        app_module, "open_path_in_explorer", lambda p: opened_folders.append(Path(p))
+    )
+    monkeypatch.setattr(app_module.messagebox, "showinfo", lambda *a, **k: None)
+
+    app._open_project_file(tmp_path, "docs/proposals/agents-memory-1.md")
+    assert opened_folders == [proposal.parent.resolve()]
+
+
 def test_format_memory_proposal_preview_includes_before_after_and_rejected() -> None:
     from hive_planner.launcher.app import HivePlannerApp
 

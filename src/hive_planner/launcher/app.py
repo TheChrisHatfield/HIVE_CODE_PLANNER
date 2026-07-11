@@ -1754,9 +1754,19 @@ class HivePlannerApp:
             messagebox.showwarning("File not found", f"Could not find:\n{target}", parent=self.root)
             return
         if sys.platform == "win32":
-            os.startfile(target)  # noqa: S606
-        else:
-            open_path_in_explorer(target)
+            try:
+                os.startfile(target)  # noqa: S606
+                return
+            except OSError:
+                open_path_in_explorer(target.parent)
+                messagebox.showinfo(
+                    "Open proposal file",
+                    "No app is associated with .md files, so the containing folder was opened instead:\n"
+                    f"{target.parent}",
+                    parent=self.root,
+                )
+                return
+        open_path_in_explorer(target)
 
     def _format_memory_proposal_preview(self, result: dict) -> str:
         lines: list[str] = []
