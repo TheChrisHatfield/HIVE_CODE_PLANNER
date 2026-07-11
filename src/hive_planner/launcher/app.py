@@ -2096,7 +2096,7 @@ class HivePlannerApp:
             self._queue_home_log(self._result_detail(result))
             for hint in result.get("hints", []):
                 self._queue_home_log(f"Tip: {hint}")
-            root = self._active_linked_root()
+            root = self._resolve_memory_work_root()
             if root and result.get("proposal_path"):
                 if result.get("accepted"):
                     self._show_memory_proposal_preview(result, root=root, allow_apply=False)

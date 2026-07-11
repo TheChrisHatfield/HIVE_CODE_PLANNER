@@ -2198,6 +2198,45 @@ def test_agents_apply_done_shows_rejection_preview_on_failure(monkeypatch: pytes
     assert previewed == [True]
 
 
+def test_agents_apply_done_uses_pending_memory_work_root(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+    from hive_planner.launcher.config import LauncherConfig, normalize_project_path
+
+    folder = tmp_path / "app"
+    folder.mkdir()
+    workspace = tmp_path / "app.code-workspace"
+    workspace.write_text('{"folders":[{"path":"app"}]}\n', encoding="utf-8")
+    candidates = folder / "docs" / "proposals" / "candidates.md"
+    candidates.parent.mkdir(parents=True)
+    candidates.write_text("- x\n", encoding="utf-8")
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.root = None
+    app._pending_home_log = []
+    app._refresh_home_dashboard = lambda: None  # type: ignore[method-assign]
+    app.config = LauncherConfig(active_project=str(workspace))
+    app._set_pending_memory_candidates(folder, candidates)
+    app._active_linked_root = lambda: None  # type: ignore[method-assign]
+    captured: list[Path] = []
+    monkeypatch.setattr(
+        app,
+        "_show_memory_rejection_preview",
+        lambda result, *, root: captured.append(root),
+    )
+
+    app._agents_apply_done(
+        {
+            "ok": False,
+            "error": "All candidate bullets were rejected by validation",
+            "proposal_path": "docs/proposals/agents-memory-1.md",
+            "rejected": [{"candidate": "bad", "reason": "behavioral"}],
+        }
+    )
+
+    assert captured == [folder.resolve()]
+    assert app._pending_memory_link == normalize_project_path(workspace)
+
+
 def test_agents_propose_done_prompts_apply_without_name_error(monkeypatch: pytest.MonkeyPatch) -> None:
     from hive_planner.launcher.app import HivePlannerApp
 
