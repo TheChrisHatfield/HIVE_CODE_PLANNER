@@ -195,6 +195,19 @@ def test_discover_source4s_files_in_folder_skips_unreadable_subdirs(
     assert [path.name for path in found] == ["keep.txt"]
 
 
+def test_source4s_selection_error_for_empty_folder_path(tmp_path: Path) -> None:
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    assert source4s_selection_error([empty]) == "No .txt or .pdf files found in the selected folder(s)."
+
+
+def test_source4s_selection_error_none_when_folder_has_supported_files(tmp_path: Path) -> None:
+    folder = tmp_path / "refs"
+    folder.mkdir()
+    (folder / "brief.txt").write_text("hello", encoding="utf-8")
+    assert source4s_selection_error([folder]) is None
+
+
 def test_source4s_needs_pdf_support_when_folder_argument_contains_pdf(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     paths.ensure_dirs()

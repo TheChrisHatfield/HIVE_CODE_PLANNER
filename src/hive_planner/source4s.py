@@ -100,10 +100,17 @@ def source4s_selection_error(source_files: list[Path]) -> str | None:
     ]
     if supported:
         return None
-    missing = [path for path in source_files if not path.is_file()]
+    dirs = [path for path in source_files if path.is_dir()]
+    missing = [path for path in source_files if not path.is_file() and not path.is_dir()]
     unsupported = [
-        path for path in source_files if path.suffix.lower() not in SOURCE4S_EXTENSIONS
+        path
+        for path in source_files
+        if path.is_file() and path.suffix.lower() not in SOURCE4S_EXTENSIONS
     ]
+    if dirs and not missing and not unsupported:
+        if any(discover_source4s_files_in_folder(path) for path in dirs):
+            return None
+        return "No .txt or .pdf files found in the selected folder(s)."
     parts: list[str] = []
     if missing:
         parts.append(f"{len(missing)} selected file(s) no longer exist")
