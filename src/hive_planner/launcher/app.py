@@ -3729,19 +3729,29 @@ class HivePlannerApp:
 
         text = build_session_start_prompt(project_name=self._rosetta_eject_project_name())
         self._copy_text_to_clipboard(text)
-        self._queue_home_log("Copied Rosetta session-start prompt to clipboard.")
+        self._emit_home_log("Copied Rosetta session-start prompt to clipboard.")
+        messagebox.showinfo(
+            "Copied",
+            "Session prompt copied — upload the contract to your planning AI, then paste this prompt.",
+            parent=self.root,
+        )
 
     def _on_copy_rosetta_contract(self) -> None:
         from hive_planner.rosetta_eject import RosettaEjectError, load_session_contract_text
 
-        root = self._active_project_root()
+        root = self._active_linked_root()
         try:
             text = load_session_contract_text(repo_root=root)
         except RosettaEjectError as exc:
-            messagebox.showerror("Rosetta eject", str(exc))
+            messagebox.showerror("Rosetta eject", str(exc), parent=self.root)
             return
         self._copy_text_to_clipboard(text)
-        self._queue_home_log("Copied Rosetta Planning Session Contract to clipboard.")
+        self._emit_home_log("Copied Rosetta Planning Session Contract to clipboard.")
+        messagebox.showinfo(
+            "Copied",
+            "Rosetta Planning Session Contract copied — upload this file to Perplexity, Gemini, ChatGPT, or Claude.",
+            parent=self.root,
+        )
 
     def _on_export_rosetta_cartridge(self) -> None:
         from hive_planner.rosetta_eject import RosettaEjectError, eject_rosetta_cartridge
