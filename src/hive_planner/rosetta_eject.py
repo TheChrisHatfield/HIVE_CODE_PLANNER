@@ -57,14 +57,23 @@ def _packaged_contract_path() -> Path:
     return Path(__file__).resolve().parent / "bootstrap_templates" / CONTRACT_FILENAME
 
 
+def _contract_file_usable(path: Path) -> bool:
+    if not path.is_file():
+        return False
+    try:
+        return bool(path.read_text(encoding="utf-8").strip())
+    except OSError:
+        return False
+
+
 def resolve_session_contract_path(repo_root: Path | None = None) -> Path | None:
     """Prefer non-empty repo docs copy; fall back to packaged bootstrap template."""
     if repo_root is not None:
         repo_contract = repo_root / "docs" / CONTRACT_FILENAME
-        if repo_contract.is_file() and repo_contract.stat().st_size > 0:
+        if _contract_file_usable(repo_contract):
             return repo_contract
     packaged = _packaged_contract_path()
-    if packaged.is_file() and packaged.stat().st_size > 0:
+    if _contract_file_usable(packaged):
         return packaged
     return None
 

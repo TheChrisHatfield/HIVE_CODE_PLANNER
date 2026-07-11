@@ -42,6 +42,18 @@ def test_resolve_session_contract_skips_empty_repo_docs(tmp_path: Path) -> None:
     assert resolved.read_text(encoding="utf-8").strip()
 
 
+def test_resolve_session_contract_skips_whitespace_only_repo_docs(tmp_path: Path) -> None:
+    root = tmp_path / "proj"
+    docs = root / "docs"
+    docs.mkdir(parents=True)
+    (docs / CONTRACT_FILENAME).write_text("   \n\t  ", encoding="utf-8")
+
+    resolved = resolve_session_contract_path(root)
+    assert resolved is not None
+    assert "bootstrap_templates" in resolved.as_posix()
+    assert "Planning Rosetta Stone" in resolved.read_text(encoding="utf-8")
+
+
 def test_resolve_session_contract_falls_back_to_packaged() -> None:
     resolved = resolve_session_contract_path(None)
     assert resolved is not None
