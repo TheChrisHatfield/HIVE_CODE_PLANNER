@@ -1786,11 +1786,11 @@ class HivePlannerApp:
         self._queue_home_log(f"Wrote proposal: {result.get('proposal_path')}")
         accepted = result.get("accepted") or []
         rejected = result.get("rejected") or []
-        if accepted:
-            self._queue_home_log(f"Accepted {len(accepted)} candidate(s).")
         if rejected:
             self._queue_home_log(f"Rejected {len(rejected)} candidate(s) — see proposal file.")
         if result.get("applied"):
+            if accepted:
+                self._queue_home_log(f"Accepted {len(accepted)} candidate(s).")
             self._queue_home_log("Applied to AGENTS.md.")
             for item in result.get("routing") or []:
                 arm = item.get("arm")
@@ -1804,6 +1804,7 @@ class HivePlannerApp:
         candidates = self._memory_work_candidates()
         if accepted and root and candidates:
             # Autonomous path: apply without modal preview (CLI/CL parity).
+            # Defer accepted-count logging until apply_done confirms outcome.
             self._start_home_action(f"Running agents-apply on {candidates.name}…")
             generation = getattr(self, "_bg_generation", 0)
             self._run_bg(
@@ -1813,6 +1814,8 @@ class HivePlannerApp:
                 self._agents_apply_done,
             )
             return
+        if accepted:
+            self._queue_home_log(f"Accepted {len(accepted)} candidate(s).")
         self._refresh_home_dashboard()
 
     def _run_memory_apply_if_current(
@@ -2138,13 +2141,13 @@ class HivePlannerApp:
         self._queue_home_log(f"Proposal: {result.get('proposal_path')}")
         accepted = result.get("accepted") or []
         rejected = result.get("rejected") or []
-        if accepted:
-            self._queue_home_log(f"Applied {len(accepted)} bullet(s) to AGENTS.md.")
         if rejected:
             self._queue_home_log(f"Rejected {len(rejected)} candidate(s) — see proposal file.")
         if result.get("noop"):
             self._queue_home_log("AGENTS.md unchanged — accepted bullets already present.")
         elif result.get("applied"):
+            if accepted:
+                self._queue_home_log(f"Accepted {len(accepted)} candidate(s).")
             self._queue_home_log("AGENTS.md updated.")
             for item in result.get("routing") or []:
                 arm = item.get("arm")

@@ -2507,6 +2507,59 @@ def test_agents_propose_done_logs_routing_when_already_applied() -> None:
     assert any("route/split" in line for line in app._pending_home_log)
 
 
+def test_deliver_memory_propose_defers_accepted_log_until_apply() -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.root = None
+    app._bg_generation = 0
+    app._pending_home_log = []
+    app._refresh_home_dashboard = lambda: None  # type: ignore[method-assign]
+    app._start_home_action = lambda _msg: None  # type: ignore[method-assign]
+    app._run_bg = lambda fn, done: None  # type: ignore[method-assign]
+    project = Path("C:/proj")
+    app.config = type("Cfg", (), {"active_project": "C:/proj"})()
+    app._active_linked_root = lambda: project
+    app._set_pending_memory_candidates(project, Path("C:/proj/docs/proposals/candidates.md"))
+
+    app._deliver_memory_propose_result(
+        {
+            "ok": True,
+            "proposal_path": "docs/proposals/agents-memory-1.md",
+            "accepted": ["Keep logs concise."],
+            "rejected": [],
+            "applied": False,
+        }
+    )
+
+    assert not any("Accepted 1 candidate" in line for line in app._pending_home_log)
+    assert any("Wrote proposal" in line for line in app._pending_home_log)
+
+
+def test_agents_apply_done_logs_accepted_count_on_apply() -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.root = None
+    app._pending_home_log = []
+    app._refresh_home_dashboard = lambda: None  # type: ignore[method-assign]
+    app._clear_memory_work_context = lambda: None  # type: ignore[method-assign]
+
+    app._agents_apply_done(
+        {
+            "ok": True,
+            "proposal_path": "docs/proposals/agents-memory-1.md",
+            "accepted": ["Keep logs concise."],
+            "rejected": [],
+            "applied": True,
+            "routing": [{"arm": "split", "reason": "Auto-split into 2 bullet(s)"}],
+        }
+    )
+
+    assert any("Accepted 1 candidate" in line for line in app._pending_home_log)
+    assert any("AGENTS.md updated" in line for line in app._pending_home_log)
+
+
 def test_agents_apply_done_logs_noop_when_already_applied() -> None:
     from hive_planner.launcher.app import HivePlannerApp
 
