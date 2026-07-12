@@ -1233,6 +1233,56 @@ def run_agents_memory_propose(project_root: Path, candidates_path: Path, *, appl
     }
 
 
+def run_agents_memory_finalize_apply(project_root: Path, prior: dict) -> dict:
+    """Apply accepted bullets from a prior propose result without re-routing candidates."""
+    from hive_planner.agents_memory import AgentsMemoryError, apply_agents_memory_accepted
+
+    summary = summarize_project(project_root)
+    if not summary.ok:
+        return {"ok": False, "error": summary.detail, "detail": summary.detail}
+    paths = RepoPaths(root=project_root.resolve())
+    accepted = prior.get("accepted") or []
+    if not accepted:
+        return {"ok": False, "error": "No accepted bullets in prior propose result"}
+    rejected = [
+        (item["candidate"], item["reason"])
+        for item in prior.get("rejected") or []
+        if isinstance(item, dict) and "candidate" in item and "reason" in item
+    ]
+    try:
+        result = apply_agents_memory_accepted(
+            paths,
+            accepted=accepted,
+            rejected=rejected,
+            spec_actions=prior.get("spec_actions") or [],
+            routing=prior.get("routing") or [],
+            current_facts=prior.get("current_facts"),
+            after_section=prior.get("after_section"),
+        )
+    except AgentsMemoryError as exc:
+        msg = str(exc)
+        payload: dict = {"ok": False, "error": msg}
+        if exc.proposal_path:
+            payload["proposal_path"] = exc.proposal_path
+            payload["rejected"] = exc.rejected
+            payload["spec_actions"] = exc.spec_actions
+            payload["current_facts"] = exc.current_facts
+            payload["after_section"] = exc.after_section or exc.current_facts
+            payload["accepted"] = exc.accepted
+        return payload
+    return {
+        "ok": True,
+        "applied": result.applied,
+        "proposal_path": result.proposal_path.relative_to(paths.root).as_posix(),
+        "accepted": result.accepted,
+        "rejected": [{"candidate": c, "reason": r} for c, r in result.rejected],
+        "current_facts": result.current_facts,
+        "after_section": result.after_section,
+        "spec_actions": result.spec_actions,
+        "routing": result.routing,
+    }
+
+
 def run_agents_memory_apply(project_root: Path, candidates_path: Path) -> dict:
     """Apply accepted CL candidates to AGENTS.md (agents-apply)."""
     return run_agents_memory_propose(project_root, candidates_path, apply=True)

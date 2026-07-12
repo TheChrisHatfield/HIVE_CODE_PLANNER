@@ -844,6 +844,95 @@ def run_agents_memory(
     )
 
 
+def apply_agents_memory_accepted(
+    paths: RepoPaths,
+    *,
+    accepted: list[str],
+    rejected: list[tuple[str, str]] | None = None,
+    spec_actions: list[str] | None = None,
+    routing: list[dict] | None = None,
+    current_facts: str | None = None,
+    after_section: str | None = None,
+    agents_path: Path | None = None,
+    skip_wiring_audit: bool = True,
+) -> AgentsMemoryResult:
+    """Apply a prior propose result without re-evaluating candidates (Thompson-safe)."""
+    from hive_planner.wiring_audit import WiringAuditError, require_wiring_audit_for_memory
+
+    if not accepted:
+        raise AgentsMemoryError("No accepted bullets to apply")
+
+    try:
+        require_wiring_audit_for_memory(paths, skip=skip_wiring_audit)
+    except WiringAuditError as exc:
+        raise AgentsMemoryError(str(exc)) from exc
+
+    target = _resolve_agents_path(paths, agents_path)
+    agents_text = target.read_text(encoding="utf-8", errors="replace")
+    sections = parse_sections(agents_text)
+    current_key = _match_section(sections, EDITABLE_SECTION)
+    facts = current_facts if current_facts is not None else (
+        sections.get(current_key, "").strip() if current_key else ""
+    )
+    proposed_bullets = "\n".join(f"- {c}" for c in accepted)
+    after = after_section if after_section is not None else (
+        f"{facts}\n{proposed_bullets}".strip() if facts else proposed_bullets
+    )
+    rejections = list(rejected or [])
+    actions = list(spec_actions or [])
+    routes = list(routing or [])
+
+    updated = _apply_accepted_bullets(agents_text, accepted)
+    target.write_text(updated, encoding="utf-8")
+    lint = lint_agents_md(paths, agents_path=target)
+    if not lint.ok:
+        target.write_text(agents_text, encoding="utf-8")
+        errors = [i.message for i in lint.issues if i.severity == "error"]
+        rollback_proposal = _write_proposal(
+            paths,
+            target=target,
+            current_facts=facts,
+            after_section=after,
+            proposed_bullets=proposed_bullets,
+            accepted=accepted,
+            rejected=rejections,
+            spec_actions=actions,
+            applied=False,
+        )
+        rel = rollback_proposal.relative_to(paths.root).as_posix()
+        raise AgentsMemoryError(
+            f"Apply rolled back — AGENTS.md lint failed: {'; '.join(errors)}",
+            proposal_path=rel,
+            rejected=[{"candidate": c, "reason": r} for c, r in rejections],
+            spec_actions=actions,
+            current_facts=facts,
+            accepted=accepted,
+            after_section=after,
+        )
+
+    out_path = _write_proposal(
+        paths,
+        target=target,
+        current_facts=facts,
+        after_section=after,
+        proposed_bullets=proposed_bullets,
+        accepted=accepted,
+        rejected=rejections,
+        spec_actions=actions,
+        applied=True,
+    )
+    return AgentsMemoryResult(
+        proposal_path=out_path,
+        applied=True,
+        accepted=accepted,
+        rejected=rejections,
+        current_facts=facts,
+        after_section=after,
+        spec_actions=actions,
+        routing=routes,
+    )
+
+
 def _append_tagged_section(lines_out: list[str], tag: str) -> None:
     if lines_out and lines_out[-1] == tag:
         return

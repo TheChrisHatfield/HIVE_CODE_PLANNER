@@ -35,6 +35,7 @@ from hive_planner.launcher.service import (
     find_staged_candidates,
     memory_candidates_picker_dir,
     run_agents_memory_apply,
+    run_agents_memory_finalize_apply,
     run_agents_memory_propose,
     run_deploy_agent_handoff,
     run_portable_bootstrap,
@@ -1806,19 +1807,30 @@ class HivePlannerApp:
             self._start_home_action(f"Running agents-apply on {candidates.name}…")
             generation = getattr(self, "_bg_generation", 0)
             self._run_bg(
-                lambda r=root, c=candidates, g=generation: self._run_memory_apply_if_current(r, c, g),
+                lambda r=root, c=candidates, g=generation, p=result: self._run_memory_apply_if_current(
+                    r, c, g, prior=p
+                ),
                 self._agents_apply_done,
             )
             return
         self._refresh_home_dashboard()
 
-    def _run_memory_apply_if_current(self, root: Path, candidates: Path, generation: int) -> dict:
+    def _run_memory_apply_if_current(
+        self,
+        root: Path,
+        candidates: Path,
+        generation: int,
+        *,
+        prior: dict | None = None,
+    ) -> dict:
         if generation != self._bg_generation:
             return {
                 "ok": False,
                 "error": "Memory apply cancelled — project or dashboard changed.",
                 "cancelled": True,
             }
+        if prior and prior.get("accepted"):
+            return run_agents_memory_finalize_apply(root, prior)
         return run_agents_memory_apply(root, candidates)
 
     def _open_project_file(self, root: Path, rel_path: str) -> None:

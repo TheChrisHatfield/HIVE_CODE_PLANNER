@@ -2350,6 +2350,33 @@ def test_run_memory_apply_if_current_cancels_on_stale_generation(tmp_path: Path)
     assert result["cancelled"] is True
 
 
+def test_run_memory_apply_if_current_uses_finalize_when_prior_has_accepted(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app._bg_generation = 0
+    candidates = tmp_path / "docs" / "proposals" / "candidates.md"
+    candidates.parent.mkdir(parents=True)
+    candidates.write_text("- x\n", encoding="utf-8")
+    prior = {"accepted": ["Keep logs concise."], "rejected": [], "routing": []}
+    calls: list[str] = []
+
+    monkeypatch.setattr(
+        "hive_planner.launcher.app.run_agents_memory_finalize_apply",
+        lambda _root, p: calls.append("finalize") or {"ok": True, "applied": True, **p},
+    )
+    monkeypatch.setattr(
+        "hive_planner.launcher.app.run_agents_memory_apply",
+        lambda *_a, **_k: calls.append("apply") or {"ok": True},
+    )
+
+    app._run_memory_apply_if_current(tmp_path, candidates, 0, prior=prior)
+
+    assert calls == ["finalize"]
+
+
 def test_deliver_memory_propose_result_clears_work_context_after_apply() -> None:
     from hive_planner.launcher.app import HivePlannerApp
 
