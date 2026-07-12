@@ -421,6 +421,11 @@ def _validate_candidate(bullet: str, existing: set[str]) -> str | None:
     return None
 
 
+def _append_spec_action(spec_actions: list[str], action: str | None) -> None:
+    if action and action not in spec_actions:
+        spec_actions.append(action)
+
+
 def _try_accept_operational(
     candidate: str,
     *,
@@ -526,8 +531,7 @@ def _evaluate_candidates(
                     stats.record(ARM_OPERATIONALIZE, success=len(accepted) > before)
                     continue
                 if decision.arm == ARM_ROUTE_SPEC:
-                    if decision.spec_action:
-                        spec_actions.append(decision.spec_action)
+                    _append_spec_action(spec_actions, decision.spec_action)
                     rejected.append((candidate, decision.reason))
                     stats.record(ARM_ROUTE_SPEC, success=False)
                     continue
@@ -547,14 +551,16 @@ def _evaluate_candidates(
                     candidate, paths=paths, feature=feature, stats=stats
                 )
                 routing.append(decision.to_dict())
-                if decision.spec_action:
-                    spec_actions.append(decision.spec_action)
+                _append_spec_action(spec_actions, decision.spec_action)
                 rejected.append((candidate, decision.reason))
             else:
                 spec_path = f"docs/specs/{feature}/spec.md" if feature else "docs/specs/<feature>/spec.md"
                 reason = f"Behavioral content belongs in Spec Kit ({spec_path}), not AGENTS.md"
                 rejected.append((candidate, reason))
-                spec_actions.append(f"Update {spec_path} before promoting behavioral bullet: {candidate[:80]}")
+                _append_spec_action(
+                    spec_actions,
+                    f"Update {spec_path} before promoting behavioral bullet: {candidate[:80]}",
+                )
             continue
         if auto_route:
             _try_accept_operational(

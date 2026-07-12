@@ -207,6 +207,27 @@ def test_ambiguous_route_spec_records_failure_not_success(
     assert stats.arm(ARM_ROUTE_SPEC).failures > 1.0
 
 
+def test_spec_actions_are_deduped_for_repeated_behavioral_candidates(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    (paths.root / "AGENTS.md").write_text(_minimal_agents(), encoding="utf-8")
+    candidates = paths.root / "candidates.md"
+    candidates.write_text(
+        "\n".join(
+            [
+                "- API must return 404 when disabled. # behavioral",
+                "- API must return 404 when disabled. # behavioral",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(AgentsMemoryError, match="All candidate"):
+        run_agents_memory(paths, candidates, skip_wiring_audit=True)
+    proposals = list((paths.root / "docs" / "proposals").glob("agents-memory-*.md"))
+    assert proposals
+    text = proposals[-1].read_text(encoding="utf-8")
+    assert text.count("Update docs/specs/feature-x/spec.md") == 1
+
+
 def test_try_accept_operational_updates_existing_set() -> None:
     from hive_planner.agents_memory import _try_accept_operational
 
