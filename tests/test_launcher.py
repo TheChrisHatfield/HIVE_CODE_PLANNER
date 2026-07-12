@@ -2479,6 +2479,36 @@ def test_agents_propose_done_logs_routing_when_already_applied() -> None:
     assert any("Applied to AGENTS.md" in line for line in app._pending_home_log)
     assert any("route/split" in line for line in app._pending_home_log)
 
+
+def test_on_agents_apply_runs_propose_with_apply_true(monkeypatch: pytest.MonkeyPatch) -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.root = None
+    app.config = type("Cfg", (), {"active_project": "C:/proj"})()
+    app._pending_memory_candidates = None
+    app._active_linked_root = lambda: Path("C:/proj")
+    app._set_pending_memory_candidates = lambda _r, _c: None  # type: ignore[method-assign]
+    app._start_home_action = lambda _msg: None  # type: ignore[method-assign]
+    captured: list[bool] = []
+
+    def fake_propose(project_root, candidates_path, *, apply=False):
+        captured.append(apply)
+        return {"ok": True, "applied": apply, "accepted": [], "rejected": []}
+
+    monkeypatch.setattr("hive_planner.launcher.app.run_agents_memory_propose", fake_propose)
+    monkeypatch.setattr(
+        "hive_planner.launcher.app.filedialog.askopenfilename",
+        lambda **_kw: "C:/proj/docs/proposals/candidates.md",
+    )
+    monkeypatch.setattr("hive_planner.launcher.app.candidates_path_in_project", lambda _r, _c: True)
+    app._run_bg = lambda fn, done: fn()  # type: ignore[method-assign]
+    app._agents_propose_done = lambda _result: None  # type: ignore[method-assign]
+
+    app._on_agents_apply()
+
+    assert captured == [True]
+
 def test_pending_memory_survives_dashboard_when_linked_via_workspace_file(tmp_path: Path) -> None:
     from hive_planner.launcher.app import HivePlannerApp
     from hive_planner.launcher.config import LauncherConfig, normalize_project_path

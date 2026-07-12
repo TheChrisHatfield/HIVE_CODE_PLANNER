@@ -2095,9 +2095,9 @@ class HivePlannerApp:
             )
             return
         self._set_pending_memory_candidates(root, candidates)
-        self._start_home_action(f"Previewing memory from {candidates.name}…")
+        self._start_home_action(f"Applying memory from {candidates.name}…")
         self._run_bg(
-            lambda r=root, c=candidates: run_agents_memory_propose(r, c, apply=False),
+            lambda r=root, c=candidates: run_agents_memory_propose(r, c, apply=True),
             self._agents_propose_done,
         )
 
