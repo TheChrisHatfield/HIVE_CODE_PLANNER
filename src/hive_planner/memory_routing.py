@@ -323,5 +323,5 @@ def route_behavioral_candidate(
         original=bullet,
         remediations=[],
         reason=reason,
-        spec_action=f"Update {spec_path} from {rel}: {bullet[:80]}",
+        spec_action=f"Update {spec_path} from {rel}: {bullet[:80]}" if wrote else None,
     )

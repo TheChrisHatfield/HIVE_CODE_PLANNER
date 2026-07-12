@@ -156,6 +156,16 @@ def test_route_behavioral_skips_stats_success_when_duplicate(tmp_path: Path) -> 
     assert stats.arm(ARM_ROUTE_SPEC).successes == 5.0
 
 
+def test_route_behavioral_omits_spec_action_when_duplicate(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    bullet = "API must return 404 when disabled. # behavioral"
+    first = route_behavioral_candidate(bullet, paths=paths, feature="feature-x")
+    assert first.spec_action
+    second = route_behavioral_candidate(bullet, paths=paths, feature="feature-x")
+    assert second.spec_action is None
+    assert "already present" in second.reason
+
+
 def test_routing_stats_roundtrip(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     stats = RoutingStats()
