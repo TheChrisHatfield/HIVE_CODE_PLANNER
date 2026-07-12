@@ -103,6 +103,29 @@ def merge_preferred_chunks(
     return merged[:limit]
 
 
+def _warn_unembedded_preferred_docs(
+    warnings: list[str],
+    *,
+    prefer_doc_ids: list[str],
+    doc_index,
+    chunk_index,
+    embed_index,
+) -> None:
+    """Warn when freshly staged sources were chunked but not embedded."""
+    vectors_lookup = embedding_lookup(embed_index)
+    for doc_id in prefer_doc_ids:
+        doc = next((d for d in doc_index.documents if d.doc_id == doc_id), None)
+        if doc is None:
+            continue
+        doc_chunks = [c for c in chunk_index.chunks if c.doc_id == doc_id]
+        if doc_chunks and not any(c.chunk_id in vectors_lookup for c in doc_chunks):
+            warnings.append(
+                f"Staged source {doc.source_path} has {len(doc_chunks)} chunk(s) but no embeddings — "
+                "turn on Improve AI search quality in Load cartridge, or run: "
+                "py -3.11 -m hive_planner ingest --embed"
+            )
+
+
 def _load_cartridge_manifest(paths: RepoPaths) -> dict:
     manifest_path = paths.cartridge / "manifest.json"
     if not manifest_path.is_file():
@@ -172,6 +195,13 @@ def emit_source_context(
             )
         ]
         selected = merge_preferred_chunks(selected, chunk_index.chunks, prefer_doc_ids)
+        _warn_unembedded_preferred_docs(
+            warnings,
+            prefer_doc_ids=prefer_doc_ids,
+            doc_index=doc_index,
+            chunk_index=chunk_index,
+            embed_index=embed_index,
+        )
     if chunk_index.chunks and terms and selected:
         if vectors:
             query_vector = embed_query(feature, model_id=embedding_model_id)
@@ -293,6 +323,7 @@ def emit_cartridge(
     *,
     force_delta: bool = False,
     emit_rules_seeds: bool = False,
+    prefer_source_paths: list[str] | None = None,
 ) -> tuple[dict[str, Path], list[str]]:
     validate_feature_id(feature)
     paths.ensure_dirs()
@@ -316,6 +347,24 @@ def emit_cartridge(
         embedding_vectors=vectors,
         embedding_model_id=embedding_model_id,
     )
+    prefer_doc_ids: list[str] = []
+    if prefer_source_paths:
+        path_order = {path: index for index, path in enumerate(prefer_source_paths)}
+        prefer_doc_ids = [
+            doc.doc_id
+            for doc in sorted(
+                (doc for doc in doc_index.documents if doc.source_path in path_order),
+                key=lambda doc: path_order[doc.source_path],
+            )
+        ]
+        selected = merge_preferred_chunks(selected, chunk_index.chunks, prefer_doc_ids)
+        _warn_unembedded_preferred_docs(
+            warnings,
+            prefer_doc_ids=prefer_doc_ids,
+            doc_index=doc_index,
+            chunk_index=chunk_index,
+            embed_index=embed_index,
+        )
     if chunk_index.chunks and terms and selected:
         if vectors:
             query_vector = embed_query(feature, model_id=embedding_model_id)
@@ -388,9 +437,19 @@ def emit_cartridge(
         "## Active documents",
     ]
     doc_ids = {c.doc_id for c in selected}
+    listed_docs: list = []
+    seen_doc_ids: set[str] = set()
+    for doc_id in prefer_doc_ids:
+        doc = next((d for d in doc_index.documents if d.doc_id == doc_id), None)
+        if doc and doc.doc_id in doc_ids and doc.doc_id not in seen_doc_ids:
+            listed_docs.append(doc)
+            seen_doc_ids.add(doc.doc_id)
     for doc in doc_index.documents:
-        if doc.doc_id in doc_ids:
-            lines.append(f"- {doc.source_path} — {doc.title}")
+        if doc.doc_id in doc_ids and doc.doc_id not in seen_doc_ids:
+            listed_docs.append(doc)
+            seen_doc_ids.add(doc.doc_id)
+    for doc in listed_docs:
+        lines.append(f"- {doc.source_path} — {doc.title}")
 
     lines.extend(["", "## Retrieved excerpts", ""])
     for chunk in selected:

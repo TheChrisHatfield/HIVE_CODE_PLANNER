@@ -785,6 +785,23 @@ def test_run_cartridge_load_sources_copies_ingests_and_emits(tmp_path: Path) -> 
     assert "mark_draft" not in result
 
 
+def test_run_cartridge_load_sources_warns_when_staged_chunks_unembedded(tmp_path: Path) -> None:
+    project = _minimal_hive_project(tmp_path / "proj")
+    source = tmp_path / "lavd-cpu-research.md"
+    source.write_text(
+        "# LAVD CPU research\n\nmlp decimacon scheduler latency model for feature retrieval.\n",
+        encoding="utf-8",
+    )
+
+    result = run_cartridge_load_sources(project, [source], "mlp-decimacon", embed=False)
+
+    assert result["ok"] is True
+    warnings = result.get("warnings") or []
+    assert any("no embeddings" in w.lower() for w in warnings)
+    context = (project / "cartridge" / "source-context.md").read_text(encoding="utf-8")
+    assert "lavd-cpu-research.md" in context
+
+
 def test_run_cartridge_load_sources_mark_draft_stamps_layers(tmp_path: Path) -> None:
     from hive_planner.translator import DRAFT_BANNER
 

@@ -1536,7 +1536,11 @@ def run_cartridge_load_sources(
 
     ingest_report = ingest(paths, embed=embed)
     try:
-        outputs, emit_warnings = emit_cartridge(paths, feature.strip())
+        outputs, emit_warnings = emit_cartridge(
+            paths,
+            feature.strip(),
+            prefer_source_paths=copied,
+        )
     except ValueError as exc:
         return {"ok": False, "error": str(exc), "copied": copied, "warnings": warnings}
 
