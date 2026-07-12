@@ -228,6 +228,36 @@ def test_spec_actions_are_deduped_for_repeated_behavioral_candidates(tmp_path: P
     assert text.count("Update docs/specs/feature-x/spec.md") == 1
 
 
+def test_run_agents_memory_apply_skips_bullets_already_in_agents(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    paths = RepoPaths(root=tmp_path)
+    (paths.root / "AGENTS.md").write_text(
+        _minimal_agents().replace(
+            "- Existing durable fact one.",
+            "- Existing durable fact one.\n- Keep logs concise.",
+        ),
+        encoding="utf-8",
+    )
+    candidates = paths.root / "candidates.md"
+    candidates.write_text("- Keep logs concise. # operational\n", encoding="utf-8")
+
+    monkeypatch.setattr(
+        "hive_planner.agents_memory._evaluate_candidates",
+        lambda *_a, **_k: (
+            ["Keep logs concise. # operational"],
+            [],
+            [],
+            [],
+        ),
+    )
+    original = (paths.root / "AGENTS.md").read_text(encoding="utf-8")
+    result = run_agents_memory(paths, candidates, apply=True, skip_wiring_audit=True)
+    assert not result.applied
+    assert result.accepted == []
+    assert (paths.root / "AGENTS.md").read_text(encoding="utf-8") == original
+
+
 def test_try_accept_operational_updates_existing_set() -> None:
     from hive_planner.agents_memory import _try_accept_operational
 

@@ -802,35 +802,43 @@ def run_agents_memory(
     after_section = f"{current_facts}\n{proposed_bullets}".strip() if current_facts else proposed_bullets
 
     applied = False
+    apply_bullets = accepted
     if apply:
-        updated = _apply_accepted_bullets(agents_text, accepted)
-        target.write_text(updated, encoding="utf-8")
-        lint = lint_agents_md(paths, agents_path=target)
-        if not lint.ok:
-            target.write_text(agents_text, encoding="utf-8")
-            errors = [i.message for i in lint.issues if i.severity == "error"]
-            rollback_proposal = _write_proposal(
-                paths,
-                target=target,
-                current_facts=current_facts,
-                after_section=after_section,
-                proposed_bullets=proposed_bullets,
-                accepted=accepted,
-                rejected=rejected,
-                spec_actions=spec_actions,
-                applied=False,
+        pending = [c for c in accepted if _normalize_bullet(c) not in _existing_durable_bullets(sections)]
+        apply_bullets = pending
+        if pending:
+            updated = _apply_accepted_bullets(agents_text, pending)
+            target.write_text(updated, encoding="utf-8")
+            lint = lint_agents_md(paths, agents_path=target)
+            if not lint.ok:
+                target.write_text(agents_text, encoding="utf-8")
+                errors = [i.message for i in lint.issues if i.severity == "error"]
+                rollback_proposal = _write_proposal(
+                    paths,
+                    target=target,
+                    current_facts=current_facts,
+                    after_section=after_section,
+                    proposed_bullets=proposed_bullets,
+                    accepted=pending,
+                    rejected=rejected,
+                    spec_actions=spec_actions,
+                    applied=False,
+                )
+                rel = rollback_proposal.relative_to(paths.root).as_posix()
+                raise AgentsMemoryError(
+                    f"Apply rolled back — AGENTS.md lint failed: {'; '.join(errors)}",
+                    proposal_path=rel,
+                    rejected=[{"candidate": c, "reason": r} for c, r in rejected],
+                    spec_actions=spec_actions,
+                    current_facts=current_facts,
+                    accepted=pending,
+                    after_section=after_section,
+                )
+            applied = True
+            proposed_bullets = "\n".join(f"- {c}" for c in pending)
+            after_section = (
+                f"{current_facts}\n{proposed_bullets}".strip() if current_facts else proposed_bullets
             )
-            rel = rollback_proposal.relative_to(paths.root).as_posix()
-            raise AgentsMemoryError(
-                f"Apply rolled back — AGENTS.md lint failed: {'; '.join(errors)}",
-                proposal_path=rel,
-                rejected=[{"candidate": c, "reason": r} for c, r in rejected],
-                spec_actions=spec_actions,
-                current_facts=current_facts,
-                accepted=accepted,
-                after_section=after_section,
-            )
-        applied = True
 
     out_path = _write_proposal(
         paths,
@@ -838,7 +846,7 @@ def run_agents_memory(
         current_facts=current_facts,
         after_section=after_section,
         proposed_bullets=proposed_bullets,
-        accepted=accepted,
+        accepted=apply_bullets if apply else accepted,
         rejected=rejected,
         spec_actions=spec_actions,
         applied=applied,
@@ -846,7 +854,7 @@ def run_agents_memory(
     return AgentsMemoryResult(
         proposal_path=out_path,
         applied=applied,
-        accepted=accepted,
+        accepted=apply_bullets if apply else accepted,
         rejected=rejected,
         current_facts=current_facts,
         after_section=after_section,
