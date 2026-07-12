@@ -228,6 +228,20 @@ def test_split_arm_records_failure_when_all_pieces_duplicate(tmp_path: Path) -> 
     assert stats.arm("split").failures > 1.0
 
 
+def test_operational_candidate_not_rejected_by_duplicate_in_other_section(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    agents = _minimal_agents().replace(
+        "## Planning Rosetta Stone",
+        "## Planning Rosetta Stone\n\n- Run ci-check before handoff.",
+    )
+    (paths.root / "AGENTS.md").write_text(agents, encoding="utf-8")
+    candidates = paths.root / "candidates.md"
+    candidates.write_text("- Run ci-check before handoff. # operational\n", encoding="utf-8")
+    result = run_agents_memory(paths, candidates, apply=True, skip_wiring_audit=True)
+    assert result.applied
+    assert any("Run ci-check before handoff" in b for b in result.accepted)
+
+
 def test_finalize_apply_enforces_wiring_audit_when_unified(tmp_path: Path) -> None:
     from hive_planner.agent_handoff import AGENT_HANDOFF_UNIFIED
     from hive_planner.agents_memory import AgentsMemoryError, apply_agents_memory_accepted

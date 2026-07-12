@@ -192,6 +192,12 @@ def _match_section(sections: dict[str, str], required: str) -> str | None:
     return None
 
 
+def _existing_durable_bullets(sections: dict[str, str]) -> set[str]:
+    key = _match_section(sections, EDITABLE_SECTION)
+    body = sections.get(key, "") if key else ""
+    return {_normalize_bullet(b) for _, b in _section_bullets(body)}
+
+
 def _parse_active_feature_from_sections(sections: dict[str, str]) -> str | None:
     from hive_planner.spec_drift import parse_feature_from_active_body
 
@@ -477,11 +483,7 @@ def _evaluate_candidates(
     )
     from hive_planner.spec_drift import classify_bullet
 
-    existing = {
-        _normalize_bullet(b)
-        for body in sections.values()
-        for _, b in _section_bullets(body)
-    }
+    existing = _existing_durable_bullets(sections)
     accepted: list[str] = []
     rejected: list[tuple[str, str]] = []
     spec_actions: list[str] = []
@@ -878,11 +880,7 @@ def apply_agents_memory_accepted(
     actions = list(spec_actions or [])
     routes = list(routing or [])
 
-    existing = {
-        _normalize_bullet(b)
-        for body in sections.values()
-        for _, b in _section_bullets(body)
-    }
+    existing = _existing_durable_bullets(sections)
     pending = [c for c in accepted if _normalize_bullet(c) not in existing]
     if not pending:
         out_path = _write_proposal(
