@@ -2507,6 +2507,30 @@ def test_agents_propose_done_logs_routing_when_already_applied() -> None:
     assert any("route/split" in line for line in app._pending_home_log)
 
 
+def test_agents_apply_done_logs_noop_when_already_applied() -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.root = None
+    app._pending_home_log = []
+    app._refresh_home_dashboard = lambda: None  # type: ignore[method-assign]
+    app._clear_memory_work_context = lambda: None  # type: ignore[method-assign]
+
+    app._agents_apply_done(
+        {
+            "ok": True,
+            "proposal_path": "docs/proposals/agents-memory-1.md",
+            "accepted": [],
+            "rejected": [],
+            "applied": False,
+            "noop": True,
+        }
+    )
+
+    assert any("already present" in line for line in app._pending_home_log)
+    assert not any("AGENTS.md updated" in line for line in app._pending_home_log)
+
+
 def test_on_agents_apply_runs_propose_with_apply_true(monkeypatch: pytest.MonkeyPatch) -> None:
     from hive_planner.launcher.app import HivePlannerApp
 

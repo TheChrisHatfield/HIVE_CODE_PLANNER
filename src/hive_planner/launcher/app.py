@@ -2142,7 +2142,9 @@ class HivePlannerApp:
             self._queue_home_log(f"Applied {len(accepted)} bullet(s) to AGENTS.md.")
         if rejected:
             self._queue_home_log(f"Rejected {len(rejected)} candidate(s) — see proposal file.")
-        if result.get("applied"):
+        if result.get("noop"):
+            self._queue_home_log("AGENTS.md unchanged — accepted bullets already present.")
+        elif result.get("applied"):
             self._queue_home_log("AGENTS.md updated.")
             for item in result.get("routing") or []:
                 arm = item.get("arm")
