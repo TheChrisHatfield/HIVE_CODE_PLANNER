@@ -9,6 +9,8 @@ from hive_planner.rosetta_eject import (
     EJECT_DIRNAME,
     PROMPT_FILENAME,
     README_FILENAME,
+    ROSETTA_CARTRIDGE_BLURB,
+    ROSETTA_EJECT_TOOLTIP,
     RosettaEjectError,
     build_session_start_prompt,
     eject_rosetta_cartridge,
@@ -16,6 +18,13 @@ from hive_planner.rosetta_eject import (
     load_session_contract_text,
     resolve_session_contract_path,
 )
+
+
+def test_rosetta_cartridge_blurb_and_tooltip_are_non_empty() -> None:
+    assert "Rosetta cartridge" in ROSETTA_CARTRIDGE_BLURB
+    assert "HOOK_ID" in ROSETTA_CARTRIDGE_BLURB
+    assert "Gemini" in ROSETTA_EJECT_TOOLTIP
+    assert "Perplexity" in ROSETTA_EJECT_TOOLTIP
 
 
 def test_resolve_session_contract_prefers_repo_docs(tmp_path: Path) -> None:

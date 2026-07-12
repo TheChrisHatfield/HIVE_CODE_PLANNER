@@ -10,6 +10,18 @@ PROMPT_FILENAME = "ROSETTA-SESSION-START-PROMPT.txt"
 README_FILENAME = "README-ROSETTA-EJECT.txt"
 EJECT_DIRNAME = "rosetta-eject"
 
+ROSETTA_CARTRIDGE_BLURB = (
+    "A Rosetta cartridge is a portable planning pack for external AIs — not your in-repo "
+    "cartridge/ folder. Eject exports a session contract plus a paste-ready prompt so "
+    "Gemini, Perplexity, or ChatGPT can scan planning chat, tag concepts with HOOK_ID "
+    "markers, and produce a Planning Rosetta Stone legend to bring back into this repo."
+)
+
+ROSETTA_EJECT_TOOLTIP = (
+    "Export a Rosetta cartridge — a portable planning pack that teaches Gemini, Perplexity, "
+    "or ChatGPT how to tag chat output with hooks and build a Rosetta Stone legend inline."
+)
+
 SESSION_START_PROMPT_TEMPLATE = """I've uploaded the Rosetta Stone Planning Session Contract.
 
 Follow it for ALL documents you produce in this session:
