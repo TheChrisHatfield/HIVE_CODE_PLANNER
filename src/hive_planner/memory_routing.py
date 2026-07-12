@@ -238,14 +238,11 @@ def route_oversized_operational(
         )
     if stats is not None:
         stats.record(ARM_SPLIT, success=False)
-        arm = stats.thompson_pick([ARM_ROUTE_SPEC, ARM_REJECT], rng=rng)
-    else:
-        arm = ARM_REJECT
     return RoutingDecision(
-        arm=arm,
+        arm=ARM_REJECT,
         original=bullet,
         remediations=[],
-        reason="Could not split under limit — routed or rejected",
+        reason="Could not auto-split under character limit — reject or shorten manually",
     )
 
 

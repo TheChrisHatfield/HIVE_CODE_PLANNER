@@ -51,6 +51,19 @@ def test_route_oversized_operational_records_split() -> None:
     assert stats.arm(ARM_SPLIT).successes > 1.0
 
 
+def test_route_oversized_unsplittable_rejects(monkeypatch) -> None:
+    stats = RoutingStats()
+    monkeypatch.setattr(
+        "hive_planner.memory_routing.split_long_bullet",
+        lambda *_a, **_k: [],
+    )
+    decision = route_oversized_operational("X" * 300 + " # operational", max_chars=240, stats=stats)
+    assert decision.arm == ARM_REJECT
+    assert not decision.remediations
+    assert stats.arm(ARM_SPLIT).failures > 1.0
+    assert "auto-split" in decision.reason.lower()
+
+
 def test_thompson_pick_is_deterministic_with_seed() -> None:
     stats = RoutingStats()
     stats.arm(ARM_OPERATIONALIZE).successes = 20
