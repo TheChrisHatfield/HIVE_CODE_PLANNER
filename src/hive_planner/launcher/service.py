@@ -1223,6 +1223,7 @@ def run_agents_memory_propose(project_root: Path, candidates_path: Path, *, appl
     return {
         "ok": True,
         "applied": result.applied,
+        "noop": apply and not result.applied and not result.accepted,
         "proposal_path": result.proposal_path.relative_to(paths.root).as_posix(),
         "accepted": result.accepted,
         "rejected": [{"candidate": c, "reason": r} for c, r in result.rejected],

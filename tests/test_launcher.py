@@ -2116,6 +2116,24 @@ def test_run_agents_memory_apply_writes_agents_md(tmp_path: Path) -> None:
     assert "Keep launcher logs concise." in (project / "AGENTS.md").read_text(encoding="utf-8")
 
 
+def test_run_agents_memory_propose_includes_noop_key_in_response(tmp_path: Path) -> None:
+    """run_agents_memory_propose always includes a 'noop' key in successful results."""
+    from hive_planner.launcher.service import run_agents_memory_propose
+    from hive_planner.wiring_audit import record_wiring_audit
+
+    project = _minimal_unified_project(tmp_path)
+    record_wiring_audit(RepoPaths(root=project), evidence="pytest -q")
+    candidates = project / "docs" / "proposals" / "candidates.md"
+    candidates.parent.mkdir(parents=True, exist_ok=True)
+    candidates.write_text("- # operational\n- Keep launcher logs concise.\n", encoding="utf-8")
+
+    result = run_agents_memory_propose(project, candidates, apply=True)
+    assert result["ok"] is True
+    assert result.get("applied") is True
+    assert "noop" in result, "noop key must always be present in propose response"
+    assert result["noop"] is False
+
+
 def test_candidates_path_in_project_rejects_outside_root(tmp_path: Path) -> None:
     from hive_planner.launcher.service import candidates_path_in_project
 
