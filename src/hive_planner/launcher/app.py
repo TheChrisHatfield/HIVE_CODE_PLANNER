@@ -1788,6 +1788,11 @@ class HivePlannerApp:
         rejected = result.get("rejected") or []
         if rejected:
             self._queue_home_log(f"Rejected {len(rejected)} candidate(s) — see proposal file.")
+        if result.get("noop"):
+            self._queue_home_log("AGENTS.md unchanged — accepted bullets already present.")
+            self._clear_memory_work_context()
+            self._refresh_home_dashboard()
+            return
         if result.get("applied"):
             if accepted:
                 self._queue_home_log(f"Accepted {len(accepted)} candidate(s).")
