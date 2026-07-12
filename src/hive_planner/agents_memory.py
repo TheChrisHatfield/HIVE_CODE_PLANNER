@@ -437,6 +437,7 @@ def _try_accept_operational(
     err = _validate_candidate(candidate, known)
     if err is None:
         accepted.append(candidate)
+        existing.add(_normalize_bullet(candidate))
         return
     if not err.startswith("Candidate exceeds"):
         rejected.append((candidate, err))
@@ -452,6 +453,7 @@ def _try_accept_operational(
                 rejected.append((piece, f"Auto-split piece failed: {piece_err}"))
             else:
                 accepted.append(piece)
+                existing.add(_normalize_bullet(piece))
                 added += 1
         if stats is not None:
             stats.record(ARM_SPLIT, success=added > 0)
@@ -569,8 +571,7 @@ def _evaluate_candidates(
                 rejected.append((candidate, err))
             else:
                 accepted.append(candidate)
-
-    if paths is not None and routing:
+                existing.add(_normalize_bullet(candidate))
         save_routing_stats(paths, stats)
     return accepted, rejected, spec_actions, routing
 

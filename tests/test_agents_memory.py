@@ -169,6 +169,25 @@ def test_apply_preserves_preamble_before_first_section(tmp_path: Path) -> None:
     assert updated.index(preamble) < updated.index("## Repository root")
 
 
+def test_try_accept_operational_updates_existing_set() -> None:
+    from hive_planner.agents_memory import _try_accept_operational
+
+    existing: set[str] = set()
+    accepted: list[str] = []
+    rejected: list[tuple[str, str]] = []
+    routing: list[dict] = []
+    _try_accept_operational(
+        "Keep pytest green. # operational",
+        accepted=accepted,
+        rejected=rejected,
+        routing=routing,
+        existing=existing,
+        stats=None,
+    )
+    assert accepted == ["Keep pytest green. # operational"]
+    assert "keep pytest green." in existing
+
+
 def test_propose_rejects_ambiguous_candidate(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     (paths.root / "AGENTS.md").write_text(_minimal_agents(), encoding="utf-8")
