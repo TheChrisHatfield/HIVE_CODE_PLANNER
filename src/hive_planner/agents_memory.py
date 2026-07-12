@@ -885,7 +885,28 @@ def apply_agents_memory_accepted(
     }
     pending = [c for c in accepted if _normalize_bullet(c) not in existing]
     if not pending:
-        raise AgentsMemoryError("All accepted bullets are already in AGENTS.md")
+        out_path = _write_proposal(
+            paths,
+            target=target,
+            current_facts=facts,
+            after_section=facts,
+            proposed_bullets="",
+            accepted=[],
+            rejected=rejections
+            + [("(prior accepted)", "All accepted bullets already present in AGENTS.md")],
+            spec_actions=actions,
+            applied=False,
+        )
+        return AgentsMemoryResult(
+            proposal_path=out_path,
+            applied=False,
+            accepted=[],
+            rejected=rejections,
+            current_facts=facts,
+            after_section=facts,
+            spec_actions=actions,
+            routing=routes,
+        )
 
     proposed_bullets = "\n".join(f"- {c}" for c in pending)
     after = f"{facts}\n{proposed_bullets}".strip() if facts else proposed_bullets

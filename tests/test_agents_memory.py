@@ -266,8 +266,8 @@ def test_finalize_apply_skips_bullets_already_in_agents(tmp_path: Path) -> None:
     assert "Add wiring audit evidence." in text
 
 
-def test_finalize_apply_rejects_when_all_bullets_already_present(tmp_path: Path) -> None:
-    from hive_planner.agents_memory import AgentsMemoryError, apply_agents_memory_accepted
+def test_finalize_apply_is_idempotent_when_all_bullets_already_present(tmp_path: Path) -> None:
+    from hive_planner.agents_memory import apply_agents_memory_accepted
 
     paths = RepoPaths(root=tmp_path)
     agents = _minimal_agents().replace(
@@ -275,12 +275,14 @@ def test_finalize_apply_rejects_when_all_bullets_already_present(tmp_path: Path)
         "- Existing durable fact one.\n- Keep logs concise.",
     )
     (paths.root / "AGENTS.md").write_text(agents, encoding="utf-8")
-    with pytest.raises(AgentsMemoryError, match="already in AGENTS"):
-        apply_agents_memory_accepted(
-            paths,
-            accepted=["Keep logs concise."],
-            skip_wiring_audit=True,
-        )
+    result = apply_agents_memory_accepted(
+        paths,
+        accepted=["Keep logs concise."],
+        skip_wiring_audit=True,
+    )
+    assert not result.applied
+    assert result.accepted == []
+    assert (paths.root / "AGENTS.md").read_text(encoding="utf-8") == agents
 
 
 def test_auto_route_behavioral_writes_cl_candidates(tmp_path: Path) -> None:
