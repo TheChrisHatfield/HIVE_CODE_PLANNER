@@ -1577,6 +1577,18 @@ def run_cartridge_load_sources(
             feature.strip(),
             only_paths=outputs.values(),
         )
+        stamped = [
+            name
+            for name, status in mark_draft.items()
+            if status in {"marked draft", "already draft"}
+        ]
+        if not stamped:
+            warnings.append(
+                "Mark as draft had nothing to stamp — Sources emit refreshes source-context "
+                "(and delta sync when present), not research drafts. "
+                "Use 'Turn one research note into planning drafts' for cartridge/*.md drafts, "
+                "or ensure docs/delta layers exist before marking emitted cartridge files as draft."
+            )
 
     payload = {
         "ok": True,

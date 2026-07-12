@@ -852,6 +852,12 @@ def test_run_cartridge_load_sources_mark_draft_stamps_layers(tmp_path: Path) -> 
     if holistic.is_file():
         assert holistic.read_text(encoding="utf-8").startswith(DRAFT_BANNER)
         assert result["mark_draft"]["holistic"] in {"marked draft", "already draft"}
+    else:
+        # Sources emit without existing delta does not write promote-eligible layers
+        assert all(
+            str(status).startswith("skipped") for status in result["mark_draft"].values()
+        )
+        assert any("nothing to stamp" in w.lower() for w in result.get("warnings") or [])
 
 
 def test_cartridge_load_mark_draft_default_sources_only() -> None:

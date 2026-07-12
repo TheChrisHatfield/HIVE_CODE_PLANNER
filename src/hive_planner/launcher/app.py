@@ -3013,7 +3013,7 @@ class HivePlannerApp:
         mark_draft_row.pack(fill="x", padx=16, pady=(0, 4))
         mark_draft_cb = tk.Checkbutton(
             mark_draft_row,
-            text="Mark new cartridge output as draft (review before merge)",
+            text="Mark synced cartridge files as draft (only if delta→cartridge sync wrote them)",
             variable=mark_draft_var,
             bg=COLORS["bg"],
             fg=COLORS["fg"],
@@ -3029,7 +3029,10 @@ class HivePlannerApp:
         mark_draft_cb.pack(anchor="w")
         attach_hover_tooltip(
             mark_draft_cb,
-            "Adds a draft banner to newly emitted cartridge files so promotion knows they still need human review.",
+            "Adds a draft banner to cartridge layer files this Sources run actually wrote "
+            "(usually only when docs/delta already exists and was synced into cartridge/). "
+            "Uploading reference files alone does not create holistic/macro drafts — "
+            "use 'Turn one research note into planning drafts' for that.",
         )
 
         embed_var = tk.BooleanVar(value=False)
@@ -3165,7 +3168,7 @@ class HivePlannerApp:
         selection_label.pack(anchor="w", padx=16, pady=(0, 4))
         attach_hover_tooltip(
             selection_label,
-            "Shows the file or folder you picked with Browse. Required before you can run Load.",
+            "Shows the file or folder you picked with Browse. Required before you can bring documents into the project.",
         )
 
         selected_files: list[Path] = []

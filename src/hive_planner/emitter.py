@@ -135,7 +135,7 @@ def _warn_unembedded_preferred_docs(
         if doc_chunks and not any(c.chunk_id in vectors_lookup for c in doc_chunks):
             warnings.append(
                 f"Staged source {doc.source_path} has {len(doc_chunks)} chunk(s) but no embeddings — "
-                "turn on Improve AI search quality in Load cartridge, or run: "
+                "enable Build embeddings / Improve AI search quality, or run: "
                 "py -3.11 -m hive_planner ingest --embed"
             )
 
