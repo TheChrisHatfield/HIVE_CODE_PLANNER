@@ -200,6 +200,8 @@ def _normalize_bullet_text(text: str) -> str:
     cleaned = _TAG_BEHAVIORAL.sub("", cleaned).strip()
     cleaned = _TAG_OPERATIONAL.sub("", cleaned).strip()
     cleaned = _TAG_AMBIGUOUS.sub("", cleaned).strip()
+    cleaned = re.sub(r"\*\*([^*]+)\*\*", r"\1", cleaned)
+    cleaned = re.sub(r"`([^`]+)`", r"\1", cleaned)
     return re.sub(r"\s+", " ", cleaned).strip().lower()
 
 
