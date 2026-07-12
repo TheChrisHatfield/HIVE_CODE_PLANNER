@@ -15,6 +15,7 @@ Hive-patched fork of [cursor/plugins/continual-learning](https://github.com/curs
 | CL-4 | Export candidates to `docs/proposals/cl-candidates.md` |
 | CL-5 | Hive env vars documented below |
 | CL-6 | Map `## Learned Workspace Facts` → `## Durable Workspace Facts` |
+| CL-7 | Prefer autonomous `agents-propose --apply` (auto-split / route / Thompson) over hand-editing AGENTS.md |
 
 ## Installation (Hive bootstrap)
 
@@ -24,7 +25,7 @@ Unified bootstrap copies this plugin to `.cursor/plugins/hive-continual-learning
 
 Same upstream architecture: `stop` hook → `continual-learning` skill → `agents-memory-updater` subagent.
 
-Hive additions: wiring audit gate, behavioral routing, spec-drift parity with CLI.
+Hive additions: wiring audit gate, behavioral routing, autonomous memory routing via Hive CLI, spec-drift parity with CLI.
 
 ## Trigger cadence
 

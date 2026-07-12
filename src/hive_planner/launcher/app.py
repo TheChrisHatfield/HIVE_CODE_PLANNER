@@ -650,13 +650,13 @@ class HivePlannerApp:
             handoff_actions,
             "Promote memory…",
             self._on_agents_propose,
-            tooltip="Review before/after memory changes, then apply approved updates to AGENTS.md.",
+            tooltip="Autonomously route and apply candidates to AGENTS.md (auto-splits long bullets; no preview).",
         )
         secondary_button(
             handoff_actions,
             "Apply memory…",
             self._on_agents_apply,
-            tooltip="Save approved memory updates into your project's agent instructions (AGENTS.md).",
+            tooltip="Re-run autonomous apply on a candidates file (same routing as Promote memory).",
         )
 
         verify_actions = tk.Frame(body, bg=COLORS["bg"])
@@ -1791,20 +1791,25 @@ class HivePlannerApp:
             self._queue_home_log(f"Rejected {len(rejected)} candidate(s) — see proposal file.")
         if result.get("applied"):
             self._queue_home_log("Applied to AGENTS.md.")
+            for item in result.get("routing") or []:
+                arm = item.get("arm")
+                reason = item.get("reason")
+                if arm or reason:
+                    self._queue_home_log(f"  route/{arm}: {reason}")
             self._clear_memory_work_context()
             self._refresh_home_dashboard()
             return
         root = self._resolve_memory_work_root()
         candidates = self._memory_work_candidates()
         if accepted and root and candidates:
-            if self._show_memory_proposal_preview(result, root=root):
-                self._start_home_action(f"Running agents-apply on {candidates.name}…")
-                generation = getattr(self, "_bg_generation", 0)
-                self._run_bg(
-                    lambda r=root, c=candidates, g=generation: self._run_memory_apply_if_current(r, c, g),
-                    self._agents_apply_done,
-                )
-                return
+            # Autonomous path: apply without modal preview (CLI/CL parity).
+            self._start_home_action(f"Running agents-apply on {candidates.name}…")
+            generation = getattr(self, "_bg_generation", 0)
+            self._run_bg(
+                lambda r=root, c=candidates, g=generation: self._run_memory_apply_if_current(r, c, g),
+                self._agents_apply_done,
+            )
+            return
         self._refresh_home_dashboard()
 
     def _run_memory_apply_if_current(self, root: Path, candidates: Path, generation: int) -> dict:
@@ -2062,9 +2067,9 @@ class HivePlannerApp:
             )
             return
         self._set_pending_memory_candidates(root, candidates)
-        self._start_home_action(f"Running agents-propose on {candidates.name}…")
+        self._start_home_action(f"Running agents-propose --apply on {candidates.name}…")
         self._run_bg(
-            lambda r=root, c=candidates: run_agents_memory_propose(r, c, apply=False),
+            lambda r=root, c=candidates: run_agents_memory_propose(r, c, apply=True),
             self._agents_propose_done,
         )
 
@@ -3565,14 +3570,14 @@ class HivePlannerApp:
             self._rosetta_eject_body.pack(fill="x", padx=0, pady=0)
             self._rosetta_eject_toggle_btn.configure(text="▼")
             self._rosetta_eject_summary.configure(
-                text="Export the Rosetta session contract for Perplexity, Gemini, ChatGPT, or Claude.",
+                text="Portable planning pack for Gemini, Perplexity, or ChatGPT — teaches hook tagging and Rosetta legend output.",
             )
             self._refresh_rosetta_eject_preview()
         else:
             self._rosetta_eject_body.pack_forget()
             self._rosetta_eject_toggle_btn.configure(text="▶")
             self._rosetta_eject_summary.configure(
-                text="Collapsed — expand to eject Rosetta planning cartridge for external AIs.",
+                text="Collapsed — expand to export a Rosetta cartridge for external planning AIs.",
             )
 
     def _rosetta_eject_scope_key(self) -> str:
@@ -3625,7 +3630,12 @@ class HivePlannerApp:
         self._rosetta_eject_preview.configure(state="disabled")
 
     def _build_rosetta_eject_card(self, parent: tk.Frame) -> None:
-        from hive_planner.rosetta_eject import CONTRACT_FILENAME, infer_project_name
+        from hive_planner.rosetta_eject import (
+            CONTRACT_FILENAME,
+            ROSETTA_CARTRIDGE_BLURB,
+            ROSETTA_EJECT_TOOLTIP,
+            infer_project_name,
+        )
 
         eject_card = card(parent)
         header = tk.Frame(eject_card, bg=COLORS["card"])
@@ -3648,25 +3658,27 @@ class HivePlannerApp:
         self._rosetta_eject_toggle_btn.pack(side="left", padx=(0, 8))
         attach_hover_tooltip(
             self._rosetta_eject_toggle_btn,
-            "Expand or collapse Rosetta cartridge eject.",
+            ROSETTA_EJECT_TOOLTIP,
         )
 
         title_block = tk.Frame(header, bg=COLORS["card"])
         title_block.pack(side="left", fill="x", expand=True)
-        tk.Label(
+        title_label = tk.Label(
             title_block,
             text="Rosetta cartridge eject",
             font=FONT_BOLD,
             bg=COLORS["card"],
             fg=COLORS["fg"],
             anchor="w",
-        ).pack(fill="x")
+        )
+        title_label.pack(fill="x")
+        attach_hover_tooltip(title_label, ROSETTA_EJECT_TOOLTIP)
         self._rosetta_eject_summary = tk.Label(
             title_block,
             text=(
-                "Export the Rosetta session contract for Perplexity, Gemini, ChatGPT, or Claude."
+                "Portable planning pack for Gemini, Perplexity, or ChatGPT — teaches hook tagging and Rosetta legend output."
                 if self._rosetta_eject_expanded
-                else "Collapsed — expand to eject Rosetta planning cartridge for external AIs."
+                else "Collapsed — expand to export a Rosetta cartridge for external planning AIs."
             ),
             wraplength=700,
             justify="left",
@@ -3683,10 +3695,21 @@ class HivePlannerApp:
 
         intro = tk.Label(
             self._rosetta_eject_body,
+            text=ROSETTA_CARTRIDGE_BLURB,
+            wraplength=700,
+            justify="left",
+            bg=COLORS["card"],
+            fg=COLORS["muted"],
+            font=FONT_SUBTITLE,
+            anchor="w",
+        )
+        intro.pack(anchor="w", padx=12, pady=(0, 4))
+        steps = tk.Label(
+            self._rosetta_eject_body,
             text=(
-                f"Ejects {CONTRACT_FILENAME} plus a paste-ready session prompt. "
-                "Upload the contract to any planning AI so it tags chat output with HOOK_ID markers "
-                "and produces a Planning Rosetta Stone legend inline."
+                f"1. Copy or export {CONTRACT_FILENAME} and upload it to your planning AI.\n"
+                "2. Paste the session prompt below as your first message.\n"
+                "3. Save the produced Planning Rosetta Stone to docs/planning-rosetta-stone.md."
             ),
             wraplength=700,
             justify="left",
@@ -3695,7 +3718,7 @@ class HivePlannerApp:
             font=FONT_SUBTITLE,
             anchor="w",
         )
-        intro.pack(anchor="w", padx=12, pady=(0, 8))
+        steps.pack(anchor="w", padx=12, pady=(0, 8))
 
         name_row = tk.Frame(self._rosetta_eject_body, bg=COLORS["card"])
         name_row.pack(fill="x", padx=12, pady=(0, 8))
@@ -3733,19 +3756,19 @@ class HivePlannerApp:
             eject_actions,
             "Copy session prompt",
             self._on_copy_rosetta_session_prompt,
-            tooltip="Copy the paste-ready prompt for after you upload the contract.",
+            tooltip="Paste after uploading the contract — tells the AI to tag hooks and deliver a Rosetta Stone legend.",
         )
         secondary_button(
             eject_actions,
             "Copy contract",
             self._on_copy_rosetta_contract,
-            tooltip="Copy the full Rosetta Planning Session Contract markdown to clipboard.",
+            tooltip="The cartridge core — upload this markdown file to Gemini, Perplexity, or ChatGPT.",
         )
         secondary_button(
             eject_actions,
             "Export to folder…",
             self._on_export_rosetta_cartridge,
-            tooltip="Write contract, prompt, and README under rosetta-eject/ in the chosen folder.",
+            tooltip="Save the full Rosetta cartridge (contract, session prompt, README) to a folder for upload.",
         )
 
     def _on_rosetta_eject_name_changed(self, _event=None) -> None:

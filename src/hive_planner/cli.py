@@ -315,6 +315,11 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Skip Integration wiring audit gate (unified handoff only)",
     )
+    agents_propose.add_argument(
+        "--no-auto-route",
+        action="store_true",
+        help="Disable autonomous split/route remediation (strict reject-only validation)",
+    )
 
     agents_apply = sub.add_parser(
         "agents-apply",
@@ -326,6 +331,11 @@ def main(argv: list[str] | None = None) -> int:
         "--skip-wiring-audit",
         action="store_true",
         help="Skip Integration wiring audit gate (unified handoff only)",
+    )
+    agents_apply.add_argument(
+        "--no-auto-route",
+        action="store_true",
+        help="Disable autonomous split/route remediation (strict reject-only validation)",
     )
 
     agents_ingest = sub.add_parser(
@@ -766,6 +776,7 @@ def main(argv: list[str] | None = None) -> int:
                 agents_path=args.path,
                 apply=args.apply,
                 skip_wiring_audit=args.skip_wiring_audit,
+                auto_route=not args.no_auto_route,
             )
         except AgentsMemoryError as exc:
             print(f"Error: {exc}", file=sys.stderr)
@@ -780,6 +791,8 @@ def main(argv: list[str] | None = None) -> int:
             print("Applied accepted bullets to AGENTS.md (guarded v2 apply)")
         else:
             print("AGENTS.md unchanged (proposal-only workflow)")
+        if result.routing:
+            print(f"Routing decisions: {len(result.routing)}")
         print(json.dumps(result.to_dict(), indent=2))
         return 0
 
@@ -791,6 +804,7 @@ def main(argv: list[str] | None = None) -> int:
                 agents_path=args.path,
                 apply=True,
                 skip_wiring_audit=args.skip_wiring_audit,
+                auto_route=not args.no_auto_route,
             )
         except AgentsMemoryError as exc:
             print(f"Error: {exc}", file=sys.stderr)
@@ -802,6 +816,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Root: {root}")
         print(f"Wrote proposal: {result.proposal_path.relative_to(root)}")
         print("Applied accepted bullets to AGENTS.md (guarded v2 apply)")
+        if result.routing:
+            print(f"Routing decisions: {len(result.routing)}")
         print(json.dumps(result.to_dict(), indent=2))
         return 0
 

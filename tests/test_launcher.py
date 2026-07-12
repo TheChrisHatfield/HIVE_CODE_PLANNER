@@ -2414,13 +2414,17 @@ def test_save_rosetta_eject_project_name_persists_entry() -> None:
     assert app._rosetta_eject_project_names[link] == "Saved Name"
 
 
-def test_agents_propose_done_prompts_apply_without_name_error(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_agents_propose_done_auto_applies_without_preview(monkeypatch: pytest.MonkeyPatch) -> None:
     from hive_planner.launcher.app import HivePlannerApp
 
     app = HivePlannerApp.__new__(HivePlannerApp)
     app.root = None
+    app._bg_generation = 0
     app._pending_home_log = []
     app._refresh_home_dashboard = lambda: None  # type: ignore[method-assign]
+    app._start_home_action = lambda _msg: None  # type: ignore[method-assign]
+    bg_calls: list[tuple] = []
+    app._run_bg = lambda fn, done: bg_calls.append((fn, done))  # type: ignore[method-assign]
     previewed: list[bool] = []
 
     monkeypatch.setattr(
@@ -2445,30 +2449,19 @@ def test_agents_propose_done_prompts_apply_without_name_error(monkeypatch: pytes
         }
     )
 
-    assert previewed == [True]
+    assert previewed == []
+    assert len(bg_calls) == 1
     assert not any("NameError" in line for line in app._pending_home_log)
 
 
-def test_agents_propose_done_apply_after_preview_accept(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_agents_propose_done_logs_routing_when_already_applied() -> None:
     from hive_planner.launcher.app import HivePlannerApp
 
     app = HivePlannerApp.__new__(HivePlannerApp)
     app.root = None
     app._pending_home_log = []
     app._refresh_home_dashboard = lambda: None  # type: ignore[method-assign]
-    app._start_home_action = lambda _msg: None  # type: ignore[method-assign]
-    bg_calls: list[tuple] = []
-    app._run_bg = lambda fn, done: bg_calls.append((fn, done))  # type: ignore[method-assign]
-
-    monkeypatch.setattr(
-        app,
-        "_show_memory_proposal_preview",
-        lambda result, *, root: True,
-    )
-    project = Path("C:/proj")
-    app.config = type("Cfg", (), {"active_project": "C:/proj"})()
-    app._active_linked_root = lambda: project
-    app._set_pending_memory_candidates(project, Path("C:/proj/docs/proposals/candidates.md"))
+    app._clear_memory_work_context = lambda: None  # type: ignore[method-assign]
 
     app._agents_propose_done(
         {
@@ -2476,14 +2469,15 @@ def test_agents_propose_done_apply_after_preview_accept(monkeypatch: pytest.Monk
             "proposal_path": "docs/proposals/agents-memory-1.md",
             "accepted": ["Keep logs concise."],
             "rejected": [],
-            "applied": False,
+            "applied": True,
+            "routing": [{"arm": "split", "reason": "Auto-split into 2 bullet(s) ≤ 240 chars"}],
             "current_facts": "- Old.",
             "after_section": "- Old.\n- Keep logs concise.",
         }
     )
 
-    assert len(bg_calls) == 1
-
+    assert any("Applied to AGENTS.md" in line for line in app._pending_home_log)
+    assert any("route/split" in line for line in app._pending_home_log)
 
 def test_pending_memory_survives_dashboard_when_linked_via_workspace_file(tmp_path: Path) -> None:
     from hive_planner.launcher.app import HivePlannerApp

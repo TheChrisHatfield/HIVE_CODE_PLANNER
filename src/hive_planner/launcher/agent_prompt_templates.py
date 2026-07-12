@@ -181,12 +181,13 @@ Rules:
 - Operational facts → AGENTS.md ## Durable Workspace Facts
 - Behavioral / product requirements → spec.md (not AGENTS.md)
 - Reject one-off session noise and code-fence examples
-- Prefer Hive Planner Promote memory → preview → Apply flow
+- Prefer Hive Planner Promote memory → autonomous apply (auto-split / route) flow
+- Or: `py -3.11 -m hive_planner agents-propose --candidates <file> --apply`
 
 Candidates file or bullets:
 <paste docs/proposals/candidates-*.md content or bullet list>
 
-Propose which bullets are accepted, rejected, and why — do not edit AGENTS.md directly unless I confirm after preview.""",
+Propose which bullets are accepted, rejected, and why — prefer CLI apply over hand-editing AGENTS.md.""",
         ),
         AgentPromptTemplate(
             id="planning.external_rosetta",

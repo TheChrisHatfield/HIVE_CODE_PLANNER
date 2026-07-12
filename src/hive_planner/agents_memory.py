@@ -115,9 +115,10 @@ class AgentsMemoryResult:
     current_facts: str = ""
     after_section: str = ""
     spec_actions: list[str] = field(default_factory=list)
+    routing: list[dict] = field(default_factory=list)
 
     def to_dict(self) -> dict:
-        return {
+        payload = {
             "proposal_path": str(self.proposal_path),
             "applied": self.applied,
             "accepted": self.accepted,
@@ -126,6 +127,9 @@ class AgentsMemoryResult:
             "after_section": self.after_section,
             "spec_actions": self.spec_actions,
         }
+        if self.routing:
+            payload["routing"] = self.routing
+        return payload
 
 
 def _normalize_bullet(text: str) -> str:
@@ -411,10 +415,64 @@ def _validate_candidate(bullet: str, existing: set[str]) -> str | None:
     return None
 
 
+def _try_accept_operational(
+    candidate: str,
+    *,
+    accepted: list[str],
+    rejected: list[tuple[str, str]],
+    routing: list[dict],
+    existing: set[str],
+    stats,
+    max_chars: int = MAX_BULLET_CHARS,
+) -> None:
+    from hive_planner.memory_routing import ARM_SPLIT, route_oversized_operational
+
+    known = existing | {_normalize_bullet(c) for c in accepted}
+    err = _validate_candidate(candidate, known)
+    if err is None:
+        accepted.append(candidate)
+        return
+    if not err.startswith("Candidate exceeds"):
+        rejected.append((candidate, err))
+        return
+
+    decision = route_oversized_operational(candidate, max_chars=max_chars, stats=stats)
+    routing.append(decision.to_dict())
+    if decision.arm == ARM_SPLIT and decision.remediations:
+        added = 0
+        for piece in decision.remediations:
+            piece_err = _validate_candidate(piece, existing | {_normalize_bullet(c) for c in accepted})
+            if piece_err:
+                rejected.append((piece, f"Auto-split piece failed: {piece_err}"))
+            else:
+                accepted.append(piece)
+                added += 1
+        rejected.append(
+            (
+                candidate,
+                f"Remediated: {decision.reason}" + (f" ({added} accepted)" if added else ""),
+            )
+        )
+        return
+    rejected.append((candidate, f"{err} — {decision.reason}"))
+
+
 def _evaluate_candidates(
     sections: dict[str, str],
     raw_candidates: list[str],
-) -> tuple[list[str], list[tuple[str, str]], list[str]]:
+    *,
+    paths: RepoPaths | None = None,
+    auto_route: bool = True,
+) -> tuple[list[str], list[tuple[str, str]], list[str], list[dict]]:
+    from hive_planner.memory_routing import (
+        ARM_OPERATIONALIZE,
+        ARM_ROUTE_SPEC,
+        RoutingStats,
+        load_routing_stats,
+        route_ambiguous_candidate,
+        route_behavioral_candidate,
+        save_routing_stats,
+    )
     from hive_planner.spec_drift import classify_bullet
 
     existing = {
@@ -425,7 +483,9 @@ def _evaluate_candidates(
     accepted: list[str] = []
     rejected: list[tuple[str, str]] = []
     spec_actions: list[str] = []
+    routing: list[dict] = []
     feature = _parse_active_feature_from_sections(sections)
+    stats = load_routing_stats(paths) if paths is not None else RoutingStats()
 
     for candidate in raw_candidates:
         if not _substantive_candidate_text(candidate):
@@ -443,6 +503,31 @@ def _evaluate_candidates(
             continue
         classified = classify_bullet(candidate)
         if classified.kind == "ambiguous":
+            if auto_route:
+                decision = route_ambiguous_candidate(candidate, feature=feature, stats=stats)
+                routing.append(decision.to_dict())
+                if decision.arm == ARM_OPERATIONALIZE and decision.remediations:
+                    before = len(accepted)
+                    for piece in decision.remediations:
+                        _try_accept_operational(
+                            piece,
+                            accepted=accepted,
+                            rejected=rejected,
+                            routing=routing,
+                            existing=existing,
+                            stats=stats,
+                        )
+                    stats.record(ARM_OPERATIONALIZE, success=len(accepted) > before)
+                    continue
+                if decision.arm == ARM_ROUTE_SPEC:
+                    if decision.spec_action:
+                        spec_actions.append(decision.spec_action)
+                    rejected.append((candidate, decision.reason))
+                    stats.record(ARM_ROUTE_SPEC, success=True)
+                    continue
+                rejected.append((candidate, decision.reason))
+                stats.record(decision.arm, success=False)
+                continue
             rejected.append(
                 (
                     candidate,
@@ -451,18 +536,39 @@ def _evaluate_candidates(
             )
             continue
         if classified.kind == "behavioral":
-            spec_path = f"docs/specs/{feature}/spec.md" if feature else "docs/specs/<feature>/spec.md"
-            reason = f"Behavioral content belongs in Spec Kit ({spec_path}), not AGENTS.md"
-            rejected.append((candidate, reason))
-            spec_actions.append(f"Update {spec_path} before promoting behavioral bullet: {candidate[:80]}")
+            if auto_route and paths is not None:
+                decision = route_behavioral_candidate(
+                    candidate, paths=paths, feature=feature, stats=stats
+                )
+                routing.append(decision.to_dict())
+                if decision.spec_action:
+                    spec_actions.append(decision.spec_action)
+                rejected.append((candidate, decision.reason))
+            else:
+                spec_path = f"docs/specs/{feature}/spec.md" if feature else "docs/specs/<feature>/spec.md"
+                reason = f"Behavioral content belongs in Spec Kit ({spec_path}), not AGENTS.md"
+                rejected.append((candidate, reason))
+                spec_actions.append(f"Update {spec_path} before promoting behavioral bullet: {candidate[:80]}")
             continue
-        err = _validate_candidate(candidate, existing | {_normalize_bullet(c) for c in accepted})
-        if err:
-            rejected.append((candidate, err))
+        if auto_route:
+            _try_accept_operational(
+                candidate,
+                accepted=accepted,
+                rejected=rejected,
+                routing=routing,
+                existing=existing,
+                stats=stats,
+            )
         else:
-            accepted.append(candidate)
+            err = _validate_candidate(candidate, existing | {_normalize_bullet(c) for c in accepted})
+            if err:
+                rejected.append((candidate, err))
+            else:
+                accepted.append(candidate)
 
-    return accepted, rejected, spec_actions
+    if paths is not None and routing:
+        save_routing_stats(paths, stats)
+    return accepted, rejected, spec_actions, routing
 
 
 def _section_render_order(sections: dict[str, str], *, insert_key: str | None = None) -> list[str]:
@@ -571,6 +677,9 @@ def _write_proposal(
                 "",
                 f"Accepted bullets were merged into `## {EDITABLE_SECTION}` ({APPLY_VERSION} guarded apply).",
                 "",
+                "Autonomous memory routing (split / route_spec / Thompson) may have remapped candidates;",
+                "see `.hive/memory-routing.json` for arm reward stats.",
+                "",
             ]
         )
     else:
@@ -595,8 +704,15 @@ def propose_agents_memory(
     *,
     agents_path: Path | None = None,
     apply: bool = False,
+    auto_route: bool = True,
 ) -> Path:
-    result = run_agents_memory(paths, candidates_path, agents_path=agents_path, apply=apply)
+    result = run_agents_memory(
+        paths,
+        candidates_path,
+        agents_path=agents_path,
+        apply=apply,
+        auto_route=auto_route,
+    )
     return result.proposal_path
 
 
@@ -607,6 +723,7 @@ def run_agents_memory(
     agents_path: Path | None = None,
     apply: bool = False,
     skip_wiring_audit: bool = False,
+    auto_route: bool = True,
 ) -> AgentsMemoryResult:
     from hive_planner.wiring_audit import WiringAuditError, require_wiring_audit_for_memory
 
@@ -636,7 +753,12 @@ def run_agents_memory(
     if not raw_candidates:
         raise AgentsMemoryError("No candidate bullets found in candidates file")
 
-    accepted, rejected, spec_actions = _evaluate_candidates(sections, raw_candidates)
+    accepted, rejected, spec_actions, routing = _evaluate_candidates(
+        sections,
+        raw_candidates,
+        paths=paths,
+        auto_route=auto_route,
+    )
 
     current_key = _match_section(sections, EDITABLE_SECTION)
     current_facts = sections.get(current_key, "").strip() if current_key else ""
@@ -716,6 +838,7 @@ def run_agents_memory(
         current_facts=current_facts,
         after_section=after_section,
         spec_actions=spec_actions,
+        routing=routing,
     )
 
 

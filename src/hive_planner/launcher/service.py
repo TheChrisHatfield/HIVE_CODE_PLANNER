@@ -1194,7 +1194,7 @@ def run_agents_memory_propose(project_root: Path, candidates_path: Path, *, appl
                 ],
             }
     try:
-        result = run_agents_memory(paths, candidate_file, apply=apply)
+        result = run_agents_memory(paths, candidate_file, apply=apply, auto_route=True)
     except AgentsMemoryError as exc:
         msg = str(exc)
         payload: dict = {"ok": False, "error": msg}
@@ -1211,6 +1211,7 @@ def run_agents_memory_propose(project_root: Path, candidates_path: Path, *, appl
             payload["hints"] = [
                 "Add `# operational` or `# behavioral` tags to ambiguous bullets.",
                 "Behavioral bullets belong in the active spec.md, not AGENTS.md.",
+                "Oversized operational bullets are auto-split when possible; check routing in the proposal.",
             ]
         elif "wiring audit" in lowered:
             payload["hints"] = [
@@ -1228,6 +1229,7 @@ def run_agents_memory_propose(project_root: Path, candidates_path: Path, *, appl
         "current_facts": result.current_facts,
         "after_section": result.after_section,
         "spec_actions": result.spec_actions,
+        "routing": result.routing,
     }
 
 

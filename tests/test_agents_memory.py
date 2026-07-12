@@ -175,7 +175,40 @@ def test_propose_rejects_ambiguous_candidate(tmp_path: Path) -> None:
     candidates = paths.root / "candidates.md"
     candidates.write_text("- Run ci-check before handoff; API must return 404 when disabled.\n", encoding="utf-8")
     with pytest.raises(AgentsMemoryError, match="All candidate"):
-        propose_agents_memory(paths, candidates)
+        propose_agents_memory(paths, candidates, auto_route=False)
+
+
+def test_auto_route_splits_oversized_operational_candidate(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    (paths.root / "AGENTS.md").write_text(_minimal_agents(), encoding="utf-8")
+    long = (
+        "Portable HivePlanner.exe lives under dist/HivePlannerPortable and must be rebuilt "
+        "after launcher UI changes. Use scripts/build_portable.ps1, then smoke-test ocr-status "
+        "and rosetta-eject --prompt-only before shipping. Close running HivePlanner.exe first "
+        "so Windows does not lock the output binary. # operational"
+    )
+    assert len(long) > 240
+    candidates = paths.root / "candidates.md"
+    candidates.write_text(f"- {long}\n", encoding="utf-8")
+    result = run_agents_memory(paths, candidates, apply=True, skip_wiring_audit=True)
+    assert result.applied
+    assert len(result.accepted) >= 2
+    assert all(len(b) <= 240 for b in result.accepted)
+    assert any(d.get("arm") == "split" for d in result.routing)
+    agents = (paths.root / "AGENTS.md").read_text(encoding="utf-8")
+    assert "HivePlanner.exe" in agents or "build_portable" in agents
+
+
+def test_auto_route_behavioral_writes_cl_candidates(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    (paths.root / "AGENTS.md").write_text(_minimal_agents(), encoding="utf-8")
+    candidates = paths.root / "candidates.md"
+    candidates.write_text("- API must return 404 when feature flag is disabled. # behavioral\n", encoding="utf-8")
+    with pytest.raises(AgentsMemoryError, match="All candidate"):
+        run_agents_memory(paths, candidates, skip_wiring_audit=True)
+    routed = paths.root / "docs" / "proposals" / "cl-candidates.md"
+    assert routed.is_file()
+    assert "API must return 404" in routed.read_text(encoding="utf-8")
 
 
 def test_agents_memory_error_detail_includes_proposal_metadata() -> None:
@@ -245,7 +278,7 @@ def test_propose_behavioral_rejection_ignores_placeholder_active_feature(tmp_pat
 
     text = _minimal_agents().replace("**feature-x**", "**none**")
     sections = parse_sections(text)
-    _, rejected, _ = _evaluate_candidates(sections, ["API must return 404 when disabled."])
+    _, rejected, _, _ = _evaluate_candidates(sections, ["API must return 404 when disabled."])
     assert rejected
     reason = rejected[0][1]
     assert "docs/specs/<feature>/spec.md" in reason
@@ -256,7 +289,7 @@ def test_propose_rejects_tag_only_candidates(tmp_path: Path) -> None:
     from hive_planner.agents_memory import _evaluate_candidates, parse_sections
 
     sections = parse_sections(_minimal_agents())
-    accepted, rejected, _ = _evaluate_candidates(
+    accepted, rejected, _, _ = _evaluate_candidates(
         sections,
         ["# operational", "# behavioral", "Keep pytest in CI. # operational"],
     )
@@ -272,10 +305,47 @@ def test_parse_candidates_honors_behavioral_section_header() -> None:
     raw = _parse_candidates(text)
     assert raw == ["The landing page shows a welcome banner. # behavioral"]
     sections = parse_sections(_minimal_agents())
-    accepted, rejected, _ = _evaluate_candidates(sections, raw)
+    accepted, rejected, _, _ = _evaluate_candidates(sections, raw)
     assert not accepted
     assert rejected
     assert "spec.md" in rejected[0][1]
+
+
+def test_operationalize_arm_records_failure_when_remediation_rejected(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from hive_planner.agents_memory import _evaluate_candidates, parse_sections
+    from hive_planner.memory_routing import ARM_OPERATIONALIZE, RoutingDecision, load_routing_stats
+
+    agents = _minimal_agents().replace(
+        "- Existing durable fact one.",
+        "- Run ci-check before handoff.",
+    )
+    sections = parse_sections(agents)
+    paths = RepoPaths(root=tmp_path)
+
+    def fake_route(bullet: str, *, feature, stats, rng=None) -> RoutingDecision:
+        return RoutingDecision(
+            arm=ARM_OPERATIONALIZE,
+            original=bullet,
+            remediations=["Run ci-check before handoff. # operational"],
+            reason="test operationalize",
+        )
+
+    monkeypatch.setattr(
+        "hive_planner.memory_routing.route_ambiguous_candidate",
+        fake_route,
+    )
+    accepted, rejected, _, _ = _evaluate_candidates(
+        sections,
+        ["Run ci-check before handoff; API must return 404 when disabled."],
+        paths=paths,
+        auto_route=True,
+    )
+    assert not accepted
+    assert rejected
+    stats = load_routing_stats(paths)
+    assert stats.arm(ARM_OPERATIONALIZE).failures > 1.0
 
 
 def test_parse_candidates_honors_ambiguous_section_header() -> None:
@@ -285,7 +355,7 @@ def test_parse_candidates_honors_ambiguous_section_header() -> None:
     raw = _parse_candidates(text)
     assert raw == ["Run ci-check before handoff. # ambiguous"]
     sections = parse_sections(_minimal_agents())
-    accepted, rejected, _ = _evaluate_candidates(sections, raw)
+    accepted, rejected, _, _ = _evaluate_candidates(sections, raw)
     assert not accepted
     assert rejected
     assert "Classification ambiguous" in rejected[0][1]
@@ -298,7 +368,7 @@ def test_parse_candidates_does_not_treat_heading_prose_as_section_tag() -> None:
     raw = _parse_candidates(text)
     assert raw == ["API must return 404 when disabled."]
     sections = parse_sections(_minimal_agents())
-    accepted, rejected, _ = _evaluate_candidates(sections, raw)
+    accepted, rejected, _, _ = _evaluate_candidates(sections, raw)
     assert not accepted
     assert rejected
     assert "spec.md" in rejected[0][1]
@@ -478,7 +548,7 @@ def test_parse_candidates_honors_behavioral_section_before_unclosed_fence() -> N
     raw = _parse_candidates(text)
     assert raw == ["The landing page shows a welcome banner. # behavioral"]
     sections = parse_sections(_minimal_agents())
-    accepted, rejected, _ = _evaluate_candidates(sections, raw)
+    accepted, rejected, _, _ = _evaluate_candidates(sections, raw)
     assert not accepted
     assert rejected
     assert "spec.md" in rejected[0][1]

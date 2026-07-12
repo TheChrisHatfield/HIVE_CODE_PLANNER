@@ -68,8 +68,8 @@ Before promoting Continual Learning candidates into `AGENTS.md`:
 1. Complete the **Integration wiring audit** checklist in `tasks.md`
 2. **Home → Record wiring audit…** — enter your validation command (e.g. `pytest -q`)
 3. **Home → Check wiring audit** — confirm attestation is current (also in **Run health check**)
-4. **Home → Promote memory…** — run `agents-propose` on staged candidates in `docs/proposals/`
-5. **Home → Apply memory…** — run `agents-apply` (or accept the prompt after propose)
+4. **Home → Promote memory…** — run autonomous `agents-propose --apply` (auto-split / route) on staged candidates
+5. **Home → Apply memory…** — re-run apply on a candidates file if needed
 
 CLI equivalents:
 
