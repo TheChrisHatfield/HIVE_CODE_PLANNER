@@ -123,6 +123,28 @@ def test_append_behavioral_dedupes_exact_bullet_line_not_substring(tmp_path: Pat
     assert text.count("- See API documentation") == 1
 
 
+def test_append_behavioral_dedupes_tag_variants(tmp_path: Path) -> None:
+    from hive_planner.memory_routing import _append_behavioral_candidate
+
+    paths = RepoPaths(root=tmp_path)
+    out = paths.root / "docs" / "proposals" / "cl-candidates.md"
+    out.parent.mkdir(parents=True)
+    out.write_text(
+        "\n".join(
+            [
+                "# Continual Learning candidates (auto-routed)",
+                "",
+                "- API must return 404 when disabled. # behavioral",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    _, wrote = _append_behavioral_candidate(paths, "feature-x", "API must return 404 when disabled.")
+    assert wrote is False
+    assert out.read_text(encoding="utf-8").count("API must return 404") == 1
+
+
 def test_route_behavioral_skips_stats_success_when_duplicate(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     bullet = "API must return 404 when disabled. # behavioral"

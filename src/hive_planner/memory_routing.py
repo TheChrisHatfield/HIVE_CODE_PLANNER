@@ -190,12 +190,25 @@ def split_long_bullet(bullet: str, *, max_chars: int) -> list[str]:
     return [c for c in hard if c and len(c) <= max_chars]
 
 
+_TAG_BEHAVIORAL = re.compile(r"(?:^|\s)#\s*behavioral\s*$", re.IGNORECASE)
+_TAG_OPERATIONAL = re.compile(r"(?:^|\s)#\s*operational\s*$", re.IGNORECASE)
+_TAG_AMBIGUOUS = re.compile(r"(?:^|\s)#\s*ambiguous\s*$", re.IGNORECASE)
+
+
+def _normalize_bullet_text(text: str) -> str:
+    cleaned = re.sub(r"^[-*]\s+", "", text.strip())
+    cleaned = _TAG_BEHAVIORAL.sub("", cleaned).strip()
+    cleaned = _TAG_OPERATIONAL.sub("", cleaned).strip()
+    cleaned = _TAG_AMBIGUOUS.sub("", cleaned).strip()
+    return re.sub(r"\s+", " ", cleaned).strip().lower()
+
+
 def _bullet_line_in_markdown(bullet: str, content: str) -> bool:
-    target = bullet.strip()
+    target = _normalize_bullet_text(bullet)
     for line in content.splitlines():
         text = line.strip()
         if text.startswith("- "):
-            if text[2:].strip() == target:
+            if _normalize_bullet_text(text[2:]) == target:
                 return True
     return False
 
