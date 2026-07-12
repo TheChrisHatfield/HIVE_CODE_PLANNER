@@ -873,9 +873,7 @@ def apply_agents_memory_accepted(
     agents_text = target.read_text(encoding="utf-8", errors="replace")
     sections = parse_sections(agents_text)
     current_key = _match_section(sections, EDITABLE_SECTION)
-    facts = current_facts if current_facts is not None else (
-        sections.get(current_key, "").strip() if current_key else ""
-    )
+    facts = sections.get(current_key, "").strip() if current_key else ""
     rejections = list(rejected or [])
     actions = list(spec_actions or [])
     routes = list(routing or [])

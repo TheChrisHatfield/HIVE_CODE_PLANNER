@@ -280,6 +280,32 @@ def test_finalize_apply_skips_bullets_already_in_agents(tmp_path: Path) -> None:
     assert "Add wiring audit evidence." in text
 
 
+def test_finalize_apply_uses_live_agents_facts_not_stale_proposal_snapshot(tmp_path: Path) -> None:
+    from hive_planner.agents_memory import apply_agents_memory_accepted
+
+    paths = RepoPaths(root=tmp_path)
+    (paths.root / "AGENTS.md").write_text(
+        _minimal_agents().replace(
+            "- Existing durable fact one.",
+            "- Live durable fact already in AGENTS.md.",
+        ),
+        encoding="utf-8",
+    )
+    result = apply_agents_memory_accepted(
+        paths,
+        accepted=["Add wiring audit evidence."],
+        current_facts="- Stale snapshot from propose.",
+        after_section="- Stale snapshot from propose.\n- Add wiring audit evidence.",
+        skip_wiring_audit=True,
+    )
+    assert result.applied
+    assert "Live durable fact already in AGENTS.md." in result.current_facts
+    assert "Stale snapshot from propose." not in result.after_section
+    agents = (paths.root / "AGENTS.md").read_text(encoding="utf-8")
+    assert "Add wiring audit evidence." in agents
+    assert "Live durable fact already in AGENTS.md." in agents
+
+
 def test_finalize_apply_is_idempotent_when_all_bullets_already_present(tmp_path: Path) -> None:
     from hive_planner.agents_memory import apply_agents_memory_accepted
 
