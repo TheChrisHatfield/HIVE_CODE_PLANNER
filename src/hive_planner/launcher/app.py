@@ -1779,8 +1779,11 @@ class HivePlannerApp:
             for hint in result.get("hints", []):
                 self._queue_home_log(f"Tip: {hint}")
             root = self._resolve_memory_work_root()
-            if root and result.get("proposal_path") and result.get("rejected"):
-                self._show_memory_rejection_preview(result, root=root)
+            if root and result.get("proposal_path"):
+                if result.get("accepted"):
+                    self._show_memory_proposal_preview(result, root=root, allow_apply=False)
+                elif result.get("rejected"):
+                    self._show_memory_rejection_preview(result, root=root)
             self._refresh_home_dashboard()
             return
         self._queue_home_log(f"Wrote proposal: {result.get('proposal_path')}")
