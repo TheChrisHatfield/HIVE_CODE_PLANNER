@@ -190,6 +190,16 @@ def split_long_bullet(bullet: str, *, max_chars: int) -> list[str]:
     return [c for c in hard if c and len(c) <= max_chars]
 
 
+def _bullet_line_in_markdown(bullet: str, content: str) -> bool:
+    target = bullet.strip()
+    for line in content.splitlines():
+        text = line.strip()
+        if text.startswith("- "):
+            if text[2:].strip() == target:
+                return True
+    return False
+
+
 def _append_behavioral_candidate(paths: RepoPaths, feature: str | None, bullet: str) -> Path:
     proposals = paths.root / "docs" / "proposals"
     proposals.mkdir(parents=True, exist_ok=True)
@@ -203,7 +213,7 @@ def _append_behavioral_candidate(paths: RepoPaths, feature: str | None, bullet: 
     ]
     if out.is_file():
         existing = out.read_text(encoding="utf-8", errors="replace")
-        if bullet.strip() in existing:
+        if _bullet_line_in_markdown(bullet, existing):
             return out
         out.write_text(existing.rstrip() + "\n" + "\n".join(block), encoding="utf-8", newline="\n")
     else:

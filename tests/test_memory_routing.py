@@ -102,6 +102,27 @@ def test_route_behavioral_writes_file(tmp_path: Path) -> None:
     assert "API must return 404" in out.read_text(encoding="utf-8")
 
 
+def test_append_behavioral_dedupes_exact_bullet_line_not_substring(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    out = paths.root / "docs" / "proposals" / "cl-candidates.md"
+    out.parent.mkdir(parents=True)
+    out.write_text(
+        "\n".join(
+            [
+                "# Continual Learning candidates (auto-routed)",
+                "",
+                "- See API documentation for details.",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    route_behavioral_candidate("API must return 404 when disabled.", paths=paths, feature="feature-x")
+    text = out.read_text(encoding="utf-8")
+    assert "API must return 404 when disabled." in text
+    assert text.count("- See API documentation") == 1
+
+
 def test_routing_stats_roundtrip(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     stats = RoutingStats()
