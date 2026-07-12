@@ -169,6 +169,44 @@ def test_apply_preserves_preamble_before_first_section(tmp_path: Path) -> None:
     assert updated.index(preamble) < updated.index("## Repository root")
 
 
+def test_ambiguous_route_spec_records_failure_not_success(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from hive_planner.agents_memory import _evaluate_candidates, parse_sections
+    from hive_planner.memory_routing import ARM_ROUTE_SPEC, RoutingDecision, load_routing_stats
+    from hive_planner.spec_drift import ClassifiedBullet
+
+    sections = parse_sections(_minimal_agents())
+    paths = RepoPaths(root=tmp_path)
+
+    monkeypatch.setattr(
+        "hive_planner.spec_drift.classify_bullet",
+        lambda bullet: ClassifiedBullet(text=bullet, kind="ambiguous", reason="test"),
+    )
+
+    def fake_route(bullet: str, *, feature, stats, rng=None) -> RoutingDecision:
+        return RoutingDecision(
+            arm=ARM_ROUTE_SPEC,
+            original=bullet,
+            remediations=[],
+            reason="Thompson: route to Spec Kit",
+            spec_action="Update docs/specs/feature-x/spec.md",
+        )
+
+    monkeypatch.setattr("hive_planner.memory_routing.route_ambiguous_candidate", fake_route)
+    accepted, rejected, spec_actions, _ = _evaluate_candidates(
+        sections,
+        ["Mixed tooling and API wording."],
+        paths=paths,
+        auto_route=True,
+    )
+    assert not accepted
+    assert rejected
+    assert spec_actions
+    stats = load_routing_stats(paths)
+    assert stats.arm(ARM_ROUTE_SPEC).failures > 1.0
+
+
 def test_try_accept_operational_updates_existing_set() -> None:
     from hive_planner.agents_memory import _try_accept_operational
 

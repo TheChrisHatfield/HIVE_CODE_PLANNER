@@ -529,7 +529,7 @@ def _evaluate_candidates(
                     if decision.spec_action:
                         spec_actions.append(decision.spec_action)
                     rejected.append((candidate, decision.reason))
-                    stats.record(ARM_ROUTE_SPEC, success=True)
+                    stats.record(ARM_ROUTE_SPEC, success=False)
                     continue
                 rejected.append((candidate, decision.reason))
                 stats.record(decision.arm, success=False)
@@ -572,6 +572,8 @@ def _evaluate_candidates(
             else:
                 accepted.append(candidate)
                 existing.add(_normalize_bullet(candidate))
+
+    if paths is not None and routing:
         save_routing_stats(paths, stats)
     return accepted, rejected, spec_actions, routing
 
