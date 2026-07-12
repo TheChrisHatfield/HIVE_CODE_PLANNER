@@ -615,7 +615,7 @@ class HivePlannerApp:
             actions,
             "Load cartridge…",
             self._on_load_cartridge,
-            tooltip="Bring planning documents and reference files into your project (import, translate, or add sources).",
+            tooltip="Open the dialog to add reference files, turn a research note into drafts, or import a cartridge folder.",
         )
         secondary_button(
             actions,
@@ -2801,12 +2801,12 @@ class HivePlannerApp:
         default_feature = summary.active_feature or "example-feature"
 
         dialog = tk.Toplevel(self.root)
-        dialog.title("Load cartridge")
+        dialog.title("Bring documents into your project")
         dialog.configure(bg=COLORS["bg"])
         dialog.transient(self.root)
         dialog.grab_set()
-        dialog.geometry("520x520")
-        dialog.minsize(480, 460)
+        dialog.geometry("540x580")
+        dialog.minsize(500, 500)
 
         action_row = tk.Frame(dialog, bg=COLORS["bg"])
         action_row.pack(side="bottom", fill="x", padx=16, pady=(8, 16))
@@ -2832,25 +2832,69 @@ class HivePlannerApp:
         bind_mousewheel(canvas, target=canvas)
         bind_mousewheel(body, target=canvas)
 
+        from hive_planner.format_deps import pdf_support_available, pdf_support_message
+
+        pdf_ok = pdf_support_available()
+
         tk.Label(
             body,
-            text="Add reference docs, translate research into draft cartridge files, or import an existing cartridge folder.",
+            text="Choose how to bring outside documents into your linked project.",
+            wraplength=480,
+            justify="left",
+            bg=COLORS["bg"],
+            fg=COLORS["fg"],
+            font=FONT_BOLD,
+        ).pack(anchor="w", padx=16, pady=(16, 4))
+        tk.Label(
+            body,
+            text=(
+                "Reference files go into your project's library so AI agents can search them. "
+                "Planning drafts update your spec and delta docs when promotion is enabled."
+            ),
             wraplength=480,
             justify="left",
             bg=COLORS["bg"],
             fg=COLORS["muted"],
             font=FONT,
-        ).pack(anchor="w", padx=16, pady=(16, 8))
+        ).pack(anchor="w", padx=16, pady=(0, 10))
+
+        tk.Label(
+            body,
+            text="What do you want to do?",
+            bg=COLORS["bg"],
+            fg=COLORS["fg"],
+            font=FONT_BOLD,
+        ).pack(anchor="w", padx=16, pady=(0, 6))
 
         mode_var = tk.StringVar(value="sources")
-        for value, label in (
-            ("sources", "Add source files — copy into context-library, ingest, and emit cartridge"),
-            ("translate", "Translate research — one markdown file into draft cartridge/*.md"),
-            ("import", "Import cartridge folder — copy cartridge markdown and manifest into the project"),
-        ):
-            tk.Radiobutton(
-                body,
-                text=label,
+        mode_options: tuple[tuple[str, str, str, str], ...] = (
+            (
+                "sources",
+                "Add reference files (recommended)",
+                "PDFs, notes, specs, or markdown — copy into your searchable project library.",
+                "Best for research papers, exports, and notes you want AI to find later. "
+                "Files are indexed and linked in cartridge/source-context.md.",
+            ),
+            (
+                "translate",
+                "Turn one research note into planning drafts",
+                "One markdown file → draft holistic/macro/micro/memory files in cartridge/.",
+                "Use when you already wrote a planning summary and want draft cartridge files quickly. "
+                "Does not add the file to your searchable library — choose Add reference files for that.",
+            ),
+            (
+                "import",
+                "Copy an existing cartridge folder",
+                "Paste in a cartridge/ folder you exported or copied from another machine.",
+                "Use when you already have a complete cartridge/ directory (manifest + markdown layers).",
+            ),
+        )
+        for value, title, subtitle, tip in mode_options:
+            row = tk.Frame(body, bg=COLORS["bg"])
+            row.pack(fill="x", padx=16, pady=3)
+            rb = tk.Radiobutton(
+                row,
+                text=title,
                 variable=mode_var,
                 value=value,
                 bg=COLORS["bg"],
@@ -2861,17 +2905,54 @@ class HivePlannerApp:
                 anchor="w",
                 justify="left",
                 font=FONT,
-                wraplength=470,
-            ).pack(anchor="w", padx=16, pady=2)
+                wraplength=460,
+            )
+            rb.pack(anchor="w")
+            tk.Label(
+                row,
+                text=subtitle,
+                wraplength=440,
+                justify="left",
+                bg=COLORS["bg"],
+                fg=COLORS["muted"],
+                font=FONT_SUBTITLE,
+            ).pack(anchor="w", padx=(22, 0))
+            attach_hover_tooltip(row, tip)
+            attach_hover_tooltip(rb, tip)
+
+        tk.Label(
+            body,
+            text="Options",
+            bg=COLORS["bg"],
+            fg=COLORS["fg"],
+            font=FONT_BOLD,
+        ).pack(anchor="w", padx=16, pady=(12, 6))
 
         feature_row = tk.Frame(body, bg=COLORS["bg"])
-        feature_row.pack(fill="x", padx=16, pady=(12, 4))
-        tk.Label(feature_row, text="Feature id", width=12, anchor="w", bg=COLORS["bg"], fg=COLORS["fg"], font=FONT).pack(
-            side="left"
+        feature_row.pack(fill="x", padx=16, pady=(0, 4))
+        feature_label = tk.Label(
+            feature_row,
+            text="Feature name",
+            width=12,
+            anchor="w",
+            bg=COLORS["bg"],
+            fg=COLORS["fg"],
+            font=FONT,
         )
+        feature_label.pack(side="left")
         feature_var = tk.StringVar(value=default_feature)
         feature_entry = tk.Entry(feature_row, textvariable=feature_var, font=FONT, bg=COLORS["card"], fg=COLORS["fg"])
         feature_entry.pack(side="left", fill="x", expand=True)
+        attach_hover_tooltip(
+            feature_label,
+            "Short id for the feature you are planning (letters, numbers, hyphens only). "
+            "Example: mlp-decimacon. Used to pick the right spec and delta files.",
+        )
+        attach_hover_tooltip(
+            feature_entry,
+            "Short id for the feature you are planning (letters, numbers, hyphens only). "
+            "Example: mlp-decimacon.",
+        )
 
         handoff_status = validate_unified_handoff(root)
         handoff_unified = handoff_status.mode == "unified"
@@ -2882,7 +2963,7 @@ class HivePlannerApp:
         promote_row.pack(fill="x", padx=16, pady=(0, 4))
         promote_cb = tk.Checkbutton(
             promote_row,
-            text="Promote drafts to Delta/Spec Kit, stage CL candidates, and run spec-drift (unified handoff)",
+            text="Update planning files in the project (spec, delta, memory candidates)",
             variable=promote_var,
             bg=COLORS["bg"],
             fg=COLORS["fg"],
@@ -2896,6 +2977,11 @@ class HivePlannerApp:
             state="normal" if handoff_unified else "disabled",
         )
         promote_cb.pack(anchor="w")
+        attach_hover_tooltip(
+            promote_cb,
+            "After loading, merge draft cartridge content into docs/delta/, stage memory bullets for AGENTS.md, "
+            "and run alignment checks. Requires unified agent handoff to be deployed.",
+        )
         if not handoff_unified:
             promote_var.set(False)
 
@@ -2903,7 +2989,7 @@ class HivePlannerApp:
         force_row.pack(fill="x", padx=16, pady=(0, 4))
         force_cb = tk.Checkbutton(
             force_row,
-            text="Force promote — overwrite existing Delta/spec files (review carefully)",
+            text="Replace existing planning files (review carefully)",
             variable=force_promote_var,
             bg=COLORS["bg"],
             fg=COLORS["fg"],
@@ -2917,12 +3003,17 @@ class HivePlannerApp:
             state="disabled",
         )
         force_cb.pack(anchor="w")
+        attach_hover_tooltip(
+            force_cb,
+            "Overwrite delta and spec files even when they already contain real content. "
+            "Use only when you intend to replace what is there.",
+        )
 
         mark_draft_row = tk.Frame(body, bg=COLORS["bg"])
         mark_draft_row.pack(fill="x", padx=16, pady=(0, 4))
         mark_draft_cb = tk.Checkbutton(
             mark_draft_row,
-            text="Mark emitted layers as draft (enables promote after Sources ingest)",
+            text="Mark new cartridge output as draft (review before merge)",
             variable=mark_draft_var,
             bg=COLORS["bg"],
             fg=COLORS["fg"],
@@ -2936,13 +3027,54 @@ class HivePlannerApp:
             state="disabled",
         )
         mark_draft_cb.pack(anchor="w")
+        attach_hover_tooltip(
+            mark_draft_cb,
+            "Adds a draft banner to newly emitted cartridge files so promotion knows they still need human review.",
+        )
+
+        embed_var = tk.BooleanVar(value=False)
+        embed_row = tk.Frame(body, bg=COLORS["bg"])
+        embed_row.pack(fill="x", padx=16, pady=(0, 4))
+        embed_cb = tk.Checkbutton(
+            embed_row,
+            text="Improve AI search quality — build embeddings (slower, recommended for new uploads)",
+            variable=embed_var,
+            bg=COLORS["bg"],
+            fg=COLORS["fg"],
+            activebackground=COLORS["bg"],
+            activeforeground=COLORS["fg"],
+            selectcolor=COLORS["card"],
+            anchor="w",
+            font=FONT,
+            wraplength=470,
+            justify="left",
+            state="disabled",
+        )
+        embed_cb.pack(anchor="w")
+        attach_hover_tooltip(
+            embed_cb,
+            "Creates semantic search vectors so agents can find the best excerpts from your uploaded files. "
+            "Turn on when adding new reference documents.",
+        )
+
+        mode_hint_var = tk.StringVar(value="")
+        mode_hint = tk.Label(
+            body,
+            textvariable=mode_hint_var,
+            bg=COLORS["bg"],
+            fg=COLORS.get("warn", "#c9a227"),
+            font=FONT_SUBTITLE,
+            wraplength=480,
+            justify="left",
+        )
+        mode_hint.pack(anchor="w", padx=16, pady=(0, 4))
 
         overwrite_var = tk.BooleanVar(value=False)
         overwrite_row = tk.Frame(body, bg=COLORS["bg"])
         overwrite_row.pack(fill="x", padx=16, pady=(0, 4))
         overwrite_cb = tk.Checkbutton(
             overwrite_row,
-            text="Overwrite existing cartridge files in the project",
+            text="Replace cartridge files already in this project",
             variable=overwrite_var,
             bg=COLORS["bg"],
             fg=COLORS["fg"],
@@ -2956,6 +3088,10 @@ class HivePlannerApp:
             state="disabled",
         )
         overwrite_cb.pack(anchor="w")
+        attach_hover_tooltip(
+            overwrite_cb,
+            "When importing a cartridge folder, copy over matching files in cartridge/ instead of skipping them.",
+        )
 
         def sync_promote_controls(*_args: object) -> None:
             if not handoff_unified:
@@ -2971,9 +3107,33 @@ class HivePlannerApp:
             sources_promote = mode_var.get() == "sources" and promote_var.get()
             mark_draft_cb.configure(state="normal" if sources_promote else "disabled")
 
-        promote_var.trace_add("write", sync_promote_controls)
-        mode_var.trace_add("write", sync_promote_controls)
-        sync_promote_controls()
+        def sync_mode_hints(*_args: object) -> None:
+            sync_promote_controls()
+            mode = mode_var.get()
+            if mode == "sources":
+                embed_cb.configure(state="normal")
+                mode_hint_var.set(
+                    "Reference files are copied into your project library and linked for AI search. "
+                    "Turn on Improve AI search quality when adding new documents."
+                )
+            elif mode == "translate":
+                embed_cb.configure(state="disabled")
+                embed_var.set(False)
+                mode_hint_var.set(
+                    "Creates draft planning files from one markdown note. "
+                    "It does not add the file to your searchable library — use Add reference files for that."
+                )
+            else:
+                embed_cb.configure(state="disabled")
+                embed_var.set(False)
+                mode_hint_var.set(
+                    "Copies an entire cartridge/ folder into your project. "
+                    "Use when you already exported or copied cartridge files elsewhere."
+                )
+
+        promote_var.trace_add("write", sync_mode_hints)
+        mode_var.trace_add("write", sync_mode_hints)
+        sync_mode_hints()
 
         def sync_import_controls(*_args: object) -> None:
             if mode_var.get() == "import":
@@ -2988,13 +3148,25 @@ class HivePlannerApp:
         selection_var = tk.StringVar(value="(none selected)")
         tk.Label(
             body,
+            text="Your selection",
+            bg=COLORS["bg"],
+            fg=COLORS["fg"],
+            font=FONT_BOLD,
+        ).pack(anchor="w", padx=16, pady=(8, 2))
+        selection_label = tk.Label(
+            body,
             textvariable=selection_var,
             bg=COLORS["bg"],
             fg=COLORS["muted"],
             font=FONT_SUBTITLE,
             wraplength=480,
             justify="left",
-        ).pack(anchor="w", padx=16, pady=(8, 4))
+        )
+        selection_label.pack(anchor="w", padx=16, pady=(0, 4))
+        attach_hover_tooltip(
+            selection_label,
+            "Shows the file or folder you picked with Browse. Required before you can run Load.",
+        )
 
         selected_files: list[Path] = []
         selected_folder: Path | None = None
@@ -3052,7 +3224,12 @@ class HivePlannerApp:
 
         browse_row = tk.Frame(body, bg=COLORS["bg"])
         browse_row.pack(fill="x", padx=16, pady=(4, 16))
-        secondary_button(browse_row, "Browse…", browse)
+        secondary_button(
+            browse_row,
+            "Browse…",
+            browse,
+            tooltip="Pick the file(s) or folder for the option you selected above.",
+        )
 
         def run_load() -> None:
             mode = mode_var.get()
@@ -3065,8 +3242,8 @@ class HivePlannerApp:
             if needs_feature:
                 if not feature:
                     messagebox.showwarning(
-                        "Feature required",
-                        "Enter a feature id for this load mode.",
+                        "Feature name required",
+                        "Enter a feature name (for example mlp-decimacon).",
                         parent=dialog,
                     )
                     return
@@ -3084,6 +3261,20 @@ class HivePlannerApp:
             if mode == "translate" and not selected_files:
                 messagebox.showwarning("Nothing selected", "Choose a research markdown file first.", parent=dialog)
                 return
+            if feature and feature != "example-feature":
+                try:
+                    validate_feature_id(feature)
+                except ValueError as exc:
+                    messagebox.showerror("Invalid feature name", str(exc), parent=dialog)
+                    return
+            if mode == "sources":
+                from hive_planner.config import RepoPaths
+                from hive_planner.source4s import expand_source4s_inputs, source4s_needs_pdf_support
+
+                check_files = expand_source4s_inputs(selected_files) or selected_files
+                if not pdf_ok and source4s_needs_pdf_support(RepoPaths(root=root), check_files):
+                    messagebox.showerror("PDF support missing", pdf_support_message(), parent=dialog)
+                    return
 
             do_promote = will_promote
             do_feature = feature.strip() if feature.strip() else None
@@ -3109,6 +3300,7 @@ class HivePlannerApp:
                         root,
                         selected_files,
                         do_feature,
+                        embed=embed_var.get(),
                         promote=do_promote,
                         force_promote=do_force,
                         mark_emitted_draft=do_mark_draft,
@@ -3145,15 +3337,15 @@ class HivePlannerApp:
 
         primary_button(
             action_row,
-            "Load cartridge",
+            "Bring into project",
             run_load,
-            tooltip="Run the option you picked above: add sources, translate research, or import a folder.",
+            tooltip="Run the steps for your selected option: add reference files, translate a note, or import a folder.",
         )
         secondary_button(
             action_row,
             "Cancel",
             dialog.destroy,
-            tooltip="Close without loading anything.",
+            tooltip="Close this window without changing your project.",
         )
 
     def _queue_cartridge_result_log(self, result: dict) -> None:
