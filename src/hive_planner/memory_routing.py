@@ -293,7 +293,7 @@ def route_ambiguous_candidate(
             original=bullet,
             remediations=[],
             reason=f"Thompson: route to Spec Kit ({spec_path})",
-            spec_action=f"Update {spec_path} before promoting behavioral bullet: {bullet[:80]}",
+            spec_action=f"Update {spec_path} before promoting ambiguous candidate: {bullet[:80]}",
         )
     return RoutingDecision(
         arm=ARM_REJECT,

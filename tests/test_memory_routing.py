@@ -198,3 +198,23 @@ def test_routing_stats_roundtrip(tmp_path: Path) -> None:
     save_routing_stats(paths, stats)
     loaded = load_routing_stats(paths)
     assert loaded.arm(ARM_SPLIT).successes >= 2.0
+
+
+def test_route_ambiguous_route_spec_labels_as_ambiguous_not_behavioral() -> None:
+    """spec_action for ambiguous→route_spec must say 'ambiguous candidate', not 'behavioral bullet'."""
+    import random
+
+    stats = RoutingStats()
+    stats.arm(ARM_ROUTE_SPEC).successes = 50
+    stats.arm(ARM_OPERATIONALIZE).failures = 20
+    stats.arm(ARM_REJECT).failures = 20
+    decision = route_ambiguous_candidate(
+        "Mixed signal bullet about architecture.",
+        feature="feature-x",
+        stats=stats,
+        rng=random.Random(42),
+    )
+    if decision.arm == ARM_ROUTE_SPEC:
+        assert decision.spec_action is not None
+        assert "ambiguous candidate" in decision.spec_action
+        assert "behavioral bullet" not in decision.spec_action
