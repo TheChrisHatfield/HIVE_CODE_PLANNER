@@ -891,3 +891,31 @@ def test_propose_rejects_candidates_outside_project_root(tmp_path: Path) -> None
 def test_normalize_candidates_requires_bullets() -> None:
     with pytest.raises(AgentsMemoryError, match="No candidate bullets"):
         normalize_candidates_text("user: hello\nassistant: hi\n")
+
+
+def test_agents_apply_cli_prints_noop_when_already_present(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    """agents-apply CLI must say 'no-op' rather than 'Applied' when AGENTS.md unchanged."""
+    from hive_planner.cli import main
+
+    paths = RepoPaths(root=tmp_path)
+    (paths.root / "AGENTS.md").write_text(
+        _minimal_agents().replace(
+            "- Existing durable fact one.",
+            "- Existing durable fact one.\n- Keep logs concise.",
+        ),
+        encoding="utf-8",
+    )
+    candidates = paths.root / "candidates.md"
+    candidates.write_text("- Keep logs concise. # operational\n", encoding="utf-8")
+
+    monkeypatch.setattr(
+        "hive_planner.agents_memory._evaluate_candidates",
+        lambda *_a, **_k: (["Keep logs concise. # operational"], [], [], []),
+    )
+    code = main(["--root", str(tmp_path), "agents-apply", "--candidates", str(candidates)])
+    captured = capsys.readouterr()
+    assert code == 0
+    assert "no-op" in captured.out
+    assert "Applied accepted bullets" not in captured.out

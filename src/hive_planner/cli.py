@@ -815,7 +815,10 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         print(f"Root: {root}")
         print(f"Wrote proposal: {result.proposal_path.relative_to(root)}")
-        print("Applied accepted bullets to AGENTS.md (guarded v2 apply)")
+        if result.applied:
+            print("Applied accepted bullets to AGENTS.md (guarded v2 apply)")
+        else:
+            print("AGENTS.md unchanged (all accepted bullets already present — no-op)")
         if result.routing:
             print(f"Routing decisions: {len(result.routing)}")
         print(json.dumps(result.to_dict(), indent=2))
