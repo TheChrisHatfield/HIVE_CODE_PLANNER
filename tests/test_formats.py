@@ -156,3 +156,25 @@ def test_emitter_respects_doc_and_excerpt_limits() -> None:
     selected = select_chunks(chunks, "cartridge-compiler-v2")
     assert len(selected) <= MAX_SOURCE_EXCERPTS
     assert len({c.doc_id for c in selected}) <= MAX_SOURCE_DOCUMENTS
+
+
+def test_merge_preferred_chunks_respects_max_documents() -> None:
+    from hive_planner.emitter import merge_preferred_chunks
+
+    chunks = [
+        ChunkRecord(
+            chunk_id=f"doc{i}-c0",
+            doc_id=f"doc{i}",
+            heading_path="h",
+            text=f"preferred upload {i}",
+            chunk_index=0,
+        )
+        for i in range(6)
+    ]
+    selected = select_chunks(chunks, "preferred-upload")
+    prefer_ids = [f"doc{i}" for i in range(6)]
+    merged = merge_preferred_chunks(selected, chunks, prefer_ids)
+    assert len(merged) <= MAX_SOURCE_EXCERPTS
+    assert len({c.doc_id for c in merged}) <= MAX_SOURCE_DOCUMENTS
+    # First preferred uploads win the document slots
+    assert {c.doc_id for c in merged} == {"doc0", "doc1", "doc2"}

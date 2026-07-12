@@ -82,24 +82,38 @@ def merge_preferred_chunks(
     chunks: list[ChunkRecord],
     prefer_doc_ids: list[str],
     limit: int = MAX_SOURCE_EXCERPTS,
+    *,
+    max_documents: int = MAX_SOURCE_DOCUMENTS,
 ) -> list[ChunkRecord]:
-    """Ensure chunks from preferred documents appear first in source-context excerpts."""
+    """Ensure chunks from preferred documents appear first in source-context excerpts.
+
+    Preferred docs are taken first (upload order), then ranked selections fill remaining
+    excerpt slots — still capped by max_documents and limit.
+    """
     if not prefer_doc_ids:
         return selected[:limit]
     merged: list[ChunkRecord] = []
     seen: set[str] = set()
+    doc_ids: set[str] = set()
     for doc_id in prefer_doc_ids:
+        if len(doc_ids) >= max_documents and doc_id not in doc_ids:
+            continue
         for chunk in chunks:
             if chunk.doc_id == doc_id and chunk.chunk_id not in seen:
                 merged.append(chunk)
                 seen.add(chunk.chunk_id)
+                doc_ids.add(doc_id)
                 break
     for chunk in selected:
         if len(merged) >= limit:
             break
-        if chunk.chunk_id not in seen:
-            merged.append(chunk)
-            seen.add(chunk.chunk_id)
+        if chunk.chunk_id in seen:
+            continue
+        if chunk.doc_id not in doc_ids and len(doc_ids) >= max_documents:
+            continue
+        merged.append(chunk)
+        seen.add(chunk.chunk_id)
+        doc_ids.add(chunk.doc_id)
     return merged[:limit]
 
 
