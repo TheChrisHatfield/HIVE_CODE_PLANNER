@@ -2509,6 +2509,31 @@ def test_on_agents_apply_runs_propose_with_apply_true(monkeypatch: pytest.Monkey
 
     assert captured == [True]
 
+
+def test_agents_apply_done_logs_routing_when_applied() -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.root = None
+    app._pending_home_log = []
+    app._refresh_home_dashboard = lambda: None  # type: ignore[method-assign]
+    app._clear_memory_work_context = lambda: None  # type: ignore[method-assign]
+
+    app._agents_apply_done(
+        {
+            "ok": True,
+            "proposal_path": "docs/proposals/agents-memory-1.md",
+            "accepted": ["Keep logs concise."],
+            "rejected": [],
+            "applied": True,
+            "routing": [{"arm": "split", "reason": "Auto-split into 2 bullet(s) ≤ 240 chars"}],
+        }
+    )
+
+    assert any("AGENTS.md updated" in line for line in app._pending_home_log)
+    assert any("route/split" in line for line in app._pending_home_log)
+
+
 def test_pending_memory_survives_dashboard_when_linked_via_workspace_file(tmp_path: Path) -> None:
     from hive_planner.launcher.app import HivePlannerApp
     from hive_planner.launcher.config import LauncherConfig, normalize_project_path

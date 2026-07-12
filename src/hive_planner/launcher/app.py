@@ -2132,6 +2132,11 @@ class HivePlannerApp:
             self._queue_home_log(f"Rejected {len(rejected)} candidate(s) — see proposal file.")
         if result.get("applied"):
             self._queue_home_log("AGENTS.md updated.")
+            for item in result.get("routing") or []:
+                arm = item.get("arm")
+                reason = item.get("reason")
+                if arm or reason:
+                    self._queue_home_log(f"  route/{arm}: {reason}")
         self._clear_memory_work_context()
         self._refresh_home_dashboard()
 
