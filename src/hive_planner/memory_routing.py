@@ -200,7 +200,7 @@ def _bullet_line_in_markdown(bullet: str, content: str) -> bool:
     return False
 
 
-def _append_behavioral_candidate(paths: RepoPaths, feature: str | None, bullet: str) -> Path:
+def _append_behavioral_candidate(paths: RepoPaths, feature: str | None, bullet: str) -> tuple[Path, bool]:
     proposals = paths.root / "docs" / "proposals"
     proposals.mkdir(parents=True, exist_ok=True)
     out = proposals / "cl-candidates.md"
@@ -214,7 +214,7 @@ def _append_behavioral_candidate(paths: RepoPaths, feature: str | None, bullet: 
     if out.is_file():
         existing = out.read_text(encoding="utf-8", errors="replace")
         if _bullet_line_in_markdown(bullet, existing):
-            return out
+            return out, False
         out.write_text(existing.rstrip() + "\n" + "\n".join(block), encoding="utf-8", newline="\n")
     else:
         header = [
@@ -224,7 +224,7 @@ def _append_behavioral_candidate(paths: RepoPaths, feature: str | None, bullet: 
             "",
         ]
         out.write_text("\n".join(header + block), encoding="utf-8", newline="\n")
-    return out
+    return out, True
 
 
 def route_oversized_operational(
@@ -295,15 +295,20 @@ def route_behavioral_candidate(
     feature: str | None,
     stats: RoutingStats | None = None,
 ) -> RoutingDecision:
-    out = _append_behavioral_candidate(paths, feature, bullet)
+    out, wrote = _append_behavioral_candidate(paths, feature, bullet)
     rel = out.relative_to(paths.root).as_posix()
     spec_path = f"docs/specs/{feature}/spec.md" if feature else "docs/specs/<feature>/spec.md"
     if stats is not None:
-        stats.record(ARM_ROUTE_SPEC, success=True)
+        stats.record(ARM_ROUTE_SPEC, success=wrote)
+    reason = (
+        f"Auto-routed behavioral bullet to {rel}"
+        if wrote
+        else f"Behavioral bullet already present in {rel}"
+    )
     return RoutingDecision(
         arm=ARM_ROUTE_SPEC,
         original=bullet,
         remediations=[],
-        reason=f"Auto-routed behavioral bullet to {rel}",
+        reason=reason,
         spec_action=f"Update {spec_path} from {rel}: {bullet[:80]}",
     )

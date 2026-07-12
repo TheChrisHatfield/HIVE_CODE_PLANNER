@@ -123,6 +123,17 @@ def test_append_behavioral_dedupes_exact_bullet_line_not_substring(tmp_path: Pat
     assert text.count("- See API documentation") == 1
 
 
+def test_route_behavioral_skips_stats_success_when_duplicate(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    bullet = "API must return 404 when disabled. # behavioral"
+    route_behavioral_candidate(bullet, paths=paths, feature="feature-x")
+    stats = RoutingStats()
+    stats.arm(ARM_ROUTE_SPEC).successes = 5.0
+    decision = route_behavioral_candidate(bullet, paths=paths, feature="feature-x", stats=stats)
+    assert "already present" in decision.reason
+    assert stats.arm(ARM_ROUTE_SPEC).successes == 5.0
+
+
 def test_routing_stats_roundtrip(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     stats = RoutingStats()
