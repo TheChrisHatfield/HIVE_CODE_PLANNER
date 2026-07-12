@@ -251,7 +251,7 @@ def test_propose_rejects_ambiguous_candidate(tmp_path: Path) -> None:
     candidates = paths.root / "candidates.md"
     candidates.write_text("- Run ci-check before handoff; API must return 404 when disabled.\n", encoding="utf-8")
     with pytest.raises(AgentsMemoryError, match="All candidate"):
-        propose_agents_memory(paths, candidates)
+        propose_agents_memory(paths, candidates, auto_route=False)
 
 
 def test_propose_rejects_behavioral_candidate(tmp_path: Path) -> None:
