@@ -1535,11 +1535,35 @@ def run_cartridge_load_sources(
         return {"ok": False, "error": "No supported source files were copied.", "warnings": warnings}
 
     ingest_report = ingest(paths, embed=embed)
+    warnings = warnings + list(ingest_report.warnings)
+
+    from hive_planner.indexer import load_document_index
+
+    indexed_paths = {doc.source_path for doc in load_document_index(paths.document_index).documents}
+    indexed_copied = [rel for rel in copied if rel in indexed_paths]
+    not_indexed = [rel for rel in copied if rel not in indexed_paths]
+    if not_indexed:
+        warnings.append(
+            f"{len(not_indexed)} of {len(copied)} staged file(s) could not be indexed: "
+            + ", ".join(not_indexed)
+        )
+    if not indexed_copied:
+        return {
+            "ok": False,
+            "error": "Staged files were copied but none could be indexed into the context library.",
+            "mode": "sources",
+            "feature": feature.strip(),
+            "copied": copied,
+            "processed": ingest_report.processed,
+            "skipped": ingest_report.skipped,
+            "warnings": warnings,
+        }
+
     try:
         outputs, emit_warnings = emit_cartridge(
             paths,
             feature.strip(),
-            prefer_source_paths=copied,
+            prefer_source_paths=indexed_copied,
         )
     except ValueError as exc:
         return {"ok": False, "error": str(exc), "copied": copied, "warnings": warnings}
@@ -1562,7 +1586,7 @@ def run_cartridge_load_sources(
         "processed": ingest_report.processed,
         "skipped": ingest_report.skipped,
         "outputs": {name: path.relative_to(target).as_posix() for name, path in outputs.items()},
-        "warnings": warnings + list(ingest_report.warnings) + list(emit_warnings),
+        "warnings": warnings + list(emit_warnings),
     }
     if mark_draft is not None:
         payload["mark_draft"] = mark_draft

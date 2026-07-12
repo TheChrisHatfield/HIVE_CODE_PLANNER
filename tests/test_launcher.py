@@ -802,6 +802,32 @@ def test_run_cartridge_load_sources_warns_when_staged_chunks_unembedded(tmp_path
     assert "lavd-cpu-research.md" in context
 
 
+def test_run_cartridge_load_sources_fails_when_staged_files_not_indexed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Prefer only indexed staged files; fail when ingest indexes none of them."""
+    from hive_planner.indexer import ChunkIndex, DocumentIndex
+
+    project = _minimal_hive_project(tmp_path / "proj")
+    source = tmp_path / "notes.md"
+    source.write_text("# Research\n\nSubsystem workflow for cartridge testing.\n", encoding="utf-8")
+
+    monkeypatch.setattr(
+        "hive_planner.launcher.service.ingest",
+        lambda *_a, **_k: type("R", (), {"processed": 0, "skipped": 1, "warnings": ["skipped"]})(),
+    )
+    monkeypatch.setattr(
+        "hive_planner.indexer.load_document_index",
+        lambda *_a, **_k: DocumentIndex(),
+    )
+
+    result = run_cartridge_load_sources(project, [source], "my-feature", promote=False)
+
+    assert result["ok"] is False
+    assert "none could be indexed" in (result.get("error") or "").lower()
+    assert result.get("copied")
+
+
 def test_run_cartridge_load_sources_mark_draft_stamps_layers(tmp_path: Path) -> None:
     from hive_planner.translator import DRAFT_BANNER
 
