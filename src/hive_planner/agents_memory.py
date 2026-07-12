@@ -854,7 +854,7 @@ def apply_agents_memory_accepted(
     current_facts: str | None = None,
     after_section: str | None = None,
     agents_path: Path | None = None,
-    skip_wiring_audit: bool = True,
+    skip_wiring_audit: bool = False,
 ) -> AgentsMemoryResult:
     """Apply a prior propose result without re-evaluating candidates (Thompson-safe)."""
     from hive_planner.wiring_audit import WiringAuditError, require_wiring_audit_for_memory

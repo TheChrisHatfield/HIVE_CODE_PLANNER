@@ -228,6 +228,23 @@ def test_split_arm_records_failure_when_all_pieces_duplicate(tmp_path: Path) -> 
     assert stats.arm("split").failures > 1.0
 
 
+def test_finalize_apply_enforces_wiring_audit_when_unified(tmp_path: Path) -> None:
+    from hive_planner.agent_handoff import AGENT_HANDOFF_UNIFIED
+    from hive_planner.agents_memory import AgentsMemoryError, apply_agents_memory_accepted
+    from hive_planner.project_profile import write_project_profile
+
+    paths = RepoPaths(root=tmp_path)
+    write_project_profile(
+        paths.root,
+        profile="minimal",
+        project_name="demo",
+        agent_handoff_mode=AGENT_HANDOFF_UNIFIED,
+    )
+    (paths.root / "AGENTS.md").write_text(_minimal_agents(), encoding="utf-8")
+    with pytest.raises(AgentsMemoryError, match="wiring audit"):
+        apply_agents_memory_accepted(paths, accepted=["New operational fact."])
+
+
 def test_auto_route_behavioral_writes_cl_candidates(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     (paths.root / "AGENTS.md").write_text(_minimal_agents(), encoding="utf-8")
