@@ -277,6 +277,32 @@ def test_try_accept_operational_updates_existing_set() -> None:
     assert "keep pytest green." in existing
 
 
+def test_try_accept_operational_accepts_arm_accept_bullet() -> None:
+    """A bullet that exceeds MAX_BULLET_CHARS only due to trailing whitespace should be
+    accepted via ARM_ACCEPT after route_oversized_operational strips and normalises it."""
+    from hive_planner.agents_memory import MAX_BULLET_CHARS, _try_accept_operational
+
+    core = "A" * MAX_BULLET_CHARS
+    candidate = core + "   "
+    assert len(candidate) > MAX_BULLET_CHARS
+    assert len(candidate.strip()) == MAX_BULLET_CHARS
+
+    existing: set[str] = set()
+    accepted: list[str] = []
+    rejected: list[tuple[str, str]] = []
+    routing: list[dict] = []
+    _try_accept_operational(
+        candidate,
+        accepted=accepted,
+        rejected=rejected,
+        routing=routing,
+        existing=existing,
+        stats=None,
+    )
+    assert accepted == [core], f"Expected accepted, got rejected={rejected}"
+    assert not rejected
+
+
 def test_propose_rejects_ambiguous_candidate(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     (paths.root / "AGENTS.md").write_text(_minimal_agents(), encoding="utf-8")

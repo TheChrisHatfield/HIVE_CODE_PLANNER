@@ -436,7 +436,7 @@ def _try_accept_operational(
     stats,
     max_chars: int = MAX_BULLET_CHARS,
 ) -> None:
-    from hive_planner.memory_routing import ARM_SPLIT, route_oversized_operational
+    from hive_planner.memory_routing import ARM_ACCEPT, ARM_SPLIT, route_oversized_operational
 
     known = existing | {_normalize_bullet(c) for c in accepted}
     err = _validate_candidate(candidate, known)
@@ -469,6 +469,13 @@ def _try_accept_operational(
             )
         )
         return
+    if decision.arm == ARM_ACCEPT and decision.remediations:
+        normalized = decision.remediations[0]
+        piece_err = _validate_candidate(normalized, existing | {_normalize_bullet(c) for c in accepted})
+        if piece_err is None:
+            accepted.append(normalized)
+            existing.add(_normalize_bullet(normalized))
+            return
     rejected.append((candidate, f"{err} — {decision.reason}"))
 
 
