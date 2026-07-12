@@ -849,6 +849,14 @@ def run_agents_memory(
     )
 
 
+def _resolve_reuse_proposal_path(paths: RepoPaths, proposal_path: Path | str | None) -> Path | None:
+    if not proposal_path:
+        return None
+    rel = Path(proposal_path)
+    candidate = rel if rel.is_absolute() else paths.root / rel
+    return candidate if candidate.is_file() else None
+
+
 def apply_agents_memory_accepted(
     paths: RepoPaths,
     *,
@@ -859,6 +867,7 @@ def apply_agents_memory_accepted(
     current_facts: str | None = None,
     after_section: str | None = None,
     agents_path: Path | None = None,
+    proposal_path: Path | str | None = None,
     skip_wiring_audit: bool = False,
 ) -> AgentsMemoryResult:
     """Apply a prior propose result without re-evaluating candidates (Thompson-safe)."""
@@ -884,20 +893,22 @@ def apply_agents_memory_accepted(
     existing = _existing_durable_bullets(sections)
     pending = [c for c in accepted if _normalize_bullet(c) not in existing]
     if not pending:
-        out_path = _write_proposal(
-            paths,
-            target=target,
-            current_facts=facts,
-            after_section=facts,
-            proposed_bullets="",
-            accepted=[],
-            rejected=rejections
-            + [("(prior accepted)", "All accepted bullets already present in AGENTS.md")],
-            spec_actions=actions,
-            applied=False,
-        )
+        reuse = _resolve_reuse_proposal_path(paths, proposal_path)
+        if reuse is None:
+            reuse = _write_proposal(
+                paths,
+                target=target,
+                current_facts=facts,
+                after_section=facts,
+                proposed_bullets="",
+                accepted=[],
+                rejected=rejections
+                + [("(prior accepted)", "All accepted bullets already present in AGENTS.md")],
+                spec_actions=actions,
+                applied=False,
+            )
         return AgentsMemoryResult(
-            proposal_path=out_path,
+            proposal_path=reuse,
             applied=False,
             accepted=[],
             rejected=rejections,

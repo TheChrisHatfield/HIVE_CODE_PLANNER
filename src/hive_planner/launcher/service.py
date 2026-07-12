@@ -1258,6 +1258,7 @@ def run_agents_memory_finalize_apply(project_root: Path, prior: dict) -> dict:
             routing=prior.get("routing") or [],
             current_facts=prior.get("current_facts"),
             after_section=prior.get("after_section"),
+            proposal_path=prior.get("proposal_path"),
         )
     except AgentsMemoryError as exc:
         msg = str(exc)

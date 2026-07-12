@@ -382,6 +382,35 @@ def test_finalize_apply_is_idempotent_when_all_bullets_already_present(tmp_path:
     assert (paths.root / "AGENTS.md").read_text(encoding="utf-8") == agents
 
 
+def test_finalize_apply_noop_reuses_prior_proposal_path(tmp_path: Path) -> None:
+    from hive_planner.agents_memory import apply_agents_memory_accepted
+
+    paths = RepoPaths(root=tmp_path)
+    agents = _minimal_agents().replace(
+        "- Existing durable fact one.",
+        "- Existing durable fact one.\n- Keep logs concise.",
+    )
+    (paths.root / "AGENTS.md").write_text(agents, encoding="utf-8")
+    first = apply_agents_memory_accepted(
+        paths,
+        accepted=["Keep logs concise."],
+        skip_wiring_audit=True,
+    )
+    assert not first.applied
+    first_rel = first.proposal_path.relative_to(paths.root).as_posix()
+    before = list((paths.root / "docs" / "proposals").glob("agents-memory-*.md"))
+    second = apply_agents_memory_accepted(
+        paths,
+        accepted=["Keep logs concise."],
+        proposal_path=first_rel,
+        skip_wiring_audit=True,
+    )
+    after = list((paths.root / "docs" / "proposals").glob("agents-memory-*.md"))
+    assert not second.applied
+    assert second.proposal_path == first.proposal_path
+    assert len(after) == len(before)
+
+
 def test_auto_route_behavioral_writes_cl_candidates(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     (paths.root / "AGENTS.md").write_text(_minimal_agents(), encoding="utf-8")
