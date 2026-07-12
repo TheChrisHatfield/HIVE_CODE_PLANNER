@@ -1803,6 +1803,13 @@ class HivePlannerApp:
         root = self._resolve_memory_work_root()
         candidates = self._memory_work_candidates()
         if accepted and root and candidates:
+            if stale:
+                self._queue_home_log(
+                    "Memory promotion finished after dashboard refresh — "
+                    "check AGENTS.md or re-run Promote memory if needed.",
+                )
+                self._refresh_home_dashboard()
+                return
             # Autonomous path: apply without modal preview (CLI/CL parity).
             # Defer accepted-count logging until apply_done confirms outcome.
             self._start_home_action(f"Running agents-apply on {candidates.name}…")
