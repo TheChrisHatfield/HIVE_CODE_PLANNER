@@ -874,15 +874,23 @@ def apply_agents_memory_accepted(
     facts = current_facts if current_facts is not None else (
         sections.get(current_key, "").strip() if current_key else ""
     )
-    proposed_bullets = "\n".join(f"- {c}" for c in accepted)
-    after = after_section if after_section is not None else (
-        f"{facts}\n{proposed_bullets}".strip() if facts else proposed_bullets
-    )
     rejections = list(rejected or [])
     actions = list(spec_actions or [])
     routes = list(routing or [])
 
-    updated = _apply_accepted_bullets(agents_text, accepted)
+    existing = {
+        _normalize_bullet(b)
+        for body in sections.values()
+        for _, b in _section_bullets(body)
+    }
+    pending = [c for c in accepted if _normalize_bullet(c) not in existing]
+    if not pending:
+        raise AgentsMemoryError("All accepted bullets are already in AGENTS.md")
+
+    proposed_bullets = "\n".join(f"- {c}" for c in pending)
+    after = f"{facts}\n{proposed_bullets}".strip() if facts else proposed_bullets
+
+    updated = _apply_accepted_bullets(agents_text, pending)
     target.write_text(updated, encoding="utf-8")
     lint = lint_agents_md(paths, agents_path=target)
     if not lint.ok:
@@ -894,7 +902,7 @@ def apply_agents_memory_accepted(
             current_facts=facts,
             after_section=after,
             proposed_bullets=proposed_bullets,
-            accepted=accepted,
+            accepted=pending,
             rejected=rejections,
             spec_actions=actions,
             applied=False,
@@ -906,7 +914,7 @@ def apply_agents_memory_accepted(
             rejected=[{"candidate": c, "reason": r} for c, r in rejections],
             spec_actions=actions,
             current_facts=facts,
-            accepted=accepted,
+            accepted=pending,
             after_section=after,
         )
 
@@ -916,7 +924,7 @@ def apply_agents_memory_accepted(
         current_facts=facts,
         after_section=after,
         proposed_bullets=proposed_bullets,
-        accepted=accepted,
+        accepted=pending,
         rejected=rejections,
         spec_actions=actions,
         applied=True,
@@ -924,7 +932,7 @@ def apply_agents_memory_accepted(
     return AgentsMemoryResult(
         proposal_path=out_path,
         applied=True,
-        accepted=accepted,
+        accepted=pending,
         rejected=rejections,
         current_facts=facts,
         after_section=after,
