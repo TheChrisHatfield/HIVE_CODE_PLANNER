@@ -447,6 +447,8 @@ def _try_accept_operational(
             else:
                 accepted.append(piece)
                 added += 1
+        if stats is not None:
+            stats.record(ARM_SPLIT, success=added > 0)
         rejected.append(
             (
                 candidate,

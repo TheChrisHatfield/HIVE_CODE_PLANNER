@@ -228,8 +228,6 @@ def route_oversized_operational(
     if len(pieces) == 1 and len(pieces[0]) <= max_chars and pieces[0] == bullet.strip():
         return RoutingDecision(arm=ARM_ACCEPT, original=bullet, remediations=[bullet.strip()], reason="fits limit")
     if pieces and all(len(p) <= max_chars for p in pieces):
-        if stats is not None:
-            stats.record(ARM_SPLIT, success=True)
         return RoutingDecision(
             arm=ARM_SPLIT,
             original=bullet,

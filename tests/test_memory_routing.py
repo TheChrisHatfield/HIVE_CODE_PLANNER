@@ -42,13 +42,13 @@ def test_split_long_bullet_preserves_tag_and_fits_limit() -> None:
     assert "build_portable" in joined
 
 
-def test_route_oversized_operational_records_split() -> None:
+def test_route_oversized_operational_splits_without_recording_stats() -> None:
     stats = RoutingStats()
     long = ("A" * 100 + ". " + "B" * 100 + ". " + "C" * 80 + " # operational")
     decision = route_oversized_operational(long, max_chars=240, stats=stats)
     assert decision.arm == ARM_SPLIT
     assert len(decision.remediations) >= 2
-    assert stats.arm(ARM_SPLIT).successes > 1.0
+    assert stats.arm(ARM_SPLIT).successes == 1.0
 
 
 def test_route_oversized_unsplittable_rejects(monkeypatch) -> None:

@@ -199,6 +199,35 @@ def test_auto_route_splits_oversized_operational_candidate(tmp_path: Path) -> No
     assert "HivePlanner.exe" in agents or "build_portable" in agents
 
 
+def test_split_arm_records_failure_when_all_pieces_duplicate(tmp_path: Path) -> None:
+    from hive_planner.agents_memory import _evaluate_candidates, parse_sections
+    from hive_planner.memory_routing import load_routing_stats, split_long_bullet
+
+    body = (
+        "Portable HivePlanner.exe lives under dist/HivePlannerPortable. "
+        "Rebuild with scripts/build_portable.ps1 after UI changes. "
+        "Smoke-test ocr-status and status before shipping. "
+        "Close the running exe first so Windows does not lock the binary."
+    )
+    long = f"{body} # operational"
+    assert len(long) > 240
+    sections = parse_sections(_minimal_agents())
+    for piece in split_long_bullet(long, max_chars=240):
+        sections.setdefault("Durable Workspace Facts", "")
+        sections["Durable Workspace Facts"] += f"\n- {piece}"
+
+    accepted, rejected, _, _ = _evaluate_candidates(
+        sections,
+        [long],
+        paths=RepoPaths(root=tmp_path),
+        auto_route=True,
+    )
+    assert not accepted
+    assert rejected
+    stats = load_routing_stats(RepoPaths(root=tmp_path))
+    assert stats.arm("split").failures > 1.0
+
+
 def test_auto_route_behavioral_writes_cl_candidates(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     (paths.root / "AGENTS.md").write_text(_minimal_agents(), encoding="utf-8")
