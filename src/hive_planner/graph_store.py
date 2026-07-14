@@ -245,6 +245,25 @@ def parse_offload_input(path: Path) -> tuple[list[dict[str, Any]], list[dict[str
             edges.append(validate_edge(item, default_status="staging"))
         return nodes, edges
 
+    # Pretty-printed or compact single record (not a bundle, not JSONL).
+    if isinstance(data, dict):
+        kind = data.get("kind")
+        if kind == "node" or (
+            "id" in data
+            and "from" not in data
+            and "to" not in data
+            and "rel" not in data
+        ):
+            payload = {k: v for k, v in data.items() if k != "kind"}
+            return [validate_node(payload, default_status="staging")], []
+        if kind == "edge" or ("from" in data and "to" in data and "rel" in data):
+            payload = {k: v for k, v in data.items() if k != "kind"}
+            return [], [validate_edge(payload, default_status="staging")]
+        raise GraphStoreError(
+            "JSON object must be a {nodes,edges} bundle, a node, or an edge "
+            "(set kind to 'node'/'edge' or include required fields)"
+        )
+
     if isinstance(data, list):
         for item in data:
             if not isinstance(item, dict):

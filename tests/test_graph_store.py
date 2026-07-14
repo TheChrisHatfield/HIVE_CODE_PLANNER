@@ -180,3 +180,17 @@ def test_offload_jsonl_kind(tmp_path: Path) -> None:
     result = offload_from_file(paths, jsonl)
     assert result.nodes_written == 2
     assert result.edges_written == 1
+
+
+def test_offload_pretty_printed_single_node(tmp_path: Path) -> None:
+    paths = _paths(tmp_path)
+    pretty = tmp_path / "single-node.json"
+    pretty.write_text(
+        '{\n  "id": "n-pretty",\n  "type": "concept",\n  "label": "Pretty Node"\n}\n',
+        encoding="utf-8",
+    )
+    result = offload_from_file(paths, pretty)
+    assert result.nodes_written == 1
+    assert result.edges_written == 0
+    staging = export_tier(paths, "staging")
+    assert staging["nodes"][0]["id"] == "n-pretty"
