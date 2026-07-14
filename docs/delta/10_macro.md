@@ -2,9 +2,19 @@
 
 **Hook:** `context.delta`, `compiler.pipeline`
 
+<!-- ROSETTA-NAV -->
+
+## Agent navigation (Rosetta Stone)
+
+Load [`docs/planning-rosetta-stone.md`](../../planning-rosetta-stone.md) (`planning.rosetta`) before using this Delta layer.
+
+- **Hook:** `context.delta`
+- **Unlocks:** micro briefs and spec.flow
+- **Next:** [`20_micro/`](./) feature briefs
+
 ## System Overview
 
-Hive Code Planner has four cooperating subsystems: **agent loader**, **context library**, **cartridge compiler**, and **cartridge output**. Planning docs and Rosetta hooks define behavior; Python tooling automates ingestion and emission.
+Hive Code Planner has five cooperating subsystems: **agent loader**, **context library**, **cartridge compiler**, **cartridge output**, and **shared graph memory**. Planning docs and Rosetta hooks define behavior; Python tooling automates ingestion and emission.
 
 ## Subsystems
 
@@ -50,12 +60,25 @@ Path: `context-library/` — see [context-library-structure-guide.md](../context
 | **Dependencies** | Compiler, Delta docs |
 | **Failure modes** | Draft cartridge promoted without review |
 
+### Shared Graph Memory
+
+| | |
+|--|--|
+| **Purpose** | Staging + permanent typed node/edge store for cross-cutting knowledge (`memory.shared_graph`) |
+| **Inputs** | Repo reflection bundles (JSON/JSONL graph records) |
+| **Outputs** | `.hive/shared-memory/staging/` + `permanent/` JSONL, `manifest.json` |
+| **Dependencies** | `src/hive_planner/graph_store.py`, CLI `graph *` |
+| **Failure modes** | Dangling edges; unvalidated dumps into permanent without promote |
+
+See [shared-graph-memory-v1.md](./20_micro/shared-graph-memory-v1.md).
+
 ## Data Contracts
 
 - **doc_id**: stable hash prefix from relative source path
 - **manifest.json**: `schema_version: cartridge.v1`
 - **chunk-index.json**: list of `{ chunk_id, doc_id, heading_path, text, keywords }`
 - **document-index.json**: list of `{ doc_id, source_path, format, title, content_hash }`
+- **graph node/edge**: JSONL lines per [shared-graph-memory-v1 spec](../specs/shared-graph-memory-v1/spec.md); store manifest `schema_version: shared-graph.v1`
 
 ## Agent Roles
 

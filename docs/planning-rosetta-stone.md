@@ -61,6 +61,8 @@ Use this file as the top-level legend for:
 - `context.cartridge`
 - `change.impact`
 - `context.document_sourcing`
+- `memory.shared_graph`
+- `representation.graph_native`
 
 **THREAD COVERAGE:** Full-thread navigation and decompression layer.
 
@@ -551,6 +553,50 @@ Use this file as the top-level legend for:
 
 ***
 
+## [HOOK:memory.shared_graph]
+
+**HOOK_ID:** `memory.shared_graph`
+
+**Meaning:** Temporary and permanent shared knowledge stores for Hive — repos offload graph reflections; a promote gate curates into permanent memory.
+
+**PRIMARY FILES:**
+
+- [delta/20_micro/shared-graph-memory-v1.md](./delta/20_micro/shared-graph-memory-v1.md)
+- [specs/shared-graph-memory-v1/spec.md](./specs/shared-graph-memory-v1/spec.md)
+- [../src/hive_planner/graph_store.py](../src/hive_planner/graph_store.py)
+
+**UNLOCKS:**
+
+- `representation.graph_native`
+- staging vs permanent tiers
+- CLI `graph offload` / `graph promote`
+
+**THREAD COVERAGE:** HIVE_CODE_DEV_1 shared-memory architecture (temp/permanent, hub curation).
+
+***
+
+## [HOOK:representation.graph_native]
+
+**HOOK_ID:** `representation.graph_native`
+
+**Meaning:** Knowledge as typed graph nodes and labeled edges (not flat documents); text is interchange, graph is the compute representation.
+
+**PRIMARY FILES:**
+
+- [specs/shared-graph-memory-v1/spec.md](./specs/shared-graph-memory-v1/spec.md)
+- [delta/20_micro/shared-graph-memory-v1.md](./delta/20_micro/shared-graph-memory-v1.md)
+- [delta/10_macro.md](./delta/10_macro.md)
+
+**UNLOCKS:**
+
+- node/edge schema
+- relationship types (`supports`, `depends_on`, …)
+- promote rules for dangling endpoints
+
+**THREAD COVERAGE:** Graph-node design discussion from HIVE_CODE_DEV_1.
+
+***
+
 ## [HOOK:meta.anchor_policy]
 
 **HOOK_ID:** `meta.anchor_policy`
@@ -620,5 +666,7 @@ The hooks above cover the major complexity strands developed across the thread:
 - validation policy
 - CI memory governance
 - startup loading and repo anchors
+- shared graph memory (staging/permanent)
+- graph-native representation
 
 This coverage is sufficient to recover the major concepts and their relationships without rereading the entire thread linearly.[^16_1][^16_4][^16_5]

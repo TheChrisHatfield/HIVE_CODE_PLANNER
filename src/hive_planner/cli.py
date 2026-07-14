@@ -415,6 +415,42 @@ def main(argv: list[str] | None = None) -> int:
     )
     cl_migrate.add_argument("--dry-run", action="store_true", help="Report actions without writing files")
 
+    graph_parser = sub.add_parser(
+        "graph",
+        help="Shared graph memory offload/promote/status/export (hook: memory.shared_graph)",
+    )
+    graph_sub = graph_parser.add_subparsers(dest="graph_command", required=True)
+    graph_offload = graph_sub.add_parser("offload", help="Append validated nodes/edges to staging JSONL")
+    graph_offload.add_argument(
+        "--from",
+        dest="source",
+        required=True,
+        type=Path,
+        help="JSON bundle {nodes,edges} or JSONL with kind node|edge",
+    )
+    graph_promote = graph_sub.add_parser(
+        "promote",
+        help="Promote staging records into permanent store (rule-based gate)",
+    )
+    graph_promote.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Report promote actions without writing files",
+    )
+    graph_sub.add_parser("status", help="Show staging/permanent counts and manifest")
+    graph_export = graph_sub.add_parser("export", help="Export a tier as JSON")
+    graph_export.add_argument(
+        "--tier",
+        choices=("staging", "permanent"),
+        default="permanent",
+        help="Which store to export (default: permanent)",
+    )
+    graph_export.add_argument(
+        "--pretty",
+        action="store_true",
+        help="Pretty-print JSON",
+    )
+
     args = parser.parse_args(argv)
     root, auto_detected = resolve_root(args.root)
     paths = RepoPaths(root=root)
@@ -857,6 +893,58 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Root: {root}")
         print(json.dumps(report.to_dict(), indent=2))
         return 0 if report.ok else 1
+
+    if args.command == "graph":
+        from hive_planner.graph_store import (
+            GraphStoreError,
+            export_tier,
+            graph_status,
+            offload_from_file,
+            promote_staging,
+        )
+
+        if args.graph_command == "offload":
+            try:
+                source = args.source if args.source.is_absolute() else root / args.source
+                result = offload_from_file(paths, source)
+            except GraphStoreError as exc:
+                print(f"Error: {exc}", file=sys.stderr)
+                return 1
+            print(f"Root: {root}")
+            print(json.dumps(result.to_dict(), indent=2))
+            return 0
+
+        if args.graph_command == "promote":
+            try:
+                result = promote_staging(paths, dry_run=args.dry_run)
+            except GraphStoreError as exc:
+                print(f"Error: {exc}", file=sys.stderr)
+                return 1
+            print(f"Root: {root}")
+            print(json.dumps(result.to_dict(), indent=2))
+            return 0
+
+        if args.graph_command == "status":
+            try:
+                payload = graph_status(paths)
+            except GraphStoreError as exc:
+                print(f"Error: {exc}", file=sys.stderr)
+                return 1
+            print(f"Root: {root}")
+            print(json.dumps(payload, indent=2))
+            return 0
+
+        try:
+            payload = export_tier(paths, args.tier)
+        except GraphStoreError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        print(f"Root: {root}")
+        if args.pretty:
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+        else:
+            print(json.dumps(payload, ensure_ascii=False))
+        return 0
 
     if args.command == "agents-ingest":
         try:

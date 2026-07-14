@@ -41,6 +41,26 @@ class RepoPaths:
     def cartridge(self) -> Path:
         return self.root / "cartridge"
 
+    @property
+    def hive_dir(self) -> Path:
+        return self.root / ".hive"
+
+    @property
+    def shared_memory(self) -> Path:
+        return self.hive_dir / "shared-memory"
+
+    @property
+    def shared_memory_staging(self) -> Path:
+        return self.shared_memory / "staging"
+
+    @property
+    def shared_memory_permanent(self) -> Path:
+        return self.shared_memory / "permanent"
+
+    @property
+    def shared_memory_manifest(self) -> Path:
+        return self.shared_memory / "manifest.json"
+
     def ensure_dirs(self) -> None:
         for path in (
             self.sources,
@@ -50,6 +70,10 @@ class RepoPaths:
             self.cartridge,
         ):
             path.mkdir(parents=True, exist_ok=True)
+
+    def ensure_shared_memory_dirs(self) -> None:
+        self.shared_memory_staging.mkdir(parents=True, exist_ok=True)
+        self.shared_memory_permanent.mkdir(parents=True, exist_ok=True)
 
 
 SUPPORTED_EXTENSIONS = {".md", ".txt", ".pdf", ".docx", ".html", ".htm", ".csv", ".pptx"}

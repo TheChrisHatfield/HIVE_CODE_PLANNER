@@ -1,0 +1,43 @@
+{
+  "nodes": [
+    {
+      "id": "n-rosetta",
+      "type": "concept",
+      "label": "Planning Rosetta Stone",
+      "properties": {"hook": "planning.rosetta"},
+      "provenance": {
+        "source_repo": "HIVE_CODE_PLANNER",
+        "source_path": "docs/planning-rosetta-stone.md",
+        "feature": "shared-graph-memory-v1",
+        "created_at": "2026-07-14T00:00:00+00:00"
+      }
+    },
+    {
+      "id": "n-spec-kit",
+      "type": "concept",
+      "label": "GitHub Spec Kit",
+      "properties": {},
+      "provenance": {
+        "source_repo": "HIVE_CODE_PLANNER",
+        "source_path": "session.transcript",
+        "feature": "shared-graph-memory-v1",
+        "created_at": "2026-07-14T00:00:00+00:00"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e-rosetta-enables-spec",
+      "from": "n-rosetta",
+      "to": "n-spec-kit",
+      "rel": "supports",
+      "confidence": 0.9,
+      "provenance": {
+        "source_repo": "HIVE_CODE_PLANNER",
+        "source_path": "session.transcript",
+        "feature": "shared-graph-memory-v1",
+        "created_at": "2026-07-14T00:00:00+00:00"
+      }
+    }
+  ]
+}
