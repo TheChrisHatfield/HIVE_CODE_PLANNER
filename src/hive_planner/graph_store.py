@@ -445,10 +445,11 @@ def export_tier(paths: RepoPaths, tier: Tier) -> dict[str, Any]:
     if tier not in ("staging", "permanent"):
         raise GraphStoreError(f"Invalid tier '{tier}'")
     paths.ensure_shared_memory_dirs()
-    nodes, edges, _ = load_tier(paths, tier)
+    nodes, edges, warnings = load_tier(paths, tier, on_error="skip")
     return {
         "schema_version": SCHEMA_VERSION,
         "tier": tier,
         "nodes": nodes,
         "edges": edges,
+        "warnings": warnings,
     }

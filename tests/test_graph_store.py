@@ -237,3 +237,17 @@ def test_offload_jsonl_node_without_type_defaults_other(tmp_path: Path) -> None:
     staging = export_tier(paths, "staging")
     assert staging["nodes"][0]["type"] == "other"
     assert staging["nodes"][0]["id"] == "n-bare"
+
+
+def test_export_tolerates_corrupt_jsonl(tmp_path: Path) -> None:
+    paths = _paths(tmp_path)
+    offload_from_file(paths, FIXTURE)
+    nodes_path = paths.shared_memory_staging / "nodes.jsonl"
+    nodes_path.write_text(
+        nodes_path.read_text(encoding="utf-8") + "{nope\n",
+        encoding="utf-8",
+    )
+    payload = export_tier(paths, "staging")
+    assert len(payload["nodes"]) == 2
+    assert len(payload["edges"]) == 1
+    assert any("Invalid JSONL" in w for w in payload["warnings"])
