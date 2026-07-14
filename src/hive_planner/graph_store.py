@@ -143,10 +143,15 @@ def _jsonl_path(paths: RepoPaths, tier: Tier, kind: Literal["nodes", "edges"]) -
     return base / f"{kind}.jsonl"
 
 
-def _read_jsonl(path: Path) -> list[dict[str, Any]]:
+def _read_jsonl(
+    path: Path,
+    *,
+    on_error: Literal["raise", "skip"] = "raise",
+) -> tuple[list[dict[str, Any]], list[str]]:
     if not path.is_file():
-        return []
+        return [], []
     rows: list[dict[str, Any]] = []
+    warnings: list[str] = []
     text = path.read_text(encoding="utf-8")
     for line_no, line in enumerate(text.splitlines(), start=1):
         stripped = line.strip()
@@ -155,11 +160,19 @@ def _read_jsonl(path: Path) -> list[dict[str, Any]]:
         try:
             obj = json.loads(stripped)
         except json.JSONDecodeError as exc:
-            raise GraphStoreError(f"Invalid JSONL in {path} line {line_no}: {exc}") from exc
+            msg = f"Invalid JSONL in {path.name} line {line_no}: {exc}"
+            if on_error == "skip":
+                warnings.append(msg)
+                continue
+            raise GraphStoreError(msg) from exc
         if not isinstance(obj, dict):
-            raise GraphStoreError(f"JSONL row must be object in {path} line {line_no}")
+            msg = f"JSONL row must be object in {path.name} line {line_no}"
+            if on_error == "skip":
+                warnings.append(msg)
+                continue
+            raise GraphStoreError(msg)
         rows.append(obj)
-    return rows
+    return rows, warnings
 
 
 def _append_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
@@ -169,10 +182,15 @@ def _append_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
             handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
 
 
-def load_tier(paths: RepoPaths, tier: Tier) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    nodes = _read_jsonl(_jsonl_path(paths, tier, "nodes"))
-    edges = _read_jsonl(_jsonl_path(paths, tier, "edges"))
-    return nodes, edges
+def load_tier(
+    paths: RepoPaths,
+    tier: Tier,
+    *,
+    on_error: Literal["raise", "skip"] = "raise",
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[str]]:
+    nodes, node_warnings = _read_jsonl(_jsonl_path(paths, tier, "nodes"), on_error=on_error)
+    edges, edge_warnings = _read_jsonl(_jsonl_path(paths, tier, "edges"), on_error=on_error)
+    return nodes, edges, node_warnings + edge_warnings
 
 
 def load_manifest(paths: RepoPaths) -> dict[str, Any]:
@@ -204,8 +222,8 @@ def write_manifest(paths: RepoPaths, manifest: dict[str, Any]) -> None:
 
 
 def refresh_manifest_counts(paths: RepoPaths, *, last_promote: str | None = None) -> dict[str, Any]:
-    staging_nodes, staging_edges = load_tier(paths, "staging")
-    permanent_nodes, permanent_edges = load_tier(paths, "permanent")
+    staging_nodes, staging_edges, _ = load_tier(paths, "staging")
+    permanent_nodes, permanent_edges, _ = load_tier(paths, "permanent")
     manifest = load_manifest(paths)
     manifest["schema_version"] = SCHEMA_VERSION
     manifest["staging_nodes"] = len(staging_nodes)
@@ -323,13 +341,17 @@ def offload_from_file(paths: RepoPaths, source: Path) -> GraphOperationResult:
 
 def promote_staging(paths: RepoPaths, *, dry_run: bool = False) -> GraphOperationResult:
     paths.ensure_shared_memory_dirs()
-    staging_nodes, staging_edges = load_tier(paths, "staging")
-    permanent_nodes, permanent_edges = load_tier(paths, "permanent")
+    staging_nodes, staging_edges, load_warnings = load_tier(paths, "staging", on_error="skip")
+    permanent_nodes, permanent_edges, perm_warnings = load_tier(
+        paths, "permanent", on_error="skip"
+    )
 
     permanent_node_ids = {n["id"] for n in permanent_nodes if isinstance(n.get("id"), str)}
     permanent_edge_ids = {e["id"] for e in permanent_edges if isinstance(e.get("id"), str)}
 
     result = GraphOperationResult(status="ok", dry_run=dry_run)
+    result.warnings.extend(load_warnings)
+    result.warnings.extend(perm_warnings)
     promote_nodes: list[dict[str, Any]] = []
     batch_ids = set(permanent_node_ids)
 
@@ -406,7 +428,7 @@ def export_tier(paths: RepoPaths, tier: Tier) -> dict[str, Any]:
     if tier not in ("staging", "permanent"):
         raise GraphStoreError(f"Invalid tier '{tier}'")
     paths.ensure_shared_memory_dirs()
-    nodes, edges = load_tier(paths, tier)
+    nodes, edges, _ = load_tier(paths, tier)
     return {
         "schema_version": SCHEMA_VERSION,
         "tier": tier,

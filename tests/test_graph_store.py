@@ -194,3 +194,19 @@ def test_offload_pretty_printed_single_node(tmp_path: Path) -> None:
     assert result.edges_written == 0
     staging = export_tier(paths, "staging")
     assert staging["nodes"][0]["id"] == "n-pretty"
+
+
+def test_promote_skips_corrupt_jsonl_and_promotes_valid(tmp_path: Path) -> None:
+    paths = _paths(tmp_path)
+    offload_from_file(paths, FIXTURE)
+    nodes_path = paths.shared_memory_staging / "nodes.jsonl"
+    nodes_path.write_text(
+        nodes_path.read_text(encoding="utf-8") + "{not-valid-json\n",
+        encoding="utf-8",
+    )
+    result = promote_staging(paths)
+    assert result.nodes_written == 2
+    assert result.edges_written == 1
+    assert any("Invalid JSONL" in w for w in result.warnings)
+    permanent = export_tier(paths, "permanent")
+    assert {n["id"] for n in permanent["nodes"]} == {"n-rosetta", "n-spec-kit"}
