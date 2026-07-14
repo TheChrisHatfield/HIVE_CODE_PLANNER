@@ -222,8 +222,9 @@ def write_manifest(paths: RepoPaths, manifest: dict[str, Any]) -> None:
 
 
 def refresh_manifest_counts(paths: RepoPaths, *, last_promote: str | None = None) -> dict[str, Any]:
-    staging_nodes, staging_edges, _ = load_tier(paths, "staging")
-    permanent_nodes, permanent_edges, _ = load_tier(paths, "permanent")
+    # Count valid rows only — corrupt JSONL must not block status/offload refresh.
+    staging_nodes, staging_edges, _ = load_tier(paths, "staging", on_error="skip")
+    permanent_nodes, permanent_edges, _ = load_tier(paths, "permanent", on_error="skip")
     manifest = load_manifest(paths)
     manifest["schema_version"] = SCHEMA_VERSION
     manifest["staging_nodes"] = len(staging_nodes)

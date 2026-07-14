@@ -210,3 +210,16 @@ def test_promote_skips_corrupt_jsonl_and_promotes_valid(tmp_path: Path) -> None:
     assert any("Invalid JSONL" in w for w in result.warnings)
     permanent = export_tier(paths, "permanent")
     assert {n["id"] for n in permanent["nodes"]} == {"n-rosetta", "n-spec-kit"}
+
+
+def test_status_tolerates_corrupt_staging_jsonl(tmp_path: Path) -> None:
+    paths = _paths(tmp_path)
+    offload_from_file(paths, FIXTURE)
+    nodes_path = paths.shared_memory_staging / "nodes.jsonl"
+    nodes_path.write_text(
+        nodes_path.read_text(encoding="utf-8") + "{broken\n",
+        encoding="utf-8",
+    )
+    status = graph_status(paths)
+    assert status["manifest"]["staging_nodes"] == 2
+    assert status["manifest"]["staging_edges"] == 1
