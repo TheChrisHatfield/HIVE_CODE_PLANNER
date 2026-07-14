@@ -288,12 +288,21 @@ def parse_offload_input(path: Path) -> tuple[list[dict[str, Any]], list[dict[str
             if not isinstance(item, dict):
                 raise GraphStoreError("List input must contain objects")
             kind = item.get("kind")
-            if kind == "node":
-                nodes.append(validate_node(item, default_status="staging"))
-            elif kind == "edge":
-                edges.append(validate_edge(item, default_status="staging"))
+            looks_like_node = (
+                "id" in item
+                and "from" not in item
+                and "to" not in item
+                and "rel" not in item
+            )
+            looks_like_edge = "from" in item and "to" in item and "rel" in item
+            if kind == "node" or (kind is None and looks_like_node):
+                payload = {k: v for k, v in item.items() if k != "kind"}
+                nodes.append(validate_node(payload, default_status="staging"))
+            elif kind == "edge" or (kind is None and looks_like_edge):
+                payload = {k: v for k, v in item.items() if k != "kind"}
+                edges.append(validate_edge(payload, default_status="staging"))
             else:
-                raise GraphStoreError("List items require kind 'node' or 'edge'")
+                raise GraphStoreError("List items require kind 'node' or 'edge' (or node/edge fields)")
         return nodes, edges
 
     # JSONL (mixed or single-kind via kind field)
@@ -308,10 +317,17 @@ def parse_offload_input(path: Path) -> tuple[list[dict[str, Any]], list[dict[str
         if not isinstance(item, dict):
             raise GraphStoreError(f"JSONL line {line_no} must be an object")
         kind = item.get("kind")
-        if kind == "node" or ("type" in item and "from" not in item and "to" not in item and "rel" not in item):
+        looks_like_node = (
+            "id" in item
+            and "from" not in item
+            and "to" not in item
+            and "rel" not in item
+        )
+        looks_like_edge = "from" in item and "to" in item and "rel" in item
+        if kind == "node" or (kind is None and looks_like_node):
             payload = {k: v for k, v in item.items() if k != "kind"}
             nodes.append(validate_node(payload, default_status="staging"))
-        elif kind == "edge" or ("from" in item and "to" in item and "rel" in item):
+        elif kind == "edge" or (kind is None and looks_like_edge):
             payload = {k: v for k, v in item.items() if k != "kind"}
             edges.append(validate_edge(payload, default_status="staging"))
         else:

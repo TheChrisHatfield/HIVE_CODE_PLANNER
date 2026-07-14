@@ -223,3 +223,17 @@ def test_status_tolerates_corrupt_staging_jsonl(tmp_path: Path) -> None:
     status = graph_status(paths)
     assert status["manifest"]["staging_nodes"] == 2
     assert status["manifest"]["staging_edges"] == 1
+
+
+def test_offload_jsonl_node_without_type_defaults_other(tmp_path: Path) -> None:
+    paths = _paths(tmp_path)
+    jsonl = tmp_path / "no-type.jsonl"
+    jsonl.write_text(
+        json.dumps({"id": "n-bare", "label": "Bare Node"}) + "\n",
+        encoding="utf-8",
+    )
+    result = offload_from_file(paths, jsonl)
+    assert result.nodes_written == 1
+    staging = export_tier(paths, "staging")
+    assert staging["nodes"][0]["type"] == "other"
+    assert staging["nodes"][0]["id"] == "n-bare"
