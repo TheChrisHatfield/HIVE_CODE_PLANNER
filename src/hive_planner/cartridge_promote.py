@@ -121,6 +121,10 @@ def mark_cartridge_layers_draft(
             results[name] = "already draft"
             continue
         content = path.read_text(encoding="utf-8", errors="replace")
+        first = _first_content_line(content)
+        if first.startswith(MANUAL_MARKER):
+            results[name] = "skipped (manual)"
+            continue
         path.write_text(f"{DRAFT_BANNER}\n\n{content.lstrip()}", encoding="utf-8")
         results[name] = "marked draft"
     return results
@@ -160,8 +164,10 @@ def _target_writable(path: Path, *, force: bool) -> tuple[bool, str]:
     if "Replace this spec with the first real feature" in content:
         return True, "bootstrap placeholder"
     first = _first_content_line(content)
-    if first.startswith(DRAFT_MARKER) or first.startswith(MANUAL_MARKER):
-        return True, "draft/manual target"
+    if first.startswith(MANUAL_MARKER):
+        return False, "manual target (use --force to overwrite)"
+    if first.startswith(DRAFT_MARKER):
+        return True, "draft target"
     if first.startswith(PROMOTED_BANNER):
         return True, "prior promotion"
     if first.startswith(AUTO_SYNC_PREFIX):

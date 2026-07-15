@@ -340,6 +340,44 @@ def test_promote_nothing_written_guidance_for_not_emitted_layers() -> None:
     assert "Overwrite existing cartridge" in guidance
 
 
+def test_mark_cartridge_layers_draft_skips_manual_layers(tmp_path: Path) -> None:
+    from hive_planner.cartridge_promote import mark_cartridge_layers_draft
+    from hive_planner.delta_emit import MANUAL_MARKER
+
+    project = _unified_project(tmp_path / "proj")
+    feature = "example-feature"
+    paths = RepoPaths(root=project)
+    holistic = paths.cartridge / "holistic.md"
+    holistic.parent.mkdir(parents=True, exist_ok=True)
+    original = f"{MANUAL_MARKER} keep me -->\n\n# Holistic\n"
+    holistic.write_text(original, encoding="utf-8")
+
+    results = mark_cartridge_layers_draft(paths, feature)
+
+    assert results["holistic"] == "skipped (manual)"
+    assert holistic.read_text(encoding="utf-8") == original
+
+
+def test_promote_skips_manual_delta_targets_without_force(tmp_path: Path) -> None:
+    from hive_planner.delta_emit import MANUAL_MARKER
+
+    project = _unified_project(tmp_path / "proj")
+    feature = "manual-feature"
+    paths = RepoPaths(root=project)
+    cartridge = paths.cartridge / "holistic.md"
+    target = project / "docs" / "delta" / "00_holistic.md"
+    cartridge.parent.mkdir(parents=True, exist_ok=True)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    cartridge.write_text(f"{DRAFT_BANNER}\n\n# New holistic from cartridge\n", encoding="utf-8")
+    target.write_text(f"{MANUAL_MARKER} do not overwrite -->\n\n# Curated holistic\n", encoding="utf-8")
+
+    result = promote_cartridge_drafts(paths, feature, run_spec_drift=False)
+
+    assert result.promotions["holistic"] == "skipped (manual target (use --force to overwrite))"
+    assert "Curated holistic" in target.read_text(encoding="utf-8")
+    assert "New holistic from cartridge" not in target.read_text(encoding="utf-8")
+
+
 def test_mark_cartridge_layers_draft_skips_not_emitted_layers(tmp_path: Path) -> None:
     from hive_planner.cartridge_promote import mark_cartridge_layers_draft
     from hive_planner.delta_emit import AUTO_SYNC_PREFIX, MANUAL_MARKER
