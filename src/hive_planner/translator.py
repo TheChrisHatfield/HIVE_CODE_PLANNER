@@ -91,6 +91,7 @@ class TranslatorResult:
     status: str
     cartridge_id: str
     files_written: list[str] = field(default_factory=list)
+    files_skipped: list[str] = field(default_factory=list)
     promotions: dict[str, int | bool] = field(default_factory=dict)
     rejections: int = 0
     classification_counts: dict[str, int] = field(default_factory=dict)
@@ -100,6 +101,7 @@ class TranslatorResult:
             "status": self.status,
             "cartridge_id": self.cartridge_id,
             "files_written": self.files_written,
+            "files_skipped": self.files_skipped,
             "promotions": self.promotions,
             "rejections": self.rejections,
             "classification_counts": self.classification_counts,
@@ -274,7 +276,22 @@ def _write_draft_markdown(path: Path, title: str, bullets: list[str], cartridge_
     path.write_text(content, encoding="utf-8")
 
 
-def translate_document(paths: RepoPaths, input_path: Path, feature: str) -> TranslatorResult:
+def _should_skip_manual_cartridge(path: Path, *, force: bool) -> bool:
+    if force or not path.exists():
+        return False
+    from hive_planner.delta_emit import MANUAL_MARKER, _first_content_line
+
+    content = path.read_text(encoding="utf-8", errors="replace")
+    return _first_content_line(content).startswith(MANUAL_MARKER)
+
+
+def translate_document(
+    paths: RepoPaths,
+    input_path: Path,
+    feature: str,
+    *,
+    force: bool = False,
+) -> TranslatorResult:
     validate_feature_id(feature)
     source = _resolve_input_path(paths, input_path)
     text = source.read_text(encoding="utf-8", errors="replace")
@@ -305,6 +322,7 @@ def translate_document(paths: RepoPaths, input_path: Path, feature: str) -> Tran
 
     cartridge_id = f"ctx-{datetime.now(timezone.utc).strftime('%Y-%m-%d')}-{feature}"
     files_written: list[str] = []
+    files_skipped: list[str] = []
 
     outputs = {
         cartridge_root / "holistic.md": ("Holistic Context (draft)", buckets["holistic"]),
@@ -314,6 +332,9 @@ def translate_document(paths: RepoPaths, input_path: Path, feature: str) -> Tran
     }
 
     for path, (title, bullets) in outputs.items():
+        if _should_skip_manual_cartridge(path, force=force):
+            files_skipped.append(_cartridge_relative(path, cartridge_root))
+            continue
         _write_draft_markdown(path, title, bullets, cartridge_root)
         files_written.append(_cartridge_relative(path, cartridge_root))
 
@@ -321,14 +342,17 @@ def translate_document(paths: RepoPaths, input_path: Path, feature: str) -> Tran
     specseed_bullets = [b for b in buckets["micro"] if _specseed_matches(b)]
     if specseed_bullets:
         spec_path = cartridge_root / "specs" / f"{feature}.specseed.md"
-        _write_draft_markdown(
-            spec_path,
-            f"Spec Seed: {feature} (draft)",
-            _dedupe_bullets(specseed_bullets),
-            cartridge_root,
-        )
-        files_written.append(_cartridge_relative(spec_path, cartridge_root))
-        specseed_created = True
+        if _should_skip_manual_cartridge(spec_path, force=force):
+            files_skipped.append(_cartridge_relative(spec_path, cartridge_root))
+        else:
+            _write_draft_markdown(
+                spec_path,
+                f"Spec Seed: {feature} (draft)",
+                _dedupe_bullets(specseed_bullets),
+                cartridge_root,
+            )
+            files_written.append(_cartridge_relative(spec_path, cartridge_root))
+            specseed_created = True
 
     agents_candidates = len(buckets["memory"])
     cursor_candidates = sum(
@@ -339,6 +363,7 @@ def translate_document(paths: RepoPaths, input_path: Path, feature: str) -> Tran
         status="ok",
         cartridge_id=cartridge_id,
         files_written=files_written,
+        files_skipped=files_skipped,
         promotions={
             "agents_md_candidates": agents_candidates,
             "cursor_rule_candidates": cursor_candidates,

@@ -158,3 +158,34 @@ def test_translate_cli_integration(tmp_path: Path) -> None:
     result = translate_document(paths, micro, "cartridge-translator-v1")
     assert result.promotions.get("spec_seed_created") is True
     assert (paths.cartridge / "specs" / "cartridge-translator-v1.specseed.md").exists()
+
+def test_translate_skips_manual_cartridge_without_force(tmp_path: Path) -> None:
+    from hive_planner.delta_emit import MANUAL_MARKER
+
+    repo = tmp_path / "repo-manual"
+    repo.mkdir()
+    (repo / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    (repo / "docs" / "planning-rosetta-stone.md").parent.mkdir(parents=True)
+    (repo / "docs" / "planning-rosetta-stone.md").write_text("# rosetta\n", encoding="utf-8")
+
+    cartridge = repo / "cartridge"
+    cartridge.mkdir()
+    holistic = cartridge / "holistic.md"
+    original = f"{MANUAL_MARKER} keep -->\n\n# Curated holistic\n"
+    holistic.write_text(original, encoding="utf-8")
+
+    input_md = repo / "notes.md"
+    input_md.write_text(
+        "Mission: ship translation.\n\nSubsystem workflow for planner modules.\n",
+        encoding="utf-8",
+    )
+    paths = RepoPaths(root=repo)
+    result = translate_document(paths, input_md, "manual-feature")
+
+    assert "holistic.md" in result.files_skipped
+    assert "holistic.md" not in result.files_written
+    assert holistic.read_text(encoding="utf-8") == original
+
+    forced = translate_document(paths, input_md, "manual-feature", force=True)
+    assert "holistic.md" in forced.files_written
+    assert DRAFT_BANNER in holistic.read_text(encoding="utf-8")
