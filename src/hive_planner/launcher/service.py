@@ -365,14 +365,27 @@ def get_setup_status(config: LauncherConfig) -> SetupStatus:
         python_ok = configured.supported
         python_version = f"{configured.version}  ({configured.command})"
     else:
-        python_ok = sys.version_info >= (3, 10)
-        python_version = f"{runtime_version}  (launcher runtime)"
+        # Do not treat the launcher interpreter as an OK substitute for a broken
+        # configured python_executable — Install/onboarding still use that command.
+        python_ok = False
+        python_version = f"{runtime_version}  (launcher runtime; configured Python unavailable)"
     hive_version = ""
     hive_installed = False
+    py_cmd = _python_command(config)
     try:
-        hive_version = importlib.metadata.version("hive-planner")
-        hive_installed = True
-    except importlib.metadata.PackageNotFoundError:
+        proc = _run_hidden(
+            [*py_cmd, "-c", "import importlib.metadata as m; print(m.version('hive-planner'))"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        if proc.returncode == 0:
+            version = (proc.stdout or "").strip().splitlines()
+            if version:
+                hive_version = version[0].strip()
+                hive_installed = True
+    except (OSError, subprocess.SubprocessError, ValueError):
         pass
     return SetupStatus(
         python_ok=python_ok,

@@ -4011,11 +4011,36 @@ def test_get_setup_status_uses_configured_python(monkeypatch: pytest.MonkeyPatch
             supported=True,
         ),
     )
+    monkeypatch.setattr(
+        "hive_planner.launcher.service._run_hidden",
+        lambda *_a, **_k: type(
+            "R",
+            (),
+            {"returncode": 0, "stdout": "9.9.9\n", "stderr": ""},
+        )(),
+    )
     cfg = LauncherConfig(python_executable="py -3.12")
     status = get_setup_status(cfg)
     assert status.python_ok is True
     assert "3.12.1" in status.python_version
     assert "py -3.12" in status.python_version
+    assert status.hive_installed is True
+    assert status.hive_version == "9.9.9"
+
+
+def test_get_setup_status_marks_python_not_ok_when_configured_probe_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("hive_planner.launcher.service.probe_python_command", lambda _cmd: None)
+    monkeypatch.setattr(
+        "hive_planner.launcher.service._run_hidden",
+        lambda *_a, **_k: type("R", (), {"returncode": 1, "stdout": "", "stderr": "gone"})(),
+    )
+    cfg = LauncherConfig(python_executable="py -99")
+    status = get_setup_status(cfg)
+    assert status.python_ok is False
+    assert "configured Python unavailable" in status.python_version
+    assert status.hive_installed is False
 
 
 def test_get_setup_status_reads_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
