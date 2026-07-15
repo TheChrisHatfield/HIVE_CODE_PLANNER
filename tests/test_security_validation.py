@@ -98,6 +98,43 @@ def test_call_graph_indexes_async_functions(tmp_path: Path) -> None:
     assert any(path.endswith("async_caller.py") for path, _ in callers)
 
 
+def test_call_graph_collects_function_scoped_imports(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    pkg = paths.root / "src" / "hive_planner"
+    pkg.mkdir(parents=True, exist_ok=True)
+    target = pkg / "lazy_target.py"
+    caller = pkg / "lazy_caller.py"
+    target.write_text("def run_job() -> int:\n    return 1\n", encoding="utf-8")
+    caller.write_text(
+        "def invoke() -> int:\n"
+        "    from hive_planner.lazy_target import run_job\n"
+        "    return run_job()\n",
+        encoding="utf-8",
+    )
+
+    graph = build_package_graph(paths)
+    assert "src/hive_planner/lazy_target.py" in graph.imports["src/hive_planner/lazy_caller.py"]
+    def_key = "src/hive_planner/lazy_target.py::run_job"
+    assert graph.callers.get(def_key) == {"src/hive_planner/lazy_caller.py"}
+
+
+def test_call_graph_skips_relative_imports(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    pkg = paths.root / "src" / "hive_planner"
+    pkg.mkdir(parents=True, exist_ok=True)
+    (pkg / "rel_target.py").write_text("def helper() -> None:\n    pass\n", encoding="utf-8")
+    (pkg / "rel_caller.py").write_text(
+        "def invoke() -> None:\n"
+        "    from .rel_target import helper\n"
+        "    helper()\n",
+        encoding="utf-8",
+    )
+
+    graph = build_package_graph(paths)
+    assert graph.imports.get("src/hive_planner/rel_caller.py", set()) == set()
+    assert graph.callers.get("src/hive_planner/rel_target.py::helper") is None
+
+
 def test_init_rejects_multiline_project_name(tmp_path: Path) -> None:
     source_root = tmp_path / "hive-planner"
     kit = source_root / "starter-kit"

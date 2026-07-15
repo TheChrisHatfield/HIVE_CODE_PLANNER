@@ -44,8 +44,12 @@ def _collect_import_maps(paths: RepoPaths, tree: ast.Module) -> tuple[set[str], 
     imported_paths: set[str] = set()
     name_to_def_key: dict[str, str] = {}
 
-    for node in tree.body:
-        if isinstance(node, ast.ImportFrom) and node.module and node.module.startswith("hive_planner"):
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            if node.level and node.level > 0:
+                continue
+            if not node.module or not node.module.startswith("hive_planner"):
+                continue
             module_src = _resolve_module_src(paths, node.module)
             if module_src:
                 imported_paths.add(module_src)
