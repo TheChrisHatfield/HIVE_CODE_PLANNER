@@ -608,7 +608,9 @@ def test_save_config_clears_probe_cache_when_python_changes(
     assert cleared == [True]
 
 
-def test_load_config_keeps_missing_links_but_clears_active(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_load_config_keeps_missing_links_but_falls_back_active(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     alive = tmp_path / "alive"
     alive.mkdir()
     gone = tmp_path / "gone"
@@ -624,7 +626,7 @@ def test_load_config_keeps_missing_links_but_clears_active(tmp_path: Path, monke
     loaded = load_config()
     assert str(alive.resolve()) in loaded.recent_projects
     assert str(gone.resolve()) in loaded.recent_projects
-    assert loaded.active_project == ""
+    assert loaded.active_project == str(alive.resolve())
     assert loaded.project_profiles[str(alive.resolve())] == "minimal"
     assert loaded.project_profiles[str(gone.resolve())] == "full"
 
@@ -3004,9 +3006,26 @@ def test_remove_recent_project_updates_active_and_profiles(tmp_path: Path) -> No
     )
     assert cfg.remove_recent_project(alive) is True
     assert cfg.recent_projects == [str(other.resolve())]
-    assert cfg.active_project == ""
+    # Hub should keep Home working by falling back to another linked workspace.
+    assert cfg.active_project == str(other.resolve())
     assert str(alive.resolve()) not in cfg.project_profiles
     assert cfg.remove_recent_project(tmp_path / "missing") is False
+
+
+def test_prune_stale_projects_falls_back_active_when_path_missing(tmp_path: Path) -> None:
+    from hive_planner.launcher.config import linked_project_exists, prune_stale_projects
+
+    gone = tmp_path / "gone"
+    keep = tmp_path / "keep"
+    keep.mkdir()
+    cfg = LauncherConfig(
+        active_project=str(gone),
+        recent_projects=[str(gone), str(keep.resolve())],
+        project_profiles={str(gone): "full", str(keep.resolve()): "minimal"},
+    )
+    assert linked_project_exists(gone) is False
+    assert prune_stale_projects(cfg) is True
+    assert cfg.active_project == str(keep.resolve())
 
 
 def test_remove_recent_project_matches_normalized_path(tmp_path: Path) -> None:

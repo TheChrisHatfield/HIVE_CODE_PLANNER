@@ -51,8 +51,16 @@ def linked_project_exists(path: str | Path) -> bool:
         return False
 
 
+def first_existing_recent_project(config: "LauncherConfig") -> str:
+    """Return the first linked workspace that still exists on disk, else empty."""
+    for entry in config.recent_projects:
+        if linked_project_exists(entry):
+            return normalize_project_path(entry)
+    return ""
+
+
 def prune_stale_projects(config: LauncherConfig) -> bool:
-    """Dedupe linked workspaces and clear a stale active project when its path is missing."""
+    """Dedupe linked workspaces and fall back active when its path is missing."""
     changed = False
     valid_recent: list[str] = []
     seen: set[str] = set()
@@ -71,8 +79,14 @@ def prune_stale_projects(config: LauncherConfig) -> bool:
         changed = True
 
     if config.active_project and not linked_project_exists(config.active_project):
-        config.active_project = ""
+        fallback = first_existing_recent_project(config)
+        config.active_project = fallback
         changed = True
+    elif not config.active_project and config.recent_projects:
+        fallback = first_existing_recent_project(config)
+        if fallback:
+            config.active_project = fallback
+            changed = True
 
     recent_keys = {normalize_project_path(p) for p in config.recent_projects}
     pruned_profiles = {
@@ -165,7 +179,7 @@ class LauncherConfig:
         self.recent_projects = [p for p in self.recent_projects if normalize_project_path(p) != value]
         clear_project_profile_cache(self, project_root)
         if normalize_project_path(self.active_project) == value:
-            self.active_project = ""
+            self.active_project = first_existing_recent_project(self)
         return True
 
 
