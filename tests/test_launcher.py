@@ -330,6 +330,15 @@ def test_file_uri_to_path_decodes_windows_drive() -> None:
     assert file_uri_to_path(uri) == "d:/DRIVE_DOWNLOADS/HIVE_CODE_PLANNER"
 
 
+def test_file_uri_to_path_keeps_unc_and_wsl_hosts() -> None:
+    assert file_uri_to_path("file://server/share/project") == r"\\server\share\project"
+    assert (
+        file_uri_to_path("file://wsl.localhost/Ubuntu/home/you/app")
+        == r"\\wsl.localhost\Ubuntu\home\you\app"
+    )
+    assert file_uri_to_path("file://localhost/C:/Users/you") == "C:/Users/you"
+
+
 def test_pick_hive_bootstrap_target_skips_multi_root_parent(tmp_path: Path) -> None:
     parent = tmp_path / "HIVE CODE"
     parent.mkdir()

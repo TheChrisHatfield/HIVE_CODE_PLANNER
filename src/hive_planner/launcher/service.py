@@ -519,8 +519,14 @@ def file_uri_to_path(uri: str) -> str | None:
         return None
     parsed = urlparse(raw)
     path = unquote(parsed.path)
-    if sys.platform == "win32" and path.startswith("/") and len(path) > 2 and path[2] == ":":
-        path = path[1:]
+    netloc = unquote(parsed.netloc or "").strip()
+    if sys.platform == "win32":
+        if netloc and netloc.lower() != "localhost":
+            # UNC / WSL: file://server/share/... → \\server\share\...
+            unc = "\\\\" + netloc + path.replace("/", "\\")
+            return unc.rstrip("\\") or None
+        if path.startswith("/") and len(path) > 2 and path[2] == ":":
+            path = path[1:]
     return path or None
 
 
