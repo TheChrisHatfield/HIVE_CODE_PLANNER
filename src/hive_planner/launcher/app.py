@@ -1270,7 +1270,18 @@ class HivePlannerApp:
         if path:
             variable.set(path)
 
-    def _populate_recent_list(self) -> None:
+    def _populate_recent_list(self, *, prefer_path: str | None = None) -> None:
+        selected_path: str | None = None
+        if prefer_path:
+            selected_path = prefer_path
+        else:
+            try:
+                current = self._selected_recent_path()
+                if current is not None:
+                    selected_path = str(current)
+            except (tk.TclError, AttributeError, IndexError):
+                selected_path = None
+
         self.recent_list.delete(0, "end")
         self._recent_project_paths.clear()
         active_norm = (
@@ -1279,6 +1290,8 @@ class HivePlannerApp:
             else ""
         )
         active_index: int | None = None
+        prefer_index: int | None = None
+        prefer_norm = normalize_project_path(selected_path) if selected_path else ""
         for path in self.config.recent_projects:
             hive_root = resolve_linked_project_root(Path(path))
             stored = read_project_profile(hive_root) if hive_root else None
@@ -1289,14 +1302,18 @@ class HivePlannerApp:
                 profile,
                 active=is_active,
             )
+            idx = len(self._recent_project_paths)
             if is_active:
-                active_index = len(self._recent_project_paths)
+                active_index = idx
+            if prefer_norm and normalize_project_path(path) == prefer_norm:
+                prefer_index = idx
             self._recent_project_paths.append(path)
             self.recent_list.insert("end", label)
         self._update_recent_scrollbar()
-        if active_index is not None:
-            self.recent_list.selection_set(active_index)
-            self.recent_list.see(active_index)
+        select_index = prefer_index if prefer_index is not None else active_index
+        if select_index is not None:
+            self.recent_list.selection_set(select_index)
+            self.recent_list.see(select_index)
 
     def _update_recent_scrollbar(self) -> None:
         count = self.recent_list.size()

@@ -4235,6 +4235,70 @@ def test_populate_ci_list_clears_when_report_is_none() -> None:
     assert rows == []
 
 
+def test_populate_recent_list_preserves_non_active_selection(tmp_path: Path) -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    a = tmp_path / "a"
+    b = tmp_path / "b"
+    a.mkdir()
+    b.mkdir()
+    a_path = str(a.resolve())
+    b_path = str(b.resolve())
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.config = LauncherConfig(active_project=a_path, recent_projects=[a_path, b_path])
+    app._recent_project_paths = [a_path, b_path]
+    selected = {"idx": (1,)}
+
+    class _List:
+        def __init__(self) -> None:
+            self.rows: list[str] = []
+            self.selection: tuple[int, ...] = ()
+
+        def delete(self, _a, _b) -> None:
+            self.rows.clear()
+            self.selection = ()
+
+        def insert(self, _end, text) -> None:
+            self.rows.append(text)
+
+        def size(self) -> int:
+            return len(self.rows)
+
+        def curselection(self):
+            return selected["idx"]
+
+        def selection_set(self, idx) -> None:
+            self.selection = (idx,)
+
+        def see(self, _idx) -> None:
+            return None
+
+        def configure(self, **_kwargs) -> None:
+            return None
+
+        def yview_moveto(self, _v) -> None:
+            return None
+
+    app.recent_list = _List()
+    app.recent_scroll = type(
+        "S",
+        (),
+        {
+            "winfo_ismapped": lambda self: False,
+            "pack": lambda *a, **k: None,
+            "pack_forget": lambda *a, **k: None,
+            "config": lambda *a, **k: None,
+            "set": lambda *a, **k: None,
+        },
+    )()
+    app._update_recent_scrollbar = lambda: None  # type: ignore[method-assign]
+
+    app._populate_recent_list()
+    assert app.recent_list.selection == (1,)
+    assert app._recent_project_paths[1] == b_path
+
+
 def test_save_settings_syncs_new_project_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     from hive_planner.launcher.app import HivePlannerApp
     from hive_planner.launcher.service import SetupStatus
