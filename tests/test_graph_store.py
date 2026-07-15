@@ -43,6 +43,32 @@ def test_validate_edge_rejects_bad_confidence() -> None:
         )
 
 
+def test_validate_edge_accepts_string_confidence() -> None:
+    edge = validate_edge(
+        {
+            "id": "e1",
+            "from": "a",
+            "to": "b",
+            "rel": "supports",
+            "confidence": "0.75",
+        }
+    )
+    assert edge["confidence"] == 0.75
+
+
+def test_validate_edge_rejects_non_numeric_string_confidence() -> None:
+    with pytest.raises(GraphStoreError, match="confidence"):
+        validate_edge(
+            {
+                "id": "e1",
+                "from": "a",
+                "to": "b",
+                "rel": "supports",
+                "confidence": "high",
+            }
+        )
+
+
 def test_offload_appends_staging(tmp_path: Path) -> None:
     paths = _paths(tmp_path)
     result = offload_from_file(paths, FIXTURE)

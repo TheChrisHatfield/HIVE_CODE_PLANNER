@@ -119,6 +119,11 @@ def validate_edge(obj: dict[str, Any], *, default_status: str = "staging") -> di
     if rel not in EDGE_RELS:
         raise GraphStoreError(f"Invalid edge rel '{rel}' for id={edge_id}")
     confidence = obj.get("confidence", 1.0)
+    if isinstance(confidence, str):
+        try:
+            confidence = float(confidence.strip())
+        except ValueError as exc:
+            raise GraphStoreError(f"Edge {edge_id} confidence must be a number") from exc
     if not isinstance(confidence, (int, float)) or isinstance(confidence, bool):
         raise GraphStoreError(f"Edge {edge_id} confidence must be a number")
     confidence_f = float(confidence)
