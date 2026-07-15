@@ -437,12 +437,21 @@ class HivePlannerApp:
                     notebook.select(self._dashboard_tab)
             except tk.TclError:
                 pass
+        # Defer scroll restore until canvas scrollregion is laid out (and Home may be mapped).
+        try:
+            self.root.after_idle(self._restore_home_scroll)
+        except tk.TclError:
+            self._restore_home_scroll()
+
+    def _restore_home_scroll(self) -> None:
         canvas = getattr(self, "_home_canvas", None)
-        if canvas is not None and self._home_scroll_y:
-            try:
+        if canvas is None or not self._home_scroll_y:
+            return
+        try:
+            if canvas.winfo_exists():
                 canvas.yview_moveto(self._home_scroll_y)
-            except tk.TclError:
-                pass
+        except (tk.TclError, ValueError, TypeError):
+            return
 
     def _on_dashboard_tab_changed(self, _event=None) -> None:
         notebook = getattr(self, "notebook", None)

@@ -2411,8 +2411,27 @@ def test_dashboard_tab_capture_and_restore_roundtrip() -> None:
     app._capture_dashboard_view()
     assert app._dashboard_tab == 1
     app.notebook.select(0)
+    app.root = type("R", (), {"after_idle": lambda self, cb: cb()})()
     app._restore_dashboard_view()
     assert app.notebook._selected == 1
+
+
+def test_restore_home_scroll_applies_captured_offset() -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    moved: list[float] = []
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app._home_scroll_y = 0.42
+    app._home_canvas = type(
+        "C",
+        (),
+        {
+            "winfo_exists": lambda self: True,
+            "yview_moveto": lambda self, v: moved.append(v),
+        },
+    )()
+    app._restore_home_scroll()
+    assert moved == [0.42]
 
 
 def test_open_project_file_rejects_paths_outside_project(
