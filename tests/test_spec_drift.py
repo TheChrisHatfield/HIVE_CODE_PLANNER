@@ -351,3 +351,16 @@ def test_repair_agents_active_feature_skips_when_handoff_missing(tmp_path: Path)
     (paths.root / "AGENTS.md").write_text(_minimal_agents("none"), encoding="utf-8")
     result = repair_agents_active_feature(paths)
     assert result.repaired is False
+
+def test_repair_agents_active_feature_preserves_custom_body_for_same_feature(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    custom = (
+        "# AGENTS.md\n\n"
+        "## Active feature\n\n"
+        "**my-feature** — implementing shipping flow with edge cases.\n"
+    )
+    (paths.root / "AGENTS.md").write_text(custom, encoding="utf-8")
+    _write_full_handoff(paths, "my-feature")
+    result = repair_agents_active_feature(paths, "my-feature")
+    assert result.repaired is False
+    assert "implementing shipping flow" in (paths.root / "AGENTS.md").read_text(encoding="utf-8")

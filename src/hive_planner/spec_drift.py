@@ -175,9 +175,16 @@ def infer_repairable_active_feature(paths: RepoPaths) -> str | None:
 
 
 def repair_agents_active_feature(paths: RepoPaths, feature: str | None = None) -> AgentsRepairResult:
-    target = feature or infer_repairable_active_feature(paths)
-    if not target:
-        return AgentsRepairResult(False, detail="no repair needed")
+    current = parse_active_feature(paths)
+    if feature:
+        # Same feature id already present — preserve custom Active feature notes.
+        if current == feature:
+            return AgentsRepairResult(False, feature=current, detail="already set")
+        target = feature
+    else:
+        target = infer_repairable_active_feature(paths)
+        if not target:
+            return AgentsRepairResult(False, detail="no repair needed")
     agents_path = paths.root / "AGENTS.md"
     if not agents_path.is_file():
         return AgentsRepairResult(False, detail="AGENTS.md missing")
