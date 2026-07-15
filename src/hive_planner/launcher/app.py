@@ -525,6 +525,7 @@ class HivePlannerApp:
         self._sync_pending_memory_for_active()
         self._update_header_detail()
         self._update_status_cards()
+        self._sync_rosetta_eject_for_active()
         if hasattr(self, "recent_list"):
             try:
                 self._populate_recent_list()
@@ -3966,6 +3967,25 @@ class HivePlannerApp:
         saved = (self._rosetta_eject_project_names.get("__default__") or "").strip()
         return saved or None
 
+    def _sync_rosetta_eject_for_active(self) -> None:
+        """Retarget Rosetta name/preview when the active linked project changes (soft refresh)."""
+        if not hasattr(self, "_rosetta_eject_name_var"):
+            return
+        scope = self._rosetta_eject_scope_key()
+        if getattr(self, "_rosetta_eject_synced_scope", None) == scope:
+            return
+        from hive_planner.rosetta_eject import infer_project_name
+
+        try:
+            saved = self._saved_rosetta_eject_project_name()
+            default_name = saved if saved else infer_project_name(self._active_linked_root())
+            self._rosetta_eject_name_var.set(default_name)
+            self._rosetta_eject_synced_scope = scope
+            if getattr(self, "_rosetta_eject_expanded", False):
+                self._refresh_rosetta_eject_preview()
+        except tk.TclError:
+            return
+
     def _rosetta_eject_project_name(self) -> str:
         from hive_planner.rosetta_eject import infer_project_name
 
@@ -4097,6 +4117,7 @@ class HivePlannerApp:
         saved_name = self._saved_rosetta_eject_project_name()
         default_name = saved_name if saved_name else infer_project_name(self._active_linked_root())
         self._rosetta_eject_name_var = tk.StringVar(value=default_name)
+        self._rosetta_eject_synced_scope = self._rosetta_eject_scope_key()
         name_entry = tk.Entry(
             name_row,
             textvariable=self._rosetta_eject_name_var,

@@ -4235,6 +4235,62 @@ def test_populate_ci_list_clears_when_report_is_none() -> None:
     assert rows == []
 
 
+def test_soft_refresh_retargets_rosetta_eject_when_active_project_changes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+    from hive_planner.launcher.service import SetupStatus
+
+    project_a = tmp_path / "alpha-app"
+    project_b = tmp_path / "beta-app"
+    project_a.mkdir()
+    project_b.mkdir()
+    (project_a / "START_HERE.md").write_text("# a\n", encoding="utf-8")
+    (project_b / "START_HERE.md").write_text("# b\n", encoding="utf-8")
+
+    cfg = LauncherConfig(
+        active_project=str(project_b.resolve()),
+        recent_projects=[str(project_a.resolve()), str(project_b.resolve())],
+    )
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app._pending_memory_link = None
+    app._pending_memory_candidates = None
+    app._last_ci_report = None
+    app._pending_home_log = []
+    app._rosetta_eject_project_names = {}
+    app._rosetta_eject_expanded = True
+    app._rosetta_eject_synced_scope = str(project_a.resolve())
+    app._rosetta_eject_name_var = type("V", (), {"get": lambda self: "alpha-app", "set": lambda self, v: setattr(self, "value", v)})()
+    app.config = cfg
+    app.setup = SetupStatus(
+        python_ok=True,
+        python_version="3.11",
+        hive_root="C:/hive",
+        hive_root_ok=True,
+        hive_installed=True,
+        hive_version="1.0.0",
+        git_available=True,
+        onboarding_complete=True,
+    )
+    refreshed: list[bool] = []
+    app._refresh_rosetta_eject_preview = lambda: refreshed.append(True)  # type: ignore[method-assign]
+    app._update_header_detail = lambda: None  # type: ignore[method-assign]
+    app._update_status_cards = lambda: None  # type: ignore[method-assign]
+    app._populate_ci_list = lambda _r: None  # type: ignore[method-assign]
+    app._flush_pending_home_log = lambda: None  # type: ignore[method-assign]
+    app._active_linked_root = lambda: project_b.resolve()  # type: ignore[method-assign]
+
+    import hive_planner.launcher.app as app_mod
+
+    monkeypatch.setattr(app_mod, "load_config", lambda: cfg)
+    monkeypatch.setattr(app_mod, "get_setup_status", lambda _cfg: app.setup)
+
+    app._soft_refresh_dashboard()
+    assert app._rosetta_eject_name_var.value == "beta-app"
+    assert app._rosetta_eject_synced_scope == str(project_b.resolve())
+    assert refreshed == [True]
+
+
 def test_ci_check_report_is_not_bg_error() -> None:
     from hive_planner.launcher.app import HivePlannerApp
 
