@@ -148,7 +148,7 @@ def test_infer_repairable_active_feature_ignores_missing_rosetta_nav(tmp_path: P
                 "",
                 "## Active feature",
                 "",
-                "**None** â€” pending.",
+                "**None** ï¿½?? pending.",
                 "",
             ]
         ),
@@ -352,12 +352,13 @@ def test_repair_agents_active_feature_skips_when_handoff_missing(tmp_path: Path)
     result = repair_agents_active_feature(paths)
     assert result.repaired is False
 
+
 def test_repair_agents_active_feature_preserves_custom_body_for_same_feature(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     custom = (
         "# AGENTS.md\n\n"
         "## Active feature\n\n"
-        "**my-feature** — implementing shipping flow with edge cases.\n"
+        "**my-feature** - implementing shipping flow with edge cases.\n"
     )
     (paths.root / "AGENTS.md").write_text(custom, encoding="utf-8")
     _write_full_handoff(paths, "my-feature")
