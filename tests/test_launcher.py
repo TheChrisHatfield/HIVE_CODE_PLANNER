@@ -4235,6 +4235,47 @@ def test_populate_ci_list_clears_when_report_is_none() -> None:
     assert rows == []
 
 
+def test_save_settings_syncs_new_project_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+    from hive_planner.launcher.service import SetupStatus
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.setup = SetupStatus(
+        python_ok=True,
+        python_version="3.11",
+        hive_root="C:/hive",
+        hive_root_ok=True,
+        hive_installed=True,
+        hive_version="1.0.0",
+        git_available=True,
+        onboarding_complete=True,
+        portable_mode=True,
+    )
+    app.config = LauncherConfig(default_profile="full", default_agent_handoff="unified")
+    app.cfg_cursor = type("V", (), {"get": lambda self: ""})()
+    app.cfg_profile = type("V", (), {"get": lambda self: "minimal"})()
+    app.cfg_agent_handoff = type("V", (), {"get": lambda self: "off"})()
+    profile_vals: list[str] = []
+    handoff_vals: list[str] = []
+    app.new_profile = type("V", (), {"set": lambda self, v: profile_vals.append(v)})()
+    app.new_agent_handoff = type("V", (), {"set": lambda self, v: handoff_vals.append(v)})()
+    refreshed: list[bool] = []
+    app._refresh_home_dashboard = lambda: refreshed.append(True)  # type: ignore[method-assign]
+
+    import hive_planner.launcher.app as app_mod
+
+    monkeypatch.setattr(app_mod, "save_config", lambda _cfg: None)
+    monkeypatch.setattr(app_mod, "get_setup_status", lambda cfg: app.setup)
+    monkeypatch.setattr(app_mod.messagebox, "showinfo", lambda *a, **k: None)
+
+    app._on_save_settings()
+    assert app.config.default_profile == "minimal"
+    assert app.config.default_agent_handoff == "off"
+    assert profile_vals == ["minimal"]
+    assert handoff_vals == ["off"]
+    assert refreshed == [True]
+
+
 def test_soft_refresh_retargets_rosetta_eject_when_active_project_changes(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

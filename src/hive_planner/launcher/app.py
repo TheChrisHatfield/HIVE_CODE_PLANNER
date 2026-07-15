@@ -534,6 +534,16 @@ class HivePlannerApp:
         self._populate_ci_list(self._last_ci_report)
         self._flush_pending_home_log()
 
+    def _sync_new_project_defaults(self) -> None:
+        """Keep Projects → New project comboboxes aligned with saved Settings defaults."""
+        try:
+            if hasattr(self, "new_profile"):
+                self.new_profile.set(self.config.default_profile)
+            if hasattr(self, "new_agent_handoff"):
+                self.new_agent_handoff.set(self.config.default_agent_handoff)
+        except tk.TclError:
+            return
+
     def _show_dashboard(self) -> None:
         self._capture_dashboard_view()
         saved_tab = self._dashboard_tab
@@ -4982,6 +4992,7 @@ class HivePlannerApp:
         )
         save_config(self.config)
         self.setup = get_setup_status(self.config)
+        self._sync_new_project_defaults()
         self._refresh_home_dashboard()
         messagebox.showinfo("Saved", "Settings updated.")
 
