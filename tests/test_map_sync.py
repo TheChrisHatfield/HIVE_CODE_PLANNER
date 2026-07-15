@@ -78,10 +78,45 @@ def test_discover_src_modules(tmp_path: Path) -> None:
     _write_src_module(paths, "src/hive_planner/foo.py", '"""Foo module."""\n')
     _write_src_module(paths, "src/hive_planner/bar/__init__.py", "")
     _write_src_module(paths, "src/hive_planner/bar/baz.py", "x = 1\n")
+    _write_src_module(paths, "src/hive_code_planner/app.py", "pass\n")
     modules = discover_src_modules(paths)
     assert "src/hive_planner/foo.py" in modules
     assert "src/hive_planner/bar/baz.py" in modules
     assert "src/hive_planner/bar/__init__.py" not in modules
+    assert "src/hive_code_planner/app.py" in modules
+
+
+def test_sync_preserves_other_src_package_rows(tmp_path: Path) -> None:
+    """Existing src/** rows outside rediscovered packages must not be dropped."""
+    paths = RepoPaths(root=tmp_path)
+    _write_src_module(paths, "src/hive_planner/emitter.py", '"""Emitter."""\n')
+    _write_project_map(
+        paths,
+        "# Project Map\n\n"
+        "| Module | Role | Spec / Delta deps |\n"
+        "|--------|------|-------------------|\n"
+        "| `src/hive_code_planner/__init__.py` | App package stub | `bootstrap` |\n"
+        "| `src/other_pkg/orphan.py` | Curated orphan | `manual` |\n",
+    )
+    _write_test_map(
+        paths,
+        "# Test Map\n\n| Source module | Tests |\n|---------------|-------|\n"
+        "| `src/hive_code_planner/__init__.py` | `tests/test_placeholder.py` |\n"
+        "| `src/other_pkg/orphan.py` | `tests/test_orphan.py` |\n",
+    )
+    sync_impact_maps(paths)
+    project_map = (paths.root / "docs" / "change-impact" / "project-map.md").read_text(
+        encoding="utf-8"
+    )
+    test_map = (paths.root / "docs" / "change-impact" / "test-map.md").read_text(
+        encoding="utf-8"
+    )
+    assert "src/hive_code_planner/__init__.py" in project_map
+    assert "App package stub" in project_map
+    assert "src/other_pkg/orphan.py" in project_map
+    assert "src/hive_planner/emitter.py" in project_map
+    assert "`tests/test_placeholder.py`" in test_map
+    assert "`tests/test_orphan.py`" in test_map
 
 
 def test_discover_test_mappings(tmp_path: Path) -> None:

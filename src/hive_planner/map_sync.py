@@ -32,14 +32,15 @@ class MapSyncReport:
 
 
 def discover_src_modules(paths: RepoPaths) -> list[str]:
-    src_root = paths.root / "src" / "hive_planner"
+    src_root = paths.root / "src"
     if not src_root.exists():
         return []
     modules: list[str] = []
-    for py_file in sorted(src_root.rglob("*.py")):
-        if py_file.name == "__init__.py":
-            continue
-        modules.append(py_file.relative_to(paths.root).as_posix())
+    for pkg_dir in sorted(p for p in src_root.iterdir() if p.is_dir()):
+        for py_file in sorted(pkg_dir.rglob("*.py")):
+            if py_file.name == "__init__.py":
+                continue
+            modules.append(py_file.relative_to(paths.root).as_posix())
     return modules
 
 
@@ -254,8 +255,13 @@ def sync_impact_maps(paths: RepoPaths, *, dry_run: bool = False) -> MapSyncRepor
     project_header, project_rows, project_footer = _parse_project_map(
         project_path.read_text(encoding="utf-8") if project_path.exists() else "# Project Map\n"
     )
-    manual_project = {k: v for k, v in project_rows.items() if not k.startswith("src/")}
-    merged_project: dict[str, tuple[str, str]] = dict(manual_project)
+    discovered_src = set(src_modules)
+    # Non-src manuals + existing src/** rows not rediscovered (other packages / orphans).
+    merged_project: dict[str, tuple[str, str]] = {
+        k: v
+        for k, v in project_rows.items()
+        if not k.startswith("src/") or k not in discovered_src
+    }
 
     for module in src_modules:
         existing = project_rows.get(module)
@@ -270,7 +276,11 @@ def sync_impact_maps(paths: RepoPaths, *, dry_run: bool = False) -> MapSyncRepor
     test_header, test_rows, test_footer = _parse_test_map(
         test_path.read_text(encoding="utf-8") if test_path.exists() else "# Test Map\n"
     )
-    merged_tests: dict[str, set[str]] = {}
+    merged_tests: dict[str, set[str]] = {
+        k: set(v)
+        for k, v in test_rows.items()
+        if k.startswith("src/") and k not in discovered_src
+    }
     for module in src_modules:
         prior = test_rows.get(module, set())
         discovered = test_mappings.get(module, set())
