@@ -1,4 +1,4 @@
-﻿"""Migrate marketplace Continual Learning data to Hive vendored CL."""
+"""Migrate marketplace Continual Learning data to Hive vendored CL."""
 
 from __future__ import annotations
 
