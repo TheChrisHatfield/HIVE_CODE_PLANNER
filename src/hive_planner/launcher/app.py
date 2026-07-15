@@ -150,6 +150,12 @@ class HivePlannerApp:
         self._home_guide_expanded = False
         self._rosetta_eject_expanded = False
         self._rosetta_eject_project_names: dict[str, str] = {}
+        self._dashboard_tab = 0
+        self._home_scroll_y = 0.0
+        self.notebook: ttk.Notebook | None = None
+        self._header_detail_label: tk.Label | None = None
+        self._status_value_labels: dict[str, tk.Label] = {}
+        self._home_canvas: tk.Canvas | None = None
 
         root.title("Hive Planner")
         root.geometry("920x680")
@@ -405,10 +411,84 @@ class HivePlannerApp:
         save_config(self.config)
         self._show_dashboard()
 
-    def _show_dashboard(self) -> None:
-        self._clear_container()
-        self.config = load_config()
-        self.setup = get_setup_status(self.config)
+    def _capture_dashboard_view(self) -> None:
+        notebook = getattr(self, "notebook", None)
+        if notebook is not None:
+            try:
+                if notebook.winfo_exists():
+                    self._dashboard_tab = int(notebook.index(notebook.select()))
+            except (tk.TclError, ValueError, TypeError):
+                pass
+        canvas = getattr(self, "_home_canvas", None)
+        if canvas is not None:
+            try:
+                if canvas.winfo_exists():
+                    self._home_scroll_y = float(canvas.yview()[0])
+            except (tk.TclError, ValueError, TypeError, IndexError):
+                pass
+
+    def _restore_dashboard_view(self) -> None:
+        notebook = getattr(self, "notebook", None)
+        if notebook is not None:
+            try:
+                tabs = notebook.tabs()
+                if tabs and 0 <= self._dashboard_tab < len(tabs):
+                    notebook.select(self._dashboard_tab)
+            except tk.TclError:
+                pass
+        canvas = getattr(self, "_home_canvas", None)
+        if canvas is not None and self._home_scroll_y:
+            try:
+                canvas.yview_moveto(self._home_scroll_y)
+            except tk.TclError:
+                pass
+
+    def _on_dashboard_tab_changed(self, _event=None) -> None:
+        notebook = getattr(self, "notebook", None)
+        if notebook is None:
+            return
+        try:
+            self._dashboard_tab = int(notebook.index(notebook.select()))
+        except (tk.TclError, ValueError, TypeError):
+            pass
+
+    def _dashboard_alive(self) -> bool:
+        notebook = getattr(self, "notebook", None)
+        if notebook is None:
+            return False
+        try:
+            return bool(notebook.winfo_exists())
+        except tk.TclError:
+            return False
+
+    def _header_detail_text(self) -> str:
+        proj = self.config.active_project
+        if not proj:
+            return "No project selected"
+        proj_label = _linked_display_name(proj)
+        profile_label = self._active_profile_label()
+        if profile_label:
+            return f"Active: {proj_label}  ·  profile: {profile_label}"
+        return f"Active: {proj_label}"
+
+    def _status_items(self) -> list[tuple[str, str]]:
+        items: list[tuple[str, str]] = [
+            ("Hive", self.setup.hive_version or "not installed"),
+            ("Profile", self._active_profile_label() or "—"),
+            ("Handoff", self._active_handoff_label()),
+            ("CL runtime", self._active_cl_runtime_label()),
+        ]
+        if self.setup.portable_mode:
+            items.append(("Bundle", "ready ✓" if self.setup.unified_handoff_ready else "repair"))
+        items.extend(
+            [
+                ("Feature", self._active_feature_label()),
+                ("Wiring", self._wiring_audit_label()),
+            ]
+        )
+        return items
+
+    def _sync_pending_memory_for_active(self) -> None:
         active_norm = (
             normalize_project_path(self.config.active_project)
             if self.config.active_project
@@ -418,26 +498,69 @@ class HivePlannerApp:
             self._pending_memory_candidates = None
             self._pending_memory_link = None
 
+    def _update_header_detail(self) -> None:
+        label = getattr(self, "_header_detail_label", None)
+        if label is None:
+            return
+        try:
+            label.configure(text=self._header_detail_text())
+        except tk.TclError:
+            return
+
+    def _update_status_cards(self) -> None:
+        labels = getattr(self, "_status_value_labels", None) or {}
+        for title, value in self._status_items():
+            label = labels.get(title)
+            if label is None:
+                continue
+            try:
+                label.configure(text=value)
+            except tk.TclError:
+                continue
+
+    def _soft_refresh_dashboard(self) -> None:
+        """Update live dashboard widgets without destroying the notebook (no blink / tab reset)."""
+        self.config = load_config()
+        self.setup = get_setup_status(self.config)
+        self._sync_pending_memory_for_active()
+        self._update_header_detail()
+        self._update_status_cards()
+        if hasattr(self, "recent_list"):
+            try:
+                self._populate_recent_list()
+            except tk.TclError:
+                pass
+        self._populate_ci_list(self._last_ci_report)
+        self._flush_pending_home_log()
+
+    def _show_dashboard(self) -> None:
+        self._capture_dashboard_view()
+        saved_tab = self._dashboard_tab
+        saved_scroll = self._home_scroll_y
+        self._clear_container()
+        self.config = load_config()
+        self.setup = get_setup_status(self.config)
+        self._sync_pending_memory_for_active()
+        self._status_value_labels = {}
+        self._header_detail_label = None
+        self._home_canvas = None
+
         header = tk.Frame(self.container, bg=COLORS["bg"])
         header.pack(fill="x", padx=16, pady=(16, 8))
         tk.Label(header, text="Hive Planner", font=FONT_TITLE, bg=COLORS["bg"], fg=COLORS["fg"]).pack(side="left")
-        proj = self.config.active_project
-        if proj:
-            proj_label = _linked_display_name(proj)
-            profile_label = self._active_profile_label()
-            header_detail = (
-                f"Active: {proj_label}  ·  profile: {profile_label}"
-                if profile_label
-                else f"Active: {proj_label}"
-            )
-        else:
-            header_detail = "No project selected"
-        tk.Label(header, text=header_detail, font=FONT_SUBTITLE, bg=COLORS["bg"], fg=COLORS["muted"]).pack(
-            side="right", padx=8
+        self._header_detail_label = tk.Label(
+            header,
+            text=self._header_detail_text(),
+            font=FONT_SUBTITLE,
+            bg=COLORS["bg"],
+            fg=COLORS["muted"],
         )
+        self._header_detail_label.pack(side="right", padx=8)
 
         notebook = ttk.Notebook(self.container)
         notebook.pack(fill="both", expand=True, padx=16, pady=8)
+        self.notebook = notebook
+        notebook.bind("<<NotebookTabChanged>>", self._on_dashboard_tab_changed)
 
         home = tk.Frame(notebook, bg=COLORS["bg"])
         projects = tk.Frame(notebook, bg=COLORS["bg"])
@@ -449,6 +572,10 @@ class HivePlannerApp:
         self._build_home_tab(home)
         self._build_projects_tab(projects)
         self._build_settings_tab(settings)
+
+        self._dashboard_tab = saved_tab
+        self._home_scroll_y = saved_scroll
+        self._restore_dashboard_view()
 
     def _scrollable_tab(self, parent: tk.Frame) -> tuple[tk.Frame, tk.Canvas]:
         canvas = tk.Canvas(parent, bg=COLORS["bg"], highlightthickness=0)
@@ -538,12 +665,24 @@ class HivePlannerApp:
         )
 
     def _refresh_home_dashboard(self) -> None:
-        """Rebuild dashboard; queued Output lines are flushed in _build_home_tab."""
+        """Refresh dashboard state without blinking when the notebook is already open."""
+        if self._dashboard_alive():
+            self._soft_refresh_dashboard()
+            return
         self._show_dashboard()
 
     def _start_home_action(self, message: str) -> None:
-        """Queue an in-progress line so it survives the post-action dashboard refresh."""
-        self._queue_home_log(message)
+        """Show an in-progress line immediately when Output exists; otherwise queue it."""
+        text = str(message).rstrip()
+        if not text:
+            return
+        if hasattr(self, "home_log"):
+            try:
+                self._append_log(self.home_log, text)
+                return
+            except tk.TclError:
+                pass
+        self._queue_home_log(text)
 
     def _bind_page_wheel(self, parent: tk.Misc, canvas: tk.Canvas) -> None:
         bind_mousewheel(canvas, target=canvas)
@@ -558,6 +697,7 @@ class HivePlannerApp:
 
     def _build_home_tab(self, parent: tk.Frame) -> None:
         body, canvas = self._scrollable_tab(parent)
+        self._home_canvas = canvas
 
         self._build_home_guide_card(body)
         self._build_agent_prompt_templates_card(body)
@@ -567,22 +707,19 @@ class HivePlannerApp:
         card_title(stats, "Status")
         row = tk.Frame(stats, bg=COLORS["card"])
         row.pack(fill="x", padx=12, pady=(0, 12))
-        for title, value in [
-            ("Hive", self.setup.hive_version or "not installed"),
-            ("Profile", self._active_profile_label() or "—"),
-            ("Handoff", self._active_handoff_label()),
-            ("CL runtime", self._active_cl_runtime_label()),
-            *(
-                [("Bundle", "ready ✓" if self.setup.unified_handoff_ready else "repair")]
-                if self.setup.portable_mode
-                else []
-            ),
-            ("Feature", self._active_feature_label()),
-            ("Wiring", self._wiring_audit_label()),
-        ]:
+        self._status_value_labels = {}
+        for title, value in self._status_items():
             cell = tk.Frame(row, bg=COLORS["secondary"], padx=12, pady=10)
             cell.pack(side="left", fill="x", expand=True, padx=4)
-            tk.Label(cell, text=value, font=("Segoe UI", 14, "bold"), bg=COLORS["secondary"], fg=COLORS["primary"]).pack()
+            value_label = tk.Label(
+                cell,
+                text=value,
+                font=("Segoe UI", 14, "bold"),
+                bg=COLORS["secondary"],
+                fg=COLORS["primary"],
+            )
+            value_label.pack()
+            self._status_value_labels[title] = value_label
             tk.Label(cell, text=title, font=FONT_SUBTITLE, bg=COLORS["secondary"], fg=COLORS["muted"]).pack()
 
         actions = tk.Frame(body, bg=COLORS["bg"])
@@ -1571,10 +1708,12 @@ class HivePlannerApp:
         return resolve_linked_project_root(Path(self.config.active_project))
 
     def _populate_ci_list(self, report: dict | None) -> None:
-        if not report or not hasattr(self, "ci_list"):
+        if not hasattr(self, "ci_list"):
             return
         try:
             self.ci_list.delete(0, "end")
+            if not report:
+                return
             for step in report.get("steps", []):
                 mark = "✓" if step.get("ok") else "✗"
                 self.ci_list.insert("end", f"{mark}  {step.get('name')}: {step.get('detail')}")
@@ -4295,7 +4434,7 @@ class HivePlannerApp:
                         "Workspace linked",
                         f"{workspace.name}\n\nLinked without changing Hive planning files.",
                     )
-                self._show_dashboard()
+                self._refresh_home_dashboard()
                 return True
             return self._bootstrap_and_activate(
                 bootstrap_target,
@@ -4328,7 +4467,7 @@ class HivePlannerApp:
                     f"Linked: {workspace.name}\n\n"
                     "Use Open in Cursor to launch it. Add Hive planning files when you want health checks.",
                 )
-        self._show_dashboard()
+        self._refresh_home_dashboard()
         return True
 
     def _on_link_workspace(self) -> None:
@@ -4601,7 +4740,7 @@ class HivePlannerApp:
             save_config(self.config)
             prepare_linked_project_root(link_path or path, repair_agents=True)
             self._queue_handoff_repair_warning(state)
-            self._show_dashboard()
+            self._refresh_home_dashboard()
             return True
 
         init_force = force
@@ -4650,7 +4789,7 @@ class HivePlannerApp:
                 f"Created planning files in:\n{bootstrap_target}\n\n"
                 f"Profile: {resolved_profile}\nHandoff: {resolved_handoff}",
             )
-        self._show_dashboard()
+        self._refresh_home_dashboard()
         return True
 
     def _on_open_cursor(self) -> None:
@@ -4724,7 +4863,7 @@ class HivePlannerApp:
         save_config(self.config)
         prepare_linked_project_root(Path(result["target"]), repair_agents=True)
         messagebox.showinfo("Created", f"Project ready at:\n{result['target']}")
-        self._show_dashboard()
+        self._refresh_home_dashboard()
 
     def _on_select_recent(self) -> None:
         path = self._selected_recent_path()
@@ -4763,7 +4902,7 @@ class HivePlannerApp:
             messagebox.showwarning("Not found", "That workspace link is not in your list.")
             return
         save_config(self.config)
-        self._show_dashboard()
+        self._refresh_home_dashboard()
 
     def _on_delete_profile(self) -> None:
         from hive_planner.project_profile import delete_project_profile, project_meta_path
@@ -4806,7 +4945,7 @@ class HivePlannerApp:
         clear_project_profile_cache(self.config, path)
         save_config(self.config)
         messagebox.showinfo("Profile deleted", detail)
-        self._show_dashboard()
+        self._refresh_home_dashboard()
 
     def _on_save_settings(self) -> None:
         if not self.setup.portable_mode:
@@ -4822,7 +4961,7 @@ class HivePlannerApp:
         )
         save_config(self.config)
         self.setup = get_setup_status(self.config)
-        self._show_dashboard()
+        self._refresh_home_dashboard()
         messagebox.showinfo("Saved", "Settings updated.")
 
     def _on_reset_onboarding(self) -> None:

@@ -1305,7 +1305,7 @@ def test_create_done_repairs_agents_after_success(tmp_path: Path, monkeypatch: p
     cfg = LauncherConfig(hive_planner_root=str(Path(__file__).resolve().parents[1]))
 
     app = HivePlannerApp.__new__(HivePlannerApp)
-    app._show_dashboard = lambda: None  # type: ignore[method-assign]
+    app._refresh_home_dashboard = lambda: None  # type: ignore[method-assign]
 
     import hive_planner.launcher.app as app_mod
 
@@ -2248,6 +2248,149 @@ def test_agents_apply_done_refreshes_dashboard_on_failure(monkeypatch: pytest.Mo
     assert refreshed == [True]
 
 
+def test_refresh_home_dashboard_uses_soft_refresh_when_dashboard_alive() -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    calls: list[str] = []
+    app._dashboard_alive = lambda: True  # type: ignore[method-assign]
+    app._soft_refresh_dashboard = lambda: calls.append("soft")  # type: ignore[method-assign]
+    app._show_dashboard = lambda: calls.append("full")  # type: ignore[method-assign]
+
+    app._refresh_home_dashboard()
+    assert calls == ["soft"]
+
+
+def test_refresh_home_dashboard_rebuilds_when_dashboard_missing() -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    calls: list[str] = []
+    app._dashboard_alive = lambda: False  # type: ignore[method-assign]
+    app._soft_refresh_dashboard = lambda: calls.append("soft")  # type: ignore[method-assign]
+    app._show_dashboard = lambda: calls.append("full")  # type: ignore[method-assign]
+
+    app._refresh_home_dashboard()
+    assert calls == ["full"]
+
+
+def test_create_done_keeps_projects_context_via_soft_refresh(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    target = tmp_path / "new-proj"
+    target.mkdir()
+    cfg = LauncherConfig(hive_planner_root=str(Path(__file__).resolve().parents[1]))
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app._dashboard_tab = 1  # Projects
+    refreshed: list[str] = []
+    app._refresh_home_dashboard = lambda: refreshed.append("refresh")  # type: ignore[method-assign]
+
+    import hive_planner.launcher.app as app_mod
+
+    monkeypatch.setattr(app_mod, "load_config", lambda: cfg)
+    monkeypatch.setattr(app_mod, "save_config", lambda _cfg: None)
+    monkeypatch.setattr(app_mod.messagebox, "showinfo", lambda *a, **k: None)
+    monkeypatch.setattr(
+        app_mod,
+        "prepare_linked_project_root",
+        lambda p, **kw: (Path(p), None),
+    )
+
+    app._create_done({"ok": True, "target": str(target.resolve())})
+    assert refreshed == ["refresh"]
+    assert app._dashboard_tab == 1
+
+
+def test_soft_refresh_updates_status_without_clearing_container(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+    from hive_planner.launcher.service import SetupStatus
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app._pending_memory_link = None
+    app._pending_memory_candidates = None
+    app._last_ci_report = None
+    app._pending_home_log = []
+    app.config = LauncherConfig()
+    app.setup = SetupStatus(
+        python_ok=True,
+        python_version="3.11",
+        hive_root="C:/hive",
+        hive_root_ok=True,
+        hive_installed=True,
+        hive_version="1.0.0",
+        git_available=True,
+        onboarding_complete=True,
+        portable_mode=False,
+        unified_handoff_ready=True,
+        unified_handoff_detail="ready",
+    )
+    cleared: list[bool] = []
+    app._clear_container = lambda: cleared.append(True)  # type: ignore[method-assign]
+    app._header_detail_text = lambda: "Active: demo"  # type: ignore[method-assign]
+    app._status_items = lambda: [("Hive", "1.0.0"), ("Profile", "full")]  # type: ignore[method-assign]
+    app._header_detail_label = type("L", (), {"configure": lambda self, **kw: None})()
+    app._status_value_labels = {
+        "Hive": type("L", (), {"configure": lambda self, **kw: setattr(self, "text", kw.get("text"))})(),
+        "Profile": type("L", (), {"configure": lambda self, **kw: setattr(self, "text", kw.get("text"))})(),
+    }
+    app._populate_ci_list = lambda _report: None  # type: ignore[method-assign]
+    app._flush_pending_home_log = lambda: None  # type: ignore[method-assign]
+
+    import hive_planner.launcher.app as app_mod
+
+    monkeypatch.setattr(app_mod, "load_config", lambda: app.config)
+    monkeypatch.setattr(app_mod, "get_setup_status", lambda _cfg: app.setup)
+
+    app._soft_refresh_dashboard()
+    assert cleared == []
+    assert app._status_value_labels["Hive"].text == "1.0.0"
+
+
+def test_dashboard_tab_capture_and_restore_roundtrip() -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    class FakeNotebook:
+        def __init__(self) -> None:
+            self._selected = 0
+            self._tabs = ("home", "projects", "settings")
+
+        def winfo_exists(self) -> bool:
+            return True
+
+        def select(self, value=None):
+            if value is None:
+                return self._tabs[self._selected]
+            if isinstance(value, int):
+                self._selected = value
+            else:
+                self._selected = self._tabs.index(value)
+
+        def index(self, tab_id) -> int:
+            if tab_id in self._tabs:
+                return self._tabs.index(tab_id)
+            return int(tab_id)
+
+        def tabs(self):
+            return self._tabs
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app._dashboard_tab = 0
+    app._home_scroll_y = 0.0
+    app._home_canvas = None
+    app.notebook = FakeNotebook()
+    app.notebook.select(1)
+    app._capture_dashboard_view()
+    assert app._dashboard_tab == 1
+    app.notebook.select(0)
+    app._restore_dashboard_view()
+    assert app.notebook._selected == 1
+
+
 def test_open_project_file_rejects_paths_outside_project(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -3084,7 +3227,7 @@ def test_delete_profile_resolves_code_workspace_link_to_project_root(tmp_path: P
     app.config = LauncherConfig(recent_projects=[str(workspace_file.resolve())])
     app._recent_project_paths = [str(workspace_file.resolve())]
     app.recent_list = type("L", (), {"curselection": lambda self: (0,)})()
-    app._show_dashboard = lambda: None  # type: ignore[method-assign]
+    app._refresh_home_dashboard = lambda: None  # type: ignore[method-assign]
 
     import hive_planner.launcher.app as app_mod
     import hive_planner.project_profile as profile_mod
@@ -4072,6 +4215,24 @@ def test_ci_check_done_preserves_report_for_dashboard_refresh(monkeypatch: pytes
     app._populate_ci_list(app._last_ci_report)
     assert len(inserted) == 2
     assert "wiring-audit" in inserted[1]
+
+
+def test_populate_ci_list_clears_when_report_is_none() -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    rows = ["✓  old: ok"]
+
+    class _List:
+        def delete(self, _a, _b) -> None:
+            rows.clear()
+
+        def insert(self, _end, text) -> None:
+            rows.append(text)
+
+    app.ci_list = _List()
+    app._populate_ci_list(None)
+    assert rows == []
 
 
 def test_ci_check_report_is_not_bg_error() -> None:
