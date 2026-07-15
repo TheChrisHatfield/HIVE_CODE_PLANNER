@@ -34,6 +34,11 @@ Run-Py @("-m", "pip", "install", "-q", "-e", ".[dev,portable,pdf]")
 Write-Host "Generating Windows version metadata..."
 Run-Py @("packaging/gen_version_info.py")
 
+# A prior portable Hive Planner launch can leave these pointing at an incomplete
+# dist/_internal/_tcl_data path, which makes PyInstaller skip Tcl/Tk data.
+Remove-Item Env:TCL_LIBRARY -ErrorAction SilentlyContinue
+Remove-Item Env:TK_LIBRARY -ErrorAction SilentlyContinue
+
 Write-Host "Running PyInstaller (UPX off, Defender-friendly)..."
 Run-Py @("-m", "PyInstaller", "packaging/hive_planner_portable.spec", "--noconfirm", "--clean")
 
@@ -46,6 +51,16 @@ $ExePath = Join-Path $Dist "HivePlanner.exe"
 if (-not (Test-Path $ExePath)) {
     throw "HivePlanner.exe not found in $Dist"
 }
+
+$TclData = Join-Path $Dist "_internal\_tcl_data"
+$TkData = Join-Path $Dist "_internal\_tk_data"
+if (-not (Test-Path (Join-Path $TclData "init.tcl"))) {
+    throw "Tcl data missing after build: $TclData (init.tcl). Clear TCL_LIBRARY/TK_LIBRARY and rebuild."
+}
+if (-not (Test-Path (Join-Path $TkData "pkgIndex.tcl"))) {
+    throw "Tk data missing after build: $TkData. Clear TCL_LIBRARY/TK_LIBRARY and rebuild."
+}
+Write-Host "Verified Tcl/Tk data dirs under _internal."
 
 if ($Sign) {
     if (-not $CertificatePath) {

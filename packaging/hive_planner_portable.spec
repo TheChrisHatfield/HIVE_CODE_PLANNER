@@ -1,6 +1,8 @@
 # -*- mode: python ; coding: utf-8 -*-
 """PyInstaller spec — portable onedir build (dist/HivePlannerPortable/)."""
 
+import os
+import sys
 from pathlib import Path
 
 from PyInstaller.utils.hooks import collect_all
@@ -11,6 +13,11 @@ pkg = root / "src" / "hive_planner"
 icon = root / "scripts" / "assets" / "HivePlanner.ico"
 version_info = root / "packaging" / "version_info.txt"
 
+# A previous portable launch may leave TCL_LIBRARY/TK_LIBRARY pointing at
+# incomplete dist/_internal/_tcl_data paths; that breaks Tk collection.
+for _key in ("TCL_LIBRARY", "TK_LIBRARY"):
+    os.environ.pop(_key, None)
+
 pymupdf_datas, pymupdf_binaries, pymupdf_hidden = collect_all("pymupdf")
 fitz_datas, fitz_binaries, fitz_hidden = collect_all("fitz")
 
@@ -19,6 +26,18 @@ datas = [
     (str(pkg / "vendor_templates"), "hive_planner/vendor_templates"),
     (str(root / "scripts" / "README.md"), "scripts"),
 ] + pymupdf_datas + fitz_datas
+
+# Explicit Tcl/Tk data dirs (PyInstaller runtime hook expects these names).
+_tcl_root = Path(sys.base_prefix) / "tcl"
+_tcl_data = _tcl_root / "tcl8.6"
+_tk_data = _tcl_root / "tk8.6"
+if _tcl_data.is_dir():
+    datas.append((str(_tcl_data), "_tcl_data"))
+if _tk_data.is_dir():
+    datas.append((str(_tk_data), "_tk_data"))
+_tcl8 = _tcl_root / "tcl8"
+if _tcl8.is_dir():
+    datas.append((str(_tcl8), "tcl8"))
 
 a = Analysis(
     [str(pkg / "frozen_entry.py")],
