@@ -4923,6 +4923,7 @@ def test_open_cursor_queues_home_log_for_dashboard_rebuild(
     app = HivePlannerApp.__new__(HivePlannerApp)
     app.config = cfg
     app._pending_home_log = []
+    app._home_log_history = []
     lines: list[str] = []
     app.home_log = type("L", (), {"configure": lambda *a, **k: None})()
     app._append_log = lambda _w, text: lines.append(text)  # type: ignore[method-assign]
@@ -4940,6 +4941,29 @@ def test_open_cursor_queues_home_log_for_dashboard_rebuild(
     assert lines
     assert "Opened in Cursor" in lines[0]
     assert not app._pending_home_log
+    assert any("Opened in Cursor" in line for line in app._home_log_history)
+
+
+def test_start_home_action_survives_full_rebuild_via_history() -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app._pending_home_log = []
+    app._home_log_history = []
+    live: list[str] = []
+    app.home_log = object()
+    app._append_log = lambda _w, text: live.append(text)  # type: ignore[method-assign]
+
+    app._start_home_action("Running ci-check…")
+    assert live == ["Running ci-check…"]
+    assert app._home_log_history == ["Running ci-check…"]
+    assert app._pending_home_log == []
+
+    restored: list[str] = []
+    app.home_log = object()
+    app._append_log = lambda _w, text: restored.append(text)  # type: ignore[method-assign]
+    app._restore_home_log_history()
+    assert restored == ["Running ci-check…"]
 
 
 def test_link_workspace_link_only_warns_handoff(

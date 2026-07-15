@@ -140,6 +140,7 @@ class HivePlannerApp:
         self._bg_generation = 0
         self._python_scan_active = False
         self._pending_home_log: list[str] = []
+        self._home_log_history: list[str] = []
         self._last_ci_report: dict | None = None
         self._pending_memory_candidates: Path | None = None
         self._pending_memory_link: str | None = None
@@ -641,6 +642,24 @@ class HivePlannerApp:
         self._queue_home_log(message)
         self._refresh_home_dashboard()
 
+    def _remember_home_log(self, text: str) -> None:
+        if not hasattr(self, "_home_log_history") or self._home_log_history is None:
+            self._home_log_history = []
+        self._home_log_history.append(text)
+        overflow = len(self._home_log_history) - 500
+        if overflow > 0:
+            del self._home_log_history[:overflow]
+
+    def _restore_home_log_history(self) -> None:
+        if not hasattr(self, "home_log"):
+            return
+        history = getattr(self, "_home_log_history", None) or []
+        try:
+            for line in history:
+                self._append_log(self.home_log, line)
+        except tk.TclError:
+            return
+
     def _flush_pending_home_log(self) -> None:
         if not self._pending_home_log or not hasattr(self, "home_log"):
             return
@@ -657,12 +676,24 @@ class HivePlannerApp:
             return
         if not hasattr(self, "_pending_home_log") or self._pending_home_log is None:
             self._pending_home_log = []
+        self._remember_home_log(text)
         self._pending_home_log.append(text)
 
     def _emit_home_log(self, message: str) -> None:
-        """Write to Output now and keep queued for the next dashboard rebuild."""
-        self._queue_home_log(message)
-        self._flush_pending_home_log()
+        """Write to Output now and retain in history for the next dashboard rebuild."""
+        text = str(message).rstrip()
+        if not text:
+            return
+        self._remember_home_log(text)
+        if hasattr(self, "home_log"):
+            try:
+                self._append_log(self.home_log, text)
+                return
+            except tk.TclError:
+                pass
+        if not hasattr(self, "_pending_home_log") or self._pending_home_log is None:
+            self._pending_home_log = []
+        self._pending_home_log.append(text)
 
     def _queue_handoff_repair_warning(self, state: BootstrapState) -> None:
         if not state.needs_handoff_repair:
@@ -683,17 +714,20 @@ class HivePlannerApp:
         self._show_dashboard()
 
     def _start_home_action(self, message: str) -> None:
-        """Show an in-progress line immediately when Output exists; otherwise queue it."""
+        """Show an in-progress line immediately; keep it in history across full rebuilds."""
         text = str(message).rstrip()
         if not text:
             return
+        self._remember_home_log(text)
         if hasattr(self, "home_log"):
             try:
                 self._append_log(self.home_log, text)
                 return
             except tk.TclError:
                 pass
-        self._queue_home_log(text)
+        if not hasattr(self, "_pending_home_log") or self._pending_home_log is None:
+            self._pending_home_log = []
+        self._pending_home_log.append(text)
 
     def _bind_page_wheel(self, parent: tk.Misc, canvas: tk.Canvas) -> None:
         bind_mousewheel(canvas, target=canvas)
@@ -857,7 +891,8 @@ class HivePlannerApp:
         bind_mousewheel(self.ci_list)
         self._populate_ci_list(self._last_ci_report)
         self._bind_page_wheel(body, canvas)
-        self._flush_pending_home_log()
+        self._restore_home_log_history()
+        self._pending_home_log.clear()
 
     def _build_projects_tab(self, parent: tk.Frame) -> None:
         top_row = tk.Frame(parent, bg=COLORS["bg"])
