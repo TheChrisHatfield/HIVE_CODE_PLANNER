@@ -100,6 +100,10 @@ class ProjectSummary:
 
 def _python_command(config: LauncherConfig) -> list[str]:
     raw = config.python_executable.strip() or "py -3.11"
+    # Bare Windows paths with spaces (e.g. C:\Program Files\...\python.exe) must
+    # stay as a single argv entry even when the user omitted quotes.
+    if Path(raw).is_file():
+        return [raw]
     parts = shlex.split(raw, posix=(sys.platform != "win32"))
     return [part.strip('"').strip("'") for part in parts]
 

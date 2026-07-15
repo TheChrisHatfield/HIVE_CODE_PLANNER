@@ -4090,6 +4090,15 @@ def test_python_command_preserves_quoted_paths() -> None:
     assert _python_command(cfg2) == ["py", "-3.11"]
 
 
+def test_python_command_keeps_unquoted_existing_path_with_spaces(tmp_path: Path) -> None:
+    folder = tmp_path / "Program Files" / "Python311"
+    folder.mkdir(parents=True)
+    exe = folder / "python.exe"
+    exe.write_bytes(b"")
+    cfg = LauncherConfig(python_executable=str(exe))
+    assert _python_command(cfg) == [str(exe)]
+
+
 def test_select_recent_rejects_missing_project(tmp_path: Path) -> None:
     from hive_planner.launcher.app import HivePlannerApp
 
