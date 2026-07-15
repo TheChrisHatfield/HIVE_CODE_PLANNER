@@ -10,6 +10,7 @@ from hive_planner.agents_memory import (
     ingest_agents_candidates,
     lint_agents_md,
     normalize_candidates_text,
+    parse_sections,
     propose_agents_memory,
     run_agents_memory,
 )
@@ -43,6 +44,53 @@ def _minimal_agents(extra: str = "") -> str:
 
 - Existing durable fact one.
 """
+
+
+def test_parse_sections_ignores_headings_inside_fenced_code() -> None:
+    text = """# Doc
+
+## Outside
+
+before
+
+```markdown
+## Fake Heading
+
+inside fence
+```
+
+after
+
+## Real
+
+body
+"""
+    sections = parse_sections(text)
+    assert "Fake Heading" not in sections
+    assert "Outside" in sections
+    assert "## Fake Heading" in sections["Outside"]
+    assert "inside fence" in sections["Outside"]
+    assert "after" in sections["Outside"]
+    assert sections["Real"] == "body"
+
+
+def test_parse_sections_appends_duplicate_heading_bodies() -> None:
+    text = """## Facts
+
+- first
+
+## Other
+
+other body
+
+## Facts
+
+- second
+"""
+    sections = parse_sections(text)
+    assert list(sections) == ["Facts", "Other"]
+    assert sections["Facts"] == "- first\n\n- second"
+    assert sections["Other"] == "other body"
 
 
 def test_lint_missing_section_errors(tmp_path: Path) -> None:

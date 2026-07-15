@@ -146,15 +146,30 @@ def parse_sections(text: str) -> dict[str, str]:
     sections: dict[str, str] = {}
     current_title = ""
     current_lines: list[str] = []
+    in_fence = False
 
     def flush() -> None:
         nonlocal current_lines
         if current_title:
-            sections[current_title] = "\n".join(current_lines).strip()
+            body = "\n".join(current_lines).strip()
+            if current_title in sections:
+                existing = sections[current_title]
+                if existing and body:
+                    sections[current_title] = f"{existing}\n\n{body}"
+                elif body:
+                    sections[current_title] = body
+            else:
+                sections[current_title] = body
         current_lines = []
 
     for line in text.splitlines():
-        if line.startswith("## "):
+        stripped = line.strip()
+        if stripped.startswith("```"):
+            in_fence = not in_fence
+            if current_title:
+                current_lines.append(line)
+            continue
+        if not in_fence and line.startswith("## "):
             flush()
             current_title = line[3:].strip()
             continue
