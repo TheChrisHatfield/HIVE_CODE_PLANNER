@@ -4911,7 +4911,26 @@ class HivePlannerApp:
         save_config(self.config)
         prepare_linked_project_root(Path(result["target"]), repair_agents=True)
         messagebox.showinfo("Created", f"Project ready at:\n{result['target']}")
+        self._clear_new_project_form()
         self._refresh_home_dashboard()
+
+    def _clear_new_project_form(self) -> None:
+        """Blank create fields after success; keep profile/handoff defaults."""
+        try:
+            if hasattr(self, "new_name"):
+                self.new_name.set("")
+            if hasattr(self, "new_target"):
+                self.new_target.set("")
+            if hasattr(self, "new_git"):
+                self.new_git.set(True)
+            if hasattr(self, "new_profile"):
+                self.new_profile.set(self.config.default_profile)
+            if hasattr(self, "new_agent_handoff"):
+                self.new_agent_handoff.set(self.config.default_agent_handoff)
+            if hasattr(self, "new_cl_runtime"):
+                self.new_cl_runtime.set("cursor")
+        except tk.TclError:
+            return
 
     def _on_select_recent(self) -> None:
         path = self._selected_recent_path()

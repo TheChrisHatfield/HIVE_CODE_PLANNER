@@ -2287,6 +2287,8 @@ def test_create_done_keeps_projects_context_via_soft_refresh(
     app._dashboard_tab = 1  # Projects
     refreshed: list[str] = []
     app._refresh_home_dashboard = lambda: refreshed.append("refresh")  # type: ignore[method-assign]
+    cleared: list[bool] = []
+    app._clear_new_project_form = lambda: cleared.append(True)  # type: ignore[method-assign]
 
     import hive_planner.launcher.app as app_mod
 
@@ -2301,7 +2303,29 @@ def test_create_done_keeps_projects_context_via_soft_refresh(
 
     app._create_done({"ok": True, "target": str(target.resolve())})
     assert refreshed == ["refresh"]
+    assert cleared == [True]
     assert app._dashboard_tab == 1
+
+
+def test_clear_new_project_form_resets_name_and_target() -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.config = LauncherConfig(default_profile="minimal", default_agent_handoff="unified")
+    app.new_name = type("V", (), {"set": lambda self, v: setattr(self, "v", v)})()
+    app.new_target = type("V", (), {"set": lambda self, v: setattr(self, "v", v)})()
+    app.new_git = type("V", (), {"set": lambda self, v: setattr(self, "v", v)})()
+    app.new_profile = type("V", (), {"set": lambda self, v: setattr(self, "v", v)})()
+    app.new_agent_handoff = type("V", (), {"set": lambda self, v: setattr(self, "v", v)})()
+    app.new_cl_runtime = type("V", (), {"set": lambda self, v: setattr(self, "v", v)})()
+
+    app._clear_new_project_form()
+    assert app.new_name.v == ""
+    assert app.new_target.v == ""
+    assert app.new_git.v is True
+    assert app.new_profile.v == "minimal"
+    assert app.new_agent_handoff.v == "unified"
+    assert app.new_cl_runtime.v == "cursor"
 
 
 def test_soft_refresh_updates_status_without_clearing_container(
