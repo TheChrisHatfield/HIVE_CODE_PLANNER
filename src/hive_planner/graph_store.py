@@ -340,20 +340,45 @@ def parse_offload_input(path: Path) -> tuple[list[dict[str, Any]], list[dict[str
 def offload_from_file(paths: RepoPaths, source: Path) -> GraphOperationResult:
     paths.ensure_shared_memory_dirs()
     nodes, edges = parse_offload_input(source)
+    staging_nodes, staging_edges, load_warnings = load_tier(paths, "staging", on_error="skip")
+    permanent_nodes, permanent_edges, perm_warnings = load_tier(
+        paths, "permanent", on_error="skip"
+    )
+    known_node_ids = {
+        str(n["id"]) for n in staging_nodes + permanent_nodes if isinstance(n.get("id"), str)
+    }
+    known_edge_ids = {
+        str(e["id"]) for e in staging_edges + permanent_edges if isinstance(e.get("id"), str)
+    }
+
+    result = GraphOperationResult(status="ok")
+    result.warnings.extend(load_warnings)
+    result.warnings.extend(perm_warnings)
+    new_nodes: list[dict[str, Any]] = []
     for node in nodes:
         node["status"] = "staging"
+        if node["id"] in known_node_ids:
+            result.nodes_skipped += 1
+            continue
+        known_node_ids.add(node["id"])
+        new_nodes.append(node)
+    new_edges: list[dict[str, Any]] = []
     for edge in edges:
         edge["status"] = "staging"
-    if nodes:
-        _append_jsonl(_jsonl_path(paths, "staging", "nodes"), nodes)
-    if edges:
-        _append_jsonl(_jsonl_path(paths, "staging", "edges"), edges)
+        if edge["id"] in known_edge_ids:
+            result.edges_skipped += 1
+            continue
+        known_edge_ids.add(edge["id"])
+        new_edges.append(edge)
+
+    if new_nodes:
+        _append_jsonl(_jsonl_path(paths, "staging", "nodes"), new_nodes)
+    if new_edges:
+        _append_jsonl(_jsonl_path(paths, "staging", "edges"), new_edges)
     refresh_manifest_counts(paths)
-    return GraphOperationResult(
-        status="ok",
-        nodes_written=len(nodes),
-        edges_written=len(edges),
-    )
+    result.nodes_written = len(new_nodes)
+    result.edges_written = len(new_edges)
+    return result
 
 
 def promote_staging(paths: RepoPaths, *, dry_run: bool = False) -> GraphOperationResult:

@@ -80,7 +80,18 @@ def test_promote_skips_duplicate_ids(tmp_path: Path) -> None:
     first = promote_staging(paths)
     first_promote_at = graph_status(paths)["manifest"]["last_promote"]
     assert first_promote_at
-    offload_from_file(paths, FIXTURE)
+    # Force re-queue of already-permanent ids (bypass offload dedupe) to exercise promote skip.
+    staging_nodes = paths.shared_memory_staging / "nodes.jsonl"
+    staging_edges = paths.shared_memory_staging / "edges.jsonl"
+    permanent = export_tier(paths, "permanent")
+    staging_nodes.write_text(
+        "\n".join(json.dumps(n) for n in permanent["nodes"]) + "\n",
+        encoding="utf-8",
+    )
+    staging_edges.write_text(
+        "\n".join(json.dumps(e) for e in permanent["edges"]) + "\n",
+        encoding="utf-8",
+    )
     result = promote_staging(paths)
     assert result.nodes_written == 0
     assert result.nodes_skipped == 2
@@ -194,6 +205,27 @@ def test_offload_pretty_printed_single_node(tmp_path: Path) -> None:
     assert result.edges_written == 0
     staging = export_tier(paths, "staging")
     assert staging["nodes"][0]["id"] == "n-pretty"
+
+
+def test_offload_skips_duplicate_ids_already_in_staging_or_permanent(tmp_path: Path) -> None:
+    paths = _paths(tmp_path)
+    first = offload_from_file(paths, FIXTURE)
+    assert first.nodes_written == 2
+    assert first.edges_written == 1
+    second = offload_from_file(paths, FIXTURE)
+    assert second.nodes_written == 0
+    assert second.edges_written == 0
+    assert second.nodes_skipped == 2
+    assert second.edges_skipped == 1
+    status = graph_status(paths)
+    assert status["manifest"]["staging_nodes"] == 2
+    assert status["manifest"]["staging_edges"] == 1
+
+    promote_staging(paths)
+    third = offload_from_file(paths, FIXTURE)
+    assert third.nodes_written == 0
+    assert third.nodes_skipped == 2
+    assert graph_status(paths)["manifest"]["staging_nodes"] == 0
 
 
 def test_promote_skips_corrupt_jsonl_and_promotes_valid(tmp_path: Path) -> None:
