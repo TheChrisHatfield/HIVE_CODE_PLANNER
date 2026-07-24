@@ -1,15 +1,19 @@
 # Hive Code Planner
 
-**Hive Code Planner** is a local desktop app and CLI that helps you run **Cursor** coding projects with a clear planning layout before agents write code.
+**Hive Code Planner is a local context compiler for AI coding agents** — not another chatbot wrapper.
 
-It scaffolds and maintains:
+Long planning threads (Perplexity, research chats, PDFs) are too noisy for Cursor to use directly. Agents lose the thread between mission, architecture, and the next file to edit. Hive turns that noise into **Git-native, reviewable structure** agents can load in one hop.
 
-- **Spec Kit** — specs, plans, and tasks (`docs/specs/`)
-- **Continual Learning** — durable operational memory in `AGENTS.md`
-- **Hive Delta docs** — holistic / macro / micro planning layers
-- **Cartridge compile** — turn research/docs into agent-ready context
+## What’s novel
 
-Think of it as a **control panel** for agentic coding: create or link a project, open it in Cursor, run health checks, and keep planning files aligned with the code.
+| Idea | Why it matters |
+|------|----------------|
+| **Planning Rosetta Stone** | Hook IDs (`planning.rosetta`, `context.delta`, …) map any question to the right docs — agents don’t guess. |
+| **Delta layers** | Holistic → Macro → Micro → code stays traceable; primary truth is always the active layer + spec/plan/tasks. |
+| **Cartridge compile** | Research and source docs compile into a portable `cartridge/` pack agents can reload from Git. |
+| **Symbiotic Spec Kit + Continual Learning** | Behavioral truth lives in Spec Kit; operational memory in `AGENTS.md` — with wiring audits so “done” means actually wired. |
+
+It ships as a **desktop app + CLI** that scaffolds Cursor projects, opens them, runs health checks, and keeps planning files aligned with the code — all on your machine.
 
 ## Using the desktop app (plain-English guide)
 
