@@ -1,14 +1,21 @@
 # Hive Code Planner
 
-Local Git repository root for Hive Code Planner work.
+**Hive Code Planner** is a local desktop app and CLI that helps you run **Cursor** coding projects with a clear planning layout before agents write code.
 
-This repo is used **locally only** (no remote required). All project files live under this directory and should be referenced from here.
+It scaffolds and maintains:
+
+- **Spec Kit** — specs, plans, and tasks (`docs/specs/`)
+- **Continual Learning** — durable operational memory in `AGENTS.md`
+- **Hive Delta docs** — holistic / macro / micro planning layers
+- **Cartridge compile** — turn research/docs into agent-ready context
+
+Think of it as a **control panel** for agentic coding: create or link a project, open it in Cursor, run health checks, and keep planning files aligned with the code.
 
 ## Using the desktop app (plain-English guide)
 
-To launch Hive Planner and read a plain-English walkthrough of what the tool does and how to use it, see **[`scripts/README.md`](scripts/README.md)** — the same guide appears on the **Home** tab inside the app.
+Full walkthrough: **[`scripts/README.md`](scripts/README.md)** (same guide appears on the **Home** tab inside the app).
 
-Quick launch: double-click `scripts\HivePlanner.lnk`.
+Quick launch: double-click `scripts\HivePlanner.lnk`, or run the portable build from `dist\HivePlannerPortable\HivePlanner.exe`.
 
 ## Repository root
 
