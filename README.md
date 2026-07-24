@@ -4,14 +4,19 @@
 
 Long planning threads (Perplexity, research chats, PDFs) are too noisy for Cursor to use directly. Agents lose the thread between mission, architecture, and the next file to edit. Hive turns that noise into **Git-native, reviewable structure** agents can load in one hop.
 
-## What’s novel
+## How Spec Kit, Continual Learning, and the Rosetta Stone work in harmony
 
-| Idea | Why it matters |
-|------|----------------|
-| **Planning Rosetta Stone** | Hook IDs (`planning.rosetta`, `context.delta`, …) map any question to the right docs — agents don’t guess. |
-| **Delta layers** | Holistic → Macro → Micro → code stays traceable; primary truth is always the active layer + spec/plan/tasks. |
-| **Cartridge compile** | Research and source docs compile into a portable `cartridge/` pack agents can reload from Git. |
-| **Symbiotic Spec Kit + Continual Learning** | Behavioral truth lives in Spec Kit; operational memory in `AGENTS.md` — with wiring audits so “done” means actually wired. |
+New users should treat these three as **one system**, not three separate tools:
+
+| Piece | Role in Hive |
+|-------|----------------|
+| **Planning Rosetta Stone** | The **map**. Hook IDs (`planning.rosetta`, `spec.flow`, `memory.agents_md`, …) tell the agent *which* docs to open and in what order — so it doesn’t wander the repo. |
+| **Spec Kit** | The **behavioral truth**. Specs, plans, and tasks (`docs/specs/`) define *what the product must do* (APIs, acceptance criteria, requirements). |
+| **Continual Learning** | The **operational memory**. Recurring workspace facts land in `AGENTS.md` (commands, paths, conventions) — never product behavior. |
+
+**Harmony rule:** Rosetta navigates → Spec Kit decides behavior → Continual Learning remembers how *this* workspace runs. Hive’s wiring audits and `agents-propose` keep those lanes from mixing, so agents stay aligned instead of inventing process or burying requirements in chat memory.
+
+Supporting layers (Delta holistic/macro/micro + cartridge compile) feed that loop: research becomes reloadable context; Delta keeps mission → architecture → tasks traceable to code.
 
 It ships as a **desktop app + CLI** that scaffolds Cursor projects, opens them, runs health checks, and keeps planning files aligned with the code — all on your machine.
 
