@@ -27,6 +27,16 @@ Same upstream architecture: `stop` hook → `continual-learning` skill → `agen
 
 Hive additions: wiring audit gate, behavioral routing, autonomous memory routing via Hive CLI, spec-drift parity with CLI.
 
+## Runtime (Cursor 3.x)
+
+Upstream uses Bun (`bun run …/continual-learning-stop.ts`). Hive ships a **Python 3.11** stop hook instead so Windows workstations without Bun still fire Continual Learning:
+
+```text
+py -3.11 ${CURSOR_PLUGIN_ROOT}/hooks/continual-learning-stop.py
+```
+
+The `.ts` file remains for upstream parity reference. Project hooks under `.cursor/hooks/` also emit Cursor 3.x JSON stdout (`additional_context` / `{}`).
+
 ## Trigger cadence
 
 See upstream defaults in hook config. Optional env overrides:

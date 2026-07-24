@@ -19,6 +19,8 @@ CURSOR_CL_ARTIFACTS = (
     ".cursor/plugins/hive-continual-learning/agents/agents-memory-updater.md",
     ".cursor/plugins/hive-continual-learning/skills/continual-learning/SKILL.md",
     ".cursor/plugins/hive-continual-learning/.cursor-plugin/plugin.json",
+    ".cursor/plugins/hive-continual-learning/hooks/hooks.json",
+    ".cursor/plugins/hive-continual-learning/hooks/continual-learning-stop.py",
 )
 
 HEADLESS_CL_ARTIFACTS = (

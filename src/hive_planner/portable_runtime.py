@@ -43,6 +43,8 @@ def _required_deploy_paths() -> tuple[str, ...]:
         f"{CL_OVERLAY_REL}/WORKFLOW.md",
         f"{CL_OVERLAY_REL}/skills/continual-learning/SKILL.md",
         f"{CL_OVERLAY_REL}/.cursor-plugin/plugin.json",
+        f"{CL_OVERLAY_REL}/hooks/hooks.json",
+        f"{CL_OVERLAY_REL}/hooks/continual-learning-stop.py",
     )
 
 

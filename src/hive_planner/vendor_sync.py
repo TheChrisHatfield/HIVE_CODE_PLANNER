@@ -319,9 +319,28 @@ def _verify_cl_overlay(root: Path, *, manifest: dict | None = None) -> list[str]
         "agents/agents-memory-updater.md",
         "skills/continual-learning/SKILL.md",
         ".cursor-plugin/plugin.json",
+        # Cursor 3.x stop hook (Python) — without these, CL never triggers
+        "hooks/hooks.json",
+        "hooks/continual-learning-stop.py",
     ):
         if not (overlay_root / rel).is_file():
             issues.append(f"continual-learning overlay missing: {CL_OVERLAY_REL}/{rel}")
+    hooks_json = overlay_root / "hooks" / "hooks.json"
+    if hooks_json.is_file():
+        try:
+            hooks_text = hooks_json.read_text(encoding="utf-8")
+        except OSError:
+            hooks_text = ""
+        if "bun " in hooks_text or "bun\t" in hooks_text or '"bun' in hooks_text:
+            issues.append(
+                f"continual-learning overlay uses Bun stop hook (need Python): "
+                f"{CL_OVERLAY_REL}/hooks/hooks.json"
+            )
+        if "continual-learning-stop.py" not in hooks_text:
+            issues.append(
+                f"continual-learning overlay hooks.json must invoke continual-learning-stop.py: "
+                f"{CL_OVERLAY_REL}/hooks/hooks.json"
+            )
     if manifest is not None:
         expected_rev = _continual_learning_patch_rev(manifest)
         if expected_rev:

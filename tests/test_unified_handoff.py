@@ -200,6 +200,79 @@ def test_unified_verify_checks_overlay_with_local_manifest(tmp_path: Path) -> No
     assert any("spec-kit overlay missing" in issue for issue in report.issues)
 
 
+def test_verify_cl_overlay_requires_python_stop_hook(tmp_path: Path) -> None:
+    """Cursor 3.x CL overlay without Python stop hook must not look healthy."""
+    from hive_planner.vendor_sync import CL_OVERLAY_REL, _verify_cl_overlay
+
+    overlay = tmp_path / CL_OVERLAY_REL
+    for rel in (
+        "README.md",
+        "WORKFLOW.md",
+        "agents/agents-memory-updater.md",
+        "skills/continual-learning/SKILL.md",
+        ".cursor-plugin/plugin.json",
+    ):
+        path = overlay / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("x\n", encoding="utf-8")
+    hooks = overlay / "hooks"
+    hooks.mkdir(parents=True, exist_ok=True)
+    (hooks / "hooks.json").write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "hooks": {
+                    "stop": [
+                        {
+                            "command": "bun run ${CURSOR_PLUGIN_ROOT}/hooks/continual-learning-stop.ts"
+                        }
+                    ]
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    issues = _verify_cl_overlay(tmp_path)
+
+    assert any("continual-learning-stop.py" in issue for issue in issues)
+    assert any("Bun" in issue for issue in issues)
+
+
+def test_verify_cl_overlay_accepts_python_stop_hook(tmp_path: Path) -> None:
+    from hive_planner.vendor_sync import CL_OVERLAY_REL, _verify_cl_overlay
+
+    overlay = tmp_path / CL_OVERLAY_REL
+    for rel in (
+        "README.md",
+        "WORKFLOW.md",
+        "agents/agents-memory-updater.md",
+        "skills/continual-learning/SKILL.md",
+        ".cursor-plugin/plugin.json",
+        "hooks/continual-learning-stop.py",
+    ):
+        path = overlay / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("x\n", encoding="utf-8")
+    (overlay / "hooks" / "hooks.json").write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "hooks": {
+                    "stop": [
+                        {
+                            "command": "py -3.11 ${CURSOR_PLUGIN_ROOT}/hooks/continual-learning-stop.py"
+                        }
+                    ]
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert _verify_cl_overlay(tmp_path) == []
+
+
 def test_unified_verify_fails_when_spec_kit_overlay_missing(tmp_path: Path) -> None:
     from hive_planner.vendor_sync import load_manifest, packaged_manifest_path
 
