@@ -1,6 +1,11 @@
 {
   "version": 1,
   "hooks": {
+    "workspaceOpen": [
+      {
+        "command": "py -3.11 .cursor/hooks/hive_workspace_open.py"
+      }
+    ],
     "sessionStart": [
       {
         "command": "py -3.11 .cursor/hooks/hive_session_start.py"
@@ -14,7 +19,7 @@
     "afterFileEdit": [
       {
         "command": "py -3.11 .cursor/hooks/hive_agents_lint.py",
-        "matcher": "AGENTS\\.md$"
+        "matcher": "Write|TabWrite"
       }
     ]
   }
