@@ -45,6 +45,8 @@ def _required_deploy_paths() -> tuple[str, ...]:
         f"{CL_OVERLAY_REL}/.cursor-plugin/plugin.json",
         f"{CL_OVERLAY_REL}/hooks/hooks.json",
         f"{CL_OVERLAY_REL}/hooks/continual-learning-stop.py",
+        ".cursor/hooks.json",
+        ".cursor/hooks/hive_workspace_open.py",
     )
 
 
@@ -133,6 +135,14 @@ def ensure_portable_runtime(app_root: Path, *, force: bool = False) -> PortableR
         deploy_force = force or not artifacts_present
         deploy_unified_vendor_artifacts(
             root,
+            root,
+            force=deploy_force,
+            written=written,
+            warnings=warnings,
+        )
+        from hive_planner.bootstrap import _copy_cursor_workspace_plugin_hooks
+
+        _copy_cursor_workspace_plugin_hooks(
             root,
             force=deploy_force,
             written=written,

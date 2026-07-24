@@ -269,8 +269,51 @@ def test_verify_cl_overlay_accepts_python_stop_hook(tmp_path: Path) -> None:
         ),
         encoding="utf-8",
     )
+    project_hooks = tmp_path / ".cursor"
+    project_hooks.mkdir(parents=True, exist_ok=True)
+    (project_hooks / "hooks.json").write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "hooks": {
+                    "workspaceOpen": [
+                        {"command": "py -3.11 .cursor/hooks/hive_workspace_open.py"}
+                    ]
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    (project_hooks / "hooks").mkdir(parents=True, exist_ok=True)
+    (project_hooks / "hooks" / "hive_workspace_open.py").write_text("print('ok')\n", encoding="utf-8")
 
     assert _verify_cl_overlay(tmp_path) == []
+
+
+def test_bootstrap_deploys_workspace_open_for_cursor_cl(tmp_path: Path) -> None:
+    """Cursor 3.x needs workspaceOpen or the vendored CL plugin never loads."""
+    from hive_planner.bootstrap import init_project
+    from hive_planner.config import RepoPaths
+
+    target = tmp_path / "consumer"
+    # init_project refuses targets inside the hive source tree; use external tmp.
+    result = init_project(
+        RepoPaths(root=_hive_repo_root()),
+        target,
+        profile="minimal",
+        force=True,
+        spec_kit=True,
+        continual_learning=True,
+        cl_runtime="cursor",
+    )
+    assert (target / ".cursor" / "hooks.json").is_file()
+    hooks = (target / ".cursor" / "hooks.json").read_text(encoding="utf-8")
+    assert "workspaceOpen" in hooks
+    assert "hive_workspace_open.py" in hooks
+    assert (target / ".cursor" / "hooks" / "hive_workspace_open.py").is_file()
+    assert any(p.endswith("hive_workspace_open.py") for p in result.files_written) or (
+        target / ".cursor" / "hooks" / "hive_workspace_open.py"
+    ).is_file()
 
 
 def test_unified_verify_fails_when_spec_kit_overlay_missing(tmp_path: Path) -> None:

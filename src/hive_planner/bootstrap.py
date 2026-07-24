@@ -119,6 +119,35 @@ def _copy_bootstrap_rules(
             warnings.append(f"Missing rule template {rule_name} — not copied")
 
 
+def _cursor_hooks_template_dir() -> Path:
+    return Path(__file__).resolve().parent / "bootstrap_templates" / ".cursor"
+
+
+def _copy_cursor_workspace_plugin_hooks(
+    target: Path,
+    *,
+    force: bool,
+    written: list[str],
+    warnings: list[str],
+) -> None:
+    """Deploy workspaceOpen so Cursor 3.x loads `.cursor/plugins/hive-continual-learning`."""
+    templates = _cursor_hooks_template_dir()
+    hooks_json = templates / "hooks.json"
+    hook_script = templates / "hooks" / "hive_workspace_open.py"
+    _copy_file(hooks_json, target, ".cursor/hooks.json", force=force, written=written)
+    _copy_file(
+        hook_script,
+        target,
+        ".cursor/hooks/hive_workspace_open.py",
+        force=force,
+        written=written,
+    )
+    if not (target / ".cursor" / "hooks.json").is_file():
+        warnings.append("Missing Cursor workspaceOpen hooks.json — plugin may not load on Cursor 3.x")
+    if not (target / ".cursor" / "hooks" / "hive_workspace_open.py").is_file():
+        warnings.append("Missing hive_workspace_open.py — plugin may not load on Cursor 3.x")
+
+
 def _write_text(target: Path, rel: str, content: str, *, force: bool, written: list[str]) -> None:
     path = target / rel
     if path.exists() and not force:
@@ -901,6 +930,12 @@ def _write_bootstrap_tree(
             cl_runtime=resolved_cl_runtime,
         )
         if requires_cursor_plugin(resolved_cl_runtime):
+            _copy_cursor_workspace_plugin_hooks(
+                target,
+                force=force,
+                written=written,
+                warnings=warnings,
+            )
             try:
                 set_project_cl_source(target, "vendored")
             except ValueError:
@@ -1001,4 +1036,11 @@ def deploy_agent_handoff_scaffold(
         warnings=warnings,
         cl_runtime=resolved_cl_runtime,
     )
+    if requires_cursor_plugin(resolved_cl_runtime):
+        _copy_cursor_workspace_plugin_hooks(
+            target,
+            force=force,
+            written=written,
+            warnings=warnings,
+        )
     return sorted(set(written)), warnings

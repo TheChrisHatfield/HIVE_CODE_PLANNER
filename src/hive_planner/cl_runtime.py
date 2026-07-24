@@ -21,6 +21,9 @@ CURSOR_CL_ARTIFACTS = (
     ".cursor/plugins/hive-continual-learning/.cursor-plugin/plugin.json",
     ".cursor/plugins/hive-continual-learning/hooks/hooks.json",
     ".cursor/plugins/hive-continual-learning/hooks/continual-learning-stop.py",
+    # Cursor 3.x project registration for the plugin tree above
+    ".cursor/hooks.json",
+    ".cursor/hooks/hive_workspace_open.py",
 )
 
 HEADLESS_CL_ARTIFACTS = (

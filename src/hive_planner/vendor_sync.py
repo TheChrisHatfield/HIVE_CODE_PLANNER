@@ -341,6 +341,28 @@ def _verify_cl_overlay(root: Path, *, manifest: dict | None = None) -> list[str]
                 f"continual-learning overlay hooks.json must invoke continual-learning-stop.py: "
                 f"{CL_OVERLAY_REL}/hooks/hooks.json"
             )
+    # Cursor 3.x does not auto-discover project plugins; workspaceOpen must register them.
+    project_hooks = root / ".cursor" / "hooks.json"
+    workspace_hook = root / ".cursor" / "hooks" / "hive_workspace_open.py"
+    if not project_hooks.is_file():
+        issues.append("continual-learning registration missing: .cursor/hooks.json (workspaceOpen)")
+    else:
+        try:
+            project_hooks_text = project_hooks.read_text(encoding="utf-8")
+        except OSError:
+            project_hooks_text = ""
+        if "workspaceOpen" not in project_hooks_text:
+            issues.append(
+                "continual-learning registration missing workspaceOpen in .cursor/hooks.json"
+            )
+        if "hive_workspace_open.py" not in project_hooks_text:
+            issues.append(
+                "continual-learning registration missing hive_workspace_open.py in .cursor/hooks.json"
+            )
+    if not workspace_hook.is_file():
+        issues.append(
+            "continual-learning registration missing: .cursor/hooks/hive_workspace_open.py"
+        )
     if manifest is not None:
         expected_rev = _continual_learning_patch_rev(manifest)
         if expected_rev:
