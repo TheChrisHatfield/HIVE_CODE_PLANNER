@@ -65,24 +65,19 @@ See [docs/delta/STAGE_ROADMAP.md](docs/delta/STAGE_ROADMAP.md).
 | `src/` | Source code and scripts |
 | `.cursor/` | Cursor IDE rules and project guidance |
 
-## Local Git workflow
+## GitHub
+
+Remote: https://github.com/TheChrisHatfield/HIVE_CODE_PLANNER
 
 ```powershell
 cd d:\DRIVE_DOWNLOADS\HIVE_CODE_PLANNER
-
-# Check status
 git status
-
-# Stage and commit changes
 git add .
 git commit -m "Describe your change"
-
-# View history
-git log --oneline --graph --decorate
+git push
 ```
 
 ## Notes
 
 - Treat this folder as the canonical project root.
 - Do not scatter project files outside this directory unless explicitly required.
-- Add a remote later with `git remote add origin <url>` if you want GitHub sync.
