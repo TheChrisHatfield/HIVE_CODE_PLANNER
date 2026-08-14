@@ -4940,7 +4940,7 @@ class HivePlannerApp:
             return
         # Keep Home/dashboard in sync when opening a list selection that was not active yet.
         if normalize_project_path(self.config.active_project or "") != normalize_project_path(root):
-            self.config = load_config()
+            # Do not load_config() here — that would discard unsaved Settings tab edits.
             self.config.add_recent_project(Path(root))
             save_config(self.config)
             if hasattr(self, "recent_list"):
