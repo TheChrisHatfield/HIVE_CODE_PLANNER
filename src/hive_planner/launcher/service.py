@@ -2084,6 +2084,54 @@ def find_cursor_executable(config: LauncherConfig | None = None) -> str | None:
     return None
 
 
+def _cursor_cli_js_for_exe(exe: Path) -> Path | None:
+    """Return resources/app/out/cli.js next to Cursor.exe when present."""
+    cli_js = exe.parent / "resources" / "app" / "out" / "cli.js"
+    if cli_js.is_file():
+        return cli_js
+    return None
+
+
+def resolve_cursor_cli_launch(cursor_path: str) -> tuple[list[str], dict[str, str]]:
+    """Build argv + env that invokes Cursor's Node CLI (supports --classic).
+
+    Cursor 3.x glass/Agents window is the default for many GUI launches. Going through
+    cli.js (same as ``cursor.cmd``) lets us pass ``--classic`` so Open in Cursor loads
+    the real editor workspace for the linked folder/.code-workspace.
+    """
+    path = Path(cursor_path)
+    name = path.name.lower()
+    exe: Path | None = None
+    cli_js: Path | None = None
+
+    if name in {"cursor.cmd", "cursor.bat"}:
+        # resources/app/bin/cursor.cmd → ../../../Cursor.exe and ../out/cli.js
+        exe = (path.parent / ".." / ".." / ".." / "Cursor.exe").resolve()
+        cli_js = (path.parent / ".." / "out" / "cli.js").resolve()
+    elif name == "cursor.exe":
+        exe = path.resolve() if path.is_file() else path
+        cli_js = _cursor_cli_js_for_exe(exe)
+    elif name == "cursor":
+        # Unix launcher script lives beside the app; prefer adjacent Cursor binary + cli.js
+        maybe_exe = (path.parent / ".." / ".." / ".." / "Cursor").resolve()
+        if maybe_exe.is_file():
+            exe = maybe_exe
+            cli_js = (path.parent / ".." / "out" / "cli.js").resolve()
+            if not cli_js.is_file():
+                cli_js = None
+
+    if exe is not None and exe.is_file():
+        if cli_js is None or not cli_js.is_file():
+            cli_js = _cursor_cli_js_for_exe(exe)
+        if cli_js is not None and cli_js.is_file():
+            return [str(exe), str(cli_js)], {
+                "ELECTRON_RUN_AS_NODE": "1",
+                "VSCODE_DEV": "",
+            }
+
+    return [str(path)], {}
+
+
 def open_in_cursor(project_root: Path, *, config: LauncherConfig | None = None) -> dict:
     raw = Path(project_root)
     if is_code_workspace_file(raw):
@@ -2091,7 +2139,16 @@ def open_in_cursor(project_root: Path, *, config: LauncherConfig | None = None) 
         if not target.is_file():
             return {"ok": False, "error": "Workspace file not found"}
         launch_path = target.resolve()
-        cwd = str(launch_path.parent)
+        # Prefer the primary repo folder inside multi-root .code-workspace files so
+        # Cursor opens the true project tree (not only the Agents/Glass workspace list).
+        primary = workspace_primary_folder(launch_path)
+        if primary is not None and primary.is_dir():
+            launch_path = primary.resolve()
+            cwd = str(launch_path)
+            entry_kind = "folder"
+        else:
+            cwd = str(launch_path.parent)
+            entry_kind = "workspace"
     else:
         try:
             launch_path = raw.resolve()
@@ -2100,6 +2157,7 @@ def open_in_cursor(project_root: Path, *, config: LauncherConfig | None = None) 
         if not launch_path.is_dir():
             return {"ok": False, "error": "Directory not found"}
         cwd = str(launch_path)
+        entry_kind = "folder"
     cursor_exe = find_cursor_executable(config)
     if not cursor_exe:
         return {
@@ -2109,17 +2167,23 @@ def open_in_cursor(project_root: Path, *, config: LauncherConfig | None = None) 
                 "or set Cursor executable in Settings."
             ),
         }
+    prefix, extra_env = resolve_cursor_cli_launch(cursor_exe)
+    # --classic: Cursor 3.x opens the editor workspace instead of Agents/Glass.
+    cmd = [*prefix, "--classic", str(launch_path)]
+    env = os.environ.copy()
+    env.update(extra_env)
     try:
-        subprocess.Popen([cursor_exe, str(launch_path)], cwd=cwd, shell=False)
+        subprocess.Popen(cmd, cwd=cwd, shell=False, env=env)
     except OSError as exc:
         return {"ok": False, "error": str(exc)}
-    hive_root = resolve_linked_project_root(launch_path)
+    hive_root = resolve_linked_project_root(raw if is_code_workspace_file(raw) else launch_path)
     summary = summarize_project(hive_root) if hive_root else summarize_project(launch_path)
     return {
         "ok": True,
         "path": str(launch_path),
         "cursor": cursor_exe,
+        "launch_cmd": cmd,
         "hive_ready": summary.ok,
         "bootstrap_profile": summary.bootstrap_profile,
-        "entry_kind": "workspace" if is_code_workspace_file(launch_path) else "folder",
+        "entry_kind": entry_kind,
     }

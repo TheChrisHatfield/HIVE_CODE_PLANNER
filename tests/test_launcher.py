@@ -90,6 +90,7 @@ from hive_planner.launcher.service import (
     format_python_scan_report,
     get_setup_status,
     open_in_cursor,
+    resolve_cursor_cli_launch,
     probe_python_command,
     run_install,
     run_project_ci_check,
@@ -311,7 +312,8 @@ def test_open_in_cursor_opens_workspace_without_hive_files(tmp_path: Path, monke
     result = open_in_cursor(workspace)
     assert result["ok"] is True
     assert result["hive_ready"] is False
-    assert launched["cmd"][1] == str(workspace.resolve())
+    assert "--classic" in launched["cmd"]
+    assert launched["cmd"][-1] == str(workspace.resolve())
 
 
 def test_open_in_cursor_rejects_missing_directory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -503,6 +505,7 @@ def test_classify_workspace_detects_hive_and_cursor(tmp_path: Path) -> None:
 def test_open_in_cursor_opens_code_workspace_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     repo = tmp_path / "app"
     repo.mkdir()
+    (repo / "START_HERE.md").write_text("# start\n", encoding="utf-8")
     workspace_file = tmp_path / "hive.code-workspace"
     workspace_file.write_text(json.dumps({"folders": [{"path": repo.name}]}), encoding="utf-8")
 
@@ -520,8 +523,10 @@ def test_open_in_cursor_opens_code_workspace_file(tmp_path: Path, monkeypatch: p
 
     result = open_in_cursor(workspace_file)
     assert result["ok"] is True
-    assert result["entry_kind"] == "workspace"
-    assert launched["cmd"][1] == str(workspace_file.resolve())
+    # Multi-root / .code-workspace links open the primary repo folder in classic editor.
+    assert result["entry_kind"] == "folder"
+    assert "--classic" in launched["cmd"]
+    assert launched["cmd"][-1] == str(repo.resolve())
 
 
 def test_open_in_cursor_launches_when_cursor_found(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -548,7 +553,50 @@ def test_open_in_cursor_launches_when_cursor_found(tmp_path: Path, monkeypatch: 
     assert result["ok"] is True
     assert result["hive_ready"] is True
     assert launched["cmd"][0] == r"C:\Cursor\Cursor.exe"
-    assert launched["cmd"][1] == str(project.resolve())
+    assert "--classic" in launched["cmd"]
+    assert launched["cmd"][-1] == str(project.resolve())
+
+
+def test_resolve_cursor_cli_launch_uses_cli_js_beside_exe(tmp_path: Path) -> None:
+    exe = tmp_path / "Cursor.exe"
+    exe.write_text("", encoding="utf-8")
+    cli_js = tmp_path / "resources" / "app" / "out" / "cli.js"
+    cli_js.parent.mkdir(parents=True)
+    cli_js.write_text("// cli\n", encoding="utf-8")
+
+    argv, env = resolve_cursor_cli_launch(str(exe))
+    assert argv == [str(exe.resolve()), str(cli_js.resolve())]
+    assert env.get("ELECTRON_RUN_AS_NODE") == "1"
+
+
+def test_open_in_cursor_uses_cli_js_and_classic(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    project = tmp_path / "repo"
+    project.mkdir()
+    cursor_root = tmp_path / "cursor-app"
+    exe = cursor_root / "Cursor.exe"
+    exe.parent.mkdir(parents=True)
+    exe.write_text("", encoding="utf-8")
+    cli_js = cursor_root / "resources" / "app" / "out" / "cli.js"
+    cli_js.parent.mkdir(parents=True)
+    cli_js.write_text("// cli\n", encoding="utf-8")
+
+    launched: dict[str, object] = {"cmd": [], "env": {}}
+
+    def fake_popen(cmd, **kwargs):
+        launched["cmd"] = cmd
+        launched["env"] = kwargs.get("env") or {}
+        return None
+
+    monkeypatch.setattr(
+        "hive_planner.launcher.service.find_cursor_executable",
+        lambda _config=None: str(exe),
+    )
+    monkeypatch.setattr("hive_planner.launcher.service.subprocess.Popen", fake_popen)
+
+    result = open_in_cursor(project)
+    assert result["ok"] is True
+    assert launched["cmd"] == [str(exe.resolve()), str(cli_js.resolve()), "--classic", str(project.resolve())]
+    assert launched["env"].get("ELECTRON_RUN_AS_NODE") == "1"
 
 
 def test_open_in_cursor_errors_when_cursor_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
