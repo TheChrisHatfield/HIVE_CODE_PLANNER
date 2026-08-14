@@ -2139,16 +2139,8 @@ def open_in_cursor(project_root: Path, *, config: LauncherConfig | None = None) 
         if not target.is_file():
             return {"ok": False, "error": "Workspace file not found"}
         launch_path = target.resolve()
-        # Prefer the primary repo folder inside multi-root .code-workspace files so
-        # Cursor opens the true project tree (not only the Agents/Glass workspace list).
-        primary = workspace_primary_folder(launch_path)
-        if primary is not None and primary.is_dir():
-            launch_path = primary.resolve()
-            cwd = str(launch_path)
-            entry_kind = "folder"
-        else:
-            cwd = str(launch_path.parent)
-            entry_kind = "workspace"
+        cwd = str(launch_path.parent)
+        entry_kind = "workspace"
     else:
         try:
             launch_path = raw.resolve()

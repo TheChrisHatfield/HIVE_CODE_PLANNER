@@ -523,10 +523,10 @@ def test_open_in_cursor_opens_code_workspace_file(tmp_path: Path, monkeypatch: p
 
     result = open_in_cursor(workspace_file)
     assert result["ok"] is True
-    # Multi-root / .code-workspace links open the primary repo folder in classic editor.
-    assert result["entry_kind"] == "folder"
+    # Linked .code-workspace files open as the workspace (settings/multi-root preserved).
+    assert result["entry_kind"] == "workspace"
     assert "--classic" in launched["cmd"]
-    assert launched["cmd"][-1] == str(repo.resolve())
+    assert launched["cmd"][-1] == str(workspace_file.resolve())
 
 
 def test_open_in_cursor_launches_when_cursor_found(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
