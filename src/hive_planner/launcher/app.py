@@ -4884,9 +4884,35 @@ class HivePlannerApp:
         self._refresh_home_dashboard()
         return True
 
+    def _resolve_open_cursor_target(self) -> str | None:
+        """Pick which linked path Open in Cursor should launch.
+
+        Prefer a valid Projects-list selection (user highlighted a workspace), then
+        active_project, then the first recent link that still exists on disk.
+        """
+        from hive_planner.launcher.config import first_existing_recent_project
+
+        selected: Path | None = None
+        if hasattr(self, "recent_list") and hasattr(self, "_recent_project_paths"):
+            try:
+                selected = self._selected_recent_path()
+            except (IndexError, tk.TclError, AttributeError):
+                selected = None
+        if selected is not None:
+            selected_s = normalize_project_path(selected)
+            if selected_s and _linked_path_exists(selected_s):
+                return selected_s
+
+        active = normalize_project_path(self.config.active_project) if self.config.active_project else ""
+        if active and _linked_path_exists(active):
+            return active
+
+        fallback = first_existing_recent_project(self.config)
+        return fallback or None
+
     def _on_open_cursor(self) -> None:
-        root = self.config.active_project
-        if not root or not _linked_path_exists(root):
+        root = self._resolve_open_cursor_target()
+        if not root:
             if messagebox.askyesno(
                 "No linked workspace",
                 "Link a Cursor workspace first?\n\n"
@@ -4894,6 +4920,13 @@ class HivePlannerApp:
             ):
                 self._show_workspace_picker()
             return
+        # Keep Home/dashboard in sync when opening a list selection that was not active yet.
+        if normalize_project_path(self.config.active_project or "") != normalize_project_path(root):
+            self.config = load_config()
+            self.config.add_recent_project(Path(root))
+            save_config(self.config)
+            if hasattr(self, "recent_list"):
+                self._populate_recent_list(prefer_path=root)
         result = open_in_cursor(Path(root), config=self.config)
         if not result.get("ok"):
             messagebox.showerror("Open in Cursor", result.get("error", "Failed to launch Cursor"))
