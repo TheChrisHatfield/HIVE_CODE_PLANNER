@@ -5144,6 +5144,23 @@ def test_open_cursor_home_uses_active_not_list_selection(
     assert app.config.active_project == active_s
 
 
+def test_open_cursor_empty_prompts_picker_then_opens_after_link(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.config = LauncherConfig(active_project="", recent_projects=[])
+    picker_kwargs: dict[str, object] = {}
+    app._show_workspace_picker = lambda **kwargs: picker_kwargs.update(kwargs)  # type: ignore[method-assign]
+
+    import hive_planner.launcher.app as app_mod
+
+    monkeypatch.setattr(app_mod.messagebox, "askyesno", lambda *_a, **_k: True)
+    app._on_open_cursor()
+    assert picker_kwargs.get("open_after_link") is True
+
+
 def test_start_home_action_survives_full_rebuild_via_history() -> None:
     from hive_planner.launcher.app import HivePlannerApp
 

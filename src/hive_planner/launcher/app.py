@@ -4377,7 +4377,7 @@ class HivePlannerApp:
             return
         messagebox.showinfo("User guide", f"Open this file in the folder:\n{path.name}")
 
-    def _show_workspace_picker(self) -> None:
+    def _show_workspace_picker(self, *, open_after_link: bool = False) -> None:
         self.config = load_config()
         linked_paths = {
             normalize_project_path(entry) for entry in self.config.recent_projects if entry
@@ -4444,6 +4444,11 @@ class HivePlannerApp:
         actions = tk.Frame(dialog, bg=COLORS["bg"])
         actions.pack(fill="x", padx=16, pady=(0, 16))
 
+        def finish_link(path: Path) -> None:
+            linked = self._link_workspace(path)
+            if linked and open_after_link:
+                self._on_open_cursor()
+
         def link_selected() -> None:
             selection = picker_list.curselection()
             if not selection or not workspace_rows:
@@ -4463,13 +4468,13 @@ class HivePlannerApp:
                 )
                 return
             dialog.destroy()
-            self._link_workspace(Path(workspace.path))
+            finish_link(Path(workspace.path))
 
         def browse_folder() -> None:
             dialog.destroy()
             path = filedialog.askdirectory(title="Choose Cursor workspace folder")
             if path:
-                self._link_workspace(Path(path))
+                finish_link(Path(path))
 
         primary_button(actions, "Add link", link_selected)
         secondary_button(actions, "Browse…", browse_folder)
@@ -4931,7 +4936,7 @@ class HivePlannerApp:
                 "Link a Cursor workspace first?\n\n"
                 "Pick one from Cursor's recent list, or browse to your repo folder.",
             ):
-                self._show_workspace_picker()
+                self._show_workspace_picker(open_after_link=True)
             return
         # Keep Home/dashboard in sync when opening a list selection that was not active yet.
         if normalize_project_path(self.config.active_project or "") != normalize_project_path(root):
