@@ -569,6 +569,16 @@ def test_resolve_cursor_cli_launch_uses_cli_js_beside_exe(tmp_path: Path) -> Non
     assert env.get("ELECTRON_RUN_AS_NODE") == "1"
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="cmd.exe fallback is Windows-only")
+def test_resolve_cursor_cli_launch_cmd_fallback_uses_cmd_exe(tmp_path: Path) -> None:
+    script = tmp_path / "cursor.cmd"
+    script.write_text("@echo off\n", encoding="utf-8")
+    argv, env = resolve_cursor_cli_launch(str(script))
+    assert argv[:2] == ["cmd.exe", "/c"]
+    assert argv[2] == str(script.resolve())
+    assert env == {}
+
+
 def test_open_in_cursor_uses_cli_js_and_classic(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     project = tmp_path / "repo"
     project.mkdir()

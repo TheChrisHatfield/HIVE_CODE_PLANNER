@@ -2129,6 +2129,11 @@ def resolve_cursor_cli_launch(cursor_path: str) -> tuple[list[str], dict[str, st
                 "VSCODE_DEV": "",
             }
 
+    # Windows cannot CreateProcess a .cmd/.bat with shell=False; run via cmd.exe so
+    # cursor.cmd can still set ELECTRON_RUN_AS_NODE and forward --classic.
+    if sys.platform == "win32" and name in {"cursor.cmd", "cursor.bat"} and path.is_file():
+        return ["cmd.exe", "/c", str(path.resolve())], {}
+
     return [str(path)], {}
 
 
