@@ -296,6 +296,8 @@ def test_open_in_cursor_opens_workspace_without_hive_files(tmp_path: Path, monke
     workspace = tmp_path / "cursor-app"
     workspace.mkdir()
     (workspace / ".cursor").mkdir()
+    cursor_exe = tmp_path / "Cursor.exe"
+    cursor_exe.write_text("", encoding="utf-8")
 
     launched: dict[str, list] = {"cmd": []}
 
@@ -305,7 +307,7 @@ def test_open_in_cursor_opens_workspace_without_hive_files(tmp_path: Path, monke
 
     monkeypatch.setattr(
         "hive_planner.launcher.service.find_cursor_executable",
-        lambda _config=None: r"C:\Cursor\Cursor.exe",
+        lambda _config=None: str(cursor_exe),
     )
     monkeypatch.setattr("hive_planner.launcher.service.subprocess.Popen", fake_popen)
 
@@ -318,9 +320,11 @@ def test_open_in_cursor_opens_workspace_without_hive_files(tmp_path: Path, monke
 
 def test_open_in_cursor_rejects_missing_directory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     missing = tmp_path / "gone"
+    cursor_exe = tmp_path / "Cursor.exe"
+    cursor_exe.write_text("", encoding="utf-8")
     monkeypatch.setattr(
         "hive_planner.launcher.service.find_cursor_executable",
-        lambda _config=None: r"C:\Cursor\Cursor.exe",
+        lambda _config=None: str(cursor_exe),
     )
     result = open_in_cursor(missing)
     assert result["ok"] is False
@@ -508,6 +512,8 @@ def test_open_in_cursor_opens_code_workspace_file(tmp_path: Path, monkeypatch: p
     (repo / "START_HERE.md").write_text("# start\n", encoding="utf-8")
     workspace_file = tmp_path / "hive.code-workspace"
     workspace_file.write_text(json.dumps({"folders": [{"path": repo.name}]}), encoding="utf-8")
+    cursor_exe = tmp_path / "Cursor.exe"
+    cursor_exe.write_text("", encoding="utf-8")
 
     launched: dict[str, list] = {"cmd": []}
 
@@ -517,7 +523,7 @@ def test_open_in_cursor_opens_code_workspace_file(tmp_path: Path, monkeypatch: p
 
     monkeypatch.setattr(
         "hive_planner.launcher.service.find_cursor_executable",
-        lambda _config=None: r"C:\Cursor\Cursor.exe",
+        lambda _config=None: str(cursor_exe),
     )
     monkeypatch.setattr("hive_planner.launcher.service.subprocess.Popen", fake_popen)
 
@@ -536,6 +542,8 @@ def test_open_in_cursor_launches_when_cursor_found(tmp_path: Path, monkeypatch: 
     from hive_planner.project_profile import write_project_profile
 
     write_project_profile(project, profile="minimal", project_name="App")
+    cursor_exe = tmp_path / "Cursor.exe"
+    cursor_exe.write_text("", encoding="utf-8")
 
     launched: dict[str, list] = {"cmd": []}
 
@@ -545,14 +553,14 @@ def test_open_in_cursor_launches_when_cursor_found(tmp_path: Path, monkeypatch: 
 
     monkeypatch.setattr(
         "hive_planner.launcher.service.find_cursor_executable",
-        lambda _config=None: r"C:\Cursor\Cursor.exe",
+        lambda _config=None: str(cursor_exe),
     )
     monkeypatch.setattr("hive_planner.launcher.service.subprocess.Popen", fake_popen)
 
     result = open_in_cursor(project)
     assert result["ok"] is True
     assert result["hive_ready"] is True
-    assert launched["cmd"][0] == r"C:\Cursor\Cursor.exe"
+    assert launched["cmd"][0] == str(cursor_exe)
     assert "--classic" in launched["cmd"]
     assert launched["cmd"][-1] == str(project.resolve())
 
@@ -607,6 +615,21 @@ def test_open_in_cursor_uses_cli_js_and_classic(tmp_path: Path, monkeypatch: pyt
     assert result["ok"] is True
     assert launched["cmd"] == [str(exe.resolve()), str(cli_js.resolve()), "--classic", str(project.resolve())]
     assert launched["env"].get("ELECTRON_RUN_AS_NODE") == "1"
+
+
+def test_open_in_cursor_rejects_missing_launch_executable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project = tmp_path / "repo"
+    project.mkdir()
+    missing_exe = tmp_path / "missing" / "Cursor.exe"
+    monkeypatch.setattr(
+        "hive_planner.launcher.service.find_cursor_executable",
+        lambda _config=None: str(missing_exe),
+    )
+    result = open_in_cursor(project)
+    assert result["ok"] is False
+    assert "not found" in result["error"].lower()
 
 
 def test_open_in_cursor_errors_when_cursor_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

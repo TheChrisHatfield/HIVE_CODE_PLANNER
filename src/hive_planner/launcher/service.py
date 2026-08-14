@@ -2137,6 +2137,23 @@ def resolve_cursor_cli_launch(cursor_path: str) -> tuple[list[str], dict[str, st
     return [str(path)], {}
 
 
+def _cursor_launch_prefix_error(prefix: list[str]) -> str | None:
+    """Return an error if the launch argv cannot run; None when it looks runnable."""
+    if not prefix:
+        return "Cursor launch command is empty"
+    argv0 = prefix[0]
+    lowered = Path(argv0).name.lower()
+    if lowered in {"cmd", "cmd.exe"}:
+        if shutil.which("cmd.exe") or shutil.which("cmd"):
+            return None
+        return "cmd.exe not found on PATH"
+    if not Path(argv0).is_file():
+        return f"Cursor executable not found: {argv0}"
+    if len(prefix) >= 2 and str(prefix[1]).lower().endswith("cli.js") and not Path(prefix[1]).is_file():
+        return f"Cursor CLI not found: {prefix[1]}"
+    return None
+
+
 def open_in_cursor(project_root: Path, *, config: LauncherConfig | None = None) -> dict:
     raw = Path(project_root)
     if is_code_workspace_file(raw):
@@ -2165,6 +2182,9 @@ def open_in_cursor(project_root: Path, *, config: LauncherConfig | None = None) 
             ),
         }
     prefix, extra_env = resolve_cursor_cli_launch(cursor_exe)
+    prefix_error = _cursor_launch_prefix_error(prefix)
+    if prefix_error:
+        return {"ok": False, "error": prefix_error}
     # --classic: Cursor 3.x opens the editor workspace instead of Agents/Glass.
     cmd = [*prefix, "--classic", str(launch_path)]
     env = os.environ.copy()
