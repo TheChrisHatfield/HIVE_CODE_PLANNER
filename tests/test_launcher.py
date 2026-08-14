@@ -5078,6 +5078,7 @@ def test_open_cursor_prefers_projects_list_selection(
     app._recent_project_paths = [active_s, selected_s]
     app.recent_list = type("L", (), {"curselection": lambda self: (1,)})()
     app._populate_recent_list = lambda **_k: None  # type: ignore[method-assign]
+    app._projects_tab_selected = lambda: True  # type: ignore[method-assign]
     lines: list[str] = []
     app.home_log = type("L", (), {"configure": lambda *a, **k: None})()
     app._append_log = lambda _w, text: lines.append(text)  # type: ignore[method-assign]
@@ -5098,6 +5099,49 @@ def test_open_cursor_prefers_projects_list_selection(
     assert opened["path"] == selected_s
     assert app.config.active_project == selected_s
     assert lines and "Opened in Cursor" in lines[0]
+
+
+def test_open_cursor_home_uses_active_not_list_selection(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    active = tmp_path / "active"
+    selected = tmp_path / "selected"
+    active.mkdir()
+    selected.mkdir()
+    active_s = str(active.resolve())
+    selected_s = str(selected.resolve())
+    cfg = LauncherConfig(
+        active_project=active_s,
+        recent_projects=[active_s, selected_s],
+        hive_planner_root=str(Path(__file__).resolve().parents[1]),
+    )
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.config = cfg
+    app._pending_home_log = []
+    app._home_log_history = []
+    app._recent_project_paths = [active_s, selected_s]
+    app.recent_list = type("L", (), {"curselection": lambda self: (1,)})()
+    app._projects_tab_selected = lambda: False  # type: ignore[method-assign]
+    lines: list[str] = []
+    app.home_log = type("L", (), {"configure": lambda *a, **k: None})()
+    app._append_log = lambda _w, text: lines.append(text)  # type: ignore[method-assign]
+
+    import hive_planner.launcher.app as app_mod
+
+    opened: dict[str, str] = {}
+
+    def fake_open(path, *, config=None):
+        opened["path"] = str(Path(path).resolve())
+        return {"ok": True, "hive_ready": True}
+
+    monkeypatch.setattr(app_mod, "open_in_cursor", fake_open)
+
+    app._on_open_cursor()
+    assert opened["path"] == active_s
+    assert app.config.active_project == active_s
 
 
 def test_start_home_action_survives_full_rebuild_via_history() -> None:

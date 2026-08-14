@@ -4884,24 +4884,37 @@ class HivePlannerApp:
         self._refresh_home_dashboard()
         return True
 
+    def _projects_tab_selected(self) -> bool:
+        notebook = getattr(self, "notebook", None)
+        if notebook is None:
+            return False
+        try:
+            if not notebook.winfo_exists():
+                return False
+            return str(notebook.tab(notebook.select(), "text")).strip().lower() == "projects"
+        except tk.TclError:
+            return False
+
     def _resolve_open_cursor_target(self) -> str | None:
         """Pick which linked path Open in Cursor should launch.
 
-        Prefer a valid Projects-list selection (user highlighted a workspace), then
-        active_project, then the first recent link that still exists on disk.
+        On the Projects tab, prefer a valid list selection (highlighted row). Elsewhere
+        (Home), prefer active_project so the dashboard's Active project is what opens.
+        Fall back to the first recent link that still exists on disk.
         """
         from hive_planner.launcher.config import first_existing_recent_project
 
-        selected: Path | None = None
-        if hasattr(self, "recent_list") and hasattr(self, "_recent_project_paths"):
-            try:
-                selected = self._selected_recent_path()
-            except (IndexError, tk.TclError, AttributeError):
-                selected = None
-        if selected is not None:
-            selected_s = normalize_project_path(selected)
-            if selected_s and _linked_path_exists(selected_s):
-                return selected_s
+        if self._projects_tab_selected():
+            selected: Path | None = None
+            if hasattr(self, "recent_list") and hasattr(self, "_recent_project_paths"):
+                try:
+                    selected = self._selected_recent_path()
+                except (IndexError, tk.TclError, AttributeError):
+                    selected = None
+            if selected is not None:
+                selected_s = normalize_project_path(selected)
+                if selected_s and _linked_path_exists(selected_s):
+                    return selected_s
 
         active = normalize_project_path(self.config.active_project) if self.config.active_project else ""
         if active and _linked_path_exists(active):
