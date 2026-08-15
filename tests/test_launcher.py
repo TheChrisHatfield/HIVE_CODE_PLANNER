@@ -4333,6 +4333,46 @@ def test_queue_home_log_flushes_after_dashboard_rebuild() -> None:
     assert app._pending_home_log == []
 
 
+def test_home_output_history_switches_with_active_project(tmp_path: Path) -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    project_a = str((tmp_path / "alpha").resolve())
+    project_b = str((tmp_path / "beta").resolve())
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.config = LauncherConfig(active_project=project_a)
+    app._pending_home_log = []
+    app._home_log_history = []
+    app._home_log_scope = normalize_project_path(project_a)
+    app._home_log_histories = {app._home_log_scope: app._home_log_history}
+
+    class _Log:
+        def __init__(self) -> None:
+            self.lines: list[str] = []
+
+        def configure(self, **_kwargs) -> None:
+            pass
+
+        def delete(self, _start, _end) -> None:
+            self.lines.clear()
+
+    app.home_log = _Log()
+    app._append_log = lambda widget, text: widget.lines.append(text)  # type: ignore[method-assign]
+
+    app._emit_home_log("alpha result")
+    assert app.home_log.lines == ["alpha result"]
+
+    app.config.active_project = project_b
+    app._sync_home_log_for_active()
+    assert app.home_log.lines == []
+    app._emit_home_log("beta result")
+    assert app.home_log.lines == ["beta result"]
+
+    app.config.active_project = project_a
+    app._sync_home_log_for_active()
+    assert app.home_log.lines == ["alpha result"]
+    assert app._home_log_histories[normalize_project_path(project_b)] == ["beta result"]
+
+
 def test_ci_check_done_clears_stale_steps_on_error(monkeypatch: pytest.MonkeyPatch) -> None:
     from hive_planner.launcher.app import HivePlannerApp
 

@@ -141,6 +141,14 @@ class HivePlannerApp:
         self._python_scan_active = False
         self._pending_home_log: list[str] = []
         self._home_log_history: list[str] = []
+        self._home_log_scope = (
+            normalize_project_path(self.config.active_project)
+            if self.config.active_project
+            else "__global__"
+        )
+        self._home_log_histories: dict[str, list[str]] = {
+            self._home_log_scope: self._home_log_history,
+        }
         self._last_ci_report: dict | None = None
         self._last_ci_link: str | None = None
         self._ci_check_target: str | None = None
@@ -553,6 +561,7 @@ class HivePlannerApp:
         """Update live dashboard widgets without destroying the notebook (no blink / tab reset)."""
         self.config = load_config()
         self.setup = get_setup_status(self.config)
+        self._sync_home_log_for_active()
         self._sync_pending_memory_for_active()
         self._sync_ci_report_for_active()
         self._update_header_detail()
@@ -583,6 +592,7 @@ class HivePlannerApp:
         self._clear_container()
         self.config = load_config()
         self.setup = get_setup_status(self.config)
+        self._sync_home_log_for_active()
         self._sync_pending_memory_for_active()
         self._sync_ci_report_for_active()
         self._status_value_labels = {}
@@ -674,9 +684,50 @@ class HivePlannerApp:
         self._queue_home_log(message)
         self._refresh_home_dashboard()
 
+    def _home_log_scope_key(self) -> str:
+        config = getattr(self, "config", None)
+        if config is not None and config.active_project:
+            return normalize_project_path(config.active_project)
+        return "__global__"
+
+    def _sync_home_log_for_active(self) -> None:
+        """Switch Output history to the newly active project without mixing logs."""
+        scope = self._home_log_scope_key()
+        current_scope = getattr(self, "_home_log_scope", None)
+        histories = getattr(self, "_home_log_histories", None)
+        if histories is None:
+            histories = {}
+            self._home_log_histories = histories
+        if current_scope is None:
+            self._home_log_scope = scope
+            histories[scope] = getattr(self, "_home_log_history", [])
+            return
+        if current_scope == scope:
+            histories[scope] = getattr(self, "_home_log_history", [])
+            return
+
+        histories[current_scope] = list(getattr(self, "_home_log_history", []) or [])
+        self._home_log_scope = scope
+        self._home_log_history = list(histories.get(scope, []))
+        histories[scope] = self._home_log_history
+        self._pending_home_log = []
+
+        log = getattr(self, "home_log", None)
+        if log is None:
+            return
+        try:
+            log.configure(state="normal")
+            log.delete("1.0", "end")
+            log.configure(state="disabled")
+            self._restore_home_log_history()
+        except (tk.TclError, AttributeError):
+            return
+
     def _remember_home_log(self, text: str) -> None:
+        self._sync_home_log_for_active()
         if not hasattr(self, "_home_log_history") or self._home_log_history is None:
             self._home_log_history = []
+            self._home_log_histories[self._home_log_scope_key()] = self._home_log_history
         self._home_log_history.append(text)
         overflow = len(self._home_log_history) - 500
         if overflow > 0:
