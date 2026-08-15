@@ -1511,7 +1511,8 @@ class HivePlannerApp:
     def _active_feature_label(self) -> str:
         if not self.config.active_project:
             return "—"
-        summary = summarize_linked_project(Path(self.config.active_project))
+        # Display-only: never repair AGENTS.md / Rosetta during status refresh.
+        summary = summarize_linked_project(Path(self.config.active_project), repair_agents=False)
         if not summary.ok:
             return "—"
         return summary.active_feature or "—"
@@ -1527,7 +1528,11 @@ class HivePlannerApp:
     def _active_profile_label(self) -> str:
         if not self.config.active_project:
             return "—"
-        root, _repair = prepare_linked_project_root(Path(self.config.active_project))
+        # Display-only: never repair project files while painting Home status.
+        root, _repair = prepare_linked_project_root(
+            Path(self.config.active_project),
+            repair_agents=False,
+        )
         if not root:
             return ""
         stored = read_project_profile(root)

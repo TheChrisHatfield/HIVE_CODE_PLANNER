@@ -3506,6 +3506,30 @@ def test_active_profile_label_uses_stored_metadata_not_inference(tmp_path: Path)
     assert app._active_profile_label() == ""
 
 
+def test_status_labels_do_not_repair_agents_md(tmp_path: Path) -> None:
+    """Soft Home status refresh must not rewrite AGENTS.md (display-only)."""
+    from hive_planner.launcher.app import HivePlannerApp
+    from hive_planner.project_profile import write_project_profile
+
+    project = tmp_path / "demo"
+    project.mkdir()
+    (project / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    (project / "pyproject.toml").write_text("[project]\nname='demo'\n", encoding="utf-8")
+    agents = project / "AGENTS.md"
+    legacy = _legacy_agents_with_rosetta("None â€” pending.")
+    agents.write_text(legacy, encoding="utf-8")
+    write_project_profile(project, profile="full", project_name="Demo")
+    _write_handoff_bundle(project, "example-feature")
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.config = LauncherConfig(active_project=str(project.resolve()))
+    before = agents.read_bytes()
+    _ = app._active_profile_label()
+    _ = app._active_feature_label()
+    _ = app._wiring_audit_label()
+    assert agents.read_bytes() == before
+
+
 def test_update_recent_scrollbar_hides_when_list_is_short() -> None:
     from hive_planner.launcher.app import HivePlannerApp
 
