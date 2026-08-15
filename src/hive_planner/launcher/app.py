@@ -234,6 +234,21 @@ class HivePlannerApp:
 
         threading.Thread(target=runner, daemon=True).start()
 
+    def _project_done_callback(self, label: str, on_done):
+        """Deliver a background result only while its originating project is active."""
+        origin = self._active_link_key()
+
+        def scoped_done(result) -> None:
+            if origin and origin != self._active_link_key():
+                self._remember_home_log_for_scope(
+                    origin,
+                    f"{label} finished after switching profiles; result retained for this project.",
+                )
+                return
+            on_done(result)
+
+        return scoped_done
+
     def _invalidate_bg_callbacks(self) -> None:
         self._bg_generation += 1
         self._python_scan_active = False
@@ -690,6 +705,24 @@ class HivePlannerApp:
         if config is not None and config.active_project:
             return normalize_project_path(config.active_project)
         return "__global__"
+
+    def _remember_home_log_for_scope(self, scope: str, text: str) -> None:
+        histories = getattr(self, "_home_log_histories", None)
+        if histories is None:
+            histories = {}
+            self._home_log_histories = histories
+        current_scope = getattr(self, "_home_log_scope", self._home_log_scope_key())
+        active_scope = self._home_log_scope_key()
+        if scope == active_scope:
+            self._remember_home_log(text)
+            return
+        if scope == current_scope:
+            histories[scope] = getattr(self, "_home_log_history", [])
+        history = histories.setdefault(scope, [])
+        history.append(text)
+        overflow = len(history) - 500
+        if overflow > 0:
+            del history[:overflow]
 
     def _sync_home_log_for_active(self) -> None:
         """Switch Output history to the newly active project without mixing logs."""
@@ -1583,7 +1616,10 @@ class HivePlannerApp:
         if selected is None:
             return
         self._start_home_action(f"Setting CL runtime to {selected}…")
-        self._run_bg(lambda r=root, rt=selected: run_set_cl_runtime(r, rt), self._set_cl_runtime_done)
+        self._run_bg(
+            lambda r=root, rt=selected: run_set_cl_runtime(r, rt),
+            self._project_done_callback("CL runtime update", self._set_cl_runtime_done),
+        )
 
     def _set_cl_runtime_done(self, result: dict) -> None:
         if self._is_bg_error(result) or not result.get("ok"):
@@ -1931,7 +1967,10 @@ class HivePlannerApp:
             messagebox.showwarning("No project", "Link a workspace first (Projects tab).")
             return
         self._start_home_action("Checking wiring audit attestation…")
-        self._run_bg(lambda r=root: run_wiring_audit_check(r), self._wiring_audit_check_done)
+        self._run_bg(
+            lambda r=root: run_wiring_audit_check(r),
+            self._project_done_callback("Wiring audit check", self._wiring_audit_check_done),
+        )
 
     def _wiring_audit_check_done(self, result: dict) -> None:
         if self._is_bg_error(result):
@@ -1990,7 +2029,7 @@ class HivePlannerApp:
             self._start_home_action(f"Recording wiring audit (evidence: {evidence})…")
             self._run_bg(
                 lambda r=root, e=evidence: run_wiring_audit_record(r, e),
-                self._wiring_audit_record_done,
+                self._project_done_callback("Wiring audit record", self._wiring_audit_record_done),
             )
 
         btn_row = tk.Frame(dialog, bg=COLORS["bg"])
@@ -2129,7 +2168,7 @@ class HivePlannerApp:
                 lambda r=root, c=candidates, g=generation, p=result: self._run_memory_apply_if_current(
                     r, c, g, prior=p
                 ),
-                self._agents_apply_done,
+                self._project_done_callback("Memory apply", self._agents_apply_done),
             )
             return
         if accepted:
@@ -2403,7 +2442,7 @@ class HivePlannerApp:
         self._start_home_action(f"Running agents-propose --apply on {candidates.name}…")
         self._run_bg(
             lambda r=root, c=candidates: run_agents_memory_propose(r, c, apply=True),
-            self._agents_propose_done,
+            self._project_done_callback("Memory promotion", self._agents_propose_done),
         )
 
     def _on_agents_apply(self) -> None:
@@ -2431,7 +2470,7 @@ class HivePlannerApp:
         self._start_home_action(f"Applying memory from {candidates.name}…")
         self._run_bg(
             lambda r=root, c=candidates: run_agents_memory_propose(r, c, apply=True),
-            self._agents_propose_done,
+            self._project_done_callback("Memory apply", self._agents_propose_done),
         )
 
     def _agents_apply_done(self, result: dict) -> None:
@@ -2488,7 +2527,10 @@ class HivePlannerApp:
             messagebox.showwarning("No project", "Link a workspace first.")
             return
         self._start_home_action("Verifying upstream pins and vendored overlays…")
-        self._run_bg(lambda r=root: run_unified_verify(r), self._unified_verify_done)
+        self._run_bg(
+            lambda r=root: run_unified_verify(r),
+            self._project_done_callback("Vendor verification", self._unified_verify_done),
+        )
 
     def _unified_verify_done(self, result: dict) -> None:
         if self._is_bg_error(result):
@@ -2514,7 +2556,10 @@ class HivePlannerApp:
             messagebox.showwarning("No project", "Link a workspace first.")
             return
         self._start_home_action("Scanning for legacy deployment traces…")
-        self._run_bg(lambda r=root: run_legacy_deployment_scan(r), self._legacy_deployment_scan_done)
+        self._run_bg(
+            lambda r=root: run_legacy_deployment_scan(r),
+            self._project_done_callback("Legacy deployment scan", self._legacy_deployment_scan_done),
+        )
 
     def _legacy_deployment_scan_done(self, result: dict) -> None:
         if self._is_bg_error(result):
@@ -2546,7 +2591,7 @@ class HivePlannerApp:
         self._start_home_action("Migrating marketplace Continual Learning data to Hive format…")
         self._run_bg(
             lambda r=root, rm=remove_plugin: run_cl_migrate(r, remove_marketplace_plugin=rm),
-            self._cl_migrate_done,
+            self._project_done_callback("Continual Learning migration", self._cl_migrate_done),
         )
 
     def _cl_migrate_done(self, result: dict) -> None:
@@ -2585,7 +2630,10 @@ class HivePlannerApp:
             messagebox.showwarning("No project", "Link a workspace first.")
             return
         self._start_home_action("Syncing impact maps…")
-        self._run_bg(lambda r=root: run_project_map_sync(r), self._map_sync_done)
+        self._run_bg(
+            lambda r=root: run_project_map_sync(r),
+            self._project_done_callback("Impact map sync", self._map_sync_done),
+        )
 
     def _map_sync_done(self, result: dict) -> None:
         if self._is_bg_error(result):
@@ -2627,7 +2675,7 @@ class HivePlannerApp:
                 force=False,
                 cl_runtime=rt,
             ),
-            self._deploy_handoff_done,
+            self._project_done_callback("Agent handoff deployment", self._deploy_handoff_done),
         )
 
     def _on_load_sources(self) -> None:
@@ -3035,7 +3083,7 @@ class HivePlannerApp:
                     force_delta=upload_force,
                     ocr_pdf=upload_ocr,
                 ),
-                self._load_sources_done,
+                self._project_done_callback("Source loading", self._load_sources_done),
             )
 
         primary_button(
@@ -3611,7 +3659,7 @@ class HivePlannerApp:
                         force_promote=do_force,
                         mark_emitted_draft=do_mark_draft,
                     ),
-                    self._cartridge_load_done,
+                    self._project_done_callback("Cartridge source load", self._cartridge_load_done),
                 )
             elif mode == "translate":
                 self._start_home_action(
@@ -3625,7 +3673,7 @@ class HivePlannerApp:
                         promote=do_promote,
                         force_promote=do_force,
                     ),
-                    self._cartridge_load_done,
+                    self._project_done_callback("Cartridge translation", self._cartridge_load_done),
                 )
             else:
                 self._start_home_action("Importing cartridge folder…")
@@ -3638,7 +3686,7 @@ class HivePlannerApp:
                         promote=do_promote,
                         force_promote=do_force,
                     ),
-                    self._cartridge_load_done,
+                    self._project_done_callback("Cartridge import", self._cartridge_load_done),
                 )
 
         primary_button(

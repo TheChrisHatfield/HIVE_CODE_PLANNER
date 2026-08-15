@@ -4789,6 +4789,48 @@ def test_bg_generation_invalidates_stale_callbacks() -> None:
     assert called["value"] is True
 
 
+def test_project_done_callback_keeps_late_result_with_origin_profile(tmp_path: Path) -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    project_a = str((tmp_path / "alpha").resolve())
+    project_b = str((tmp_path / "beta").resolve())
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.config = LauncherConfig(active_project=project_a)
+    app._home_log_scope = normalize_project_path(project_a)
+    app._home_log_history = []
+    app._home_log_histories = {app._home_log_scope: app._home_log_history}
+    app._pending_home_log = []
+    delivered: list[dict] = []
+
+    callback = app._project_done_callback("Impact map sync", delivered.append)
+    app.config.active_project = project_b
+    callback({"ok": True})
+
+    assert delivered == []
+    origin_history = app._home_log_histories[normalize_project_path(project_a)]
+    assert origin_history == [
+        "Impact map sync finished after switching profiles; result retained for this project."
+    ]
+
+    app.config.active_project = project_a
+    app._sync_home_log_for_active()
+    assert app._home_log_history == origin_history
+
+
+def test_project_done_callback_delivers_when_profile_unchanged(tmp_path: Path) -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    project = str((tmp_path / "alpha").resolve())
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.config = LauncherConfig(active_project=project)
+    delivered: list[dict] = []
+
+    callback = app._project_done_callback("Impact map sync", delivered.append)
+    callback({"ok": True})
+
+    assert delivered == [{"ok": True}]
+
+
 def test_load_config_recovers_corrupt_json(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     import json
 
