@@ -4341,10 +4341,14 @@ def test_ci_check_done_clears_stale_steps_on_error(monkeypatch: pytest.MonkeyPat
     app.root = type("R", (), {})()
     app._pending_home_log = []
     app._last_ci_report = {"ok": True, "steps": [{"name": "old", "ok": True, "detail": "x"}]}
+    app._last_ci_link = "C:/old"
+    app._ci_check_target = "C:/old"
+    app.config = LauncherConfig(active_project="C:/old")
     app._show_dashboard = lambda: None  # type: ignore[method-assign]
     app._refresh_home_dashboard = lambda: None  # type: ignore[method-assign]
     app._ci_check_done({"ok": False, "error": "Not a Hive project (missing START_HERE.md)"})
     assert app._last_ci_report is None
+    assert app._last_ci_link is None
     assert app._pending_home_log
     assert "START_HERE" in app._pending_home_log[0]
 
@@ -4357,6 +4361,9 @@ def test_ci_check_done_preserves_report_for_dashboard_refresh(monkeypatch: pytes
     app.root = type("R", (), {})()
     app._pending_home_log = []
     app._last_ci_report = None
+    app._last_ci_link = None
+    app._ci_check_target = "C:/proj"
+    app.config = LauncherConfig(active_project="C:/proj")
     app._show_dashboard = lambda: None  # type: ignore[method-assign]
     app._refresh_home_dashboard = lambda: None  # type: ignore[method-assign]
     report = {
@@ -4368,6 +4375,7 @@ def test_ci_check_done_preserves_report_for_dashboard_refresh(monkeypatch: pytes
     }
     app._ci_check_done(report)
     assert app._last_ci_report == report
+    assert app._last_ci_link == normalize_project_path("C:/proj")
     assert any("wiring-audit" in line for line in app._pending_home_log)
     inserted: list[str] = []
 
@@ -4382,6 +4390,102 @@ def test_ci_check_done_preserves_report_for_dashboard_refresh(monkeypatch: pytes
     app._populate_ci_list(app._last_ci_report)
     assert len(inserted) == 2
     assert "wiring-audit" in inserted[1]
+
+
+def test_soft_refresh_clears_ci_report_when_active_project_changes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+    from hive_planner.launcher.service import SetupStatus
+
+    project_a = tmp_path / "alpha"
+    project_b = tmp_path / "beta"
+    project_a.mkdir()
+    project_b.mkdir()
+    a_path = str(project_a.resolve())
+    b_path = str(project_b.resolve())
+
+    cfg = LauncherConfig(active_project=b_path, recent_projects=[a_path, b_path])
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.config = cfg
+    app._pending_memory_link = None
+    app._pending_memory_candidates = None
+    app._pending_home_log = []
+    app._last_ci_report = {
+        "ok": True,
+        "steps": [{"name": "agents-lint", "ok": True, "detail": "ok for alpha"}],
+    }
+    app._last_ci_link = a_path
+    app.setup = SetupStatus(
+        python_ok=True,
+        python_version="3.11",
+        hive_root="C:/hive",
+        hive_root_ok=True,
+        hive_installed=True,
+        hive_version="1.0.0",
+        git_available=True,
+        onboarding_complete=True,
+    )
+    cleared: list[object] = []
+
+    class _List:
+        def delete(self, _a, _b) -> None:
+            cleared.append("cleared")
+
+        def insert(self, _end, text) -> None:
+            cleared.append(text)
+
+    app.ci_list = _List()
+    app._update_header_detail = lambda: None  # type: ignore[method-assign]
+    app._update_status_cards = lambda: None  # type: ignore[method-assign]
+    app._sync_rosetta_eject_for_active = lambda: None  # type: ignore[method-assign]
+    app._flush_pending_home_log = lambda: None  # type: ignore[method-assign]
+
+    import hive_planner.launcher.app as app_mod
+
+    monkeypatch.setattr(app_mod, "load_config", lambda: cfg)
+    monkeypatch.setattr(app_mod, "get_setup_status", lambda _cfg: app.setup)
+
+    app._soft_refresh_dashboard()
+    assert app._last_ci_report is None
+    assert app._last_ci_link is None
+    assert cleared == ["cleared"]
+
+
+def test_ci_check_done_discards_result_after_active_switch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    dialogs: list[str] = []
+    monkeypatch.setattr(
+        "hive_planner.launcher.app.messagebox.showinfo",
+        lambda *a, **k: dialogs.append("info"),
+    )
+    monkeypatch.setattr(
+        "hive_planner.launcher.app.messagebox.showwarning",
+        lambda *a, **k: dialogs.append("warn"),
+    )
+    monkeypatch.setattr(
+        "hive_planner.launcher.app.messagebox.showerror",
+        lambda *a, **k: dialogs.append("error"),
+    )
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.root = type("R", (), {})()
+    app.config = LauncherConfig(active_project="C:/beta")
+    app._ci_check_target = normalize_project_path("C:/alpha")
+    app._last_ci_report = None
+    app._last_ci_link = None
+    app._pending_home_log = []
+    refreshed: list[bool] = []
+    app._refresh_home_dashboard = lambda: refreshed.append(True)  # type: ignore[method-assign]
+
+    app._ci_check_done({"ok": True, "steps": [{"name": "agents-lint", "ok": True, "detail": "ok"}]})
+    assert app._last_ci_report is None
+    assert dialogs == []
+    assert refreshed == [True]
+    assert any("previous project" in line.lower() for line in app._pending_home_log)
 
 
 def test_populate_ci_list_clears_when_report_is_none() -> None:

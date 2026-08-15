@@ -142,6 +142,8 @@ class HivePlannerApp:
         self._pending_home_log: list[str] = []
         self._home_log_history: list[str] = []
         self._last_ci_report: dict | None = None
+        self._last_ci_link: str | None = None
+        self._ci_check_target: str | None = None
         self._pending_memory_candidates: Path | None = None
         self._pending_memory_link: str | None = None
         self._memory_work_root: Path | None = None
@@ -508,6 +510,25 @@ class HivePlannerApp:
             self._pending_memory_candidates = None
             self._pending_memory_link = None
 
+    def _active_link_key(self) -> str:
+        if not self.config.active_project:
+            return ""
+        return normalize_project_path(self.config.active_project)
+
+    def _sync_ci_report_for_active(self) -> None:
+        """Drop health-check results that belong to a different active project."""
+        active = self._active_link_key()
+        last_link = getattr(self, "_last_ci_link", None)
+        last_n = normalize_project_path(last_link) if last_link else ""
+        if not self._last_ci_report:
+            self._last_ci_link = None
+            return
+        if last_n and active and last_n == active:
+            return
+        # Active switched (or cleared) — do not show another project's Latest ci-check.
+        self._last_ci_report = None
+        self._last_ci_link = None
+
     def _update_header_detail(self) -> None:
         label = getattr(self, "_header_detail_label", None)
         if label is None:
@@ -533,6 +554,7 @@ class HivePlannerApp:
         self.config = load_config()
         self.setup = get_setup_status(self.config)
         self._sync_pending_memory_for_active()
+        self._sync_ci_report_for_active()
         self._update_header_detail()
         self._update_status_cards()
         self._sync_rosetta_eject_for_active()
@@ -562,6 +584,7 @@ class HivePlannerApp:
         self.config = load_config()
         self.setup = get_setup_status(self.config)
         self._sync_pending_memory_for_active()
+        self._sync_ci_report_for_active()
         self._status_value_labels = {}
         self._header_detail_label = None
         self._home_canvas = None
@@ -1795,9 +1818,14 @@ class HivePlannerApp:
     def _queue_ci_check_log(self, report: dict) -> None:
         if self._is_bg_error(report):
             self._last_ci_report = None
+            self._last_ci_link = None
             self._queue_home_log(self._result_detail(report))
             return
         self._last_ci_report = report
+        target = getattr(self, "_ci_check_target", None)
+        self._last_ci_link = (
+            normalize_project_path(target) if target else self._active_link_key()
+        ) or None
         for step in report.get("steps", []):
             mark = "✓" if step.get("ok") else "✗"
             self._queue_home_log(f"  {mark}  {step.get('name')}: {step.get('detail')}")
@@ -1816,11 +1844,23 @@ class HivePlannerApp:
         if not root:
             messagebox.showwarning("No project", "Link a workspace first (Projects tab).", parent=self.root)
             return
+        self._ci_check_target = self._active_link_key() or normalize_project_path(str(root))
         self._start_home_action("Running ci-check…")
         self._run_bg(lambda r=root: run_project_ci_check(r), self._ci_check_done)
 
     def _ci_check_done(self, report: dict) -> None:
+        target = getattr(self, "_ci_check_target", None)
+        target_n = normalize_project_path(target) if target else ""
+        active_n = self._active_link_key()
+        if target_n and active_n and target_n != active_n:
+            self._queue_home_log(
+                "Health check finished for a previous project — discarded after active switch.",
+            )
+            self._ci_check_target = None
+            self._refresh_home_dashboard()
+            return
         self._queue_ci_check_log(report)
+        self._ci_check_target = None
         if self._is_bg_error(report):
             messagebox.showerror("Health check", self._result_detail(report), parent=self.root)
         elif report.get("ok"):
