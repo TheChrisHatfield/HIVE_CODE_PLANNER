@@ -1915,17 +1915,20 @@ class HivePlannerApp:
         except tk.TclError:
             return
 
-    def _queue_ci_check_log(self, report: dict) -> None:
+    def _queue_ci_check_log(self, report: dict, *, link: str | None = None) -> None:
         if self._is_bg_error(report):
             self._last_ci_report = None
             self._last_ci_link = None
             self._queue_home_log(self._result_detail(report))
             return
         self._last_ci_report = report
-        target = getattr(self, "_ci_check_target", None)
-        self._last_ci_link = (
-            normalize_project_path(target) if target else self._active_link_key()
-        ) or None
+        link_n = normalize_project_path(link) if link else ""
+        if not link_n:
+            target = getattr(self, "_ci_check_target", None)
+            link_n = (
+                normalize_project_path(target) if target else self._active_link_key()
+            ) or ""
+        self._last_ci_link = link_n or None
         for step in report.get("steps", []):
             mark = "✓" if step.get("ok") else "✗"
             self._queue_home_log(f"  {mark}  {step.get('name')}: {step.get('detail')}")
@@ -1944,23 +1947,37 @@ class HivePlannerApp:
         if not root:
             messagebox.showwarning("No project", "Link a workspace first (Projects tab).", parent=self.root)
             return
-        self._ci_check_target = self._active_link_key() or normalize_project_path(str(root))
+        job_target = self._active_link_key() or normalize_project_path(str(root))
+        self._ci_check_target = job_target
         self._start_home_action("Running ci-check…")
-        self._run_bg(lambda r=root: run_project_ci_check(r), self._ci_check_done)
+        # Stamp expected_link on the callback so overlapping jobs cannot overwrite
+        # shared _ci_check_target and mis-attribute an older result.
+        self._run_bg(
+            lambda r=root: run_project_ci_check(r),
+            lambda report, expected=job_target: self._ci_check_done(
+                report, expected_link=expected
+            ),
+        )
 
-    def _ci_check_done(self, report: dict) -> None:
-        target = getattr(self, "_ci_check_target", None)
-        target_n = normalize_project_path(target) if target else ""
+    def _ci_check_done(self, report: dict, *, expected_link: str | None = None) -> None:
+        expected_n = normalize_project_path(expected_link) if expected_link else ""
+        if not expected_n:
+            shared = getattr(self, "_ci_check_target", None)
+            expected_n = normalize_project_path(shared) if shared else ""
         active_n = self._active_link_key()
-        if target_n and active_n and target_n != active_n:
-            self._queue_home_log(
-                "Health check finished for a previous project — discarded after active switch.",
+        if expected_n and active_n and expected_n != active_n:
+            self._remember_home_log_for_scope(
+                expected_n,
+                "Health check finished after switching profiles; discarded for the prior project.",
             )
-            self._ci_check_target = None
-            self._refresh_home_dashboard()
+            shared = getattr(self, "_ci_check_target", None)
+            if shared and normalize_project_path(shared) == expected_n:
+                self._ci_check_target = None
             return
-        self._queue_ci_check_log(report)
-        self._ci_check_target = None
+        self._queue_ci_check_log(report, link=expected_n or None)
+        shared = getattr(self, "_ci_check_target", None)
+        if not shared or normalize_project_path(shared) == expected_n:
+            self._ci_check_target = None
         if self._is_bg_error(report):
             messagebox.showerror("Health check", self._result_detail(report), parent=self.root)
         elif report.get("ok"):

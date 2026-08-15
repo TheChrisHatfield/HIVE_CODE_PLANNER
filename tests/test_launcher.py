@@ -4556,21 +4556,76 @@ def test_ci_check_done_discards_result_after_active_switch(
         lambda *a, **k: dialogs.append("error"),
     )
 
+    alpha = normalize_project_path("C:/alpha")
+    beta = normalize_project_path("C:/beta")
     app = HivePlannerApp.__new__(HivePlannerApp)
     app.root = type("R", (), {})()
-    app.config = LauncherConfig(active_project="C:/beta")
-    app._ci_check_target = normalize_project_path("C:/alpha")
+    app.config = LauncherConfig(active_project=beta)
+    app._ci_check_target = alpha
     app._last_ci_report = None
     app._last_ci_link = None
     app._pending_home_log = []
+    app._home_log_scope = beta
+    app._home_log_history = []
+    app._home_log_histories = {alpha: [], beta: app._home_log_history}
     refreshed: list[bool] = []
     app._refresh_home_dashboard = lambda: refreshed.append(True)  # type: ignore[method-assign]
 
-    app._ci_check_done({"ok": True, "steps": [{"name": "agents-lint", "ok": True, "detail": "ok"}]})
+    app._ci_check_done(
+        {"ok": True, "steps": [{"name": "agents-lint", "ok": True, "detail": "ok"}]},
+        expected_link=alpha,
+    )
     assert app._last_ci_report is None
     assert dialogs == []
-    assert refreshed == [True]
-    assert any("previous project" in line.lower() for line in app._pending_home_log)
+    assert refreshed == []
+    assert app._home_log_histories[alpha] and "discarded" in app._home_log_histories[alpha][0].lower()
+    assert app._home_log_history == []
+
+
+def test_ci_check_done_discards_overlapping_job_after_second_start(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Shared _ci_check_target may point at B while an older A job completes — must discard."""
+    from hive_planner.launcher.app import HivePlannerApp
+
+    dialogs: list[str] = []
+    monkeypatch.setattr(
+        "hive_planner.launcher.app.messagebox.showinfo",
+        lambda *a, **k: dialogs.append("info"),
+    )
+    monkeypatch.setattr(
+        "hive_planner.launcher.app.messagebox.showwarning",
+        lambda *a, **k: dialogs.append("warn"),
+    )
+    monkeypatch.setattr(
+        "hive_planner.launcher.app.messagebox.showerror",
+        lambda *a, **k: dialogs.append("error"),
+    )
+
+    alpha = normalize_project_path("C:/alpha")
+    beta = normalize_project_path("C:/beta")
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.root = type("R", (), {})()
+    app.config = LauncherConfig(active_project=beta)
+    # Second health check already retargeted the shared field to Beta.
+    app._ci_check_target = beta
+    app._last_ci_report = None
+    app._last_ci_link = None
+    app._pending_home_log = []
+    app._home_log_scope = beta
+    app._home_log_history = []
+    app._home_log_histories = {alpha: [], beta: app._home_log_history}
+
+    app._ci_check_done(
+        {"ok": True, "steps": [{"name": "agents-lint", "ok": True, "detail": "alpha-old"}]},
+        expected_link=alpha,
+    )
+    assert app._last_ci_report is None
+    assert app._last_ci_link is None
+    assert dialogs == []
+    assert app._ci_check_target == beta  # in-flight Beta job still tracked
+    assert app._home_log_histories[alpha] and "discarded" in app._home_log_histories[alpha][0].lower()
+    assert app._home_log_history == []
 
 
 def test_populate_ci_list_clears_when_report_is_none() -> None:
