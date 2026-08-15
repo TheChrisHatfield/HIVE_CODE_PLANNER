@@ -2680,6 +2680,27 @@ def test_memory_work_root_persists_after_pending_cleared(tmp_path: Path) -> None
     assert app._memory_work_candidates() == candidates
 
 
+def test_profile_switch_clears_entire_memory_work_context(tmp_path: Path) -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    project_a = tmp_path / "alpha"
+    project_b = tmp_path / "beta"
+    candidates = project_a / "docs" / "proposals" / "candidates.md"
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.config = LauncherConfig(active_project=str(project_b.resolve()))
+    app._pending_memory_link = str(project_a.resolve())
+    app._pending_memory_candidates = candidates
+    app._memory_work_root = project_a.resolve()
+    app._memory_work_candidates_path = candidates
+
+    app._sync_pending_memory_for_active()
+
+    assert app._pending_memory_link is None
+    assert app._pending_memory_candidates is None
+    assert app._memory_work_root is None
+    assert app._memory_work_candidates_path is None
+
+
 def test_run_memory_apply_if_current_cancels_on_stale_generation(tmp_path: Path) -> None:
     from hive_planner.launcher.app import HivePlannerApp
 

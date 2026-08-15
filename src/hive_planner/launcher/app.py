@@ -514,9 +514,10 @@ class HivePlannerApp:
             if self.config.active_project
             else ""
         )
-        if self._pending_memory_link and self._pending_memory_link != active_norm:
-            self._pending_memory_candidates = None
-            self._pending_memory_link = None
+        pending_link = getattr(self, "_pending_memory_link", None)
+        pending_norm = normalize_project_path(pending_link) if pending_link else ""
+        if pending_norm and pending_norm != active_norm:
+            self._clear_memory_work_context()
 
     def _active_link_key(self) -> str:
         if not self.config.active_project:
