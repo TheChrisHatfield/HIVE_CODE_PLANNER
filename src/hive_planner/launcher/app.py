@@ -830,10 +830,10 @@ class HivePlannerApp:
             "Use Deploy agent handoff or re-link with repair.",
         )
 
-    def _refresh_home_dashboard(self) -> None:
+    def _refresh_home_dashboard(self, *, reload_config: bool = True) -> None:
         """Refresh dashboard state without blinking when the notebook is already open."""
         if self._dashboard_alive():
-            self._soft_refresh_dashboard()
+            self._soft_refresh_dashboard(reload_config=reload_config)
             return
         self._show_dashboard()
 
@@ -4668,7 +4668,7 @@ class HivePlannerApp:
             or workspace_primary_folder(target)
             or target
         )
-        self.config = load_config()
+        # Keep in-memory Settings (python/cursor paths, etc.) — do not load_config().
         bootstrap_target = pick_hive_bootstrap_target(hive_folder) or hive_folder
         state = summarize_bootstrap_state(bootstrap_target)
         already_known = any(
@@ -4700,7 +4700,7 @@ class HivePlannerApp:
                         "Workspace linked",
                         f"{workspace.name}\n\nLinked without changing Hive planning files.",
                     )
-                self._refresh_home_dashboard()
+                self._refresh_home_dashboard(reload_config=False)
                 return True
             return self._bootstrap_and_activate(
                 bootstrap_target,
@@ -4733,7 +4733,7 @@ class HivePlannerApp:
                     f"Linked: {workspace.name}\n\n"
                     "Use Open in Cursor to launch it. Add Hive planning files when you want health checks.",
                 )
-        self._refresh_home_dashboard()
+        self._refresh_home_dashboard(reload_config=False)
         return True
 
     def _on_link_workspace(self) -> None:
@@ -5001,12 +5001,11 @@ class HivePlannerApp:
             resolved_cl_runtime = choice.cl_runtime
 
         if action == "link_only":
-            self.config = load_config()
             self.config.add_recent_project(link_path or path)
             save_config(self.config)
             prepare_linked_project_root(link_path or path, repair_agents=True)
             self._queue_handoff_repair_warning(state)
-            self._refresh_home_dashboard()
+            self._refresh_home_dashboard(reload_config=False)
             return True
 
         init_force = force
@@ -5039,13 +5038,11 @@ class HivePlannerApp:
             messagebox.showerror("Setup failed", detail)
             self._queue_home_log(detail)
             if result.get("files_written"):
-                self.config = load_config()
                 self.config.add_recent_project(link_path or path)
                 save_config(self.config)
                 prepare_linked_project_root(link_path or path, repair_agents=True)
-            self._refresh_home_dashboard()
+            self._refresh_home_dashboard(reload_config=False)
             return False
-        self.config = load_config()
         self.config.add_recent_project(link_path or path)
         save_config(self.config)
         prepare_linked_project_root(link_path or path, repair_agents=True)
@@ -5055,7 +5052,7 @@ class HivePlannerApp:
                 f"Created planning files in:\n{bootstrap_target}\n\n"
                 f"Profile: {resolved_profile}\nHandoff: {resolved_handoff}",
             )
-        self._refresh_home_dashboard()
+        self._refresh_home_dashboard(reload_config=False)
         return True
 
     def _projects_tab_selected(self) -> bool:

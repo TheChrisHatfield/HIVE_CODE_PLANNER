@@ -2344,7 +2344,7 @@ def test_refresh_home_dashboard_uses_soft_refresh_when_dashboard_alive() -> None
     app = HivePlannerApp.__new__(HivePlannerApp)
     calls: list[str] = []
     app._dashboard_alive = lambda: True  # type: ignore[method-assign]
-    app._soft_refresh_dashboard = lambda: calls.append("soft")  # type: ignore[method-assign]
+    app._soft_refresh_dashboard = lambda **_k: calls.append("soft")  # type: ignore[method-assign]
     app._show_dashboard = lambda: calls.append("full")  # type: ignore[method-assign]
 
     app._refresh_home_dashboard()
@@ -2357,7 +2357,7 @@ def test_refresh_home_dashboard_rebuilds_when_dashboard_missing() -> None:
     app = HivePlannerApp.__new__(HivePlannerApp)
     calls: list[str] = []
     app._dashboard_alive = lambda: False  # type: ignore[method-assign]
-    app._soft_refresh_dashboard = lambda: calls.append("soft")  # type: ignore[method-assign]
+    app._soft_refresh_dashboard = lambda **_k: calls.append("soft")  # type: ignore[method-assign]
     app._show_dashboard = lambda: calls.append("full")  # type: ignore[method-assign]
 
     app._refresh_home_dashboard()
@@ -4337,6 +4337,59 @@ def test_select_recent_persists_active_project(tmp_path: Path, monkeypatch: pyte
     loaded = load_config()
     assert loaded.active_project == str(p2.resolve())
     assert loaded.recent_projects[0] == str(p2.resolve())
+
+
+def test_select_recent_preserves_unsaved_settings(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Set as active must not load_config() and wipe in-memory Settings edits."""
+    from hive_planner.launcher.app import HivePlannerApp
+
+    cfg_dir = tmp_path / "cfg"
+    cfg_dir.mkdir()
+    p1 = tmp_path / "proj1"
+    p2 = tmp_path / "proj2"
+    for project in (p1, p2):
+        project.mkdir()
+        (project / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+
+    monkeypatch.setattr("hive_planner.launcher.config.default_config_dir", lambda: cfg_dir)
+    save_config(
+        LauncherConfig(
+            active_project=str(p1.resolve()),
+            recent_projects=[str(p1.resolve()), str(p2.resolve())],
+            python_executable="py -3.11",
+        )
+    )
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.config = load_config()
+    app.config.python_executable = r"C:\Custom\Python\python.exe"
+    app._recent_project_paths = [str(p2.resolve()), str(p1.resolve())]
+    app.recent_list = type("L", (), {"curselection": lambda self: (0,)})()
+    app._pending_home_log = []
+    app._home_log_history = []
+    app._home_log_histories = {}
+    app._last_ci_report = None
+    soft_calls: list[dict] = []
+    app._dashboard_alive = lambda: True  # type: ignore[method-assign]
+    app._soft_refresh_dashboard = (  # type: ignore[method-assign]
+        lambda **kwargs: soft_calls.append(dict(kwargs))
+    )
+
+    import hive_planner.launcher.app as app_mod
+
+    monkeypatch.setattr(app_mod.messagebox, "showinfo", lambda *a, **k: None)
+    monkeypatch.setattr(
+        app_mod,
+        "load_config",
+        lambda: (_ for _ in ()).throw(AssertionError("load_config must not run on Set as active")),
+    )
+
+    app._on_select_recent()
+    assert app.config.active_project == str(p2.resolve())
+    assert app.config.python_executable == r"C:\Custom\Python\python.exe"
+    assert soft_calls == [{"reload_config": False}]
 
 
 def test_recent_double_click_opens_folder(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
