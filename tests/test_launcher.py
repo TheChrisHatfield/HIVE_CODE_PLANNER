@@ -5414,6 +5414,65 @@ def test_open_cursor_activate_preserves_unsaved_settings(
     assert app.config.python_executable == r"C:\Custom\Python\python.exe"
 
 
+def test_open_cursor_activate_soft_refreshes_home_without_load_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Activating via Open in Cursor must refresh Home widgets without load_config()."""
+    from hive_planner.launcher.app import HivePlannerApp
+
+    active = tmp_path / "active"
+    selected = tmp_path / "selected"
+    active.mkdir()
+    selected.mkdir()
+    active_s = str(active.resolve())
+    selected_s = str(selected.resolve())
+    cfg = LauncherConfig(
+        active_project=active_s,
+        recent_projects=[active_s, selected_s],
+        python_executable="py -3.11",
+        hive_planner_root=str(Path(__file__).resolve().parents[1]),
+    )
+    cfg.python_executable = r"C:\Custom\Python\python.exe"
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.config = cfg
+    app._pending_home_log = []
+    app._home_log_history = []
+    app._home_log_histories = {}
+    app._home_log_scope = active_s
+    app._last_ci_report = {"ok": True}
+    app._last_ci_link = active_s
+    app._recent_project_paths = [active_s, selected_s]
+    app.recent_list = type("L", (), {"curselection": lambda self: (1,)})()
+    app._projects_tab_selected = lambda: True  # type: ignore[method-assign]
+    app.home_log = type("L", (), {"configure": lambda *a, **k: None, "delete": lambda *a, **k: None, "insert": lambda *a, **k: None})()
+    app._append_log = lambda *_a, **_k: None  # type: ignore[method-assign]
+    soft_calls: list[dict] = []
+    app._dashboard_alive = lambda: True  # type: ignore[method-assign]
+    app._soft_refresh_dashboard = (  # type: ignore[method-assign]
+        lambda **kwargs: soft_calls.append(dict(kwargs))
+    )
+
+    import hive_planner.launcher.app as app_mod
+
+    monkeypatch.setattr(
+        app_mod,
+        "open_in_cursor",
+        lambda *_a, **_k: {"ok": True, "hive_ready": False},
+    )
+    monkeypatch.setattr(app_mod, "save_config", lambda _cfg: None)
+    monkeypatch.setattr(
+        app_mod,
+        "load_config",
+        lambda: (_ for _ in ()).throw(AssertionError("load_config must not run on Open activate")),
+    )
+
+    app._on_open_cursor()
+    assert app.config.active_project == selected_s
+    assert soft_calls == [{"reload_config": False}]
+    assert app.config.python_executable == r"C:\Custom\Python\python.exe"
+
+
 def test_open_cursor_home_uses_active_not_list_selection(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

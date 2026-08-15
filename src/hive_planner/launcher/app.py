@@ -544,8 +544,10 @@ class HivePlannerApp:
         active = self._active_link_key()
         last_link = getattr(self, "_last_ci_link", None)
         last_n = normalize_project_path(last_link) if last_link else ""
-        if not self._last_ci_report:
+        last_report = getattr(self, "_last_ci_report", None)
+        if not last_report:
             self._last_ci_link = None
+            self._last_ci_report = None
             return
         if last_n and active and last_n == active:
             return
@@ -573,9 +575,14 @@ class HivePlannerApp:
             except tk.TclError:
                 continue
 
-    def _soft_refresh_dashboard(self) -> None:
-        """Update live dashboard widgets without destroying the notebook (no blink / tab reset)."""
-        self.config = load_config()
+    def _soft_refresh_dashboard(self, *, reload_config: bool = True) -> None:
+        """Update live dashboard widgets without destroying the notebook (no blink / tab reset).
+
+        When reload_config is False, keep the in-memory LauncherConfig (preserves unsaved
+        Settings StringVars) and only re-paint Home from the current active project.
+        """
+        if reload_config:
+            self.config = load_config()
         self.setup = get_setup_status(self.config)
         self._sync_home_log_for_active()
         self._sync_pending_memory_for_active()
@@ -5088,8 +5095,16 @@ class HivePlannerApp:
             # Do not load_config() here — that would discard unsaved Settings tab edits.
             self.config.add_recent_project(Path(root))
             save_config(self.config)
-            if hasattr(self, "recent_list"):
-                self._populate_recent_list(prefer_path=root)
+            if self._dashboard_alive():
+                # Refresh header/status/CI/Rosetta/Output for the newly active project.
+                self._soft_refresh_dashboard(reload_config=False)
+            else:
+                # Dashboard not built yet — still retarget scoped in-memory state.
+                self._sync_home_log_for_active()
+                self._sync_pending_memory_for_active()
+                self._sync_ci_report_for_active()
+                if hasattr(self, "recent_list"):
+                    self._populate_recent_list(prefer_path=root)
         result = open_in_cursor(Path(root), config=self.config)
         if not result.get("ok"):
             messagebox.showerror("Open in Cursor", result.get("error", "Failed to launch Cursor"))
