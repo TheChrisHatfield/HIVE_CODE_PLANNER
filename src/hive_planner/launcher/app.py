@@ -4977,6 +4977,10 @@ class HivePlannerApp:
         from hive_planner.agent_handoff import AGENT_HANDOFF_UNIFIED, normalize_agent_handoff_mode
 
         cfg = load_config()
+        # Prefer the live in-memory config (preserves unsaved Settings). Tests and
+        # cold paths may not have set self.config yet — fall back to the disk load.
+        if getattr(self, "config", None) is None:
+            self.config = cfg
         bootstrap_target = pick_hive_bootstrap_target(path) or path
         state = summarize_bootstrap_state(bootstrap_target)
         resolved_profile = (profile or cfg.default_profile).strip() or cfg.default_profile

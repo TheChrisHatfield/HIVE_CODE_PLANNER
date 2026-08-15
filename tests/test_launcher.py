@@ -1132,7 +1132,7 @@ def test_cartridge_load_done_does_not_log_success_after_emit_failure() -> None:
 
     app = HivePlannerApp.__new__(HivePlannerApp)
     app._pending_home_log = []
-    app._refresh_home_dashboard = lambda: None  # type: ignore[method-assign]
+    app._refresh_home_dashboard = lambda **_k: None  # type: ignore[method-assign]
     app._log_cartridge_promote = lambda _promote: None  # type: ignore[method-assign]
 
     app._cartridge_load_done(
@@ -1157,7 +1157,7 @@ def test_cartridge_load_done_warns_on_promote_failure_in_error_path() -> None:
 
     app = HivePlannerApp.__new__(HivePlannerApp)
     app._pending_home_log = []
-    app._refresh_home_dashboard = lambda: None  # type: ignore[method-assign]
+    app._refresh_home_dashboard = lambda **_k: None  # type: ignore[method-assign]
     app._log_cartridge_promote = lambda _promote: app._pending_home_log.append("PROMOTE_LOG")  # type: ignore[method-assign]
 
     app._cartridge_load_done(
@@ -1180,7 +1180,7 @@ def test_cartridge_load_done_warns_when_promote_fails_on_success() -> None:
 
     app = HivePlannerApp.__new__(HivePlannerApp)
     app._pending_home_log = []
-    app._refresh_home_dashboard = lambda: None  # type: ignore[method-assign]
+    app._refresh_home_dashboard = lambda **_k: None  # type: ignore[method-assign]
     app._log_cartridge_promote = lambda _promote: app._pending_home_log.append("PROMOTE_LOG")  # type: ignore[method-assign]
 
     app._cartridge_load_done(
@@ -1388,7 +1388,7 @@ def test_deploy_handoff_done_logs_partial_work_when_validation_fails() -> None:
 
     app = HivePlannerApp.__new__(HivePlannerApp)
     app._pending_home_log = []
-    app._refresh_home_dashboard = lambda: None  # type: ignore[method-assign]
+    app._refresh_home_dashboard = lambda **_k: None  # type: ignore[method-assign]
 
     app._deploy_handoff_done(
         {
@@ -1417,7 +1417,7 @@ def test_create_done_repairs_agents_after_success(tmp_path: Path, monkeypatch: p
     cfg = LauncherConfig(hive_planner_root=str(Path(__file__).resolve().parents[1]))
 
     app = HivePlannerApp.__new__(HivePlannerApp)
-    app._refresh_home_dashboard = lambda: None  # type: ignore[method-assign]
+    app._refresh_home_dashboard = lambda **_k: None  # type: ignore[method-assign]
 
     import hive_planner.launcher.app as app_mod
 
@@ -1486,7 +1486,7 @@ def test_create_done_shows_partial_bootstrap_when_handoff_incomplete() -> None:
 
     app = HivePlannerApp.__new__(HivePlannerApp)
     app._pending_home_log = []
-    app._refresh_home_dashboard = lambda: None  # type: ignore[method-assign]
+    app._refresh_home_dashboard = lambda **_k: None  # type: ignore[method-assign]
 
     class Box:
         calls: list[tuple[str, str]] = []
@@ -1528,7 +1528,7 @@ def test_create_done_repairs_after_partial_bootstrap(tmp_path: Path, monkeypatch
 
     app = HivePlannerApp.__new__(HivePlannerApp)
     app._pending_home_log = []
-    app._refresh_home_dashboard = lambda: None  # type: ignore[method-assign]
+    app._refresh_home_dashboard = lambda **_k: None  # type: ignore[method-assign]
 
     import hive_planner.launcher.app as app_mod
 
@@ -2353,7 +2353,7 @@ def test_agents_apply_done_refreshes_dashboard_on_failure(monkeypatch: pytest.Mo
 
     app = HivePlannerApp.__new__(HivePlannerApp)
     refreshed: list[bool] = []
-    app._refresh_home_dashboard = lambda: refreshed.append(True)  # type: ignore[method-assign]
+    app._refresh_home_dashboard = lambda **_k: refreshed.append(True)  # type: ignore[method-assign]
     app._active_linked_root = lambda: None  # type: ignore[method-assign]
 
     app._agents_apply_done({"ok": False, "error": "Wiring audit required", "hints": ["Record wiring audit"]})
@@ -2398,7 +2398,7 @@ def test_create_done_keeps_projects_context_via_soft_refresh(
     app = HivePlannerApp.__new__(HivePlannerApp)
     app._dashboard_tab = 1  # Projects
     refreshed: list[str] = []
-    app._refresh_home_dashboard = lambda: refreshed.append("refresh")  # type: ignore[method-assign]
+    app._refresh_home_dashboard = lambda **_k: refreshed.append("refresh")  # type: ignore[method-assign]
     cleared: list[bool] = []
     app._clear_new_project_form = lambda: cleared.append(True)  # type: ignore[method-assign]
 
@@ -2620,7 +2620,7 @@ def test_agents_apply_done_shows_rejection_preview_on_failure(monkeypatch: pytes
     app = HivePlannerApp.__new__(HivePlannerApp)
     app.root = None
     app._pending_home_log = []
-    app._refresh_home_dashboard = lambda: None  # type: ignore[method-assign]
+    app._refresh_home_dashboard = lambda **_k: None  # type: ignore[method-assign]
     previewed: list[bool] = []
     app._active_linked_root = lambda: Path("C:/proj")
     monkeypatch.setattr(
@@ -2656,7 +2656,7 @@ def test_agents_apply_done_uses_pending_memory_work_root(monkeypatch: pytest.Mon
     app = HivePlannerApp.__new__(HivePlannerApp)
     app.root = None
     app._pending_home_log = []
-    app._refresh_home_dashboard = lambda: None  # type: ignore[method-assign]
+    app._refresh_home_dashboard = lambda **_k: None  # type: ignore[method-assign]
     app.config = LauncherConfig(active_project=str(workspace))
     app._set_pending_memory_candidates(folder, candidates)
     app._active_linked_root = lambda: None  # type: ignore[method-assign]
@@ -2774,7 +2774,7 @@ def test_deliver_memory_propose_result_clears_work_context_after_apply() -> None
     app._memory_work_candidates_path = Path("C:/proj/docs/proposals/candidates.md")
     app._pending_memory_candidates = app._memory_work_candidates_path
     app._pending_memory_link = "C:/proj"
-    app._refresh_home_dashboard = lambda: None  # type: ignore[method-assign]
+    app._refresh_home_dashboard = lambda **_k: None  # type: ignore[method-assign]
 
     app._deliver_memory_propose_result({"ok": True, "applied": True, "accepted": ["x"], "rejected": []})
 
@@ -2836,7 +2836,7 @@ def test_agents_propose_done_auto_applies_without_preview(monkeypatch: pytest.Mo
     app.root = None
     app._bg_generation = 0
     app._pending_home_log = []
-    app._refresh_home_dashboard = lambda: None  # type: ignore[method-assign]
+    app._refresh_home_dashboard = lambda **_k: None  # type: ignore[method-assign]
     app._start_home_action = lambda _msg: None  # type: ignore[method-assign]
     bg_calls: list[tuple] = []
     app._run_bg = lambda fn, done: bg_calls.append((fn, done))  # type: ignore[method-assign]
@@ -2875,7 +2875,7 @@ def test_agents_propose_done_logs_routing_when_already_applied() -> None:
     app = HivePlannerApp.__new__(HivePlannerApp)
     app.root = None
     app._pending_home_log = []
-    app._refresh_home_dashboard = lambda: None  # type: ignore[method-assign]
+    app._refresh_home_dashboard = lambda **_k: None  # type: ignore[method-assign]
     app._clear_memory_work_context = lambda: None  # type: ignore[method-assign]
 
     app._agents_propose_done(
@@ -2902,7 +2902,7 @@ def test_deliver_memory_propose_defers_accepted_log_until_apply() -> None:
     app.root = None
     app._bg_generation = 0
     app._pending_home_log = []
-    app._refresh_home_dashboard = lambda: None  # type: ignore[method-assign]
+    app._refresh_home_dashboard = lambda **_k: None  # type: ignore[method-assign]
     app._start_home_action = lambda _msg: None  # type: ignore[method-assign]
     app._run_bg = lambda fn, done: None  # type: ignore[method-assign]
     project = Path("C:/proj")
@@ -2931,7 +2931,7 @@ def test_deliver_memory_propose_stale_does_not_start_bg_apply() -> None:
     app.root = None
     app._bg_generation = 0
     app._pending_home_log = []
-    app._refresh_home_dashboard = lambda: None  # type: ignore[method-assign]
+    app._refresh_home_dashboard = lambda **_k: None  # type: ignore[method-assign]
     app._start_home_action = lambda _msg: None  # type: ignore[method-assign]
     bg_calls: list = []
     app._run_bg = lambda fn, done: bg_calls.append((fn, done))  # type: ignore[method-assign]
@@ -2961,7 +2961,7 @@ def test_agents_apply_done_logs_accepted_count_on_apply() -> None:
     app = HivePlannerApp.__new__(HivePlannerApp)
     app.root = None
     app._pending_home_log = []
-    app._refresh_home_dashboard = lambda: None  # type: ignore[method-assign]
+    app._refresh_home_dashboard = lambda **_k: None  # type: ignore[method-assign]
     app._clear_memory_work_context = lambda: None  # type: ignore[method-assign]
 
     app._agents_apply_done(
@@ -2985,7 +2985,7 @@ def test_agents_apply_done_logs_noop_when_already_applied() -> None:
     app = HivePlannerApp.__new__(HivePlannerApp)
     app.root = None
     app._pending_home_log = []
-    app._refresh_home_dashboard = lambda: None  # type: ignore[method-assign]
+    app._refresh_home_dashboard = lambda **_k: None  # type: ignore[method-assign]
     app._clear_memory_work_context = lambda: None  # type: ignore[method-assign]
 
     app._agents_apply_done(
@@ -3039,7 +3039,7 @@ def test_agents_apply_done_logs_routing_when_applied() -> None:
     app = HivePlannerApp.__new__(HivePlannerApp)
     app.root = None
     app._pending_home_log = []
-    app._refresh_home_dashboard = lambda: None  # type: ignore[method-assign]
+    app._refresh_home_dashboard = lambda **_k: None  # type: ignore[method-assign]
     app._clear_memory_work_context = lambda: None  # type: ignore[method-assign]
 
     app._agents_apply_done(
@@ -3098,7 +3098,7 @@ def test_cl_migrate_done_logs_warnings_on_success_path() -> None:
 
     app = HivePlannerApp.__new__(HivePlannerApp)
     app._pending_home_log = []
-    app._refresh_home_dashboard = lambda: None  # type: ignore[method-assign]
+    app._refresh_home_dashboard = lambda **_k: None  # type: ignore[method-assign]
 
     app._cl_migrate_done(
         {
@@ -3190,7 +3190,7 @@ def test_map_sync_done_formats_success() -> None:
 
     app = HivePlannerApp.__new__(HivePlannerApp)
     app._pending_home_log = []
-    app._refresh_home_dashboard = lambda: None  # type: ignore[method-assign]
+    app._refresh_home_dashboard = lambda **_k: None  # type: ignore[method-assign]
     app._map_sync_done(
         {
             "ok": True,
@@ -3403,7 +3403,7 @@ def test_delete_profile_resolves_code_workspace_link_to_project_root(tmp_path: P
     app.config = LauncherConfig(recent_projects=[str(workspace_file.resolve())])
     app._recent_project_paths = [str(workspace_file.resolve())]
     app.recent_list = type("L", (), {"curselection": lambda self: (0,)})()
-    app._refresh_home_dashboard = lambda: None  # type: ignore[method-assign]
+    app._refresh_home_dashboard = lambda **_k: None  # type: ignore[method-assign]
 
     import hive_planner.launcher.app as app_mod
     import hive_planner.project_profile as profile_mod
@@ -4505,7 +4505,7 @@ def test_ci_check_done_clears_stale_steps_on_error(monkeypatch: pytest.MonkeyPat
     app._ci_check_target = "C:/old"
     app.config = LauncherConfig(active_project="C:/old")
     app._show_dashboard = lambda: None  # type: ignore[method-assign]
-    app._refresh_home_dashboard = lambda: None  # type: ignore[method-assign]
+    app._refresh_home_dashboard = lambda **_k: None  # type: ignore[method-assign]
     app._ci_check_done({"ok": False, "error": "Not a Hive project (missing START_HERE.md)"})
     assert app._last_ci_report is None
     assert app._last_ci_link is None
@@ -4525,7 +4525,7 @@ def test_ci_check_done_preserves_report_for_dashboard_refresh(monkeypatch: pytes
     app._ci_check_target = "C:/proj"
     app.config = LauncherConfig(active_project="C:/proj")
     app._show_dashboard = lambda: None  # type: ignore[method-assign]
-    app._refresh_home_dashboard = lambda: None  # type: ignore[method-assign]
+    app._refresh_home_dashboard = lambda **_k: None  # type: ignore[method-assign]
     report = {
         "ok": False,
         "steps": [
@@ -4644,7 +4644,7 @@ def test_ci_check_done_discards_result_after_active_switch(
     app._home_log_history = []
     app._home_log_histories = {alpha: [], beta: app._home_log_history}
     refreshed: list[bool] = []
-    app._refresh_home_dashboard = lambda: refreshed.append(True)  # type: ignore[method-assign]
+    app._refresh_home_dashboard = lambda **_k: refreshed.append(True)  # type: ignore[method-assign]
 
     app._ci_check_done(
         {"ok": True, "steps": [{"name": "agents-lint", "ok": True, "detail": "ok"}]},
@@ -4810,7 +4810,7 @@ def test_save_settings_syncs_new_project_defaults(monkeypatch: pytest.MonkeyPatc
     app.new_profile = type("V", (), {"set": lambda self, v: profile_vals.append(v)})()
     app.new_agent_handoff = type("V", (), {"set": lambda self, v: handoff_vals.append(v)})()
     refreshed: list[bool] = []
-    app._refresh_home_dashboard = lambda: refreshed.append(True)  # type: ignore[method-assign]
+    app._refresh_home_dashboard = lambda **_k: refreshed.append(True)  # type: ignore[method-assign]
 
     import hive_planner.launcher.app as app_mod
 
@@ -5266,7 +5266,7 @@ def test_note_stale_bg_result_queues_home_log_message() -> None:
 
     app = HivePlannerApp.__new__(HivePlannerApp)
     app._pending_home_log = []
-    app._refresh_home_dashboard = lambda: None  # type: ignore[method-assign]
+    app._refresh_home_dashboard = lambda **_k: None  # type: ignore[method-assign]
     app._note_stale_bg_result({"ok": False, "mode": "import", "error": "emit failed"})
     joined = "\n".join(app._pending_home_log)
     assert "emit failed" in joined
@@ -5302,7 +5302,7 @@ def test_note_stale_bg_result_clears_memory_work_context_on_cancelled() -> None:
     app._memory_work_candidates_path = Path("C:/proj/docs/proposals/candidates.md")
     app._pending_memory_candidates = app._memory_work_candidates_path
     app._pending_memory_link = "C:/proj"
-    app._refresh_home_dashboard = lambda: None  # type: ignore[method-assign]
+    app._refresh_home_dashboard = lambda **_k: None  # type: ignore[method-assign]
     app._note_stale_bg_result(
         {
             "ok": False,
@@ -5320,7 +5320,7 @@ def test_note_stale_bg_result_preserves_cartridge_details() -> None:
 
     app = HivePlannerApp.__new__(HivePlannerApp)
     app._pending_home_log = []
-    app._refresh_home_dashboard = lambda: None  # type: ignore[method-assign]
+    app._refresh_home_dashboard = lambda **_k: None  # type: ignore[method-assign]
     app._log_cartridge_promote = lambda _promote: None  # type: ignore[method-assign]
     app._note_stale_bg_result(
         {
@@ -5343,7 +5343,7 @@ def test_note_stale_bg_result_lazy_inits_pending_log() -> None:
 
     app = HivePlannerApp.__new__(HivePlannerApp)
     refreshed = {"value": False}
-    app._refresh_home_dashboard = lambda: refreshed.__setitem__("value", True)  # type: ignore[method-assign]
+    app._refresh_home_dashboard = lambda **_k: refreshed.__setitem__("value", True)  # type: ignore[method-assign]
     app._note_stale_bg_result({"ok": False, "error": "late finish"})
     assert app._pending_home_log == ["Background task finished after dashboard refresh: late finish"]
     assert refreshed["value"] is True
@@ -5355,7 +5355,7 @@ def test_note_stale_bg_result_refreshes_dashboard_for_cartridge() -> None:
     app = HivePlannerApp.__new__(HivePlannerApp)
     app._pending_home_log = []
     refreshed = {"count": 0}
-    app._refresh_home_dashboard = lambda: refreshed.__setitem__("count", refreshed["count"] + 1)  # type: ignore[method-assign]
+    app._refresh_home_dashboard = lambda **_k: refreshed.__setitem__("count", refreshed["count"] + 1)  # type: ignore[method-assign]
     app._log_cartridge_promote = lambda _promote: None  # type: ignore[method-assign]
 
     app._note_stale_bg_result(
@@ -5746,7 +5746,7 @@ def test_bootstrap_and_activate_failure_queues_home_log(tmp_path: Path, monkeypa
     app = HivePlannerApp.__new__(HivePlannerApp)
     app._pending_home_log = []
     refreshed = {"value": False}
-    app._refresh_home_dashboard = lambda: refreshed.__setitem__("value", True)  # type: ignore[method-assign]
+    app._refresh_home_dashboard = lambda **_k: refreshed.__setitem__("value", True)  # type: ignore[method-assign]
 
     import hive_planner.launcher.app as app_mod
 
