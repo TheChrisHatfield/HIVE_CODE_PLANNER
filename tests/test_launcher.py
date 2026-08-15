@@ -282,6 +282,28 @@ def test_linked_project_exists_accepts_code_workspace_file(tmp_path: Path) -> No
     assert linked_project_exists(tmp_path / "missing") is False
 
 
+def test_linked_project_exists_rejects_workspace_with_dead_folders(tmp_path: Path) -> None:
+    workspace_file = tmp_path / "hive.code-workspace"
+    workspace_file.write_text(
+        json.dumps({"folders": [{"path": "missing-app"}]}),
+        encoding="utf-8",
+    )
+    assert workspace_primary_folder(workspace_file) is None
+    assert linked_project_exists(workspace_file) is False
+
+
+def test_workspace_primary_folder_ignores_missing_folder_entries(tmp_path: Path) -> None:
+    alive = tmp_path / "alive"
+    alive.mkdir()
+    (alive / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    workspace_file = tmp_path / "hive.code-workspace"
+    workspace_file.write_text(
+        json.dumps({"folders": [{"path": "missing-app"}, {"path": "alive"}]}),
+        encoding="utf-8",
+    )
+    assert workspace_primary_folder(workspace_file) == alive.resolve()
+
+
 def test_prune_stale_projects_keeps_code_workspace_links(tmp_path: Path) -> None:
     workspace_file = tmp_path / "hive.code-workspace"
     workspace_file.write_text("{}", encoding="utf-8")

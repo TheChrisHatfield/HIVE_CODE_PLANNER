@@ -44,7 +44,14 @@ def normalize_project_path(path: str | Path) -> str:
 def linked_project_exists(path: str | Path) -> bool:
     entry = Path(path)
     if entry.suffix.lower() == ".code-workspace":
-        return entry.is_file()
+        if not entry.is_file():
+            return False
+        # Require at least one resolvable folder so Home does not treat dead
+        # workspace entries as an active Hive project root.
+        from hive_planner.launcher.service import workspace_primary_folder
+
+        primary = workspace_primary_folder(entry)
+        return primary is not None and primary.is_dir()
     try:
         return entry.resolve().is_dir()
     except OSError:

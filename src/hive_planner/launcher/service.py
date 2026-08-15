@@ -679,7 +679,7 @@ def pick_hive_bootstrap_target(link_path: Path) -> Path | None:
     for root in roots:
         if root.is_dir():
             return root
-    return roots[0]
+    return None
 
 
 def workspace_primary_folder(path: Path) -> Path | None:
@@ -689,16 +689,18 @@ def workspace_primary_folder(path: Path) -> Path | None:
         roots = _resolved_workspace_roots(path)
         if not roots:
             try:
-                return path.parent.resolve()
+                parent = path.parent.resolve()
             except OSError:
-                return path.parent
+                parent = path.parent
+            return parent if parent.is_dir() else None
         best = _best_hive_root(_collect_hive_root_candidates(roots))
         if best is not None:
             return best
         for root in roots:
             if root.is_dir():
                 return root
-        return roots[0]
+        # Do not return a missing folder path — callers treat None as unlinkable.
+        return None
     try:
         resolved = path.resolve()
     except OSError:
