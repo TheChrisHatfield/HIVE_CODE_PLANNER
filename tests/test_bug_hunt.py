@@ -184,6 +184,18 @@ def test_missing_bug_hunt_artifacts_lists_absent_files(tmp_path: Path) -> None:
     assert missing_bug_hunt_artifacts(tmp_path) == [".cursor/rules/bug-hunt.mdc"]
 
 
+def test_preview_and_install_accept_str_root(tmp_path: Path) -> None:
+    overlay = tmp_path / ".hive" / "bug-hunt" / "repo-overlay.md"
+    overlay.parent.mkdir(parents=True)
+    overlay.write_text("Run coco_bug_hunt_audit.py after each fix.\n", encoding="utf-8")
+    text = preview_agent_prompt(str(tmp_path), 7)
+    assert "7-iteration" in text
+    assert "coco_bug_hunt_audit.py" in text
+    result = install_bug_hunt(str(tmp_path), iterations=7)
+    assert result.command_path.is_file()
+    assert missing_bug_hunt_artifacts(str(tmp_path)) == []
+
+
 def test_cli_installs_into_root(tmp_path: Path) -> None:
     stdout = io.StringIO()
     with redirect_stdout(stdout):

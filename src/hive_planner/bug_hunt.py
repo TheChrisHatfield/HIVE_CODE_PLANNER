@@ -101,7 +101,7 @@ def is_bug_hunt_request(text: str) -> bool:
 
 
 def _read_repo_overlay(root: Path) -> str:
-    path = root / OVERLAY_REL
+    path = Path(root) / OVERLAY_REL
     if not path.is_file():
         return ""
     text = path.read_text(encoding="utf-8").strip()
@@ -109,7 +109,7 @@ def _read_repo_overlay(root: Path) -> str:
 
 
 def _prompt_options(root: Path) -> tuple[bool, str]:
-    target = root.resolve()
+    target = Path(root).resolve()
     return (target / DUAL_LANE_REL).is_file(), _read_repo_overlay(target)
 
 
@@ -211,7 +211,7 @@ def _write_if_needed(path: Path, content: str, *, force: bool) -> bool:
 
 def missing_bug_hunt_artifacts(root: Path) -> list[str]:
     """Relative paths that must exist after a successful install."""
-    target = root.resolve()
+    target = Path(root).resolve()
     missing: list[str] = []
     for rel in (COMMAND_REL, RULE_REL, PACKET_REL, SCRIPTS_REL):
         if not (target / rel).is_file():
@@ -226,7 +226,7 @@ def install_bug_hunt(
     force: bool = True,
 ) -> BugHuntInstall:
     count = validate_iterations(iterations)
-    target = root.resolve()
+    target = Path(root).resolve()
     if not target.is_dir():
         raise BugHuntError(f"repo root is not a directory: {target}")
 
