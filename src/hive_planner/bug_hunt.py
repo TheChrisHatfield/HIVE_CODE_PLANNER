@@ -104,6 +104,21 @@ def is_bug_hunt_request(text: str) -> bool:
     return True
 
 
+def resolve_bug_hunt_root(root: Path) -> Path:
+    """Directory that receives hunt files. Workspace files resolve to their folder."""
+    target = Path(root).resolve()
+    if target.is_file() and target.suffix.lower() == ".code-workspace":
+        from hive_planner.launcher.service import resolve_linked_project_root
+
+        folder = resolve_linked_project_root(target)
+        if folder is None:
+            raise BugHuntError(f"workspace has no folder on disk: {target}")
+        target = folder
+    if not target.is_dir():
+        raise BugHuntError(f"repo root is not a directory: {target}")
+    return target
+
+
 def _read_repo_overlay(root: Path) -> str:
     path = Path(root) / OVERLAY_REL
     if not path.is_file():
@@ -113,7 +128,10 @@ def _read_repo_overlay(root: Path) -> str:
 
 
 def _prompt_options(root: Path) -> tuple[bool, str]:
-    target = Path(root).resolve()
+    try:
+        target = resolve_bug_hunt_root(root)
+    except BugHuntError:
+        target = Path(root).resolve()
     return (target / DUAL_LANE_REL).is_file(), _read_repo_overlay(target)
 
 
@@ -215,7 +233,10 @@ def _write_if_needed(path: Path, content: str, *, force: bool) -> bool:
 
 def missing_bug_hunt_artifacts(root: Path) -> list[str]:
     """Relative paths that must exist after a successful install."""
-    target = Path(root).resolve()
+    try:
+        target = resolve_bug_hunt_root(root)
+    except BugHuntError:
+        target = Path(root).resolve()
     missing: list[str] = []
     for rel in (COMMAND_REL, RULE_REL, PACKET_REL, SCRIPTS_REL):
         if not (target / rel).is_file():
@@ -230,16 +251,7 @@ def install_bug_hunt(
     force: bool = True,
 ) -> BugHuntInstall:
     count = validate_iterations(iterations)
-    target = Path(root).resolve()
-    if target.is_file() and target.suffix.lower() == ".code-workspace":
-        from hive_planner.launcher.service import resolve_linked_project_root
-
-        folder = resolve_linked_project_root(target)
-        if folder is None:
-            raise BugHuntError(f"workspace has no folder on disk: {target}")
-        target = folder
-    if not target.is_dir():
-        raise BugHuntError(f"repo root is not a directory: {target}")
+    target = resolve_bug_hunt_root(root)
 
     dual_lane, overlay = _prompt_options(target)
     prompt = render_agent_prompt(count, dual_lane=dual_lane, overlay=overlay)

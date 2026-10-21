@@ -1080,7 +1080,7 @@ def main(argv: list[str] | None = None) -> int:
         except BugHuntError as exc:
             print(f"Error: {exc}", file=sys.stderr)
             return 1
-        missing = missing_bug_hunt_artifacts(root)
+        missing = missing_bug_hunt_artifacts(installed.root)
         if missing:
             print(
                 "Error: Bug-hunt install incomplete — missing: " + ", ".join(missing),

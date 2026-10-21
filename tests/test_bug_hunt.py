@@ -155,7 +155,11 @@ def test_install_resolves_code_workspace_to_folder(tmp_path: Path) -> None:
     result = install_bug_hunt(workspace, iterations=3)
     assert result.root == folder.resolve()
     assert (folder / ".cursor" / "commands" / "bug-hunt.md").is_file()
-    assert missing_bug_hunt_artifacts(folder) == []
+    assert missing_bug_hunt_artifacts(workspace) == []
+    overlay = folder / ".hive" / "bug-hunt" / "repo-overlay.md"
+    overlay.parent.mkdir(parents=True, exist_ok=True)
+    overlay.write_text("workspace-overlay-token\n", encoding="utf-8")
+    assert "workspace-overlay-token" in preview_agent_prompt(workspace, 3)
 
 
 def test_iterations_out_of_range(tmp_path: Path) -> None:
@@ -210,6 +214,24 @@ def test_preview_and_install_accept_str_root(tmp_path: Path) -> None:
     result = install_bug_hunt(str(tmp_path), iterations=7)
     assert result.command_path.is_file()
     assert missing_bug_hunt_artifacts(str(tmp_path)) == []
+
+
+def test_cli_installs_into_workspace_folder(tmp_path: Path) -> None:
+    import json
+
+    folder = tmp_path / "app"
+    folder.mkdir()
+    (folder / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    workspace = tmp_path / "hive.code-workspace"
+    workspace.write_text(json.dumps({"folders": [{"path": "app"}]}), encoding="utf-8")
+    stdout = io.StringIO()
+    with redirect_stdout(stdout):
+        code = main(["--root", str(workspace), "bug-hunt", "--iterations", "5"])
+    assert code == 0
+    assert (folder / ".cursor" / "commands" / "bug-hunt.md").is_file()
+    assert "5-iteration" in (folder / ".cursor" / "commands" / "bug-hunt.md").read_text(
+        encoding="utf-8"
+    )
 
 
 def test_cli_installs_into_root(tmp_path: Path) -> None:
