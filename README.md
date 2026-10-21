@@ -1,4 +1,4 @@
-# HIVE — Hierarchical Inference Versatile Engine Code Planner
+# HIVE — ( Hierarchical, Inference, Versatile Engine ) Code Planner
 
 Prompting alone does not give an agentic coding agent enough context for successful deployment in the software development process. Spec-Driven Development closes the gap by providing a reviewable baseline before an agent begins to code. HIVE Code Planner ( Hierarchical, Inference, Versatile, Engine )
 provides the next steps by giving users the ability to effectively ideate and cross correlate source documents in software development process. 
