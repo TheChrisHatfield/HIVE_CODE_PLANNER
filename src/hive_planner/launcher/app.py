@@ -2689,13 +2689,13 @@ class HivePlannerApp:
         self._refresh_home_dashboard()
 
     def _on_bug_hunt_install(self) -> None:
-        root = self._active_linked_root()
-        if not root:
+        if not self.config.active_project:
             messagebox.showwarning("No project", "Link a workspace first.")
             return
+        link = Path(self.config.active_project)
         self._start_home_action("Installing bug-hunt chat trigger…")
         self._run_bg(
-            lambda r=root: run_project_bug_hunt_install(r),
+            lambda r=link: run_project_bug_hunt_install(r),
             self._project_done_callback("Bug-hunt install", self._bug_hunt_install_done),
         )
 

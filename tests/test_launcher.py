@@ -1360,6 +1360,59 @@ def test_bug_hunt_install_done_logs_chat_trigger() -> None:
     assert any("bug hunt" in line for line in lines)
 
 
+def test_on_bug_hunt_install_sends_workspace_link_to_service(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    workspace = tmp_path / "dead.code-workspace"
+    workspace.write_text('{"folders":[{"path":"missing"}]}', encoding="utf-8")
+    shown: list[tuple] = []
+    sent: list[Path] = []
+    monkeypatch.setattr(
+        "hive_planner.launcher.app.messagebox.showwarning",
+        lambda *a, **k: shown.append(a),
+    )
+    monkeypatch.setattr(
+        "hive_planner.launcher.app.run_project_bug_hunt_install",
+        lambda root, **k: sent.append(Path(root)) or {"ok": False, "error": "Workspace file has no folder on disk"},
+    )
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.config = LauncherConfig(active_project=str(workspace))
+    started: list[str] = []
+    app._start_home_action = lambda msg: started.append(str(msg))  # type: ignore[method-assign]
+    app._run_bg = lambda fn, cb: cb(fn())  # type: ignore[method-assign]
+    app._project_done_callback = lambda _label, on_done: on_done  # type: ignore[method-assign]
+    lines: list[str] = []
+    app._queue_home_log = lambda msg: lines.append(str(msg))  # type: ignore[method-assign]
+    app._refresh_home_dashboard = lambda **_k: None  # type: ignore[method-assign]
+    app._on_bug_hunt_install()
+    assert shown == []
+    assert started
+    assert sent == [workspace]
+    assert any("folder" in line.lower() for line in lines)
+    assert not any("Bug hunt enabled" in line for line in lines)
+
+
+def test_on_bug_hunt_install_warns_when_no_project(monkeypatch: pytest.MonkeyPatch) -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    shown: list[tuple] = []
+    monkeypatch.setattr(
+        "hive_planner.launcher.app.messagebox.showwarning",
+        lambda *a, **k: shown.append(a),
+    )
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.config = LauncherConfig(active_project="")
+    started: list[str] = []
+    app._start_home_action = lambda msg: started.append(str(msg))  # type: ignore[method-assign]
+    app._run_bg = lambda *_a, **_k: started.append("bg")  # type: ignore[method-assign]
+    app._on_bug_hunt_install()
+    assert started == []
+    assert shown
+    assert "Link a workspace first" in shown[0][1]
+
+
 def test_run_deploy_agent_handoff_headless_skips_cursor_plugin(tmp_path: Path) -> None:
     from hive_planner.cl_runtime import CL_RUNTIME_HEADLESS, HEADLESS_CL_WORKFLOW_REL
     from hive_planner.vendor_sync import CL_OVERLAY_REL
