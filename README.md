@@ -1,7 +1,7 @@
 # Hive Code Planner
 
 Prompting alone does not give an agentic coding agent enough context for successful deployment in the software development process. Spec-Driven Development closes the gap by providing a reviewable baseline before an agent begins to code. HIVE Code Planner ( Hierarchical, Inference, Versatile, Engine )
-provides the next steps in Spec development by giving user the ability to effectively ideate and cross correlate sources documents in development process. 
+provides the next steps by giving users the ability to effectively ideate and cross correlate source documents in software development process. 
 
 Specification still depends on the context the agent has when it writes. Hive Code Planner supplies the context with three input feeds.
 
@@ -16,12 +16,6 @@ The system passes the context to Spec Kit. Spec Kit writes the specification, th
 Full walkthrough: **[`scripts/README.md`](scripts/README.md)** (same guide appears on the **Home** tab inside the app).
 
 Quick launch: double-click `scripts\HivePlanner.lnk`, or run the portable build from `dist\HivePlannerPortable\HivePlanner.exe`.
-
-## Repository root
-
-```
-d:\DRIVE_DOWNLOADS\HIVE_CODE_PLANNER
-```
 
 ## Agent startup
 
@@ -65,19 +59,4 @@ See [docs/delta/STAGE_ROADMAP.md](docs/delta/STAGE_ROADMAP.md).
 | `src/` | Source code and scripts |
 | `.cursor/` | Cursor IDE rules and project guidance |
 
-## GitHub
 
-Remote: https://github.com/TheChrisHatfield/HIVE_CODE_PLANNER
-
-```powershell
-cd d:\DRIVE_DOWNLOADS\HIVE_CODE_PLANNER
-git status
-git add .
-git commit -m "Describe your change"
-git push
-```
-
-## Notes
-
-- Treat this folder as the canonical project root.
-- Do not scatter project files outside this directory unless explicitly required.
