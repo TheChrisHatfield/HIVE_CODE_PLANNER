@@ -232,6 +232,9 @@ def test_cli_installs_into_workspace_folder(tmp_path: Path) -> None:
     assert "5-iteration" in (folder / ".cursor" / "commands" / "bug-hunt.md").read_text(
         encoding="utf-8"
     )
+    out = stdout.getvalue()
+    assert str(folder.resolve()) in out
+    assert f"Root: {workspace}" not in out
 
 
 def test_cli_installs_into_root(tmp_path: Path) -> None:

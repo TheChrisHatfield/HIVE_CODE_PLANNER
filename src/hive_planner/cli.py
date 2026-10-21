@@ -1087,7 +1087,7 @@ def main(argv: list[str] | None = None) -> int:
                 file=sys.stderr,
             )
             return 1
-        print(f"Root: {root}")
+        print(f"Root: {installed.root}")
         print(json.dumps(installed.to_dict(), indent=2))
         return 0
 
