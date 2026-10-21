@@ -248,6 +248,25 @@ def test_cli_installs_into_workspace_folder(tmp_path: Path) -> None:
     assert f"Root: {workspace}" not in out
 
 
+def test_cli_reports_oserror_instead_of_traceback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def _boom(_root, **_kwargs):
+        raise OSError("Permission denied")
+
+    monkeypatch.setattr("hive_planner.bug_hunt.install_bug_hunt", _boom)
+    stderr = io.StringIO()
+    stdout = io.StringIO()
+    from contextlib import redirect_stderr
+
+    with redirect_stdout(stdout), redirect_stderr(stderr):
+        code = main(["--root", str(tmp_path), "bug-hunt"])
+    assert code == 1
+    assert "Permission denied" in stderr.getvalue()
+    assert "Traceback" not in stderr.getvalue()
+    assert "Traceback" not in stdout.getvalue()
+
+
 def test_cli_installs_into_root(tmp_path: Path) -> None:
     stdout = io.StringIO()
     with redirect_stdout(stdout):

@@ -1435,7 +1435,7 @@ def run_project_bug_hunt_install(
         return {"ok": False, "error": "Path is not a project directory"}
     try:
         installed = install_bug_hunt(target, iterations=iterations, force=True)
-    except BugHuntError as exc:
+    except (BugHuntError, OSError) as exc:
         return {"ok": False, "error": str(exc)}
     payload = installed.to_dict()
     missing = missing_bug_hunt_artifacts(target)

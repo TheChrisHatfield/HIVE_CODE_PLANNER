@@ -1077,7 +1077,7 @@ def main(argv: list[str] | None = None) -> int:
                 print(preview_agent_prompt(root, args.iterations), end="")
                 return 0
             installed = install_bug_hunt(root, iterations=args.iterations)
-        except BugHuntError as exc:
+        except (BugHuntError, OSError) as exc:
             print(f"Error: {exc}", file=sys.stderr)
             return 1
         missing = missing_bug_hunt_artifacts(installed.root)

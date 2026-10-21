@@ -1332,6 +1332,21 @@ def test_run_project_bug_hunt_install_fails_when_trigger_missing(
     assert "missing" in result.get("error", "").lower()
 
 
+def test_run_project_bug_hunt_install_reports_oserror(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project = tmp_path / "app"
+    project.mkdir()
+
+    def _boom(_root, **_kwargs):
+        raise OSError("Permission denied")
+
+    monkeypatch.setattr("hive_planner.bug_hunt.install_bug_hunt", _boom)
+    result = run_project_bug_hunt_install(project)
+    assert result["ok"] is False
+    assert "Permission denied" in result.get("error", "")
+
+
 def test_bug_hunt_install_done_does_not_claim_enabled_on_failure() -> None:
     from hive_planner.launcher.app import HivePlannerApp
 
