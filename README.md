@@ -23,28 +23,6 @@ Quick launch: double-click `scripts\HivePlanner.lnk`, or run the portable build 
 2. Load [`docs/planning-rosetta-stone.md`](docs/planning-rosetta-stone.md) — search **Planning Rosetta Stone** or hook `planning.rosetta`
 3. Read [`AGENTS.md`](AGENTS.md)
 
-## Active development
-
-**Feature:** `roadmap-complete-v4` — **v1.3.0 — Stage 9 complete (22/22)**
-
-| Stage | Hooks | Command |
-|-------|-------|---------|
-| 9B | `workflow.tools` | `py -3.11 -m hive_planner roadmap-status` |
-| 9A | `integration.unified_handoff` | `py -3.11 -m hive_planner init --agent-handoff unified --target <path>` |
-| 9A | `integration.unified_handoff` | `py -3.11 -m hive_planner unified-verify` |
-| 8B | `workflow.tools` | `py -3.11 -m hive_planner roadmap-status` |
-| 8A | `workflow.project_bootstrap` | `py -3.11 -m hive_planner init --profile full --git-init --target <path>` |
-| 7F | `workflow.tools` | `py -3.11 -m hive_planner ci-check` |
-| 7E | `workflow.project_bootstrap` | `py -3.11 -m hive_planner init --target <path> --name "My App"` |
-
-```powershell
-py -3.11 -m pytest -v
-py -3.11 -m hive_planner roadmap-status
-py -3.11 -m hive_planner ci-check
-```
-
-See [docs/delta/STAGE_ROADMAP.md](docs/delta/STAGE_ROADMAP.md).
-
 ## Layout
 
 | Path | Purpose |
