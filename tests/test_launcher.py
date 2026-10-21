@@ -93,6 +93,7 @@ from hive_planner.launcher.service import (
     resolve_cursor_cli_launch,
     probe_python_command,
     run_install,
+    run_project_bug_hunt_install,
     run_project_ci_check,
     run_project_init,
     run_project_map_sync,
@@ -1272,6 +1273,72 @@ def test_run_deploy_agent_handoff_ok_when_unified_complete(tmp_path: Path) -> No
     assert result.get("error") is None
     assert result.get("cl_runtime") == "cursor"
     assert (project / "spec-kit-agent-integration.md").is_file()
+    assert (project / ".cursor" / "commands" / "bug-hunt.md").is_file()
+    assert (project / ".cursor" / "rules" / "bug-hunt.mdc").is_file()
+
+
+def test_run_project_bug_hunt_install_writes_chat_trigger(tmp_path: Path) -> None:
+    project = tmp_path / "app"
+    project.mkdir()
+    result = run_project_bug_hunt_install(project, iterations=25)
+    assert result["ok"] is True
+    assert result["iterations"] == 25
+    rule = (project / ".cursor" / "rules" / "bug-hunt.mdc").read_text(encoding="utf-8")
+    assert "alwaysApply: true" in rule
+    assert "hunt for bugs" in rule
+    assert (project / ".cursor" / "commands" / "bug-hunt.md").is_file()
+
+
+def test_run_project_bug_hunt_install_fails_when_trigger_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from hive_planner import bug_hunt as bug_hunt_mod
+
+    project = tmp_path / "app"
+    project.mkdir()
+
+    def _install(root, iterations=50, *, force=True):
+        return bug_hunt_mod.BugHuntInstall(
+            root=root.resolve(),
+            iterations=iterations,
+            command_path=root / bug_hunt_mod.COMMAND_REL,
+            rule_path=root / bug_hunt_mod.RULE_REL,
+            packet_path=root / bug_hunt_mod.PACKET_REL,
+            files_written=[],
+        )
+
+    monkeypatch.setattr("hive_planner.bug_hunt.install_bug_hunt", _install)
+    result = run_project_bug_hunt_install(project)
+    assert result["ok"] is False
+    assert "missing" in result.get("error", "").lower()
+
+
+def test_bug_hunt_install_done_does_not_claim_enabled_on_failure() -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    lines: list[str] = []
+    app._queue_home_log = lambda msg: lines.append(str(msg))  # type: ignore[method-assign]
+    app._refresh_home_dashboard = lambda **_k: None  # type: ignore[method-assign]
+    app._bug_hunt_install_done({"ok": False, "error": "Bug-hunt install incomplete — missing: rule"})
+    assert lines and "missing" in lines[0].lower()
+    assert not any("Bug hunt enabled" in line for line in lines)
+
+
+def test_bug_hunt_install_done_logs_chat_trigger() -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    lines: list[str] = []
+    refreshed: list[bool] = []
+    app._queue_home_log = lambda msg: lines.append(str(msg))  # type: ignore[method-assign]
+    app._refresh_home_dashboard = lambda **_k: refreshed.append(True)  # type: ignore[method-assign]
+    app._bug_hunt_install_done(
+        {"ok": True, "files_written": ["a", "b"], "iterations": 50}
+    )
+    assert refreshed == [True]
+    assert any("Bug hunt enabled" in line for line in lines)
+    assert any("bug hunt" in line for line in lines)
 
 
 def test_run_deploy_agent_handoff_headless_skips_cursor_plugin(tmp_path: Path) -> None:

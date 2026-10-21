@@ -42,6 +42,7 @@ from hive_planner.launcher.service import (
     run_install,
     run_legacy_deployment_scan,
     run_cl_migrate,
+    run_project_bug_hunt_install,
     run_project_ci_check,
     run_project_init,
     run_project_map_sync,
@@ -916,6 +917,12 @@ class HivePlannerApp:
             "Deploy agent handoff",
             self._on_deploy_agent_handoff,
             tooltip="Copy planning and memory tools into your project so AI agents can follow your workflow.",
+        )
+        secondary_button(
+            actions,
+            "Enable bug hunt",
+            self._on_bug_hunt_install,
+            tooltip="Install the chat trigger so saying bug hunt (or a similar phrase) starts a find/fix/commit loop in Cursor.",
         )
         secondary_button(
             actions,
@@ -2679,6 +2686,30 @@ class HivePlannerApp:
             self._queue_home_log(f"Impact maps synced: {added} added, {updated} updated.")
         else:
             self._queue_home_log("Impact maps already up to date.")
+        self._refresh_home_dashboard()
+
+    def _on_bug_hunt_install(self) -> None:
+        root = self._active_linked_root()
+        if not root:
+            messagebox.showwarning("No project", "Link a workspace first.")
+            return
+        self._start_home_action("Installing bug-hunt chat trigger…")
+        self._run_bg(
+            lambda r=root: run_project_bug_hunt_install(r),
+            self._project_done_callback("Bug-hunt install", self._bug_hunt_install_done),
+        )
+
+    def _bug_hunt_install_done(self, result: dict) -> None:
+        if self._is_bg_error(result) or result.get("ok") is not True:
+            self._queue_home_log(self._result_detail(result))
+            self._refresh_home_dashboard()
+            return
+        count = len(result.get("files_written") or [])
+        iterations = result.get("iterations", 50)
+        self._queue_home_log(
+            f"Bug hunt enabled ({count} file(s), {iterations} iterations). "
+            "In any Cursor chat on this project, say bug hunt — or hunt for bugs / start a bug hunt."
+        )
         self._refresh_home_dashboard()
 
     def _on_deploy_agent_handoff(self) -> None:

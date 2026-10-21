@@ -1415,6 +1415,31 @@ def run_deploy_agent_handoff(
     return payload
 
 
+def run_project_bug_hunt_install(
+    project_root: Path,
+    *,
+    iterations: int = 50,
+) -> dict:
+    """Install the chat-triggered bug-hunt script into a linked project."""
+    from hive_planner.bug_hunt import BugHuntError, install_bug_hunt, missing_bug_hunt_artifacts
+
+    target = project_root.resolve()
+    if not target.is_dir():
+        return {"ok": False, "error": "Path does not exist"}
+    try:
+        installed = install_bug_hunt(target, iterations=iterations, force=True)
+    except BugHuntError as exc:
+        return {"ok": False, "error": str(exc)}
+    payload = installed.to_dict()
+    missing = missing_bug_hunt_artifacts(target)
+    if missing:
+        payload["ok"] = False
+        payload["error"] = "Bug-hunt install incomplete — missing: " + ", ".join(missing)
+        return payload
+    payload["ok"] = True
+    return payload
+
+
 def run_project_map_sync(project_root: Path, *, dry_run: bool = False) -> dict:
     target = project_root.resolve()
     summary = summarize_project(target)

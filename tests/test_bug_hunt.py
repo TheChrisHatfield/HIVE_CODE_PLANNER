@@ -10,6 +10,8 @@ from hive_planner.bug_hunt import (
     BugHuntError,
     install_bug_hunt,
     is_bug_hunt_request,
+    missing_bug_hunt_artifacts,
+    preview_agent_prompt,
     render_agent_prompt,
     render_cursor_rule,
 )
@@ -33,6 +35,8 @@ from hive_planner.cli import main
         "run some bug-hunting",
         "do bug hunts",
         "please hunt for any bugs",
+        "use this prompt to check you implenationtat of the bug hunt script",
+        "Execute a continuous 50-iteration bug-hunting and wiring verification loop",
     ],
 )
 def test_is_bug_hunt_request_starts_the_loop(text: str) -> None:
@@ -152,10 +156,10 @@ def test_cli_print_does_not_write(tmp_path: Path) -> None:
     assert not (tmp_path / ".cursor" / "commands" / "bug-hunt.md").exists()
 
 
-def test_cli_print_includes_root_overlay(tmp_path: Path) -> None:
+def test_cli_print_includes_repo_overlay(tmp_path: Path) -> None:
     overlay = tmp_path / ".hive" / "bug-hunt" / "repo-overlay.md"
     overlay.parent.mkdir(parents=True)
-    overlay.write_text("Run coco_bug_hunt_audit.py after each fix.\n", encoding="utf-8")
+    overlay.write_text("## This repo\n\nRun coco_bug_hunt_audit.py after each fix.\n", encoding="utf-8")
     stdout = io.StringIO()
     with redirect_stdout(stdout):
         code = main(["--root", str(tmp_path), "bug-hunt", "--print", "--iterations", "8"])
@@ -163,7 +167,21 @@ def test_cli_print_includes_root_overlay(tmp_path: Path) -> None:
     text = stdout.getvalue()
     assert "8-iteration" in text
     assert "coco_bug_hunt_audit.py" in text
+    assert preview_agent_prompt(tmp_path, 8).count("coco_bug_hunt_audit.py") == 1
     assert not (tmp_path / ".cursor" / "commands" / "bug-hunt.md").exists()
+
+
+def test_missing_bug_hunt_artifacts_lists_absent_files(tmp_path: Path) -> None:
+    assert missing_bug_hunt_artifacts(tmp_path) == [
+        ".cursor/commands/bug-hunt.md",
+        ".cursor/rules/bug-hunt.mdc",
+        ".hive/bug-hunt/AGENT_PROMPT.md",
+        "scripts/bug-hunt.md",
+    ]
+    install_bug_hunt(tmp_path, iterations=4)
+    assert missing_bug_hunt_artifacts(tmp_path) == []
+    (tmp_path / ".cursor" / "rules" / "bug-hunt.mdc").unlink()
+    assert missing_bug_hunt_artifacts(tmp_path) == [".cursor/rules/bug-hunt.mdc"]
 
 
 def test_cli_installs_into_root(tmp_path: Path) -> None:

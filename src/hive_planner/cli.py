@@ -1065,15 +1065,27 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "bug-hunt":
-        from hive_planner.bug_hunt import BugHuntError, install_bug_hunt, render_prompt_for_root
+        from hive_planner.bug_hunt import (
+            BugHuntError,
+            install_bug_hunt,
+            missing_bug_hunt_artifacts,
+            preview_agent_prompt,
+        )
 
         try:
             if args.print_only:
-                print(render_prompt_for_root(root, args.iterations), end="")
+                print(preview_agent_prompt(root, args.iterations), end="")
                 return 0
             installed = install_bug_hunt(root, iterations=args.iterations)
         except BugHuntError as exc:
             print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        missing = missing_bug_hunt_artifacts(root)
+        if missing:
+            print(
+                "Error: Bug-hunt install incomplete — missing: " + ", ".join(missing),
+                file=sys.stderr,
+            )
             return 1
         print(f"Root: {root}")
         print(json.dumps(installed.to_dict(), indent=2))

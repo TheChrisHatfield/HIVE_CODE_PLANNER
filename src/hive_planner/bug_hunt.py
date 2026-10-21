@@ -108,14 +108,18 @@ def _read_repo_overlay(root: Path) -> str:
     return f"\n{text}\n" if text else ""
 
 
-def render_prompt_for_root(root: Path, iterations: int = DEFAULT_ITERATIONS) -> str:
-    """Script text install would write for this root (dual-lane + overlay)."""
+def _prompt_options(root: Path) -> tuple[bool, str]:
     target = root.resolve()
-    return render_agent_prompt(
-        iterations,
-        dual_lane=(target / DUAL_LANE_REL).is_file(),
-        overlay=_read_repo_overlay(target),
-    )
+    return (target / DUAL_LANE_REL).is_file(), _read_repo_overlay(target)
+
+
+def preview_agent_prompt(root: Path, iterations: int = DEFAULT_ITERATIONS) -> str:
+    """Same script text install would write (overlay + dual-lane), without writing files."""
+    dual_lane, overlay = _prompt_options(root)
+    return render_agent_prompt(iterations, dual_lane=dual_lane, overlay=overlay)
+
+
+render_prompt_for_root = preview_agent_prompt
 
 
 def render_agent_prompt(
@@ -205,6 +209,16 @@ def _write_if_needed(path: Path, content: str, *, force: bool) -> bool:
     return True
 
 
+def missing_bug_hunt_artifacts(root: Path) -> list[str]:
+    """Relative paths that must exist after a successful install."""
+    target = root.resolve()
+    missing: list[str] = []
+    for rel in (COMMAND_REL, RULE_REL, PACKET_REL, SCRIPTS_REL):
+        if not (target / rel).is_file():
+            missing.append(rel.as_posix())
+    return missing
+
+
 def install_bug_hunt(
     root: Path,
     iterations: int = DEFAULT_ITERATIONS,
@@ -216,14 +230,15 @@ def install_bug_hunt(
     if not target.is_dir():
         raise BugHuntError(f"repo root is not a directory: {target}")
 
-    prompt = render_prompt_for_root(target, count)
+    dual_lane, overlay = _prompt_options(target)
+    prompt = render_agent_prompt(count, dual_lane=dual_lane, overlay=overlay)
     command_path = target / COMMAND_REL
     rule_path = target / RULE_REL
     packet_path = target / PACKET_REL
     scripts_path = target / SCRIPTS_REL
     written: list[str] = []
     pairs = (
-        (command_path, render_cursor_command(count, overlay=_read_repo_overlay(target), dual_lane=(target / DUAL_LANE_REL).is_file()), COMMAND_REL),
+        (command_path, render_cursor_command(count, dual_lane=dual_lane, overlay=overlay), COMMAND_REL),
         (rule_path, render_cursor_rule(), RULE_REL),
         (packet_path, prompt, PACKET_REL),
         (scripts_path, prompt, SCRIPTS_REL),
