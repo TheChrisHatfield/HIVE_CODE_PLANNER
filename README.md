@@ -10,7 +10,7 @@ The specification still depends on the context the agent has when it writes the 
 
 Hive Planner passes this context to Spec Kit. Spec Kit writes the specification, the plan, and the tasks. The coding agent implements the tasks.
 
-## Using the desktop app (plain-English guide)
+## Using the desktop app 
 
 Full walkthrough: **[`scripts/README.md`](scripts/README.md)** (same guide appears on the **Home** tab inside the app).
 
