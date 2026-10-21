@@ -1,14 +1,15 @@
 # Hive Code Planner
 
-A strict prompt does not give a coding agent enough information to build the correct software. GitHub Spec Kit closes that gap. Spec Kit turns the prompt into three artifacts: a specification, a technical plan, and a task list. The coding agent implements those artifacts.
+Prompting alone does not give an agentic coding agent enough context for successful deployment in the software development process. Spec-Driven Development closes the gap by providing a reviewable baseline before an agent begins to code. HIVE Code Planner ( Hierarchical, Inference, Versatile, Engine )
+provides the next steps in Spec development by giving user the ability to effectively ideate and cross correlate sources documents in development process. 
 
-The specification still depends on the context the agent has when it writes the specification. Hive Planner supplies that context. Three inputs feed the specification:
+Specification still depends on the context the agent has when it writes. Hive Code Planner supplies the context with three input feeds.
 
 - **Project memory.** Continual memory records how this project specifies and builds software. The agent reads that record when it writes the next specification.
-- **Source documents.** You can add text files and PDFs. Hive Planner indexes the text, runs optical character recognition (OCR) on scanned pages, and uses embedding search to return the passages that match the current question.
+- **Source documents.** You can add text files and PDFs. Hive Code Planner indexes the text, runs optical character recognition (OCR) on scanned pages, and uses embedding search to return the passages that match the current question.
 - **Long ideation.** You can develop an idea in another system. That text is often too long for an agent to load in one pass. The Rosetta Stone indexes the text by concept. The agent opens the section that matches the question. A search system does this job with embeddings. The Rosetta Stone does it with a structured index.
 
-Hive Planner passes this context to Spec Kit. Spec Kit writes the specification, the plan, and the tasks. The coding agent implements the tasks.
+The system passes the context to Spec Kit. Spec Kit writes the specification, the plan, and the tasks. The coding agent implements the tasks.
 
 ## Using the desktop app 
 
