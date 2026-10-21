@@ -75,6 +75,17 @@ def test_init_creates_detectable_repo_root(tmp_path: Path) -> None:
     assert result.project_name == "Demo Project"
     assert "START_HERE.md" in result.files_written
     assert ".hive/project.json" in result.files_written
+    assert (target / ".cursor" / "commands" / "bug-hunt.md").is_file()
+    assert (target / ".cursor" / "rules" / "bug-hunt.mdc").is_file()
+    assert "alwaysApply: true" in (target / ".cursor" / "rules" / "bug-hunt.mdc").read_text(
+        encoding="utf-8"
+    )
+    stale = target / ".cursor" / "rules" / "bug-hunt.mdc"
+    stale.write_text("stale trigger\n", encoding="utf-8")
+    init_project(source, target, force=False)
+    refreshed = stale.read_text(encoding="utf-8")
+    assert "stale trigger" not in refreshed
+    assert "Do not stop after one bug" in refreshed
     meta = json.loads((target / ".hive" / "project.json").read_text(encoding="utf-8"))
     assert meta["bootstrap_profile"] == "minimal"
     assert meta.get("agent_handoff_mode") == "unified"

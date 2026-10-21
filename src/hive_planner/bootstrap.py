@@ -148,6 +148,28 @@ def _copy_cursor_workspace_plugin_hooks(
         warnings.append("Missing hive_workspace_open.py — plugin may not load on Cursor 3.x")
 
 
+def _install_bug_hunt_artifacts(
+    target: Path,
+    *,
+    force: bool,
+    written: list[str],
+    warnings: list[str],
+) -> None:
+    """Install the chat-triggered bug-hunt command + always-on rule (core Hive feature)."""
+    from hive_planner.bug_hunt import BugHuntError, install_bug_hunt
+
+    try:
+        # Generated trigger files must refresh even when init/deploy force=False,
+        # or upgraded Hive Planner leaves a stale "one bug then wait" rule.
+        result = install_bug_hunt(target, force=True)
+    except BugHuntError as exc:
+        warnings.append(f"Bug-hunt install skipped: {exc}")
+        return
+    for rel in result.files_written:
+        if rel not in written:
+            written.append(rel)
+
+
 def _write_text(target: Path, rel: str, content: str, *, force: bool, written: list[str]) -> None:
     path = target / rel
     if path.exists() and not force:
@@ -889,6 +911,7 @@ def _write_bootstrap_tree(
         spec_kit=spec_kit,
         continual_learning=continual_learning,
     )
+    _install_bug_hunt_artifacts(target, force=force, written=written, warnings=warnings)
 
     if profile == "full":
         _write_full_profile(
@@ -1000,6 +1023,7 @@ def deploy_agent_handoff_scaffold(
         spec_kit=True,
         continual_learning=True,
     )
+    _install_bug_hunt_artifacts(target, force=force, written=written, warnings=warnings)
     from hive_planner.cartridge_promote import _append_tasks_wiring_audit_if_missing
 
     example_tasks = target / "docs" / "specs" / "example-feature" / "tasks.md"
