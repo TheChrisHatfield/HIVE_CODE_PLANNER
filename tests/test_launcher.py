@@ -1823,6 +1823,16 @@ def test_default_agent_prompt_templates_are_non_empty_and_unique() -> None:
         assert "@" in template.prompt or "HOOK" in template.prompt or "spec" in template.prompt.lower()
 
 
+def test_bug_hunt_prompt_template_keeps_the_loop_moving() -> None:
+    from hive_planner.launcher.agent_prompt_templates import get_agent_prompt_template
+
+    found = get_agent_prompt_template("change.bug_hunt")
+    assert found is not None
+    assert found.prompt.lstrip().startswith("bug hunt")
+    assert "without asking whether to continue" in found.prompt
+    assert "@.cursor/commands/bug-hunt.md" in found.prompt
+
+
 def test_get_agent_prompt_template_by_id() -> None:
     from hive_planner.launcher.agent_prompt_templates import get_agent_prompt_template
 
