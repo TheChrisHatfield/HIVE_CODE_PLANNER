@@ -37,6 +37,8 @@ from hive_planner.cli import main
         "please hunt for any bugs",
         "use this prompt to check you implenationtat of the bug hunt script",
         "Execute a continuous 50-iteration bug-hunting and wiring verification loop",
+        "hunt some bugs",
+        "please hunting for more bugs",
     ],
 )
 def test_is_bug_hunt_request_starts_the_loop(text: str) -> None:
