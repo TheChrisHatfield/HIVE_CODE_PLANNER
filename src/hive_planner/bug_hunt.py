@@ -42,6 +42,9 @@ TRIGGER_PHRASES = (
 _COMMAND_QUESTION = re.compile(
     r"(?i)^\s*(how\s+(do\s+i|does|to)|where\s+(is|does)|what\s+(is|does)|does)\b"
 )
+_DOCS_QUESTION = re.compile(
+    r"(?i)\b(?:how\s+(?:do\s+i|does|to)|where\s+(?:is|does)|what\s+(?:is|does))\b.{0,80}?\bbu[gn]g?"
+)
 _HUNT_BUGS = re.compile(
     r"(?i)\bhunt(?:ing)?(?:\s+(?:for|some|those|these|more|any|the))*\s+bugs?\b"
 )
@@ -99,7 +102,7 @@ def is_bug_hunt_request(text: str) -> bool:
     )
     if not has_signal:
         return False
-    if _COMMAND_QUESTION.search(raw):
+    if _COMMAND_QUESTION.search(raw) or _DOCS_QUESTION.search(raw):
         return False
     return True
 

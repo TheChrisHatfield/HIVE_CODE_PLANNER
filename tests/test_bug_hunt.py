@@ -56,6 +56,9 @@ def test_is_bug_hunt_request_starts_the_loop(text: str) -> None:
         "what is a bug hunt",
         "does bug hunt install files",
         "how do I install bug hunt",
+        "please tell me how does bug hunt work",
+        "how to run a bug hunt",
+        "Can you tell me where is the bug-hunt command",
     ],
 )
 def test_is_bug_hunt_request_rejects_docs_and_noise(text: str) -> None:
