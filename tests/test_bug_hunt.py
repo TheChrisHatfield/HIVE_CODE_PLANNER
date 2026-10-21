@@ -144,6 +144,20 @@ def test_install_appends_dual_lane_when_rule_present(tmp_path: Path) -> None:
     assert "bug-hunt-dual-lane.mdc" in command
 
 
+def test_install_resolves_code_workspace_to_folder(tmp_path: Path) -> None:
+    import json
+
+    folder = tmp_path / "app"
+    folder.mkdir()
+    (folder / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    workspace = tmp_path / "hive.code-workspace"
+    workspace.write_text(json.dumps({"folders": [{"path": "app"}]}), encoding="utf-8")
+    result = install_bug_hunt(workspace, iterations=3)
+    assert result.root == folder.resolve()
+    assert (folder / ".cursor" / "commands" / "bug-hunt.md").is_file()
+    assert missing_bug_hunt_artifacts(folder) == []
+
+
 def test_iterations_out_of_range(tmp_path: Path) -> None:
     with pytest.raises(BugHuntError):
         install_bug_hunt(tmp_path, iterations=0)

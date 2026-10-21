@@ -1424,8 +1424,15 @@ def run_project_bug_hunt_install(
     from hive_planner.bug_hunt import BugHuntError, install_bug_hunt, missing_bug_hunt_artifacts
 
     target = project_root.resolve()
-    if not target.is_dir():
+    if not target.exists():
         return {"ok": False, "error": "Path does not exist"}
+    if target.is_file() and target.suffix.lower() == ".code-workspace":
+        folder = resolve_linked_project_root(target)
+        if folder is None:
+            return {"ok": False, "error": "Workspace file has no folder on disk"}
+        target = folder
+    if not target.is_dir():
+        return {"ok": False, "error": "Path is not a project directory"}
     try:
         installed = install_bug_hunt(target, iterations=iterations, force=True)
     except BugHuntError as exc:

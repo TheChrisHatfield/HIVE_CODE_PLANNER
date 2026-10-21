@@ -1277,6 +1277,25 @@ def test_run_deploy_agent_handoff_ok_when_unified_complete(tmp_path: Path) -> No
     assert (project / ".cursor" / "rules" / "bug-hunt.mdc").is_file()
 
 
+def test_run_project_bug_hunt_install_resolves_workspace_file(tmp_path: Path) -> None:
+    folder = tmp_path / "app"
+    folder.mkdir()
+    (folder / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    workspace = tmp_path / "hive.code-workspace"
+    workspace.write_text(json.dumps({"folders": [{"path": "app"}]}), encoding="utf-8")
+    result = run_project_bug_hunt_install(workspace)
+    assert result["ok"] is True
+    assert (folder / ".cursor" / "rules" / "bug-hunt.mdc").is_file()
+
+
+def test_run_project_bug_hunt_install_rejects_plain_file(tmp_path: Path) -> None:
+    target = tmp_path / "notes.txt"
+    target.write_text("nope\n", encoding="utf-8")
+    result = run_project_bug_hunt_install(target)
+    assert result["ok"] is False
+    assert "not a project directory" in result.get("error", "")
+
+
 def test_run_project_bug_hunt_install_writes_chat_trigger(tmp_path: Path) -> None:
     project = tmp_path / "app"
     project.mkdir()

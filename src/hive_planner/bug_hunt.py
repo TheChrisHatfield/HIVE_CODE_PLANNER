@@ -231,6 +231,13 @@ def install_bug_hunt(
 ) -> BugHuntInstall:
     count = validate_iterations(iterations)
     target = Path(root).resolve()
+    if target.is_file() and target.suffix.lower() == ".code-workspace":
+        from hive_planner.launcher.service import resolve_linked_project_root
+
+        folder = resolve_linked_project_root(target)
+        if folder is None:
+            raise BugHuntError(f"workspace has no folder on disk: {target}")
+        target = folder
     if not target.is_dir():
         raise BugHuntError(f"repo root is not a directory: {target}")
 
