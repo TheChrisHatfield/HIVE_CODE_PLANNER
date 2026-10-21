@@ -451,6 +451,23 @@ def main(argv: list[str] | None = None) -> int:
         help="Pretty-print JSON",
     )
 
+    bug_hunt = sub.add_parser(
+        "bug-hunt",
+        help="Install the continuous bug-hunt agent script (hook: change.bugfix_mode)",
+    )
+    bug_hunt.add_argument(
+        "--iterations",
+        type=int,
+        default=50,
+        help="How many reviewed local commits the script aims for (1-200, default 50)",
+    )
+    bug_hunt.add_argument(
+        "--print",
+        dest="print_only",
+        action="store_true",
+        help="Print the script and do not write files",
+    )
+
     args = parser.parse_args(argv)
     root, auto_detected = resolve_root(args.root)
     paths = RepoPaths(root=root)
@@ -1045,6 +1062,21 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         print(f"Root: {root}")
         print(json.dumps(result.to_dict(), indent=2))
+        return 0
+
+    if args.command == "bug-hunt":
+        from hive_planner.bug_hunt import BugHuntError, install_bug_hunt, render_prompt_for_root
+
+        try:
+            if args.print_only:
+                print(render_prompt_for_root(root, args.iterations), end="")
+                return 0
+            installed = install_bug_hunt(root, iterations=args.iterations)
+        except BugHuntError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        print(f"Root: {root}")
+        print(json.dumps(installed.to_dict(), indent=2))
         return 0
 
     return 1

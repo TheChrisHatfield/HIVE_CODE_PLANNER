@@ -152,6 +152,20 @@ def test_cli_print_does_not_write(tmp_path: Path) -> None:
     assert not (tmp_path / ".cursor" / "commands" / "bug-hunt.md").exists()
 
 
+def test_cli_print_includes_root_overlay(tmp_path: Path) -> None:
+    overlay = tmp_path / ".hive" / "bug-hunt" / "repo-overlay.md"
+    overlay.parent.mkdir(parents=True)
+    overlay.write_text("Run coco_bug_hunt_audit.py after each fix.\n", encoding="utf-8")
+    stdout = io.StringIO()
+    with redirect_stdout(stdout):
+        code = main(["--root", str(tmp_path), "bug-hunt", "--print", "--iterations", "8"])
+    assert code == 0
+    text = stdout.getvalue()
+    assert "8-iteration" in text
+    assert "coco_bug_hunt_audit.py" in text
+    assert not (tmp_path / ".cursor" / "commands" / "bug-hunt.md").exists()
+
+
 def test_cli_installs_into_root(tmp_path: Path) -> None:
     stdout = io.StringIO()
     with redirect_stdout(stdout):

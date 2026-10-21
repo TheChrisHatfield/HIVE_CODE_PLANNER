@@ -108,6 +108,16 @@ def _read_repo_overlay(root: Path) -> str:
     return f"\n{text}\n" if text else ""
 
 
+def render_prompt_for_root(root: Path, iterations: int = DEFAULT_ITERATIONS) -> str:
+    """Script text install would write for this root (dual-lane + overlay)."""
+    target = root.resolve()
+    return render_agent_prompt(
+        iterations,
+        dual_lane=(target / DUAL_LANE_REL).is_file(),
+        overlay=_read_repo_overlay(target),
+    )
+
+
 def render_agent_prompt(
     iterations: int = DEFAULT_ITERATIONS,
     *,
@@ -206,16 +216,14 @@ def install_bug_hunt(
     if not target.is_dir():
         raise BugHuntError(f"repo root is not a directory: {target}")
 
-    dual_lane = (target / DUAL_LANE_REL).is_file()
-    overlay = _read_repo_overlay(target)
+    prompt = render_prompt_for_root(target, count)
     command_path = target / COMMAND_REL
     rule_path = target / RULE_REL
     packet_path = target / PACKET_REL
     scripts_path = target / SCRIPTS_REL
-    prompt = render_agent_prompt(count, dual_lane=dual_lane, overlay=overlay)
     written: list[str] = []
     pairs = (
-        (command_path, render_cursor_command(count, dual_lane=dual_lane, overlay=overlay), COMMAND_REL),
+        (command_path, render_cursor_command(count, overlay=_read_repo_overlay(target), dual_lane=(target / DUAL_LANE_REL).is_file()), COMMAND_REL),
         (rule_path, render_cursor_rule(), RULE_REL),
         (packet_path, prompt, PACKET_REL),
         (scripts_path, prompt, SCRIPTS_REL),
