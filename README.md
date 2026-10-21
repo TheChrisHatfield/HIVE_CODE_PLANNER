@@ -1,24 +1,14 @@
 # Hive Code Planner
 
-**Hive Code Planner is a local context compiler for AI coding agents** — not another chatbot wrapper.
+A strict prompt does not give a coding agent enough information to build the correct software. GitHub Spec Kit closes that gap. Spec Kit turns the prompt into three artifacts: a specification, a technical plan, and a task list. The coding agent implements those artifacts.
 
-Long planning threads (Perplexity, research chats, PDFs) are too noisy for Cursor to use directly. Agents lose the thread between mission, architecture, and the next file to edit. Hive turns that noise into **Git-native, reviewable structure** agents can load in one hop.
+The specification still depends on the context the agent has when it writes the specification. Hive Planner supplies that context. Three inputs feed the specification:
 
-## How Spec Kit, Continual Learning, and the Rosetta Stone work in harmony
+- **Project memory.** Continual memory records how this project specifies and builds software. The agent reads that record when it writes the next specification.
+- **Source documents.** You can add text files and PDFs. Hive Planner indexes the text, runs optical character recognition (OCR) on scanned pages, and uses embedding search to return the passages that match the current question.
+- **Long ideation.** You can develop an idea in another system. That text is often too long for an agent to load in one pass. The Rosetta Stone indexes the text by concept. The agent opens the section that matches the question. A search system does this job with embeddings. The Rosetta Stone does it with a structured index.
 
-New users should treat these three as **one system**, not three separate tools:
-
-| Piece | Role in Hive |
-|-------|----------------|
-| **Planning Rosetta Stone** | The **map**. Hook IDs (`planning.rosetta`, `spec.flow`, `memory.agents_md`, …) tell the agent *which* docs to open and in what order — so it doesn’t wander the repo. |
-| **Spec Kit** | The **behavioral truth**. Specs, plans, and tasks (`docs/specs/`) define *what the product must do* (APIs, acceptance criteria, requirements). |
-| **Continual Learning** | The **operational memory**. Recurring workspace facts land in `AGENTS.md` (commands, paths, conventions) — never product behavior. |
-
-**Harmony rule:** Rosetta navigates → Spec Kit decides behavior → Continual Learning remembers how *this* workspace runs. Hive’s wiring audits and `agents-propose` keep those lanes from mixing, so agents stay aligned instead of inventing process or burying requirements in chat memory.
-
-Supporting layers (Delta holistic/macro/micro + cartridge compile) feed that loop: research becomes reloadable context; Delta keeps mission → architecture → tasks traceable to code.
-
-It ships as a **desktop app + CLI** that scaffolds Cursor projects, opens them, runs health checks, and keeps planning files aligned with the code — all on your machine.
+Hive Planner passes this context to Spec Kit. Spec Kit writes the specification, the plan, and the tasks. The coding agent implements the tasks.
 
 ## Using the desktop app (plain-English guide)
 
