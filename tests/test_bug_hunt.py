@@ -29,6 +29,10 @@ from hive_planner.cli import main
         "/bug-hunt",
         "Can you bughunt the launcher?",
         "perform a bug hunt on Home",
+        "start bug hunting",
+        "run some bug-hunting",
+        "do bug hunts",
+        "please hunt for any bugs",
     ],
 )
 def test_is_bug_hunt_request_starts_the_loop(text: str) -> None:

@@ -33,13 +33,15 @@ TRIGGER_PHRASES = (
     "run a bug hunt",
     "start a bug hunt",
     "perform a bug hunt",
+    "bug hunting",
+    "bug hunts",
 )
 
 _COMMAND_QUESTION = re.compile(
     r"(?i)^\s*(how\s+(do\s+i|does|to)|where\s+(is|does)|what\s+(is|does)|does)\b"
 )
-_HUNT_BUGS = re.compile(r"(?i)\bhunt(?:ing)?\s+(?:for\s+)?bugs?\b")
-_BUG_HUNT = re.compile(r"(?i)\bbu[gn]g?\s*-?\s*hun[t]?\b")
+_HUNT_BUGS = re.compile(r"(?i)\bhunt(?:ing)?\s+(?:for\s+)?(?:any\s+|the\s+)?bugs?\b")
+_BUG_HUNT = re.compile(r"(?i)\bbu[gn]g?\s*-?\s*hun(?:t(?:s|ing)?)?\b")
 _SLASH = re.compile(r"(?i)(?:^|\s)/bug-?hunt\b")
 _COMPOUND = re.compile(r"(?i)\bbughunt\b")
 
