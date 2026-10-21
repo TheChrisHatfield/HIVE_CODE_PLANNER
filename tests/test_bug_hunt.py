@@ -123,6 +123,17 @@ def test_install_appends_repo_overlay(tmp_path: Path) -> None:
     assert again.count("coco_bug_hunt_audit.py") == 1
 
 
+def test_install_skips_unreadable_overlay(tmp_path: Path) -> None:
+    overlay = tmp_path / ".hive" / "bug-hunt" / "repo-overlay.md"
+    overlay.parent.mkdir(parents=True)
+    overlay.write_bytes(b"\xff\xfe\x00\x00")
+    result = install_bug_hunt(tmp_path, iterations=4)
+    command = (tmp_path / ".cursor" / "commands" / "bug-hunt.md").read_text(encoding="utf-8")
+    assert "4-iteration" in command
+    assert result.command_path.is_file()
+    assert preview_agent_prompt(tmp_path, 4).count("4-iteration") == 1
+
+
 def test_install_skips_existing_when_not_forced(tmp_path: Path) -> None:
     first = install_bug_hunt(tmp_path, iterations=10)
     assert first.files_written

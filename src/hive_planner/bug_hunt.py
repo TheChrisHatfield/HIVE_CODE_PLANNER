@@ -123,7 +123,10 @@ def _read_repo_overlay(root: Path) -> str:
     path = Path(root) / OVERLAY_REL
     if not path.is_file():
         return ""
-    text = path.read_text(encoding="utf-8").strip()
+    try:
+        text = path.read_text(encoding="utf-8").strip()
+    except (OSError, UnicodeDecodeError):
+        return ""
     return f"\n{text}\n" if text else ""
 
 
