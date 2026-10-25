@@ -4,6 +4,19 @@
 **Status:** active  
 **Delta:** [roadmap-complete-v4.md](../../delta/20_micro/roadmap-complete-v4.md)
 
+<!-- ROSETTA-NAV -->
+
+## Agent navigation (Rosetta Stone)
+
+Before implementing, load the hook map — do not jump straight into requirements.
+
+1. [`docs/planning-rosetta-stone.md`](../../planning-rosetta-stone.md) — hook `planning.rosetta`
+2. Follow **UNLOCKS**: `context.delta` → [`00_holistic.md`](../../delta/00_holistic.md), [`10_macro.md`](../../delta/10_macro.md)
+3. This feature — hook `spec.flow`:
+   - Delta micro: [`roadmap-complete-v4.md`](../../delta/20_micro/roadmap-complete-v4.md)
+   - Plan: [`plan.md`](./plan.md)
+   - Tasks: [`tasks.md`](./tasks.md)
+
 ## What
 
 Close Stage 9 by extending roadmap validation to unified-handoff-v2 and marking the extended roadmap complete at v1.3.0.

@@ -1,28 +1,25 @@
-<!-- AUTO-SYNC: from docs/delta/20_micro/cartridge-pack-v1.md -->
+<!-- AUTO-SYNC: from docs/delta/20_micro/shared-graph-memory-v1.md -->
 
 # Research Summary
 
-**Feature:** `cartridge-pack-v1`
+**Feature:** `shared-graph-memory-v1`
 
 ## Problem statement
 
-Extend `emit` to produce remaining cartridge schema files alongside delta sync and source-context.
+Add a local shared-memory graph substrate: typed nodes and edges in staging and permanent JSONL stores, with CLI offload and rule-based promotion (no neural controller).
 
 ## Key findings
 
-Fulfills cartridge schema required files beyond delta sync (Stage 5A).
+See Delta holistic context.
 
 ## Constraints
 
 | In scope | Out of scope |
 |----------|--------------|
-| `research-summary.md` from micro/spec | LLM summarization |
-| `memory.md` from AGENTS durable facts | Auto-write AGENTS.md |
-| `specs/<feature>.specseed.md` from spec | Reverse Delta promotion |
-| `mappings/source-map.json` | Translator rewrite |
-| Manifest `files` + `pack_sync` stats | Cloud hosting |
-
-**Files:** `src/hive_planner/cartridge_pack.py`, `emitter.py`, `tests/test_cartridge_pack.py`
+| Typed node/edge schema (JSONL) | MLP-hybrid neural controller |
+| `.hive/shared-memory/staging/` + `permanent/` | SurrealDB / Arango / cloud graph DB |
+| `graph offload` / `promote` / `status` / `export` | Cross-machine multi-root sync |
+| Rule-based promote (dedupe, endpoint check) | Vendor latent embeddings |
 
 ## Risks
 
@@ -31,6 +28,6 @@ Fulfills cartridge schema required files beyond delta sync (Stage 5A).
 ## Open questions
 
 ```powershell
-py -3.11 -m hive_planner emit --feature cartridge-pack-v1 --force-delta
-py -3.11 -m pytest tests/test_cartridge_pack.py -v
+py -3.11 -m pytest tests/test_graph_store.py -q
+py -3.11 -m hive_planner graph status
 ```

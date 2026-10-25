@@ -2,6 +2,16 @@
 
 **Hook:** `context.delta` | **Feature:** repo-wide
 
+<!-- ROSETTA-NAV -->
+
+## Agent navigation (Rosetta Stone)
+
+Load [`docs/planning-rosetta-stone.md`](../../planning-rosetta-stone.md) (`planning.rosetta`) before using this Delta layer.
+
+- **Hook:** `context.delta`
+- **Unlocks:** macro / micro / spec alignment
+- **Next:** [`10_macro.md`](../10_macro.md)
+
 ## Mission
 
 Hive Code Planner is a local, Git-native system that turns upstream planning research into structured, agent-readable context so coding agents can implement with less drift.

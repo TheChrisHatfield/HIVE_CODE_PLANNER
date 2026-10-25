@@ -1,6 +1,7 @@
 {
   "schema_version": "source-map.v1",
-  "feature": "cartridge-pack-v1",
+  "feature": "shared-graph-memory-v1",
+  "_auto_sync": true,
   "mappings": [
     {
       "cartridge": "cartridge/holistic.md",
@@ -13,19 +14,24 @@
       "layer": "macro"
     },
     {
-      "cartridge": "cartridge/micro/cartridge-pack-v1.md",
-      "delta": "docs/delta/20_micro/cartridge-pack-v1.md",
+      "cartridge": "cartridge/micro/shared-graph-memory-v1.md",
+      "delta": "docs/delta/20_micro/shared-graph-memory-v1.md",
       "layer": "micro"
     },
     {
-      "cartridge": "cartridge/specs/cartridge-pack-v1.specseed.md",
-      "delta": "docs/specs/cartridge-pack-v1/spec.md",
+      "cartridge": "cartridge/specs/shared-graph-memory-v1.specseed.md",
+      "delta": "docs/specs/shared-graph-memory-v1/spec.md",
       "layer": "spec_seed"
     },
     {
       "cartridge": "cartridge/memory.md",
       "delta": "AGENTS.md",
       "layer": "memory"
+    },
+    {
+      "cartridge": "cartridge/rules/shared-graph-memory-v1.mdc.seed",
+      "delta": "docs/delta/20_micro/shared-graph-memory-v1.md",
+      "layer": "cursor_rule_seed"
     },
     {
       "cartridge": "cartridge/source-context.md",

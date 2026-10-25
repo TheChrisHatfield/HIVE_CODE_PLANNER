@@ -170,6 +170,27 @@ def _install_bug_hunt_artifacts(
             written.append(rel)
 
 
+def _install_implementation_loop_artifacts(
+    target: Path,
+    pack: str,
+    *,
+    force: bool,
+    written: list[str],
+    warnings: list[str],
+) -> None:
+    """Install the post-spec coding loop when an explicit pack is given."""
+    from hive_planner.implementation_loop import install_implementation_loop
+
+    try:
+        files = install_implementation_loop(target, pack, force_pack=force)
+    except (ValueError, OSError) as exc:
+        warnings.append(f"Implementation-loop install skipped: {exc}")
+        return
+    for rel in files:
+        if rel not in written:
+            written.append(rel)
+
+
 def _write_text(target: Path, rel: str, content: str, *, force: bool, written: list[str]) -> None:
     path = target / rel
     if path.exists() and not force:
@@ -754,6 +775,7 @@ def init_project(
     spec_kit: bool | None = None,
     continual_learning: bool | None = None,
     cl_runtime: str | None = None,
+    implementation_loop_pack: str | None = None,
 ) -> BootstrapResult:
     from hive_planner.agent_handoff import AGENT_HANDOFF_OFF, AGENT_HANDOFF_UNIFIED, integrations_from_mode, normalize_agent_handoff_mode
     from hive_planner.cl_runtime import CL_RUNTIME_CURSOR, normalize_cl_runtime
@@ -805,6 +827,7 @@ def init_project(
             spec_kit=spec_kit_enabled,
             continual_learning=continual_learning_enabled,
             cl_runtime=resolved_cl_runtime,
+            implementation_loop_pack=implementation_loop_pack,
         )
     except OSError as exc:
         raise BootstrapError(f"Failed to write bootstrap files: {exc}") from exc
@@ -838,6 +861,7 @@ def _write_bootstrap_tree(
     spec_kit: bool,
     continual_learning: bool,
     cl_runtime: str = "cursor",
+    implementation_loop_pack: str | None = None,
 ) -> None:
     from hive_planner.cl_runtime import CL_RUNTIME_CURSOR, normalize_cl_runtime
     from hive_planner.vendor_sync import deploy_unified_vendor_artifacts
@@ -912,6 +936,8 @@ def _write_bootstrap_tree(
         continual_learning=continual_learning,
     )
     _install_bug_hunt_artifacts(target, force=force, written=written, warnings=warnings)
+    if implementation_loop_pack is not None:
+        _install_implementation_loop_artifacts(target, implementation_loop_pack, force=force, written=written, warnings=warnings)
 
     if profile == "full":
         _write_full_profile(

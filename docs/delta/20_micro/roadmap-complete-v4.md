@@ -2,6 +2,15 @@
 
 **Hook:** `workflow.tools`, `integration.unified_handoff`
 
+<!-- ROSETTA-NAV -->
+
+## Agent navigation (Rosetta Stone)
+
+Load [`docs/planning-rosetta-stone.md`](../../planning-rosetta-stone.md) (`planning.rosetta`) before coding from this brief.
+
+- **Hooks:** `context.delta`, `spec.flow`
+- **Spec Kit:** [`spec.md`](../../specs/roadmap-complete-v4/spec.md), [`plan.md`](../../specs/roadmap-complete-v4/plan.md), [`tasks.md`](../../specs/roadmap-complete-v4/tasks.md)
+
 ## Feature Name
 
 Roadmap Complete v4 — validate Stage 9 artifacts and mark extended roadmap done.

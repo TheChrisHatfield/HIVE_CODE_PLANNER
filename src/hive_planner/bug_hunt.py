@@ -20,6 +20,7 @@ OVERLAY_REL = Path(".hive") / "bug-hunt" / "repo-overlay.md"
 # Explicit phrases plus common typos (also listed in the always-on Cursor rule).
 TRIGGER_PHRASES = (
     "bug hunt",
+    "bu hunt",
     "bug hun",
     "bung hunt",
     "do a bug hunt",
@@ -48,7 +49,7 @@ _DOCS_QUESTION = re.compile(
 _HUNT_BUGS = re.compile(
     r"(?i)\bhunt(?:ing)?(?:\s+(?:for|some|those|these|more|any|the))*\s+bugs?\b"
 )
-_BUG_HUNT = re.compile(r"(?i)\bbu[gn]g?\s*-?\s*hun(?:t(?:s|ing)?)?\b")
+_BUG_HUNT = re.compile(r"(?i)\bbu(?:g|ng|n)?\s*-?\s*hun(?:t(?:s|ing)?)?\b")
 _SLASH = re.compile(r"(?i)(?:^|\s)/bug-?hunt\b")
 _COMPOUND = re.compile(r"(?i)\bbughunt\b")
 
@@ -164,11 +165,15 @@ You do not do one bug at a time and then wait. Pause only for that internal revi
 
 ## Each iteration
 
-1. Find one real functional or wiring bug: wrong result, a throw on a path the user can hit, a skipped link (UI or event never reaches the handler, or success is reported when a required step was skipped), or a dead setting. Skip style nits, drive-by refactors, and speculative guards that do not match a failure.
+1. Review one area for a bug you can fix this iteration. A bug qualifies when the code, given a concrete action and state, produces a wrong result.
+   - Confirmed: it fails on a path the user can hit now. Wrong result, a throw, a skipped link (UI or event never reaches the handler), success reported when a required step was skipped, or a dead setting.
+   - Potential: it has not failed in this session, but you can name the action, the state, and the wrong outcome, and that outcome follows from the code as written. Count these: two readers of the same fact disagree (a live value versus a cache, a remembered path versus the folder the other app polls); a first observation swallows a later event; success is returned before a required step; a value that must be per host, per project, or per file is shared; a stamp, flag, or fingerprint sticks and changes the next run.
+   Skip style nits, drive-by refactors, and a guard that does not change a result. "I did not reproduce it this session" is not a reason to skip a potential bug that meets that bar.
 2. Apply the smallest fix that closes that failure. Follow this repo's theme, connectivity, and validation rules when the change touches them.
-3. Self-review the patch before committing. The review passes only when all of these hold:
+3. Self-review the patch before committing. Stop on this step. Do not commit the first draft. Simulate the user-visible behavior this code already had, including behavior the patch was not meant to change. Walk the call chain from the action that used to work through every function the patch edits, using the same inputs that used to succeed. Example: creating extra command-strip tabs must still show the overflow slider; a follow-up layout pass must not hide it. The review fails if the patch removes, skips, caches off, or permanently replaces that behavior. The review passes only when all of these hold:
    - The change matches the failure you named.
-   - A test or contract covers the fix when this repo has a harness for that layer.
+   - The simulation shows the previous behavior still happens on the path that used to perform it.
+   - A test or contract covers the fix when this repo has a harness for that layer, and covers the behavior you had to keep.
    - Wiring audit: the chain from the user-visible action to the handler and the persisted or rendered result is actually called.
    - Only files for this fix are staged.
 4. Commit locally with a message that says why. Do not push, open a pull request, or upload to a remote.
@@ -176,7 +181,7 @@ You do not do one bug at a time and then wait. Pause only for that internal revi
 
 ## Stop
 
-Stop after {count} committed fixes, or after two consecutive areas with no real bug. That empty-area stop is the satisfactory quality level — report the commits, what each one fixed, and any area you searched that had no bug. Do not invent work to fill the budget. Do not push.
+Stop after {count} committed fixes, or after two consecutive areas that contain neither a confirmed bug nor a potential bug that meets the bar above. Report the commits, what each one fixed (confirmed or potential, and the scenario), and any area that had neither. Do not invent a scenario the code does not actually produce. Do not push.
 """
     extra = ""
     if dual_lane:

@@ -19,6 +19,7 @@ Daily use:
   Home → Agent prompt templates — copy-paste into Cursor chat
   Home → Rosetta cartridge eject — export contract for Gemini / Perplexity planning sessions
   Home → Run health check before handoff
+  Home → Enable bug hunt — then say "bug hunt" (or hunt for bugs) in any Cursor chat
   Home → Verify vendor pins / Scan legacy deployment (unified handoff)
   Home → Open in Cursor
 

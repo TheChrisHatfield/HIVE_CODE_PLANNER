@@ -60,119 +60,7 @@ Primary truth drives the immediate task. Secondary governs behavior. Tertiary is
 
 ## Active feature
 
-**roadmap-complete-v4** — Stage 9 complete (v1.3.0). Extended roadmap: 22/22 artifacts.
-
-```powershell
-py -3.11 -m hive_planner roadmap-status
-py -3.11 -m hive_planner ci-check
-py -3.11 -m hive_planner unified-verify
-```
-
-Unified handoff (Stage 9A):
-
-```powershell
-py -3.11 -m hive_planner init --target D:\projects\my-app --agent-handoff unified --name "My App"
-```
-
-Starter-kit v2 (Stage 8A):
-
-```powershell
-py -3.11 -m hive_planner init --target D:\projects\my-app --profile full --git-init --name "My App"
-py -3.11 -m pytest tests/test_bootstrap.py tests/test_security_validation.py -v
-```
-
-Project bootstrap minimal profile (Stage 7E):
-
-```powershell
-py -3.11 -m hive_planner init --target D:\projects\my-app --name "My App"
-```
-
-Change impact v3 / bugfix mode (Stage 7D):
-
-```powershell
-py -3.11 -m hive_planner impact --feature change-impact-v3 --mode bugfix --files src/hive_planner/impact.py
-py -3.11 -m hive_planner impact --feature change-impact-v3 --deep --files src/hive_planner/call_graph.py
-```
-
-Cartridge rule seeds (Stage 7C):
-
-```powershell
-py -3.11 -m hive_planner emit --feature cartridge-pack-v2 --emit-rules-seeds --force-delta
-```
-
-Roadmap validation (Stage 6B / 7F):
-
-```powershell
-py -3.11 -m hive_planner roadmap-status
-py -3.11 -m hive_planner ci-check
-```
-
-Cartridge pack emit (Stage 6A):
-
-```powershell
-py -3.11 -m hive_planner emit --feature cartridge-pack-v1 --force-delta
-```
-
-Handoff CI (Stage 5C):
-
-```powershell
-py -3.11 -m hive_planner impact-sync-maps
-py -3.11 -m hive_planner ci-check
-py -3.11 -m hive_planner ci-check --allow-map-drift
-```
-
-Impact map sync (Stage 5B):
-
-```powershell
-py -3.11 -m hive_planner impact-sync-maps --dry-run
-py -3.11 -m hive_planner impact-sync-maps
-```
-
-Delta cartridge sync (Stage 5A):
-
-```powershell
-py -3.11 -m hive_planner emit --feature cartridge-delta-emit-v1
-py -3.11 -m hive_planner emit --feature cartridge-delta-emit-v1 --force-delta
-```
-
-Hybrid retrieval (Stage 4D):
-
-```powershell
-py -3.11 -m hive_planner ingest --embed
-py -3.11 -m hive_planner emit --feature embedding-retrieval-v1
-```
-
-Memory CI (Stage 4C):
-
-```powershell
-py -3.11 -m hive_planner agents-lint
-py -3.11 -m hive_planner agents-propose --candidates docs/proposals/example-candidates.md
-py -3.11 -m hive_planner agents-apply --candidates docs/proposals/example-candidates.md
-py -3.11 -m hive_planner agents-ingest --from path/to/export.txt
-py -3.11 -m hive_planner spec-drift-check
-py -3.11 -m hive_planner spec-drift-check --candidates docs/proposals/candidates-template.md
-```
-
-Translator (Stage 4B):
-
-```powershell
-py -3.11 -m hive_planner translate --input docs/delta/20_micro/cartridge-compiler-v3.md --feature cartridge-translator-v1
-```
-
-Compiler (Stage 4A):
-
-```powershell
-py -3.11 -m pip install -e ".[dev,pdf,docx,html,pptx]"
-py -3.11 -m hive_planner ingest
-py -3.11 -m hive_planner emit --feature cartridge-compiler-v3
-```
-
-Change impact (Stage 3):
-
-```powershell
-py -3.11 -m hive_planner impact --feature change-impact-v1 --files src/hive_planner/impact.py
-```
-
+**roadmap-complete-v4** — unified Spec Kit + Continual Learning scaffold; replace when real work begins.
 ## Planning source archive
 
 Full thread export (reference only): `docs/HIVE_PLANNING_DEV.md`
@@ -192,3 +80,7 @@ Full thread export (reference only): `docs/HIVE_PLANNING_DEV.md`
 - `hive_planner init` must target a directory outside the Hive source tree (never a subdirectory of this repo). # operational
 - Bootstrapped projects use plain `None` for active feature until the first real feature id is set.
 - Starter-kit v2 (`--profile full`) adds pyproject, src/tests layout, `.gitignore`, and GitHub CI stub; `--git-init` is optional.
+- Cursor 3.x project/plugin hooks must emit JSON on stdout (`additional_context` / `followup_message` / `{}`); plain text causes parse errors. # operational
+- Hive Continual Learning stop hook runs via `py -3.11` (not Bun); `afterFileEdit` matchers use tool types (`Write|TabWrite`), not file paths. # operational
+- Cursor 3.x loads project plugins via `workspaceOpen` `pluginPaths` (see `.cursor/hooks/hive_workspace_open.py`); `.cursor/plugins/` alone is not auto-discovered. # operational
+- Bug hunts: `py -3.11 -m hive_planner bug-hunt` (also `init`, handoff deploy, and Home → Enable bug hunt) writes `.cursor/commands/bug-hunt.md`, the always-on rule `.cursor/rules/bug-hunt.mdc`, and `.hive/bug-hunt/AGENT_PROMPT.md` (default 50 iterations). Saying bug hunt — or a derivative such as hunt for bugs / start a bug hunt / bung hunt — in any project chat starts the loop. # operational

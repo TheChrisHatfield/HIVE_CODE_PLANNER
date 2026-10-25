@@ -1,0 +1,501 @@
+{
+  "pass": 90,
+  "log": [
+    "P1 seed 20 gaps from the spec text.",
+    "P2 R1/R2 confirmed G01, G04, G11, G12, G13. Bug-hunt's always-on rule is only a pointer to the command, so G15 is a missing binding, not a missing Cursor ability.",
+    "P3 R3: reviewer fail, result overwrite, and assumption marks confirmed.",
+    "P4 R4: behavior stop has no state transition.",
+    "P5 R5: dirty tree, commit paths, and missing PR confirmed.",
+    "P6 R6: complete-versus-blocked and test:full recovery confirmed.",
+    "P7 R7: log writer missing. Propose rejection and multi-spec lessons added as G25.",
+    "P8 R8/R9: phrase, feature pick, Home re-entry, and one running feature.",
+    "P9 tasks.md has no words for result log, complete status, subagent, or test:full recovery: G15, G16",
+    "P10 micro brief is a third ready list.",
+    "P11 macro early mention dropped to accepted risk G30.",
+    "P12 plan restates sticky commands and the AND default.",
+    "P13 result file learned as a list. 1-pack uses the same list.",
+    "P14 handoff fields and first-open-checkbox rule recorded as the missing contract.",
+    "P15 assumption marker is required for the slice pause to be testable.",
+    "P16 dirty-tree allowlist and commit path list learned together.",
+    "P17 complete is a ready end state, not a blocked one.",
+    "P18 reviewer fail returns to the coder. Sign-off pauses.",
+    "P19 1-pack file set narrowed to the coordinator.",
+    "P20 full-test failure blocks and keeps commits.",
+    "P21 Home re-entry matches the CLI reinstall rules.",
+    "P22 feature pick and a running feature are one rule.",
+    "P23 the coordinator writes the retrospective line at completion.",
+    "P24 OR versus AND resolved as per-command evidence.",
+    "P25 initial state and force-pack update are one install rule.",
+    "P26 subagent entry and the three gates each got one job.",
+    "P27 rejected a second checkbox syntax.",
+    "P28 phrase, behavior stop, and rejected memory bullets tightened.",
+    "P29 clustered the open gaps into readiness, pass protocol, git, and lifecycle.",
+    "P30 ranked 24 open gaps and recorded the learned fixes.",
+    "R2 start: the learned fixes are treated as the draft. Each pass probes them.",
+    "P31 readiness list fixed as one list.",
+    "P32 complete is a ready end state.",
+    "P33 command defaults resolved per command.",
+    "P34 result list covers both gates and the 1-pack.",
+    "P35 handoff and assumptions fixed. Clarification return left in G06.",
+    "P36 subagent entry point fixed.",
+    "P37 each gate has one job.",
+    "P38 commit paths fixed. New product files narrow G02.",
+    "P39 PR-less finish fixed.",
+    "P40 full-test failure blocks.",
+    "P41 proposal rejection fixed. Counting left in G05.",
+    "P42 Home re-entry, feature pick, and one running feature fixed.",
+    "P43 1-pack files and state.pack fixed.",
+    "P44 sticky empty commands fixed.",
+    "P45 behavior stop has a state.",
+    "P46 phrase risk narrowed to self-trigger.",
+    "P47 phrase risk closed as a non-gap.",
+    "P48 retrospective count is monotonic.",
+    "P49 G05 closed.",
+    "P50 new product files are expected dirt.",
+    "P51 G02 closed.",
+    "P52 new gap: task id fallback.",
+    "P53 G31 closed.",
+    "P54 new gap: when the result list resets.",
+    "P55 G32 closed.",
+    "P56 recount open gaps.",
+    "P57 rank remaining open gaps.",
+    "P58 list T002 blockers.",
+    "P59 patch order for the spec.",
+    "P60 close-out tally.",
+    "R3 start: only G06 open. Each pass probes the one open gap and re-checks a few resolved ones.",
+    "P61 G06 narrowed to the clarification return.",
+    "P62 clarification goes through the coordinator.",
+    "P63 re-handoff spends a round trip.",
+    "P64 G06 closed.",
+    "P65 recount open gaps.",
+    "P66 new gap: cap after a re-handoff.",
+    "P67 G33 closed.",
+    "P68 new gap: result entry fields.",
+    "P69 G34 closed.",
+    "P70 new gap: retrospective log header.",
+    "P71 G35 closed.",
+    "P72 new gap: slice heading edge case.",
+    "P73 G36 closed.",
+    "P74 new gap: commit slug for no-id tasks.",
+    "P75 G37 closed.",
+    "P76 new gap: push failure.",
+    "P77 G38 closed.",
+    "P78 new gap: Home install on trunk.",
+    "P79 G39 closed.",
+    "P80 new gap: result list reset across features.",
+    "P81 G40 closed.",
+    "P82 recount open gaps.",
+    "P83 rank remaining open gaps.",
+    "P84 list T002 blockers.",
+    "P85 patch order for the spec.",
+    "P86 close-out tally.",
+    "P87 record the clarification flow.",
+    "P88 record the result entry schema.",
+    "P89 record push failure behavior.",
+    "P90 final open list."
+  ],
+  "pause_sec": 10,
+  "method": "Each pass reads this file, checks one slice of the spec, then raises, merges, or drops gaps.",
+  "gaps": [
+    {
+      "id": "G01",
+      "title": "Three different ready definitions",
+      "confidence": 0.96,
+      "status": "resolved",
+      "blocks": "T002",
+      "note": "P31: one R1 list is now the fix. US1 and the micro brief are prose, not the gate."
+    },
+    {
+      "id": "G02",
+      "title": "Dirty tree includes the loop's own files",
+      "confidence": 0.25,
+      "status": "resolved",
+      "blocks": "T006",
+      "note": "P51: unrelated dirty paths at loop start block. Paths the loop touched are expected and stay unstaged until commit."
+    },
+    {
+      "id": "G03",
+      "title": "build, test:quick, and wiring audit have no single job",
+      "confidence": 0.92,
+      "status": "resolved",
+      "blocks": "T002",
+      "note": "P37: build runs before the coder returns. The checker runs test:quick, then the wiring audit as its own checklist. test:full runs at slice end."
+    },
+    {
+      "id": "G04",
+      "title": "force-pack leaves state.pack stale",
+      "confidence": 0.93,
+      "status": "resolved",
+      "blocks": "T004",
+      "note": "P43: install writes pack, status idle, round_trips 0, and push. force-pack updates state.pack."
+    },
+    {
+      "id": "G05",
+      "title": "Nobody writes the retrospective completed=N line",
+      "confidence": 0.3,
+      "status": "resolved",
+      "blocks": "T010",
+      "note": "P49: monotonic count from the log lines is enough. The retrospective reads commits since the last line."
+    },
+    {
+      "id": "G06",
+      "title": "Reviewer fail has no return path",
+      "confidence": 0.45,
+      "status": "resolved",
+      "blocks": "T006",
+      "note": "P64: role fail with a question -> coordinator asks human -> same-role re-handoff as one round trip. needs-sign-off still pauses without a re-handoff."
+    },
+    {
+      "id": "G07",
+      "title": "1-pack has no result.md writer",
+      "confidence": 0.9,
+      "status": "resolved",
+      "blocks": "T009",
+      "note": "P34: the 1-pack coordinator appends its own check and review entries."
+    },
+    {
+      "id": "G08",
+      "title": "Next task and handoff fields are undefined",
+      "confidence": 0.9,
+      "status": "resolved",
+      "blocks": "T006",
+      "note": "P35: handoff names feature, task, role, root, and the three spec paths. The task is the first open checkbox."
+    },
+    {
+      "id": "G09",
+      "title": "Finished loop asks for a pull request that may not exist",
+      "confidence": 0.9,
+      "status": "resolved",
+      "blocks": "T007",
+      "note": "P39: the ending step asks for pull-request approval only when pr_url is set. A local-only finish asks for local merge approval."
+    },
+    {
+      "id": "G10",
+      "title": "One result.md cannot store both gates",
+      "confidence": 0.97,
+      "status": "resolved",
+      "blocks": "T006",
+      "note": "P34: result.md is a list of role outcomes for the current task. A later pass appends. It does not overwrite."
+    },
+    {
+      "id": "G11",
+      "title": "No open tasks is both success and a blocked status",
+      "confidence": 0.97,
+      "status": "resolved",
+      "blocks": "T002",
+      "note": "P32: exit 0 status complete when every box is checked and R1 inputs exist. Exit 2 stays for missing inputs or trunk."
+    },
+    {
+      "id": "G12",
+      "title": "Empty commands.json is sticky and initial state has no schema",
+      "confidence": 0.96,
+      "status": "resolved",
+      "blocks": "T004",
+      "note": "P44: reinstall fills only empty command strings. It never clears a value."
+    },
+    {
+      "id": "G13",
+      "title": "Hive command defaults use OR in the spec and AND in the plan",
+      "confidence": 0.97,
+      "status": "resolved",
+      "blocks": "T002",
+      "note": "P33: per-command evidence. test:quick only from pytest evidence. test:full only from ci-check. No cross-fill."
+    },
+    {
+      "id": "G14",
+      "title": "1-pack install file set is ambiguous",
+      "confidence": 0.88,
+      "status": "resolved",
+      "blocks": "T009",
+      "note": "P43: 1-pack writes coordinator.md only, plus retrospective, NOTICE, commands, state, and log."
+    },
+    {
+      "id": "G15",
+      "title": "No Cursor entry point for a role pass",
+      "confidence": 0.9,
+      "status": "resolved",
+      "blocks": "T006",
+      "note": "P36: the always-on rule only points at the command, matching bug hunt. The command starts each 4-pack role as its own subagent."
+    },
+    {
+      "id": "G16",
+      "title": "test:full failure has no recovery",
+      "confidence": 0.86,
+      "status": "resolved",
+      "blocks": "T007",
+      "note": "P40: a test:full failure sets status blocked, keeps the commits, and adds no task."
+    },
+    {
+      "id": "G17",
+      "title": "Home does not say what a second enable does",
+      "confidence": 0.84,
+      "status": "resolved",
+      "blocks": "T014",
+      "note": "P42: Home on the same pack refreshes prompts. A different pack asks for force. Cancel writes nothing."
+    },
+    {
+      "id": "G18",
+      "title": "Chat text does not define how a feature id is chosen",
+      "confidence": 0.88,
+      "status": "resolved",
+      "blocks": "T012",
+      "note": "P42: a feature id in the message wins. Else the only spec with an open box. Else ask."
+    },
+    {
+      "id": "G19",
+      "title": "state.json holds one feature and a second start is undefined",
+      "confidence": 0.88,
+      "status": "resolved",
+      "blocks": "T007",
+      "note": "P42: a running feature asks before state.feature changes."
+    },
+    {
+      "id": "G20",
+      "title": "Commit path list is undefined",
+      "confidence": 0.86,
+      "status": "resolved",
+      "blocks": "T006",
+      "note": "P38: the commit is the task's product files, tasks.md, and an approved plan.md edit. Loop runtime files stay unstaged."
+    },
+    {
+      "id": "G23",
+      "title": "Assumption text has no format",
+      "confidence": 0.84,
+      "status": "resolved",
+      "blocks": "T006",
+      "note": "P35: assumption is a marked line. R6 pauses only on an unresolved mark."
+    },
+    {
+      "id": "G24",
+      "title": "A behavior stop does not set state",
+      "confidence": 0.8,
+      "status": "resolved",
+      "blocks": "T007",
+      "note": "P45: on a behavior stop, status is blocked, the diff stays uncommitted, and the box is not checked."
+    },
+    {
+      "id": "G25",
+      "title": "Retrospective has no path when propose rejects a bullet",
+      "confidence": 0.8,
+      "status": "resolved",
+      "blocks": "T010",
+      "note": "P41: a rejected behavioral bullet stays in the proposal file under its feature id. The human picks the spec to edit."
+    },
+    {
+      "id": "G22",
+      "title": "implement the spec is a broad start phrase",
+      "confidence": 0.35,
+      "status": "resolved",
+      "blocks": "T012",
+      "note": "P47: the phrase is fine. R8 already excludes a question, and the command asks which feature when the target is unclear. The agent's own words do not re-enter because the rule is user-scoped by the installed command's read step."
+    },
+    {
+      "id": "G30",
+      "title": "Macro names a loop the CLI does not install yet",
+      "confidence": 0.4,
+      "status": "accepted-risk",
+      "blocks": "docs",
+      "note": "P11: the impact packet already records this. It is a draft-spec risk, not a behavior hole."
+    },
+    {
+      "id": "G27",
+      "title": "Support star checkboxes",
+      "confidence": 0.2,
+      "status": "rejected",
+      "blocks": "none",
+      "note": "P27: Hive tasks use '- [ ]'. A second marker is a new format, not a hole in this spec."
+    },
+    {
+      "id": "G31",
+      "title": "No task ids in some Hive tasks files",
+      "confidence": 0.62,
+      "status": "resolved",
+      "blocks": "T006",
+      "note": "P53: the handoff uses the task id when present, else the task line text and its section heading. Same rule for the commit message."
+    },
+    {
+      "id": "G32",
+      "title": "Result list has no task boundary",
+      "confidence": 0.55,
+      "status": "resolved",
+      "blocks": "T006",
+      "note": "P55: the coordinator replaces result.md when the next task's handoff is written. Commit reads only entries for the current task."
+    },
+    {
+      "id": "G33",
+      "title": "Round-trip cap and re-handoff order",
+      "confidence": 0.4,
+      "status": "resolved",
+      "blocks": "T006",
+      "note": "P67: the cap check runs before every delegation, including a re-handoff after a human answer."
+    },
+    {
+      "id": "G34",
+      "title": "Result list entry schema",
+      "confidence": 0.55,
+      "status": "resolved",
+      "blocks": "T006",
+      "note": "P69: each result entry has task, role, outcome, evidence, and an optional question on fail."
+    },
+    {
+      "id": "G35",
+      "title": "Retrospective log header",
+      "confidence": 0.5,
+      "status": "resolved",
+      "blocks": "T010",
+      "note": "P71: install writes one header comment. The count uses lines that match the date pattern."
+    },
+    {
+      "id": "G36",
+      "title": "Slice heading rule when tasks.md has no ## sections",
+      "confidence": 0.5,
+      "status": "resolved",
+      "blocks": "T007",
+      "note": "P73: a slice is the first ## section that contains a checkbox. If none exists, the whole file is one slice."
+    },
+    {
+      "id": "G37",
+      "title": "Commit message when a task has no id",
+      "confidence": 0.5,
+      "status": "resolved",
+      "blocks": "T006",
+      "note": "P75: the commit message uses the task id when present, else a 6-10 word slug from the task text."
+    },
+    {
+      "id": "G38",
+      "title": "Push failure handling",
+      "confidence": 0.55,
+      "status": "resolved",
+      "blocks": "T007",
+      "note": "P77: a push failure keeps the commit, sets status blocked, and asks the human. It does not retry silently."
+    },
+    {
+      "id": "G39",
+      "title": "Home install and branch state",
+      "confidence": 0.5,
+      "status": "resolved",
+      "blocks": "T014",
+      "note": "P79: install is allowed on trunk. Readiness blocks until a non-trunk branch exists."
+    },
+    {
+      "id": "G40",
+      "title": "No spec for the result list reset on a new feature",
+      "confidence": 0.5,
+      "status": "resolved",
+      "blocks": "T006",
+      "note": "P81: a new feature starts with an empty result.md. The coordinator clears it when the feature's first handoff is written."
+    }
+  ],
+  "uncovered_by_tasks": [
+    "G15",
+    "G16"
+  ],
+  "clusters": {
+    "readiness": [
+      "G01",
+      "G03",
+      "G11",
+      "G12",
+      "G13",
+      "G04"
+    ],
+    "pass-protocol": [
+      "G06",
+      "G07",
+      "G08",
+      "G10",
+      "G14",
+      "G15",
+      "G23"
+    ],
+    "git": [
+      "G02",
+      "G09",
+      "G16",
+      "G20",
+      "G24"
+    ],
+    "lifecycle": [
+      "G05",
+      "G17",
+      "G18",
+      "G19",
+      "G22",
+      "G25"
+    ]
+  },
+  "final_order": [
+    "G10",
+    "G11",
+    "G13",
+    "G01",
+    "G05",
+    "G06",
+    "G12",
+    "G02",
+    "G04",
+    "G03",
+    "G07",
+    "G08",
+    "G09",
+    "G15",
+    "G14",
+    "G18",
+    "G19",
+    "G16",
+    "G20",
+    "G17",
+    "G23",
+    "G24",
+    "G25",
+    "G22"
+  ],
+  "learned_fixes": [
+    "One ready list: project.json, spec, plan, tasks, micro brief, one open task, non-empty build and test:quick and test:full, pack, non-trunk branch.",
+    "All boxes checked and the other inputs present is status complete, exit 0.",
+    "result.md stores one outcome per role for the current task.",
+    "Reviewer fail returns to the coder. needs-sign-off waits for the human.",
+    "1-pack writes only the coordinator role file and still appends check and review outcomes.",
+    "Handoff names feature, task, role, root, and the three spec paths. The task is the first open checkbox.",
+    "Loop files under .hive/implementation-loop/ are expected dirt and stay unstaged.",
+    "test:full failure blocks, keeps commits, and adds no task.",
+    "The coordinator appends the retrospective line when a feature completes.",
+    "The command starts each 4-pack role as its own subagent. The always-on rule only points at the command."
+  ],
+  "round": 3,
+  "open_after_r2": [
+    "G06"
+  ],
+  "final_order_r2": [
+    "G06"
+  ],
+  "blocking_before_t002": [],
+  "spec_patch_order": [
+    "spec.md R1/R5/R6/R7/R3",
+    "plan.md gates and discovery",
+    "tasks.md T002-T010",
+    "micro brief acceptance"
+  ],
+  "round2_result": {
+    "open": 1,
+    "resolved": 25,
+    "rejected": 1
+  },
+  "open_after_r3": [],
+  "final_order_r3": [],
+  "blocking_before_t002_r3": [],
+  "spec_patch_order_r3": [
+    "spec.md R3/R5/R6/R7",
+    "plan.md result schema and push failure",
+    "tasks.md T002-T010",
+    "micro brief acceptance"
+  ],
+  "round3_result": {
+    "open": 0,
+    "resolved": 34,
+    "rejected": 1
+  },
+  "clarification_flow": "role fail with question -> coordinator asks human -> re-handoff to same role as one round trip",
+  "result_entry_schema": "task, role, outcome, evidence, question (fail only)",
+  "push_failure": "keep commit, set blocked, ask human, no silent retry"
+}

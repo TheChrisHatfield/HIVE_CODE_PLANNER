@@ -1,0 +1,191 @@
+"""Tests for the implementation-loop installer and readiness gate."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import pytest
+
+from hive_planner.implementation_loop import (
+    PACK_1,
+    PACK_4,
+    assess_implementation_readiness,
+    install_implementation_loop,
+    is_implementation_loop_request,
+    preview_agent_prompt,
+    render_cursor_rule,
+)
+
+
+@pytest.fixture()
+def project_root(tmp_path: Path) -> Path:
+    root = tmp_path / "proj"
+    root.mkdir()
+    (root / ".hive").mkdir()
+    (root / ".hive" / "project.json").write_text(json.dumps({"project_name": "proj"}), encoding="utf-8")
+    (root / "docs" / "specs" / "feature-x").mkdir(parents=True)
+    (root / "docs" / "delta" / "20_micro").mkdir(parents=True)
+    (root / "docs" / "delta" / "20_micro" / "feature-x.md").write_text("# micro\n", encoding="utf-8")
+    (root / "docs" / "specs" / "feature-x" / "spec.md").write_text("# spec\n", encoding="utf-8")
+    (root / "docs" / "specs" / "feature-x" / "plan.md").write_text("# plan\n", encoding="utf-8")
+    (root / "docs" / "specs" / "feature-x" / "tasks.md").write_text(
+        "# tasks\n\n- [ ] T001 do the thing\n", encoding="utf-8"
+    )
+    (root / "pyproject.toml").write_text(
+        '[project]\nname = "proj"\n\n[tool.pytest.ini_options]\ntestpaths = ["tests"]\n',
+        encoding="utf-8",
+    )
+    return root
+
+
+def test_trigger_phrases() -> None:
+    assert is_implementation_loop_request("implementation loop")
+    assert is_implementation_loop_request("implement the spec")
+    assert is_implementation_loop_request("run the implementation loop")
+    assert is_implementation_loop_request("start the implementation loop")
+    assert is_implementation_loop_request("/implementation-loop")
+    assert not is_implementation_loop_request("what is the implementation loop")
+    assert not is_implementation_loop_request("how do I install it")
+    assert not is_implementation_loop_request("bug hunt")
+    assert not is_implementation_loop_request("hunt for bugs")
+
+
+def test_render_cursor_rule_mentions_command_and_questions() -> None:
+    text = render_cursor_rule()
+    assert ".cursor/commands/implementation-loop.md" in text
+    assert "question" in text.lower()
+    assert "bug-hunt" in text.lower()
+
+
+def test_install_4pack_writes_all_files(project_root: Path) -> None:
+    written = install_implementation_loop(project_root, PACK_4)
+    rels = {str(Path(w)) for w in written}
+    expected = {
+        ".cursor/commands/implementation-loop.md",
+        ".cursor/rules/implementation-loop.mdc",
+        ".hive/implementation-loop/roles/coordinator.md",
+        ".hive/implementation-loop/roles/coder.md",
+        ".hive/implementation-loop/roles/checker.md",
+        ".hive/implementation-loop/roles/reviewer.md",
+        ".hive/implementation-loop/NOTICE",
+        ".hive/implementation-loop/commands.json",
+        ".hive/implementation-loop/state.json",
+        ".hive/implementation-loop/retrospective.log",
+    }
+    for rel in expected:
+        assert rel.replace("/", "\\") in rels, f"missing {rel}"
+
+    state = json.loads((project_root / ".hive/implementation-loop/state.json").read_text(encoding="utf-8"))
+    assert state["pack"] == PACK_4
+    assert state["status"] == "idle"
+    assert state["round_trips"] == 0
+
+    commands = json.loads((project_root / ".hive/implementation-loop/commands.json").read_text(encoding="utf-8"))
+    assert commands["test:quick"] == "py -3.11 -m pytest"
+    # This fixture is not a Hive project, so ci-check is not discovered.
+    assert commands["test:full"] == ""
+
+
+def test_install_1pack_removes_delegated_roles(project_root: Path) -> None:
+    install_implementation_loop(project_root, PACK_4)
+    install_implementation_loop(project_root, PACK_1, force_pack=True)
+    role_dir = project_root / ".hive/implementation-loop/roles"
+    assert (role_dir / "coordinator.md").is_file()
+    assert not (role_dir / "coder.md").exists()
+    assert not (role_dir / "checker.md").exists()
+    assert not (role_dir / "reviewer.md").exists()
+    state = json.loads((project_root / ".hive/implementation-loop/state.json").read_text(encoding="utf-8"))
+    assert state["pack"] == PACK_1
+
+
+def test_reinstall_preserves_commands_and_state(project_root: Path) -> None:
+    install_implementation_loop(project_root, PACK_4)
+    commands_path = project_root / ".hive/implementation-loop/commands.json"
+    commands = json.loads(commands_path.read_text(encoding="utf-8"))
+    commands["build"] = "echo build"
+    commands_path.write_text(json.dumps(commands), encoding="utf-8")
+    state_path = project_root / ".hive/implementation-loop/state.json"
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    state["round_trips"] = 7
+    state_path.write_text(json.dumps(state), encoding="utf-8")
+    install_implementation_loop(project_root, PACK_4)
+    assert json.loads(commands_path.read_text(encoding="utf-8"))["build"] == "echo build"
+    assert json.loads(state_path.read_text(encoding="utf-8"))["round_trips"] == 7
+
+
+def test_force_pack_required_for_pack_change(project_root: Path) -> None:
+    install_implementation_loop(project_root, PACK_4)
+    with pytest.raises(ValueError, match="force-pack"):
+        install_implementation_loop(project_root, PACK_1)
+
+
+def test_readiness_ready(project_root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import hive_planner.implementation_loop as mod
+
+    monkeypatch.setattr(mod, "_current_branch", lambda root: "feature-x")
+    monkeypatch.setattr(mod, "_resolve_trunk", lambda root: "main")
+    install_implementation_loop(project_root, PACK_4)
+    commands_path = project_root / ".hive/implementation-loop/commands.json"
+    commands = json.loads(commands_path.read_text(encoding="utf-8"))
+    commands["build"] = "echo build"
+    commands["test:full"] = "echo test-full"
+    commands_path.write_text(json.dumps(commands), encoding="utf-8")
+    report = assess_implementation_readiness(project_root, "feature-x")
+    assert report.ready is True
+    assert report.missing == []
+
+
+def test_readiness_missing_tasks(project_root: Path) -> None:
+    (project_root / "docs" / "specs" / "feature-x" / "tasks.md").write_text("# tasks\n\n- [x] done\n", encoding="utf-8")
+    install_implementation_loop(project_root, PACK_4)
+    report = assess_implementation_readiness(project_root, "feature-x")
+    assert report.ready is False
+    assert any("no open task" in m for m in report.missing)
+
+
+def test_readiness_missing_commands(project_root: Path) -> None:
+    install_implementation_loop(project_root, PACK_4)
+    commands_path = project_root / ".hive/implementation-loop/commands.json"
+    commands = json.loads(commands_path.read_text(encoding="utf-8"))
+    commands["build"] = ""
+    commands_path.write_text(json.dumps(commands), encoding="utf-8")
+    report = assess_implementation_readiness(project_root, "feature-x")
+    assert report.ready is False
+    assert any("build" in m for m in report.missing)
+
+
+def test_readiness_missing_spec(project_root: Path) -> None:
+    (project_root / "docs" / "specs" / "feature-x" / "spec.md").unlink()
+    install_implementation_loop(project_root, PACK_4)
+    report = assess_implementation_readiness(project_root, "feature-x")
+    assert report.ready is False
+    assert any("spec.md" in m for m in report.missing)
+
+
+def test_readiness_trunk_branch(project_root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    install_implementation_loop(project_root, PACK_4)
+    import hive_planner.implementation_loop as mod
+
+    monkeypatch.setattr(mod, "_current_branch", lambda root: "main")
+    monkeypatch.setattr(mod, "_resolve_trunk", lambda root: "main")
+    report = assess_implementation_readiness(project_root, "feature-x")
+    assert report.ready is False
+    assert any("trunk" in m for m in report.missing)
+
+
+def test_preview_agent_prompt_1pack() -> None:
+    text = preview_agent_prompt(PACK_1)
+    assert "1-pack" in text
+    assert "do not delegate" in text.lower()
+
+
+def test_preview_agent_prompt_4pack() -> None:
+    text = preview_agent_prompt(PACK_4)
+    assert "4-pack" in text
+    assert "delegate" in text.lower()
+
+
+def test_invalid_pack() -> None:
+    with pytest.raises(ValueError):
+        install_implementation_loop(Path("dummy"), "5-pack")

@@ -1447,6 +1447,30 @@ def run_project_bug_hunt_install(
     return payload
 
 
+def run_project_implementation_loop_install(
+    project_root: Path,
+    pack: str,
+) -> dict:
+    """Install the post-spec coding loop into a linked project."""
+    from hive_planner.implementation_loop import install_implementation_loop
+
+    target = project_root.resolve()
+    if not target.exists():
+        return {"ok": False, "error": "Path does not exist"}
+    if target.is_file() and target.suffix.lower() == ".code-workspace":
+        folder = resolve_linked_project_root(target)
+        if folder is None:
+            return {"ok": False, "error": "Workspace file has no folder on disk"}
+        target = folder
+    if not target.is_dir():
+        return {"ok": False, "error": "Path is not a project directory"}
+    try:
+        written = install_implementation_loop(target, pack, force_pack=False)
+    except (ValueError, OSError) as exc:
+        return {"ok": False, "error": str(exc)}
+    return {"ok": True, "files_written": written, "pack": pack}
+
+
 def run_project_map_sync(project_root: Path, *, dry_run: bool = False) -> dict:
     target = project_root.resolve()
     summary = summarize_project(target)

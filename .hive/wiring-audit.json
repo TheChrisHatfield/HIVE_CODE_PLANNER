@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "feature": "implementation-loop",
+  "recorded_at": "2026-10-25T21:53:37.384907+00:00",
+  "evidence": "py -3.11 -m hive_planner spec-drift-check --feature implementation-loop: ok",
+  "summary": "CLI, bootstrap, and Home all call install_implementation_loop; status exits 2 on blocked fixture",
+  "max_age_hours": 168,
+  "checks": {
+    "trace_verified": true,
+    "no_false_success": true,
+    "integration_evidence": true
+  }
+}

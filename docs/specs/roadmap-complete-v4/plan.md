@@ -2,6 +2,16 @@
 
 **Spec:** [spec.md](./spec.md)
 
+<!-- ROSETTA-NAV -->
+
+## Agent navigation (Rosetta Stone)
+
+Load [`docs/planning-rosetta-stone.md`](../../planning-rosetta-stone.md) (`planning.rosetta`) before editing this plan.
+
+- **Spec:** [`spec.md`](./spec.md)
+- **Delta micro:** [`roadmap-complete-v4.md`](../../delta/20_micro/roadmap-complete-v4.md)
+- **Hooks:** `spec.flow`, `context.delta`
+
 ## Approach
 
 1. Extend `ROADMAP_FEATURES` with `unified-handoff-v2` and `roadmap-complete-v4`.

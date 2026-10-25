@@ -1,23 +1,23 @@
 {
   "status": "ok",
-  "cartridge_id": "ctx-2026-06-21-cartridge-translator-v1",
+  "cartridge_id": "ctx-2026-07-14-hive-dev-1-shared-memory",
   "files_written": [
     "holistic.md",
     "macro.md",
-    "micro/cartridge-translator-v1.md",
+    "micro/hive-dev-1-shared-memory.md",
     "memory.md"
   ],
   "promotions": {
-    "agents_md_candidates": 0,
+    "agents_md_candidates": 22,
     "cursor_rule_candidates": 0,
     "spec_seed_created": false
   },
-  "rejections": 2,
+  "rejections": 121,
   "classification_counts": {
-    "holistic": 1,
-    "macro": 1,
-    "micro": 5,
-    "memory": 0,
-    "reject": 2
+    "holistic": 5,
+    "macro": 3,
+    "micro": 0,
+    "memory": 22,
+    "reject": 121
   }
 }

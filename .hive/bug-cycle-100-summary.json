@@ -1,0 +1,521 @@
+{
+  "prior_fix_cycles": "1-16 (individual fix commits)",
+  "inspection_cycles": "17-100",
+  "total_cycles": 100,
+  "clean_inspections": 83,
+  "failed_inspections": 1,
+  "failures": [
+    {
+      "cycle": 48,
+      "area": "ast src/hive_planner/cl_migration.py",
+      "status": "fail",
+      "detail": "invalid non-printable character U+FEFF (<unknown>, line 1)"
+    }
+  ],
+  "results": [
+    {
+      "cycle": 17,
+      "area": "import hive_planner.launcher.app",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 18,
+      "area": "import hive_planner.launcher.service",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 19,
+      "area": "import hive_planner.launcher.config",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 20,
+      "area": "import hive_planner.spec_drift",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 21,
+      "area": "import hive_planner.translator",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 22,
+      "area": "import hive_planner.cartridge_promote",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 23,
+      "area": "import hive_planner.map_sync",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 24,
+      "area": "import hive_planner.call_graph",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 25,
+      "area": "import hive_planner.agents_memory",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 26,
+      "area": "import hive_planner.graph_store",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 27,
+      "area": "import hive_planner.bootstrap",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 28,
+      "area": "import hive_planner.cl_runtime",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 29,
+      "area": "import hive_planner.agent_handoff",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 30,
+      "area": "import hive_planner.delta_emit",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 31,
+      "area": "import hive_planner.emitter",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 32,
+      "area": "import hive_planner.cartridge_pack",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 33,
+      "area": "import hive_planner.wiring_audit",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 34,
+      "area": "import hive_planner.project_profile",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 35,
+      "area": "import hive_planner.source4s",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 36,
+      "area": "import hive_planner.pipeline",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 37,
+      "area": "ast src/hive_planner/__init__.py",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 38,
+      "area": "ast src/hive_planner/__main__.py",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 39,
+      "area": "ast src/hive_planner/agent_handoff.py",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 40,
+      "area": "ast src/hive_planner/agents_memory.py",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 41,
+      "area": "ast src/hive_planner/bootstrap.py",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 42,
+      "area": "ast src/hive_planner/call_graph.py",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 43,
+      "area": "ast src/hive_planner/cartridge_adapt.py",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 44,
+      "area": "ast src/hive_planner/cartridge_pack.py",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 45,
+      "area": "ast src/hive_planner/cartridge_promote.py",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 46,
+      "area": "ast src/hive_planner/chunker.py",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 47,
+      "area": "ast src/hive_planner/ci_handoff.py",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 48,
+      "area": "ast src/hive_planner/cl_migration.py",
+      "status": "fail",
+      "detail": "invalid non-printable character U+FEFF (<unknown>, line 1)"
+    },
+    {
+      "cycle": 49,
+      "area": "ast src/hive_planner/cl_runtime.py",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 50,
+      "area": "ast src/hive_planner/cli.py",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 51,
+      "area": "ast src/hive_planner/config.py",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 52,
+      "area": "ast src/hive_planner/delta_emit.py",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 53,
+      "area": "ast src/hive_planner/discovery.py",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 54,
+      "area": "ast src/hive_planner/embeddings.py",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 55,
+      "area": "ast src/hive_planner/emitter.py",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 56,
+      "area": "ast src/hive_planner/format_deps.py",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 57,
+      "area": "ast src/hive_planner/frozen_entry.py",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 58,
+      "area": "ast src/hive_planner/graph_store.py",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 59,
+      "area": "ast src/hive_planner/impact.py",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 60,
+      "area": "ast src/hive_planner/indexer.py",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 61,
+      "area": "ast src/hive_planner/launcher/__init__.py",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 62,
+      "area": "ast src/hive_planner/launcher/__main__.py",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 63,
+      "area": "ast src/hive_planner/launcher/agent_prompt_templates.py",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 64,
+      "area": "ast src/hive_planner/launcher/app.py",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 65,
+      "area": "ast src/hive_planner/launcher/bootstrap_state.py",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 66,
+      "area": "ast src/hive_planner/launcher/config.py",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 67,
+      "area": "ast src/hive_planner/launcher/console_win.py",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 68,
+      "area": "ast src/hive_planner/launcher/service.py",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 69,
+      "area": "ast src/hive_planner/launcher/theme.py",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 70,
+      "area": "ast src/hive_planner/launcher/user_guide.py",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 71,
+      "area": "invariant MANUAL promote/mark-draft",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 72,
+      "area": "invariant soft-refresh helpers",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 73,
+      "area": "invariant python setup readiness",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 74,
+      "area": "invariant agents parse fence-aware",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 75,
+      "area": "invariant call_graph walk imports",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 76,
+      "area": "invariant map_sync discover src",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 77,
+      "area": "invariant translator MANUAL skip",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 78,
+      "area": "pytest tests/test_launcher.py",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 79,
+      "area": "pytest tests/test_translator.py",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 80,
+      "area": "pytest tests/test_cartridge_promote.py",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 81,
+      "area": "pytest tests/test_spec_drift.py",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 82,
+      "area": "pytest tests/test_map_sync.py",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 83,
+      "area": "pytest tests/test_agents_memory.py",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 84,
+      "area": "pytest tests/test_graph_store.py",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 85,
+      "area": "pytest tests/test_cl_runtime.py",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 86,
+      "area": "pytest tests/test_bootstrap.py",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 87,
+      "area": "pytest tests/test_wiring_audit.py",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 88,
+      "area": "pytest tests/test_project_profile.py",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 89,
+      "area": "pytest tests/test_runtime_paths.py",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 90,
+      "area": "pytest tests/test_security_validation.py",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 91,
+      "area": "pytest tests/test_cli_handoff.py",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 92,
+      "area": "pytest tests/test_formats.py",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 93,
+      "area": "pytest tests/test_cartridge_pack.py",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 94,
+      "area": "pytest tests/test_memory_routing.py",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 95,
+      "area": "pytest tests/test_rosetta_nav.py",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 96,
+      "area": "ast src/hive_planner/__init__.py",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 97,
+      "area": "ast src/hive_planner/__init__.py",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 98,
+      "area": "ast src/hive_planner/__init__.py",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 99,
+      "area": "ast src/hive_planner/__init__.py",
+      "status": "clean",
+      "detail": ""
+    },
+    {
+      "cycle": 100,
+      "area": "ast src/hive_planner/__init__.py",
+      "status": "clean",
+      "detail": ""
+    }
+  ]
+}

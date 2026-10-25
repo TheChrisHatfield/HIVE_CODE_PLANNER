@@ -24,7 +24,7 @@ Hive Code Planner has five cooperating subsystems: **agent loader**, **context l
 |--|--|
 | **Purpose** | Tell coding agents what to read and in what order |
 | **Inputs** | Rosetta Stone, START_HERE, AGENTS.md, active spec/tasks |
-| **Outputs** | Scoped context loading decisions |
+| **Outputs** | Scoped context loading decisions; chat-triggered bug-hunt loop via `.cursor/rules/bug-hunt.mdc` |
 | **Dependencies** | Delta docs, `.cursor/rules/` |
 | **Failure modes** | Agent reads raw archive instead of distilled files |
 
@@ -87,6 +87,7 @@ See [shared-graph-memory-v1.md](./20_micro/shared-graph-memory-v1.md).
 | Planning (Perplexity) | Upstream research and blueprint |
 | Spec (Spec Kit) | spec.md / plan.md / tasks.md |
 | Coding (Cursor) | Implementation against active task |
+| Implementation loop (optional) | After spec, plan, and tasks exist: separate coder, checker, and reviewer passes, then one commit. See [implementation-loop](../specs/implementation-loop/spec.md). |
 | Compiler (automated) | Ingest sources, emit cartridge |
 
 ## Workflow Graph
@@ -98,8 +99,9 @@ Perplexity research
   -> hive_planner ingest (compiler)
   -> cartridge/ + indexes
   -> Cursor reads START_HERE + Rosetta + active task
-  -> implement one micro task
-  -> validate -> optional AGENTS.md promotion
+  -> Spec Kit spec.md + plan.md + tasks.md
+  -> optional implementation loop (one task per cycle, separate passes, commit after gates)
+  -> validate -> retrospective proposals -> optional AGENTS.md promotion
 ```
 
 ## Risks

@@ -255,6 +255,12 @@ def main(argv: list[str] | None = None) -> int:
         choices=("cursor", "headless", "external"),
         help="Continual Learning runtime: cursor (plugin) or headless/external (CLI-only memory loop)",
     )
+    init_parser.add_argument(
+        "--implementation-loop-pack",
+        default=None,
+        choices=("1-pack", "4-pack"),
+        help="Install the post-spec coding loop with this pack (optional)",
+    )
 
     cl_runtime_parser = sub.add_parser(
         "cl-runtime",
@@ -451,6 +457,17 @@ def main(argv: list[str] | None = None) -> int:
         help="Pretty-print JSON",
     )
 
+    ground_truth = sub.add_parser(
+        "ground-truth-on-mine",
+        help="Install the ground-truth mine agent script (hook: planning.rosetta)",
+    )
+    ground_truth.add_argument(
+        "--print",
+        dest="print_only",
+        action="store_true",
+        help="Print the script and do not write files",
+    )
+
     bug_hunt = sub.add_parser(
         "bug-hunt",
         help="Install the continuous bug-hunt agent script (hook: change.bugfix_mode)",
@@ -467,6 +484,32 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Print the script and do not write files",
     )
+
+    impl_loop = sub.add_parser(
+        "implementation-loop",
+        help="Install the post-spec coding loop (hook: spec.flow)",
+    )
+    impl_sub = impl_loop.add_subparsers(dest="implementation_loop_command", required=True)
+    impl_install = impl_sub.add_parser("install", help="Install the loop into this project")
+    impl_install.add_argument(
+        "--pack",
+        required=True,
+        choices=("1-pack", "4-pack"),
+        help="Pack: 1-pack solo coordinator, 4-pack coordinator + coder + checker + reviewer",
+    )
+    impl_install.add_argument(
+        "--force-pack",
+        action="store_true",
+        help="Replace an existing different pack",
+    )
+    impl_install.add_argument(
+        "--print",
+        dest="print_only",
+        action="store_true",
+        help="Print the coordinator script and do not write files",
+    )
+    impl_status = impl_sub.add_parser("status", help="Report whether a feature is ready to code")
+    impl_status.add_argument("--feature", required=True, help="Feature id to check")
 
     args = parser.parse_args(argv)
     root, auto_detected = resolve_root(args.root)
@@ -495,6 +538,7 @@ def main(argv: list[str] | None = None) -> int:
                 git_init=args.git_init,
                 agent_handoff=agent_handoff,
                 cl_runtime=args.cl_runtime,
+                implementation_loop_pack=args.implementation_loop_pack,
             )
         except BootstrapError as exc:
             print(f"Error: {exc}", file=sys.stderr)
@@ -1064,6 +1108,33 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(result.to_dict(), indent=2))
         return 0
 
+    if args.command == "ground-truth-on-mine":
+        from hive_planner.ground_truth_mine import (
+            GroundTruthMineError,
+            install_ground_truth_mine,
+            missing_ground_truth_mine_artifacts,
+            preview_agent_prompt as preview_ground_truth_prompt,
+        )
+
+        try:
+            if args.print_only:
+                print(preview_ground_truth_prompt(root), end="")
+                return 0
+            installed = install_ground_truth_mine(root)
+        except (GroundTruthMineError, OSError) as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        missing = missing_ground_truth_mine_artifacts(installed.root)
+        if missing:
+            print(
+                "Error: Ground-truth mine install incomplete — missing: " + ", ".join(missing),
+                file=sys.stderr,
+            )
+            return 1
+        print(f"Root: {installed.root}")
+        print(json.dumps(installed.to_dict(), indent=2))
+        return 0
+
     if args.command == "bug-hunt":
         from hive_planner.bug_hunt import (
             BugHuntError,
@@ -1090,5 +1161,34 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Root: {installed.root}")
         print(json.dumps(installed.to_dict(), indent=2))
         return 0
+
+    if args.command == "implementation-loop":
+        from hive_planner.implementation_loop import (
+            assess_implementation_readiness,
+            install_implementation_loop,
+            preview_agent_prompt,
+        )
+
+        if args.implementation_loop_command == "install":
+            try:
+                if args.print_only:
+                    print(preview_agent_prompt(args.pack), end="")
+                    return 0
+                written = install_implementation_loop(root, args.pack, force_pack=args.force_pack)
+            except (ValueError, OSError) as exc:
+                print(f"Error: {exc}", file=sys.stderr)
+                return 1
+            print(f"Root: {root}")
+            print("Written:")
+            for rel in written:
+                print(f"  - {rel}")
+            return 0
+
+        if args.implementation_loop_command == "status":
+            report = assess_implementation_readiness(root, args.feature)
+            print(json.dumps(report.to_dict(), indent=2))
+            if report.ready and report.blocked_reason == "complete":
+                return 0
+            return 0 if report.ready else 2
 
     return 1

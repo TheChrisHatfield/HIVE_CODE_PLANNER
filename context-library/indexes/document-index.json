@@ -1,6 +1,22 @@
 {
   "documents": [
     {
+      "doc_id": "5690170c94a9022a",
+      "source_path": "context-library/sources/imported/HIVE_CODE_DEV_1_FULL_CHAT-2.md",
+      "format": "md",
+      "title": "HIVE_CODE_DEV_1 \u2014 Full Chat Export",
+      "content_hash": "74462f3ab6514d79",
+      "category": "imported"
+    },
+    {
+      "doc_id": "b3c1ce1951e57a2e",
+      "source_path": "context-library/sources/imported/HIVE_CODE_DEV_1_FULL_CHAT.md",
+      "format": "md",
+      "title": "HIVE_CODE_DEV_1 \u2014 Full Chat Export",
+      "content_hash": "74462f3ab6514d79",
+      "category": "imported"
+    },
+    {
       "doc_id": "b6ade3b680171279",
       "source_path": "context-library/sources/reference/rosetta-usage-sample.md",
       "format": "md",

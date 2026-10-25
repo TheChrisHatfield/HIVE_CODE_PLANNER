@@ -43,6 +43,7 @@ from hive_planner.launcher.service import (
     run_legacy_deployment_scan,
     run_cl_migrate,
     run_project_bug_hunt_install,
+    run_project_implementation_loop_install,
     run_project_ci_check,
     run_project_init,
     run_project_map_sync,
@@ -923,6 +924,12 @@ class HivePlannerApp:
             "Enable bug hunt",
             self._on_bug_hunt_install,
             tooltip="Install the chat trigger so saying bug hunt (or a similar phrase) starts a find/fix/commit loop in Cursor.",
+        )
+        secondary_button(
+            actions,
+            "Enable implementation loop",
+            self._on_implementation_loop_install,
+            tooltip="Install the post-spec coding loop so a finished spec, plan, and task list are coded in separate passes.",
         )
         secondary_button(
             actions,
@@ -2709,6 +2716,43 @@ class HivePlannerApp:
         self._queue_home_log(
             f"Bug hunt enabled ({count} file(s), {iterations} iterations). "
             "In any Cursor chat on this project, say bug hunt — or hunt for bugs / start a bug hunt."
+        )
+        self._refresh_home_dashboard()
+
+    def _on_implementation_loop_install(self) -> None:
+        if not self.config.active_project:
+            messagebox.showwarning("No project", "Link a workspace first.")
+            return
+        from hive_planner.implementation_loop import PACK_1, PACK_4
+
+        pack = simpledialog.askstring(
+            "Implementation loop pack",
+            f"Pack ({PACK_1} or {PACK_4}):",
+            parent=self.root,
+        )
+        if not pack:
+            return
+        pack = pack.strip()
+        if pack not in (PACK_1, PACK_4):
+            messagebox.showwarning("Invalid pack", f"Use {PACK_1} or {PACK_4}.")
+            return
+        link = Path(self.config.active_project)
+        self._start_home_action(f"Installing implementation loop ({pack})…")
+        self._run_bg(
+            lambda r=link, p=pack: run_project_implementation_loop_install(r, p),
+            self._project_done_callback("Implementation loop install", self._implementation_loop_install_done),
+        )
+
+    def _implementation_loop_install_done(self, result: dict) -> None:
+        if self._is_bg_error(result) or result.get("ok") is not True:
+            self._queue_home_log(self._result_detail(result))
+            self._refresh_home_dashboard()
+            return
+        count = len(result.get("files_written") or [])
+        pack = result.get("pack", "")
+        self._queue_home_log(
+            f"Implementation loop enabled ({pack}, {count} file(s)). "
+            "In any Cursor chat on this project, say implementation loop or implement the spec."
         )
         self._refresh_home_dashboard()
 

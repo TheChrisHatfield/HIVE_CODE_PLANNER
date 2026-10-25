@@ -1,8 +1,20 @@
+<!-- DRAFT: review before promoting -->
+
 <!-- AUTO-SYNC: from docs/delta/00_holistic.md -->
 
 # Holistic Context
 
 **Hook:** `context.delta` | **Feature:** repo-wide
+
+<!-- ROSETTA-NAV -->
+
+## Agent navigation (Rosetta Stone)
+
+Load [`docs/planning-rosetta-stone.md`](../../planning-rosetta-stone.md) (`planning.rosetta`) before using this Delta layer.
+
+- **Hook:** `context.delta`
+- **Unlocks:** macro / micro / spec alignment
+- **Next:** [`10_macro.md`](../10_macro.md)
 
 ## Mission
 

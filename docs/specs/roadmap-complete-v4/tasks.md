@@ -1,5 +1,15 @@
 # Tasks: roadmap-complete-v4
 
+<!-- ROSETTA-NAV -->
+
+## Agent navigation (Rosetta Stone)
+
+Load [`docs/planning-rosetta-stone.md`](../../planning-rosetta-stone.md) (`planning.rosetta`) before executing tasks.
+
+- **Spec:** [`spec.md`](./spec.md)
+- **Plan:** [`plan.md`](./plan.md)
+- **Delta micro:** [`roadmap-complete-v4.md`](../../delta/20_micro/roadmap-complete-v4.md)
+
 ## Task 1 — Extend ROADMAP_FEATURES ✅
 
 - [x] Add `unified-handoff-v2` and `roadmap-complete-v4` to `roadmap_status.py`

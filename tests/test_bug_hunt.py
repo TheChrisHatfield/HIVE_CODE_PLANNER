@@ -39,6 +39,7 @@ from hive_planner.cli import main
         "Execute a continuous 50-iteration bug-hunting and wiring verification loop",
         "hunt some bugs",
         "please hunting for more bugs",
+        "bu hunt",
     ],
 )
 def test_is_bug_hunt_request_starts_the_loop(text: str) -> None:
@@ -82,6 +83,10 @@ def test_prompt_keeps_the_loop_moving() -> None:
     assert "Do not ask the user whether to continue" in text
     assert "Do not push" in text
     assert "Wiring audit" in text
+    assert "Potential:" in text
+    assert "two readers of the same fact" in text
+    assert "neither a confirmed bug nor a potential bug" in text
+    assert "I did not reproduce it this session" in text
 
 
 def test_install_writes_command_and_packet(tmp_path: Path) -> None:

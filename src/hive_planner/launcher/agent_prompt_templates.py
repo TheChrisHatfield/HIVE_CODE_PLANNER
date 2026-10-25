@@ -190,6 +190,18 @@ Candidates file or bullets:
 Propose which bullets are accepted, rejected, and why — prefer CLI apply over hand-editing AGENTS.md.""",
         ),
         AgentPromptTemplate(
+            id="research.ground_truth_mine",
+            title="Runner ground truth on mine",
+            description="Mine Rosetta stones, cartridges, and PDFs as a temporary ground-truth distribution.",
+            prompt="""okay runner ground truth on mine
+
+Start this repo's ground-truth mine now. Read @.cursor/commands/ground-truth-on-mine.md (or @scripts/ground-truth-on-mine.md if the command is missing) and execute it in this turn.
+
+The stones, cartridges, and PDFs are a training distribution for this inference: a temporary ground truth, not a single required reading. Bootstrap from the project, pin the claim against those sources, and search where they disagree or stop. Do not explain how to invoke the command.
+
+Question: <what to mine, or leave blank for the active feature's open unknowns>""",
+        ),
+        AgentPromptTemplate(
             id="change.bug_hunt",
             title="Start a bug hunt",
             description="Trigger the installed find / fix / self-review / local-commit loop from chat.",

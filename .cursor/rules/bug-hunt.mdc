@@ -1,0 +1,10 @@
+---
+description: Start the bug-hunt loop when the user asks to hunt bugs in any chat in this repo
+alwaysApply: true
+---
+
+# Bug hunt trigger
+
+When the user asks to run a bug hunt in any chat on this repo — the message is or clearly requests a bug hunt, including typos and derivatives such as "bug hunt", "bug hun", "bung hunt", "do a bug hunt", "do a bung hunt", "bug-hunt", "bughunt", "/bug-hunt", "hunt for bugs", "hunt bugs", "hunting bugs", "run a bug hunt", "start a bug hunt", "perform a bug hunt", "bug hunting", "bug hunts" — read `.cursor/commands/bug-hunt.md` and execute that script in this turn. If that file is missing, read `scripts/bug-hunt.md`. Start the loop and keep going: after each internal review and local commit, begin the next iteration without asking the user to continue. Do not stop after one bug. Do not reply with instructions for how to invoke the command.
+
+Match intent, not only an exact string: "please hunt for bugs", "start hunting bugs", "run a bug-hunt", or "/bug-hunt" are start signals. A question about the command itself (whether it works, where the file is, how to install it) is not a start signal.
