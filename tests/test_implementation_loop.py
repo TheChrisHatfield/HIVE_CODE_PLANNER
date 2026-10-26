@@ -329,6 +329,28 @@ def test_discover_build_from_src_and_setuptools(project_root: Path) -> None:
     assert commands["build"] == "py -3.11 -m compileall -q src"
 
 
+def test_init_pack_failure_is_bootstrap_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from hive_planner.bootstrap import BootstrapError, init_project
+    from hive_planner.config import RepoPaths
+
+    source_root = tmp_path / "hive-planner"
+    kit = source_root / "starter-kit"
+    rules = source_root / ".cursor" / "rules"
+    rules.mkdir(parents=True)
+    kit.mkdir(parents=True)
+    (rules / "architecture.mdc").write_text("# Architecture\n", encoding="utf-8")
+    (rules / "task-execution.mdc").write_text("# Task Execution\n", encoding="utf-8")
+    (rules / "validation.mdc").write_text("# Validation\n", encoding="utf-8")
+    (kit / "spec-kit-agent-integration.md").write_text("# Spec Kit\n", encoding="utf-8")
+
+    def boom(*_args, **_kwargs):
+        raise ValueError("disk full")
+
+    monkeypatch.setattr("hive_planner.implementation_loop.install_implementation_loop", boom)
+    with pytest.raises(BootstrapError, match="Implementation-loop install failed"):
+        init_project(RepoPaths(root=source_root), tmp_path / "new-project", implementation_loop_pack=PACK_4)
+
+
 def test_init_with_pack_installs_loop(tmp_path: Path) -> None:
     from hive_planner.bootstrap import init_project
     from hive_planner.config import RepoPaths

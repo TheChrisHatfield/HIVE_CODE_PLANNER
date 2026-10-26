@@ -184,8 +184,7 @@ def _install_implementation_loop_artifacts(
     try:
         files = install_implementation_loop(target, pack, force_pack=force)
     except (ValueError, OSError) as exc:
-        warnings.append(f"Implementation-loop install skipped: {exc}")
-        return
+        raise BootstrapError(f"Implementation-loop install failed: {exc}") from exc
     for rel in files:
         if rel not in written:
             written.append(rel)
