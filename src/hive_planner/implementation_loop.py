@@ -1206,7 +1206,14 @@ def _append_retrospective(root: Path, feature: str) -> int:
 
 def _gh(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
     try:
-        return subprocess.run(["gh", *args], cwd=root, capture_output=True, text=True)
+        return subprocess.run(
+            ["gh", *args],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
     except FileNotFoundError:
         return subprocess.CompletedProcess(["gh", *args], 127, stdout="", stderr="gh not found")
 

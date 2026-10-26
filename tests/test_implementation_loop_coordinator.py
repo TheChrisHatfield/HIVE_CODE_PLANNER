@@ -24,6 +24,7 @@ from hive_planner.implementation_loop import (
     _check_off_task,
     _last_outcome,
     _push_enabled,
+    _gh,
     _git as loop_git,
     _run_named_command,
     coordinator_accept,
@@ -744,6 +745,22 @@ def test_git_decodes_utf8_output(loop_root: Path, monkeypatch: pytest.MonkeyPatc
 
     monkeypatch.setattr(mod.subprocess, "run", fake_run)
     proc = loop_git(loop_root, "status")
+    assert proc.returncode == 0
+    assert captured.get("encoding") == "utf-8"
+    assert captured.get("errors") == "replace"
+
+
+def test_gh_decodes_utf8_output(loop_root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import hive_planner.implementation_loop as mod
+
+    captured: dict[str, object] = {}
+
+    def fake_run(*_args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        captured.update(kwargs)
+        return subprocess.CompletedProcess(["gh"], 0, stdout="https://example/pr/1", stderr="")
+
+    monkeypatch.setattr(mod.subprocess, "run", fake_run)
+    proc = _gh(loop_root, "pr", "view")
     assert proc.returncode == 0
     assert captured.get("encoding") == "utf-8"
     assert captured.get("errors") == "replace"
