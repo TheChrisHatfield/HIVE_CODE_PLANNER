@@ -51,7 +51,7 @@ To **upload to Perplexity / Gemini / ChatGPT** at the start of a planning sessio
 
 ## Implementation loop
 
-After `spec.md`, `plan.md`, and `tasks.md` exist, install the opt-in coding loop with `py -3.11 -m hive_planner implementation-loop install --pack 4-pack` (or `1-pack`). In chat, say **implementation loop**. Spec: [`docs/specs/implementation-loop/spec.md`](docs/specs/implementation-loop/spec.md).
+After `spec.md`, `plan.md`, and `tasks.md` exist, install the opt-in coding loop with `py -3.11 -m hive_planner implementation-loop install --pack 4-pack` (or `1-pack`), or Home **Enable implementation loop**. Run gates from chat (**implementation loop**) or Home **Loop status / start / handoff / check / accept / commit**. Spec: [`docs/specs/implementation-loop/spec.md`](docs/specs/implementation-loop/spec.md).
 
 ## Execution rule
 
