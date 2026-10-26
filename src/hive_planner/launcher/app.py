@@ -5,7 +5,7 @@ import sys
 import threading
 import tkinter as tk
 from pathlib import Path
-from tkinter import filedialog, messagebox, scrolledtext, ttk
+from tkinter import filedialog, messagebox, scrolledtext, simpledialog, ttk
 
 from hive_planner.launcher.bootstrap_state import (
     BootstrapState,
@@ -44,7 +44,12 @@ from hive_planner.launcher.service import (
     run_cl_migrate,
     run_project_bug_hunt_install,
     peek_implementation_loop_pack,
+    run_project_implementation_loop_accept,
+    run_project_implementation_loop_commit,
+    run_project_implementation_loop_handoff,
     run_project_implementation_loop_install,
+    run_project_implementation_loop_start,
+    run_project_implementation_loop_status,
     run_project_ci_check,
     run_project_init,
     run_project_map_sync,
@@ -931,6 +936,39 @@ class HivePlannerApp:
             "Enable implementation loop",
             self._on_implementation_loop_install,
             tooltip="Install the post-spec coding loop so a finished spec, plan, and task list are coded in separate passes.",
+        )
+
+        loop_actions = tk.Frame(body, bg=COLORS["bg"])
+        loop_actions.pack(fill="x", padx=16, pady=(0, 8))
+        secondary_button(
+            loop_actions,
+            "Loop status",
+            self._on_implementation_loop_status,
+            tooltip="Same as the CLI status command: show whether the active feature is ready to code.",
+        )
+        secondary_button(
+            loop_actions,
+            "Loop start",
+            self._on_implementation_loop_start,
+            tooltip="Same as implementation-loop start. You can still type the start phrase in Cursor chat instead.",
+        )
+        secondary_button(
+            loop_actions,
+            "Loop handoff",
+            self._on_implementation_loop_handoff,
+            tooltip="Same as implementation-loop handoff: write handoff.md and increment round trips for a role.",
+        )
+        secondary_button(
+            loop_actions,
+            "Loop accept",
+            self._on_implementation_loop_accept,
+            tooltip="Same as implementation-loop accept: check the role's result.md entry.",
+        )
+        secondary_button(
+            loop_actions,
+            "Loop commit",
+            self._on_implementation_loop_commit,
+            tooltip="Same as implementation-loop commit: one Python commit after checker and reviewer pass.",
         )
         secondary_button(
             actions,
@@ -2767,9 +2805,234 @@ class HivePlannerApp:
         pack = result.get("pack", "")
         self._queue_home_log(
             f"Implementation loop enabled ({pack}, {count} file(s)). "
-            "In any Cursor chat on this project, say implementation loop or implement the spec."
+            "Use Home Loop status / start / handoff / accept / commit, or say implementation loop in Cursor chat."
         )
         self._refresh_home_dashboard()
+
+    def _require_active_link(self) -> Path | None:
+        if not self.config.active_project:
+            messagebox.showwarning("No project", "Link a workspace first.")
+            return None
+        return Path(self.config.active_project)
+
+    def _ask_loop_feature(self) -> str | None:
+        initial = self._active_feature_label()
+        if initial == "—":
+            initial = ""
+        value = simpledialog.askstring(
+            "Implementation loop feature",
+            "Feature id (leave blank to use AGENTS.md Active feature):",
+            initialvalue=initial,
+            parent=self.root,
+        )
+        if value is None:
+            return None
+        return value.strip()
+
+    def _ask_loop_role(self) -> str | None:
+        value = simpledialog.askstring(
+            "Implementation loop role",
+            "Role: coder, checker, reviewer (4-pack) or coordinator (1-pack):",
+            parent=self.root,
+        )
+        if value is None:
+            return None
+        role = value.strip()
+        if not role:
+            messagebox.showwarning("Role required", "Enter a role.")
+            return None
+        return role
+
+    def _format_loop_gate(self, result: dict) -> str:
+        parts: list[str] = []
+        if "ready" in result:
+            parts.append(f"ready={result.get('ready')}")
+        for key in (
+            "action",
+            "feature",
+            "task",
+            "current_task",
+            "role",
+            "next_role",
+            "round_trips",
+            "blocked_reason",
+            "commit",
+            "pr_url",
+            "pack",
+            "state_status",
+        ):
+            val = result.get(key)
+            if val not in (None, "", []):
+                parts.append(f"{key}={val}")
+        missing = result.get("missing") or []
+        if missing:
+            parts.append("missing=" + ", ".join(str(item) for item in missing))
+        dirty = result.get("dirty") or []
+        if dirty:
+            parts.append("dirty=" + ", ".join(str(item) for item in dirty))
+        err = result.get("error")
+        if err:
+            parts.append(str(err))
+        if parts:
+            return "Implementation loop: " + "; ".join(parts)
+        return "Implementation loop: " + str(result)
+
+    def _log_loop_gate(self, result: dict) -> None:
+        if self._is_bg_error(result) or result.get("ok") is not True:
+            self._queue_home_log(self._format_loop_gate(result) if isinstance(result, dict) else self._result_detail(result))
+            self._refresh_home_dashboard()
+            return
+        self._queue_home_log(self._format_loop_gate(result))
+        self._refresh_home_dashboard()
+
+    def _on_implementation_loop_status(self) -> None:
+        link = self._require_active_link()
+        if link is None:
+            return
+        feature = self._ask_loop_feature()
+        if feature is None:
+            return
+        self._start_home_action("Checking implementation-loop status…")
+        self._run_bg(
+            lambda r=link, f=feature: run_project_implementation_loop_status(r, f or None),
+            self._project_done_callback("Implementation loop status", self._log_loop_gate),
+        )
+
+    def _on_implementation_loop_start(self) -> None:
+        link = self._require_active_link()
+        if link is None:
+            return
+        feature = self._ask_loop_feature()
+        if feature is None:
+            return
+        self._run_loop_start(link, feature, allow_dirty=False, force_feature=False)
+
+    def _run_loop_start(
+        self,
+        link: Path,
+        feature: str,
+        *,
+        allow_dirty: bool,
+        force_feature: bool,
+    ) -> None:
+        self._loop_start_ctx = {
+            "link": link,
+            "feature": feature,
+            "allow_dirty": allow_dirty,
+            "force_feature": force_feature,
+        }
+        self._start_home_action("Starting implementation loop…")
+        self._run_bg(
+            lambda r=link, f=feature, d=allow_dirty, ff=force_feature: run_project_implementation_loop_start(
+                r,
+                f or None,
+                allow_dirty=d,
+                force_feature=ff,
+            ),
+            self._project_done_callback("Implementation loop start", self._implementation_loop_start_done),
+        )
+
+    def _implementation_loop_start_done(self, result: dict) -> None:
+        if self._is_bg_error(result) or result.get("ok") is not True:
+            err = str(result.get("error") or result.get("blocked_reason") or "")
+            ctx = getattr(self, "_loop_start_ctx", None) or {}
+            if "unrelated dirty" in err and not ctx.get("allow_dirty"):
+                dirty = result.get("dirty") or []
+                extra = ""
+                if dirty:
+                    listed = "\n".join(str(path) for path in dirty[:12])
+                    if len(dirty) > 12:
+                        listed += f"\n(+{len(dirty) - 12} more)"
+                    extra = f"\n\n{listed}"
+                if messagebox.askyesno(
+                    "Unrelated dirty files",
+                    "Unrelated dirty paths block start. Continue anyway (same as --allow-dirty)?"
+                    + extra,
+                    parent=self.root,
+                ):
+                    self._run_loop_start(
+                        ctx["link"],
+                        ctx["feature"],
+                        allow_dirty=True,
+                        force_feature=bool(ctx.get("force_feature")),
+                    )
+                    return
+            if ("loop is blocked" in err or "loop is running for" in err) and not ctx.get("force_feature"):
+                if messagebox.askyesno(
+                    "Force start",
+                    "The loop is blocked or already running for another feature. Force start (same as --force-feature)?",
+                    parent=self.root,
+                ):
+                    self._run_loop_start(
+                        ctx["link"],
+                        ctx["feature"],
+                        allow_dirty=bool(ctx.get("allow_dirty")),
+                        force_feature=True,
+                    )
+                    return
+            self._log_loop_gate(result)
+            return
+        self._log_loop_gate(result)
+
+    def _on_implementation_loop_handoff(self) -> None:
+        link = self._require_active_link()
+        if link is None:
+            return
+        role = self._ask_loop_role()
+        if role is None:
+            return
+        self._run_loop_handoff(link, role, continue_after_cap=False)
+
+    def _run_loop_handoff(self, link: Path, role: str, *, continue_after_cap: bool) -> None:
+        self._loop_handoff_ctx = {"link": link, "role": role, "continue_after_cap": continue_after_cap}
+        self._start_home_action(f"Writing implementation-loop handoff ({role})…")
+        self._run_bg(
+            lambda r=link, n=role, c=continue_after_cap: run_project_implementation_loop_handoff(
+                r,
+                n,
+                continue_after_cap=c,
+            ),
+            self._project_done_callback("Implementation loop handoff", self._implementation_loop_handoff_done),
+        )
+
+    def _implementation_loop_handoff_done(self, result: dict) -> None:
+        if self._is_bg_error(result) or result.get("ok") is not True:
+            err = str(result.get("error") or result.get("blocked_reason") or "")
+            ctx = getattr(self, "_loop_handoff_ctx", None) or {}
+            if "continue-after-cap" in err and not ctx.get("continue_after_cap"):
+                if messagebox.askyesno(
+                    "Round-trip cap",
+                    "This slice has 10 round trips. Continue anyway (same as --continue-after-cap)?",
+                    parent=self.root,
+                ):
+                    self._run_loop_handoff(ctx["link"], ctx["role"], continue_after_cap=True)
+                    return
+            self._log_loop_gate(result)
+            return
+        self._log_loop_gate(result)
+
+    def _on_implementation_loop_accept(self) -> None:
+        link = self._require_active_link()
+        if link is None:
+            return
+        role = self._ask_loop_role()
+        if role is None:
+            return
+        self._start_home_action(f"Accepting implementation-loop result ({role})…")
+        self._run_bg(
+            lambda r=link, n=role: run_project_implementation_loop_accept(r, n),
+            self._project_done_callback("Implementation loop accept", self._log_loop_gate),
+        )
+
+    def _on_implementation_loop_commit(self) -> None:
+        link = self._require_active_link()
+        if link is None:
+            return
+        self._start_home_action("Running implementation-loop commit…")
+        self._run_bg(
+            lambda r=link: run_project_implementation_loop_commit(r),
+            self._project_done_callback("Implementation loop commit", self._log_loop_gate),
+        )
 
     def _on_deploy_agent_handoff(self) -> None:
         root = self._active_linked_root()

@@ -1490,6 +1490,136 @@ def run_project_implementation_loop_install(
     return {"ok": True, "files_written": written, "pack": pack}
 
 
+def _resolve_implementation_loop_feature(target: Path, feature: str | None) -> tuple[str | None, str | None]:
+    feat = (feature or "").strip() or None
+    if not feat:
+        feat = parse_active_feature(RepoPaths(root=target))
+    if not feat:
+        return None, "Set an active feature in AGENTS.md or enter a feature id."
+    return feat, None
+
+
+def _coordinator_error_payload(exc: Exception) -> dict:
+    payload = {"ok": False, "error": str(exc)}
+    fields = getattr(exc, "fields", None)
+    if isinstance(fields, dict):
+        payload.update(fields)
+        payload["ok"] = False
+        payload["error"] = str(exc)
+    return payload
+
+
+def run_project_implementation_loop_status(project_root: Path, feature: str | None = None) -> dict:
+    """Report readiness using the same assess function as the CLI."""
+    from hive_planner.implementation_loop import assess_implementation_readiness
+
+    target, error = linked_install_directory(project_root)
+    if error:
+        return {"ok": False, "error": error, "action": "status"}
+    feat, ferr = _resolve_implementation_loop_feature(target, feature)
+    if ferr:
+        return {"ok": False, "error": ferr, "action": "status"}
+    report = assess_implementation_readiness(target, feat)
+    payload = report.to_dict()
+    payload["ok"] = True
+    payload["action"] = "status"
+    payload["root"] = str(target)
+    return payload
+
+
+def run_project_implementation_loop_start(
+    project_root: Path,
+    feature: str | None = None,
+    *,
+    allow_dirty: bool = False,
+    force_feature: bool = False,
+) -> dict:
+    """Start coordinator gates (same as CLI `implementation-loop start`)."""
+    from hive_planner.implementation_loop import CoordinatorError, coordinator_start
+
+    target, error = linked_install_directory(project_root)
+    if error:
+        return {"ok": False, "error": error, "action": "start"}
+    feat, ferr = _resolve_implementation_loop_feature(target, feature)
+    if ferr:
+        return {"ok": False, "error": ferr, "action": "start"}
+    try:
+        report = coordinator_start(
+            target,
+            feat,
+            allow_dirty=allow_dirty,
+            force_feature=force_feature,
+        )
+    except CoordinatorError as exc:
+        return _coordinator_error_payload(exc)
+    payload = report.to_dict()
+    if payload.get("ok") is False and not payload.get("error"):
+        payload["error"] = payload.get("blocked_reason") or "blocked"
+    return payload
+
+
+def run_project_implementation_loop_handoff(
+    project_root: Path,
+    role: str,
+    *,
+    continue_after_cap: bool = False,
+) -> dict:
+    """Write handoff.md (same as CLI `implementation-loop handoff`)."""
+    from hive_planner.implementation_loop import CoordinatorError, coordinator_handoff
+
+    target, error = linked_install_directory(project_root)
+    if error:
+        return {"ok": False, "error": error, "action": "handoff"}
+    name = (role or "").strip()
+    if not name:
+        return {"ok": False, "error": "Enter a role (coder, checker, reviewer, or coordinator).", "action": "handoff"}
+    try:
+        report = coordinator_handoff(target, name, continue_after_cap=continue_after_cap)
+    except CoordinatorError as exc:
+        return _coordinator_error_payload(exc)
+    payload = report.to_dict()
+    if payload.get("ok") is False and not payload.get("error"):
+        payload["error"] = payload.get("blocked_reason") or "blocked"
+    return payload
+
+
+def run_project_implementation_loop_accept(project_root: Path, role: str) -> dict:
+    """Accept a result.md entry (same as CLI `implementation-loop accept`)."""
+    from hive_planner.implementation_loop import CoordinatorError, coordinator_accept
+
+    target, error = linked_install_directory(project_root)
+    if error:
+        return {"ok": False, "error": error, "action": "accept"}
+    name = (role or "").strip()
+    if not name:
+        return {"ok": False, "error": "Enter a role (coder, checker, reviewer, or coordinator).", "action": "accept"}
+    try:
+        report = coordinator_accept(target, name)
+    except CoordinatorError as exc:
+        return _coordinator_error_payload(exc)
+    payload = report.to_dict()
+    if payload.get("ok") is False and not payload.get("error"):
+        payload["error"] = payload.get("blocked_reason") or "blocked"
+    return payload
+
+
+def run_project_implementation_loop_commit(project_root: Path) -> dict:
+    """Commit after checker and reviewer pass (same as CLI `implementation-loop commit`)."""
+    from hive_planner.implementation_loop import CoordinatorError, coordinator_commit
+
+    target, error = linked_install_directory(project_root)
+    if error:
+        return {"ok": False, "error": error, "action": "commit"}
+    try:
+        report = coordinator_commit(target)
+    except CoordinatorError as exc:
+        return _coordinator_error_payload(exc)
+    payload = report.to_dict()
+    if payload.get("ok") is False and not payload.get("error"):
+        payload["error"] = payload.get("blocked_reason") or "blocked"
+    return payload
+
+
 def run_project_map_sync(project_root: Path, *, dry_run: bool = False) -> dict:
     target = project_root.resolve()
     summary = summarize_project(target)

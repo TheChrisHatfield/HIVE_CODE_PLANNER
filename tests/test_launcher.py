@@ -95,7 +95,12 @@ from hive_planner.launcher.service import (
     run_install,
     peek_implementation_loop_pack,
     run_project_bug_hunt_install,
+    run_project_implementation_loop_accept,
+    run_project_implementation_loop_commit,
+    run_project_implementation_loop_handoff,
     run_project_implementation_loop_install,
+    run_project_implementation_loop_start,
+    run_project_implementation_loop_status,
     run_project_ci_check,
     run_project_init,
     run_project_map_sync,
@@ -1296,6 +1301,65 @@ def test_peek_implementation_loop_pack_uses_workspace_folder(tmp_path: Path) -> 
     assert parent_peek.get("pack") is None
 
 
+def test_run_project_implementation_loop_status_uses_workspace_folder(tmp_path: Path) -> None:
+    from hive_planner.implementation_loop import PACK_4, install_implementation_loop
+
+    folder = tmp_path / "app"
+    folder.mkdir()
+    (folder / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    install_implementation_loop(folder, PACK_4)
+    workspace = tmp_path / "hive.code-workspace"
+    workspace.write_text(json.dumps({"folders": [{"path": "app"}]}), encoding="utf-8")
+    result = run_project_implementation_loop_status(workspace, "feature-x")
+    assert result["ok"] is True
+    assert result["action"] == "status"
+    assert result["feature"] == "feature-x"
+    assert result["ready"] is False
+    assert result["root"] == str(folder.resolve())
+
+
+def test_run_project_implementation_loop_status_reads_agents_feature(tmp_path: Path) -> None:
+    from hive_planner.implementation_loop import PACK_1, install_implementation_loop
+
+    folder = tmp_path / "app"
+    folder.mkdir()
+    install_implementation_loop(folder, PACK_1)
+    (folder / "AGENTS.md").write_text("## Active feature\n\n**demo-feature** — loop\n", encoding="utf-8")
+    result = run_project_implementation_loop_status(folder, None)
+    assert result["ok"] is True
+    assert result["feature"] == "demo-feature"
+
+
+def test_run_project_implementation_loop_start_requires_feature(tmp_path: Path) -> None:
+    folder = tmp_path / "app"
+    folder.mkdir()
+    result = run_project_implementation_loop_start(folder, None)
+    assert result["ok"] is False
+    assert "feature" in result.get("error", "").lower()
+
+
+def test_run_project_implementation_loop_commit_wraps_coordinator_error(tmp_path: Path) -> None:
+    folder = tmp_path / "app"
+    folder.mkdir()
+    result = run_project_implementation_loop_commit(folder)
+    assert result["ok"] is False
+    assert result.get("error")
+
+
+def test_run_project_implementation_loop_handoff_requires_role(tmp_path: Path) -> None:
+    folder = tmp_path / "app"
+    folder.mkdir()
+    result = run_project_implementation_loop_handoff(folder, "  ")
+    assert result["ok"] is False
+    assert "role" in result.get("error", "").lower()
+
+
+def test_run_project_implementation_loop_accept_rejects_missing_path(tmp_path: Path) -> None:
+    result = run_project_implementation_loop_accept(tmp_path / "missing-proj", "coder")
+    assert result["ok"] is False
+    assert "does not exist" in result.get("error", "")
+
+
 def test_run_project_bug_hunt_install_resolves_workspace_file(tmp_path: Path) -> None:
     folder = tmp_path / "app"
     folder.mkdir()
@@ -1939,6 +2003,34 @@ def test_bug_hunt_prompt_template_keeps_the_loop_moving() -> None:
     assert "@.cursor/commands/bug-hunt.md" in found.prompt
 
 
+def test_format_loop_gate_includes_dirty_paths() -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    text = app._format_loop_gate(
+        {
+            "ok": False,
+            "error": "unrelated dirty paths block start",
+            "dirty": ["notes.txt", "scratch.py"],
+        }
+    )
+    assert "notes.txt" in text
+    assert "scratch.py" in text
+    assert "unrelated dirty" in text
+
+
+def test_implementation_loop_prompt_template_keeps_chat_and_home() -> None:
+    from hive_planner.launcher.agent_prompt_templates import get_agent_prompt_template
+
+    found = get_agent_prompt_template("change.implementation_loop")
+    assert found is not None
+    assert found.title == "Start the implementation loop"
+    assert found.prompt.lstrip().startswith("implementation loop")
+    assert "@.cursor/commands/implementation-loop.md" in found.prompt
+    assert "Loop status" in found.prompt
+    assert "Loop commit" in found.prompt
+
+
 def test_get_agent_prompt_template_by_id() -> None:
     from hive_planner.launcher.agent_prompt_templates import get_agent_prompt_template
 
@@ -2052,6 +2144,8 @@ def test_load_user_guide_fallback_mentions_agent_prompt_templates(tmp_path: Path
     cfg = LauncherConfig(hive_planner_root=str(tmp_path / "missing"))
     text = load_user_guide(cfg)
     assert "Agent prompt templates" in text
+    assert "Loop status" in text
+    assert "implementation loop" in text
 
 
 def test_ci_check_hints_parses_vendor_missing_from_profile_step(tmp_path: Path) -> None:

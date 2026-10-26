@@ -20,6 +20,7 @@ Daily use:
   Home → Rosetta cartridge eject — export contract for Gemini / Perplexity planning sessions
   Home → Run health check before handoff
   Home → Enable bug hunt — then say "bug hunt" (or hunt for bugs) in any Cursor chat
+  Home → Enable implementation loop — then Loop status / start / handoff / accept / commit, or say "implementation loop" in chat
   Home → Verify vendor pins / Scan legacy deployment (unified handoff)
   Home → Open in Cursor
 

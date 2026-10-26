@@ -212,6 +212,16 @@ Start the project's continuous bug-hunt loop now. Read @.cursor/commands/bug-hun
 You do not do one bug and then wait. Pause only for your own internal review, commit locally when that review passes, then continue the next iteration without asking whether to continue. Do not explain how to invoke the command.""",
         ),
         AgentPromptTemplate(
+            id="change.implementation_loop",
+            title="Start the implementation loop",
+            description="Trigger the installed post-spec coding loop from chat, or use Home Loop status / start / handoff / accept / commit instead of typing.",
+            prompt="""implementation loop
+
+Start this project's implementation loop now. Read @.cursor/commands/implementation-loop.md (or @scripts/implementation-loop.md if the command is missing) and execute it in this turn.
+
+Hive Planner Home can run the same Python coordinator gates without typing: Loop status, Loop start, Loop handoff, Loop accept, and Loop commit. Chat and Home are both valid. Do not explain how to invoke the command.""",
+        ),
+        AgentPromptTemplate(
             id="planning.external_rosetta",
             title="External planning — Rosetta session (Gemini / Perplexity)",
             description="Paste after uploading the ejected Rosetta contract in a non-Cursor planning AI.",
