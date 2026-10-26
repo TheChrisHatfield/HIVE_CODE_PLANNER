@@ -2023,6 +2023,7 @@ def test_format_loop_gate_includes_dirty_paths() -> None:
             "dirty": ["notes.txt", "scratch.py"],
         }
     )
+    assert "ok=False" in text
     assert "notes.txt" in text
     assert "scratch.py" in text
     assert "unrelated dirty" in text

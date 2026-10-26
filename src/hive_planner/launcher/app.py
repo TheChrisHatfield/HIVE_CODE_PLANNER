@@ -2855,6 +2855,7 @@ class HivePlannerApp:
         if "ready" in result:
             parts.append(f"ready={result.get('ready')}")
         for key in (
+            "ok",
             "action",
             "feature",
             "task",
