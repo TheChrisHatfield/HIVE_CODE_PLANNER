@@ -133,9 +133,23 @@ def _read_json(path: Path) -> dict[str, Any] | None:
     if not path.is_file():
         return None
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        data = json.loads(path.read_text(encoding="utf-8"))
     except Exception:
         return None
+    return data if isinstance(data, dict) else None
+
+
+def _read_existing_json_object(path: Path, label: str) -> dict[str, Any] | None:
+    """Return the object if the file exists. Raise when the file is present but invalid."""
+    if not path.is_file():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        raise ValueError(f"{label} is not valid JSON") from exc
+    if not isinstance(data, dict):
+        raise ValueError(f"{label} must be a JSON object")
+    return data
 
 
 def _write_json(path: Path, data: dict[str, Any]) -> None:
@@ -455,7 +469,7 @@ def install_implementation_loop(root: Path, pack: str, *, force_pack: bool = Fal
     written: list[str] = []
 
     state_path = loop_dir / "state.json"
-    existing_state = _read_json(state_path)
+    existing_state = _read_existing_json_object(state_path, "state.json")
     if existing_state is not None:
         existing_pack = str(existing_state.get("pack", ""))
         if existing_pack and existing_pack != pack and not force_pack:
@@ -470,7 +484,7 @@ def install_implementation_loop(root: Path, pack: str, *, force_pack: bool = Fal
         written.append(_posix_rel(root, state_path))
 
     commands_path = loop_dir / "commands.json"
-    existing_commands = _read_json(commands_path)
+    existing_commands = _read_existing_json_object(commands_path, "commands.json")
     discovered = _discover_commands(root)
     if existing_commands is None:
         commands = {

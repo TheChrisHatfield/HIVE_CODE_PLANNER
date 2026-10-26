@@ -122,6 +122,14 @@ def test_reinstall_preserves_commands_and_state(project_root: Path) -> None:
     assert json.loads(state_path.read_text(encoding="utf-8"))["round_trips"] == 7
 
 
+def test_install_rejects_corrupt_state_json(project_root: Path) -> None:
+    install_implementation_loop(project_root, PACK_4)
+    (project_root / ".hive/implementation-loop/state.json").write_text("{not json", encoding="utf-8")
+    with pytest.raises(ValueError, match="state.json is not valid JSON"):
+        install_implementation_loop(project_root, PACK_4)
+    assert (project_root / ".hive/implementation-loop/state.json").read_text(encoding="utf-8") == "{not json"
+
+
 def test_force_pack_required_for_pack_change(project_root: Path) -> None:
     install_implementation_loop(project_root, PACK_4)
     with pytest.raises(ValueError, match="force-pack"):
