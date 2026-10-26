@@ -225,9 +225,9 @@ def _discover_commands(root: Path) -> dict[str, str]:
         p = root / name
         if p.is_file():
             text = p.read_text(encoding="utf-8", errors="replace")
-            if re.search(r"^build:", text, re.MULTILINE):
-                commands["build"] = f"make build"
-            if re.search(r"^test:", text, re.MULTILINE):
+            if "build" not in commands and re.search(r"^build:", text, re.MULTILINE):
+                commands["build"] = "make build"
+            if "test:quick" not in commands and re.search(r"^test:", text, re.MULTILINE):
                 commands["test:quick"] = "make test"
             break
     pkg = root / "package.json"
@@ -235,9 +235,9 @@ def _discover_commands(root: Path) -> dict[str, str]:
         try:
             data = json.loads(pkg.read_text(encoding="utf-8"))
             scripts = data.get("scripts", {})
-            if "build" in scripts:
+            if "build" not in commands and "build" in scripts:
                 commands["build"] = "npm run build"
-            if "test" in scripts:
+            if "test:quick" not in commands and "test" in scripts:
                 commands["test:quick"] = "npm test"
         except Exception:
             pass
