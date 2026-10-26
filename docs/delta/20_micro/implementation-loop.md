@@ -23,12 +23,12 @@ Implementation loop — code a finished Hive spec in separate passes.
 | Install a Cursor loop that reads `docs/specs/<feature>/{spec,plan,tasks}.md` | Writing or regenerating the spec, plan, or tasks |
 | 1-pack and 4-pack | 5-pack tracker, personas, Copilot install |
 | One task per cycle: implement, check, review, then coordinator commit | Merge, deploy, force-push |
-| Readiness command that blocks when the spec stack or commands are missing | Running coder, checker, or reviewer inside Python |
-| Python coordinator gates: start, handoff, accept, commit | Agent-owned git commit or hand-edited round trips |
+| Readiness command that blocks when the spec stack or commands are missing | Running coder or reviewer inside Python |
+| Python coordinator gates: start, handoff, check, accept, commit | Agent-owned git commit or hand-edited round trips |
 | Retrospective every five completed features, human-approved | Editing `AGENTS.md` during a coding task |
-| Chat start phrase and Home enable | Install on every `init` without a pack |
+| Chat start phrase, Home enable, and Home coordinator buttons | Install on every `init` without a pack |
 
-**Files:** `src/hive_planner/implementation_loop.py`, `src/hive_planner/cli.py`, `src/hive_planner/bootstrap.py`, `src/hive_planner/launcher/app.py`, `src/hive_planner/launcher/service.py`, `tests/test_implementation_loop.py`, `tests/test_implementation_loop_coordinator.py`
+**Files:** `src/hive_planner/implementation_loop.py`, `src/hive_planner/cli.py`, `src/hive_planner/bootstrap.py`, `src/hive_planner/launcher/app.py`, `src/hive_planner/launcher/service.py`, `src/hive_planner/launcher/agent_prompt_templates.py`, `src/hive_planner/launcher/user_guide.py`, `tests/test_implementation_loop.py`, `tests/test_implementation_loop_coordinator.py`, `tests/test_launcher.py`
 
 ## Acceptance Criteria
 
@@ -38,11 +38,13 @@ Implementation loop — code a finished Hive spec in separate passes.
 - [x] 1-pack keeps a single coordinator and still forbids merge and deploy
 - [x] Retrospective proposals split operational and behavioral, and coding passes leave `AGENTS.md` alone
 - [x] Chat phrase and Home install use the same installer; plain init does not
+- [x] Home Loop status/start/handoff/check/accept/commit call the same Python gates as the CLI; chat remains valid
+- [x] Python `check` runs build / test:quick / wiring audit and appends the checker result; bug hunt stays separate
 
 ## Validation
 
 ```powershell
-py -3.11 -m pytest tests/test_implementation_loop.py -v
+py -3.11 -m pytest tests/test_implementation_loop.py tests/test_implementation_loop_coordinator.py tests/test_launcher.py -k "implementation_loop" -v
 py -3.11 -m hive_planner spec-drift-check --feature implementation-loop
 ```
 
