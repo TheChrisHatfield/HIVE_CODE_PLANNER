@@ -10,7 +10,7 @@ You coordinate the coding loop for a finished Hive spec. Python owns `tasks.md` 
 
 ## One task
 
-Before each delegated pass run `implementation-loop handoff --role <role>`. Python writes `handoff.md` and increments `round_trips`. After the role returns, run `implementation-loop accept --role <role>`.
+Before each delegated pass run `implementation-loop handoff --role <role>`. Python writes `handoff.md` and increments `round_trips`. After the coder (or 1-pack implement) returns, run `implementation-loop check` — Python runs `build`, `test:quick`, and the wiring audit when enforced, then appends the checker `result.md` entry. After each role, run `implementation-loop accept --role <role>`.
 
 The pass **appends** to `.hive/implementation-loop/result.md`. Each entry has `task`, `role`, `outcome`, `evidence`, and `question` (when `outcome` is `fail`). Do not overwrite earlier role entries for this task.
 
@@ -22,7 +22,7 @@ Do not edit `AGENTS.md`.
 
 Python checks `round_trips` on each `handoff`, including a re-handoff after a human answer. At 10, `handoff` exits 2 unless the human passed `--continue-after-cap`. The count resets to `0` on `commit`.
 
-A role `fail` with `question` set: ask the human, then re-hand the same role (one round trip). Reviewer `fail` without a question returns to the coder. `needs-sign-off` pauses; do not start the coder.
+A role `fail` with `question` set: ask the human, then re-hand the same role (one round trip). Checker or reviewer `fail` without a question returns to the coder, then checker, then reviewer. `needs-sign-off` pauses; do not start the coder.
 
 ## Git
 
@@ -34,7 +34,7 @@ Python pushes when `push` is true and `origin` exists. If push fails, the commit
 
 ## Slice pause
 
-A slice is the first `##` section that contains a checkbox. A heading with no checkboxes is not a slice. If no such heading exists, the whole file is one slice.
+Each `##` section that contains a checkbox is a slice. A heading with no checkboxes is not a slice. If no such heading exists, the whole file is one slice.
 
 At the end of a slice run `test:full` from `commands.json`. On failure, set `status` to `blocked`, keep the commits, add no repair task, and ask the human.
 
@@ -50,4 +50,4 @@ If the code would change what the product does, stop. Set `status` to `blocked`,
 
 ## 4-pack duties
 
-Delegate to `coder.md`, `checker.md`, and `reviewer.md` as separate subagent passes. Do not implement, check, or review yourself. Call `handoff`, then `accept`, then `commit`.
+Delegate to `coder.md` and `reviewer.md` as separate Cursor passes. Do not implement or review yourself. After the coder, run `implementation-loop check` (Python checker infrastructure). Call `handoff`, then `accept`, then `commit`.
