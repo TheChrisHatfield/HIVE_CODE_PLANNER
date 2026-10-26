@@ -26,6 +26,7 @@ from hive_planner.implementation_loop import (
     _push_enabled,
     _run_named_command,
     coordinator_accept,
+    coordinator_check,
     coordinator_commit,
     coordinator_handoff,
     coordinator_start,
@@ -745,6 +746,80 @@ def test_needs_sign_off_blocks_commit_and_coder(loop_root: Path) -> None:
         coordinator_handoff(loop_root, "coder")
 
 
+def test_check_requires_coder_pass(loop_root: Path) -> None:
+    _install_ready(loop_root)
+    coordinator_start(loop_root, "feature-x")
+    with pytest.raises(CoordinatorError, match="last coder"):
+        coordinator_check(loop_root)
+
+
+def test_check_appends_pass_without_incrementing_round_trips(loop_root: Path) -> None:
+    _install_ready(loop_root)
+    coordinator_start(loop_root, "feature-x")
+    coordinator_handoff(loop_root, "coder")
+    _write_result(loop_root, "T001", "coder", "pass")
+    coordinator_accept(loop_root, "coder")
+    before = json.loads((loop_root / ".hive/implementation-loop/state.json").read_text(encoding="utf-8"))
+    report = coordinator_check(loop_root)
+    assert report.ok is True
+    assert report.role == "checker"
+    assert report.blocked_reason == ""
+    assert report.round_trips == before["round_trips"]
+    text = (loop_root / ".hive/implementation-loop/result.md").read_text(encoding="utf-8")
+    assert "role: checker" in text
+    assert "outcome: pass" in text
+    accepted = coordinator_accept(loop_root, "checker")
+    assert accepted.ok is True
+
+
+def test_check_appends_fail_when_build_exits_nonzero(loop_root: Path) -> None:
+    _install_ready(loop_root)
+    commands_path = loop_root / ".hive/implementation-loop/commands.json"
+    commands = json.loads(commands_path.read_text(encoding="utf-8"))
+    commands["build"] = "hive-missing-check-build"
+    commands_path.write_text(json.dumps(commands), encoding="utf-8")
+    coordinator_start(loop_root, "feature-x")
+    coordinator_handoff(loop_root, "coder")
+    _write_result(loop_root, "T001", "coder", "pass")
+    coordinator_accept(loop_root, "coder")
+    report = coordinator_check(loop_root)
+    assert report.ok is False
+    assert report.blocked_reason == "fail"
+    assert report.next_role == "coder"
+    entries = parse_result_entries(
+        (loop_root / ".hive/implementation-loop/result.md").read_text(encoding="utf-8")
+    )
+    assert _last_outcome(entries, "T001", "checker") == "fail"
+
+
+def test_cli_check_exits_2_when_checker_fails(loop_root: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    from hive_planner.cli import main
+
+    _install_ready(loop_root)
+    commands_path = loop_root / ".hive/implementation-loop/commands.json"
+    commands = json.loads(commands_path.read_text(encoding="utf-8"))
+    commands["build"] = "hive-missing-check-build"
+    commands_path.write_text(json.dumps(commands), encoding="utf-8")
+    coordinator_start(loop_root, "feature-x")
+    coordinator_handoff(loop_root, "coder")
+    _write_result(loop_root, "T001", "coder", "pass")
+    coordinator_accept(loop_root, "coder")
+    code = main(["--root", str(loop_root), "implementation-loop", "check"])
+    assert code == 2
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is False
+    assert payload["blocked_reason"] == "fail"
+
+
+def test_check_1pack_runs_without_coder_result(loop_root: Path) -> None:
+    _install_ready(loop_root, PACK_1)
+    coordinator_start(loop_root, "feature-x")
+    coordinator_handoff(loop_root, "coordinator")
+    report = coordinator_check(loop_root)
+    assert report.ok is True
+    assert report.role == "checker"
+
+
 def test_cli_start_subcommand_is_wired(loop_root: Path, capsys: pytest.CaptureFixture[str]) -> None:
     from hive_planner.cli import main
 
@@ -762,6 +837,8 @@ def test_installed_text_calls_python_gates() -> None:
     coordinator = render_role_coordinator(PACK_4)
     assert "implementation-loop start --feature" in command
     assert "implementation-loop start --feature" in coordinator
+    assert "implementation-loop check" in command
+    assert "implementation-loop check" in coordinator
     assert "implementation-loop commit" in coordinator
     assert "Do not `git commit`" in command or "Do not `git commit`" in coordinator
     assert "bug hunt" in command.lower()

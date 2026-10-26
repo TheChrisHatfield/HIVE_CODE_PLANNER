@@ -96,6 +96,7 @@ from hive_planner.launcher.service import (
     peek_implementation_loop_pack,
     run_project_bug_hunt_install,
     run_project_implementation_loop_accept,
+    run_project_implementation_loop_check,
     run_project_implementation_loop_commit,
     run_project_implementation_loop_handoff,
     run_project_implementation_loop_install,
@@ -1342,6 +1343,14 @@ def test_run_project_implementation_loop_commit_wraps_coordinator_error(tmp_path
     folder = tmp_path / "app"
     folder.mkdir()
     result = run_project_implementation_loop_commit(folder)
+    assert result["ok"] is False
+    assert result.get("error")
+
+
+def test_run_project_implementation_loop_check_wraps_not_running(tmp_path: Path) -> None:
+    folder = tmp_path / "app"
+    folder.mkdir()
+    result = run_project_implementation_loop_check(folder)
     assert result["ok"] is False
     assert result.get("error")
 

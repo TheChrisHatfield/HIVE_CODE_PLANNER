@@ -1583,6 +1583,23 @@ def run_project_implementation_loop_handoff(
     return payload
 
 
+def run_project_implementation_loop_check(project_root: Path) -> dict:
+    """Run checker infrastructure (same as CLI `implementation-loop check`)."""
+    from hive_planner.implementation_loop import CoordinatorError, coordinator_check
+
+    target, error = linked_install_directory(project_root)
+    if error:
+        return {"ok": False, "error": error, "action": "check"}
+    try:
+        report = coordinator_check(target)
+    except CoordinatorError as exc:
+        return _coordinator_error_payload(exc)
+    payload = report.to_dict()
+    if payload.get("ok") is False and not payload.get("error"):
+        payload["error"] = payload.get("blocked_reason") or "blocked"
+    return payload
+
+
 def run_project_implementation_loop_accept(project_root: Path, role: str) -> dict:
     """Accept a result.md entry (same as CLI `implementation-loop accept`)."""
     from hive_planner.implementation_loop import CoordinatorError, coordinator_accept

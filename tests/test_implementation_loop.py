@@ -229,6 +229,7 @@ def test_installed_text_forbids_merge_deploy_and_agents_md(project_root: Path) -
     assert "deploy" in coder.lower()
     assert "Do not commit" in coder
     assert "Do not commit" in checker
+    assert "implementation-loop check" in checker
     assert "Do not commit" in reviewer
     assert "force-push" in command.lower() or "force-push" in coordinator
     assert "Do not edit `AGENTS.md`" in coordinator

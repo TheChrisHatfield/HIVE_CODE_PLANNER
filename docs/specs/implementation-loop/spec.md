@@ -47,7 +47,7 @@ A person enables the loop on a Hive project, picks a pack, and can see whether a
 
 After the start phrase, the coordinator gives one open task to the coder, then the checker, then the reviewer. Each returns before the next starts. The coordinator commits only after the checker and the reviewer pass.
 
-**Independent test:** installed 4-pack command and role files describe that order, the handoff file, the 10-pass cap, and commit ownership. Status tracks round trips in `state.json`.
+**Independent test:** installed 4-pack command and role files describe that order, the handoff file, the 10-pass cap, and commit ownership. `check` writes a checker `result.md` entry from `build` / `test:quick`. Status tracks round trips in `state.json`.
 
 ### US3 — Solo pack (P2)
 
@@ -63,9 +63,9 @@ Every five completed features, the loop proposes durable lessons. The human appr
 
 ### US5 — Start from chat or Home (P2)
 
-Saying the start phrase in a project chat starts the loop in that turn. Home can install it after the pack is chosen. Project init does not install it unless a pack is passed.
+Saying the start phrase in a project chat starts the loop in that turn. Home can install it after the pack is chosen. After install, Home **Loop status**, **Loop start**, **Loop handoff**, **Loop accept**, and **Loop commit** call the same Python coordinator gates as the CLI, so the user can click or type. Project init does not install it unless a pack is passed.
 
-**Independent test:** trigger matcher, Home install call, and init without a pack leaves the loop files absent.
+**Independent test:** trigger matcher, Home install call, Home gate wrappers call the same coordinator functions as the CLI, and init without a pack leaves the loop files absent.
 
 ### US6 — Python strict coordinator (P1)
 
@@ -144,14 +144,14 @@ The coordinator writes `.hive/implementation-loop/handoff.md` before each delega
 
 `result.md` is a list of role outcomes for the **current** task. Each entry has `task`, `role`, `outcome`, `evidence`, and `question` when `outcome` is `fail`. A later pass **appends**. It does not overwrite. The coordinator replaces `result.md` when the next task's handoff is written, and when a new feature's first handoff is written. The coordinator accepts a pass only when an entry for that task and role exists with `pass`, `fail`, or `needs-sign-off`. A missing result is a failed pass.
 
-The 1-pack coordinator writes its own check and review entries. It does not write `coder.md`, `checker.md`, or `reviewer.md`.
+Python `implementation-loop check` is the checker infrastructure: it runs `build` and `test:quick` from `commands.json`, then the wiring audit when that project enforces it, and **appends** a checker `result.md` entry. Cursor still implements and reviews. Bug hunt stays a separate loop. The 1-pack coordinator does not write `coder.md`, `checker.md`, or `reviewer.md`; it still calls `check` for the checker result and writes its own reviewer entry.
 
 A role with a blocking question returns `fail` with `question` set. The coordinator asks the human, then re-hands the same role. That re-handoff counts as one round trip. The 10-pass cap is checked **before every** delegation, including a re-handoff. Checker or reviewer `fail` without `question` returns to the coder, then checker, then reviewer. `needs-sign-off` pauses for the human and does not start the coder.
 
 Order for each open task in a 4-pack:
 
 1. Coder implements and leaves the work uncommitted.
-2. Checker runs. On fail, the coder runs again. Repeat until the checker passes.
+2. Checker runs via `implementation-loop check` (Home **Loop check**). On fail, the coder runs again. Repeat until the checker passes.
 3. Reviewer runs.
 4. Coordinator updates the task, resets the round-trip count, commits, and pushes only as R5 allows.
 
@@ -223,20 +223,23 @@ The always-on rule tells the agent to read `.cursor/commands/implementation-loop
 
 Home **Enable implementation loop** asks for `1-pack` or `4-pack`, then calls the same install function as the CLI on the active linked project. Same pack refreshes prompts. A different pack asks before `--force-pack`. Cancel leaves the project unchanged.
 
+Home also exposes the coordinator gates on the active linked project: **Loop status**, **Loop start**, **Loop handoff**, **Loop check**, **Loop accept**, and **Loop commit**. Those buttons call the same Python functions as `implementation-loop status` / `start` / `handoff` / `check` / `accept` / `commit`. Feature id defaults from AGENTS.md Active feature when the dialog is left blank. Start offers `--allow-dirty` and `--force-feature` after the matching block. Handoff offers `--continue-after-cap` after the round-trip cap. Chat remains valid: the Agent prompt template **Start the implementation loop** and the always-on phrase still start the loop without using Home.
+
 ### R10 — Python coordinator gates
 
-Python enforces coordinator rules. It does not edit product code, does not run `test:quick` as the checker, and does not write checker or reviewer judgments.
+Python enforces coordinator rules. It does not edit product code and does not write reviewer judgments. It **does** run the checker infrastructure (`implementation-loop check`): `build`, `test:quick`, and the wiring audit when enforced, then appends the checker `result.md` entry from those exits.
 
 | Command | Does |
 |---------|------|
 | `implementation-loop start --feature <id>` | Readiness must be ready. Unrelated dirty paths block (`--allow-dirty` after the human chooses). Paths under `.hive/` are expected dirt. Sets `status` to `running`, `feature`, `branch`, and `current_task` to the first open checkbox. A different running feature blocks unless `--force-feature`. `status` `blocked` (push or slice `test:full` failure) blocks start unless `--force-feature` after the human agrees. When every box is already checked, sets `complete`, appends the retrospective line if missing, and does not start work. |
 | `implementation-loop handoff --role <role>` | Writes `handoff.md` for the **current** task (not merely the first open checkbox). Replaces `result.md` on the first coder/coordinator handoff of a task. Increments `round_trips`. At 10, blocks unless `--continue-after-cap`. 4-pack roles: `coder`, `checker`, `reviewer` (role names are case-insensitive). Checker requires last coder `pass`. Reviewer requires last checker `pass` **after** the last coder (a recode invalidates the previous checker). Checker or reviewer `fail` without `question` requires the next handoff to be `coder`; after that coder result, checker then reviewer are allowed again. A `fail` with `question` re-hands the same role. Checker or reviewer `needs-sign-off` forbids a coder handoff. Current branch must match `state.branch`. Detached `HEAD` is not a branch. 1-pack role: `coordinator` only. Feature comes from `state.json`. |
+| `implementation-loop check` | Runs the checker infrastructure for the current task. 4-pack: last coder outcome must be `pass`; checker or reviewer `fail` without `question` still returns to the coder first. 1-pack: loop must be running. Runs `build`, then `test:quick`, then `wiring-audit check` when that project enforces the audit. Appends a checker `result.md` entry (`pass` or `fail`) with command evidence. `ok` is false and the CLI exits 2 when the checker outcome is `fail` (the entry is still written). Does not increment `round_trips`, does not edit product code, and does not write a reviewer entry. Then `accept --role checker` as today. |
 | `implementation-loop accept --role <role>` | Passes only when `result.md` has an entry for this task and role with `outcome` `pass`, `fail`, or `needs-sign-off`. Missing is a failed pass (exit 2). `needs-sign-off` sets `slice_signoff`. Checker or reviewer `fail` without `question` sets `next_role` to `coder`. A `fail` with `question` sets `next_role` to the same role. |
 | `implementation-loop commit` | Refuses when the current branch is trunk or is not `state.branch`. Requires last checker and last reviewer `pass` for the current task. In 4-pack, that checker `pass` must be after the last coder, and that reviewer `pass` after the last checker. Blocks on `Assumption: unresolved`, `needs-sign-off`, or a dirty `AGENTS.md`. Checks off the **current** task, commits new product files plus `tasks.md` and changed `plan.md`, leaves `.hive/` unstaged, skips paths dirty at `start` and tool caches, resets `round_trips` to 0. If `git add` or `git commit` fails, restore the previous `tasks.md` checkbox and do not keep a partial checkoff. Message is `implementation-loop <feature> <task-id-or-slug>`. Does not merge, force-push, or push to trunk. When `push` is true and `origin` exists, pushes the current branch; on failure keeps the commit, sets `blocked`, does not advance `current_task`, and does not retry. After the first successful push, if `pr_url` is empty, run `gh pr create` when `gh` is available; store the URL in `state.json`. If `gh` is missing, leave `pr_url` empty and do not raise. Slice-end `test:full` failure (including a missing executable or a malformed command string) keeps the commit, sets `blocked`, and does not advance `current_task` or append a retrospective line. `handoff` and `accept` treat role names as case-insensitive. Advance to the next task (or `complete`) only after push and slice `test:full` succeed. When completed-feature count is at least 5 more than `last_retrospective_n`, write `docs/proposals/implementation-loop-candidates.md` if missing (`# operational` and `# behavioral`), set `last_retrospective_n`, and set `next_role` to `retrospective`. |
 
 Exit `0` on success. Exit `2` on a gate block. JSON stdout includes `ok`, `action`, `feature`, `task`, `role`, `round_trips`, `blocked_reason`.
 
-Installed coordinator and command text tell the agent to call these commands. The agent still runs coder, checker, and reviewer passes and appends `result.md`.
+Installed coordinator and command text tell the agent to call these commands. The agent still runs coder and reviewer passes. Python runs the checker command gates and appends the checker `result.md` entry.
 
 ## State
 
@@ -266,7 +269,7 @@ Installed coordinator and command text tell the agent to call these commands. Th
 
 ## Out of scope
 
-- Running coder, checker, or reviewer duties inside the Python process (implementing product code, judging the spec, or running `test:quick` as the checker). Coordinator gates in R10 are in scope.
+- Running **coder** or **reviewer** duties inside the Python process (implementing product code or judging the spec). Checker infrastructure in R10 (`check`) is in scope. Coordinator gates in R10 are in scope.
 - Generating or replacing Spec Kit specification, plan, or tasks.
 - Copilot paths, Copilot model pins, Jarvis or Friday personas, and the `bro` / `yagni` user skills.
 - A 5-pack CI tracker, worktree-per-item workflow, and `vibe/` or `wi/` branch names.
@@ -278,7 +281,7 @@ Installed coordinator and command text tell the agent to call these commands. Th
 
 - A project with a finished spec, plan, and task list can be installed and reported ready.
 - A project missing any R1 input is reported blocked, with the missing input named.
-- The installed 4-pack script gives each task its own coder, checker, and reviewer passes, then one commit.
+- The installed 4-pack script gives each task a coder pass, a Python checker (`build` / `test:quick` / wiring audit), a reviewer pass, then one commit.
 - The installed script forbids merge and deploy in every pack.
 - Five completed features produce a proposal file the human must approve before memory or role files change.
 - `tests/test_implementation_loop.py` covers install, readiness, the trigger phrase, pack handling, and the prohibitions in the installed text.

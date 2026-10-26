@@ -533,6 +533,10 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Allow another handoff after 10 round trips when the human agrees",
     )
+    impl_sub.add_parser(
+        "check",
+        help="Run checker infrastructure (build, test:quick, wiring audit) and append result.md",
+    )
     impl_accept = impl_sub.add_parser("accept", help="Accept a result.md entry for a role")
     impl_accept.add_argument("--role", required=True, help="Role that just returned")
     impl_sub.add_parser("commit", help="Commit after checker and reviewer pass")
@@ -1193,6 +1197,7 @@ def main(argv: list[str] | None = None) -> int:
             CoordinatorError,
             assess_implementation_readiness,
             coordinator_accept,
+            coordinator_check,
             coordinator_commit,
             coordinator_handoff,
             coordinator_start,
@@ -1236,6 +1241,8 @@ def main(argv: list[str] | None = None) -> int:
                     args.role,
                     continue_after_cap=args.continue_after_cap,
                 )
+            elif args.implementation_loop_command == "check":
+                gate = coordinator_check(root)
             elif args.implementation_loop_command == "accept":
                 gate = coordinator_accept(root, args.role)
             elif args.implementation_loop_command == "commit":

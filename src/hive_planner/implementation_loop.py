@@ -439,11 +439,12 @@ Call the Python coordinator gates. Do not `git commit`, edit `state.json` round 
 ```text
 py -3.11 -m hive_planner implementation-loop start --feature <id>
 py -3.11 -m hive_planner implementation-loop handoff --role {'coordinator' if pack == PACK_1 else 'coder'}
+py -3.11 -m hive_planner implementation-loop check
 py -3.11 -m hive_planner implementation-loop accept --role <role>
 py -3.11 -m hive_planner implementation-loop commit
 ```
 
-If this is a {pack}, the coordinator {'performs implement, check, and review, then calls commit' if pack == PACK_1 else 'delegates to coder, checker, and reviewer as separate subagent passes, then calls commit'}.
+If this is a {pack}, the coordinator {'performs implement, then Python check, then review, then commit' if pack == PACK_1 else 'delegates coder and reviewer as separate Cursor passes; Python runs check (build / test:quick / wiring audit)'}.
 
 If a bug hunt is already in progress, finish or pause it before starting this loop.
 
@@ -467,7 +468,7 @@ def render_role_coordinator(pack: str) -> str:
         "",
         "## One task",
         "",
-        "Before each delegated pass run `implementation-loop handoff --role <role>`. Python writes `handoff.md` and increments `round_trips`. After the role returns, run `implementation-loop accept --role <role>`.",
+        "Before each delegated pass run `implementation-loop handoff --role <role>`. Python writes `handoff.md` and increments `round_trips`. After the coder (or 1-pack implement) returns, run `implementation-loop check` — Python runs `build`, `test:quick`, and the wiring audit when enforced, then appends the checker `result.md` entry. After each role, run `implementation-loop accept --role <role>`.",
         "",
         "The pass **appends** to `.hive/implementation-loop/result.md`. Each entry has `task`, `role`, `outcome`, `evidence`, and `question` (when `outcome` is `fail`). Do not overwrite earlier role entries for this task.",
         "",
@@ -510,14 +511,14 @@ def render_role_coordinator(pack: str) -> str:
             "",
             "## 1-pack duties",
             "",
-            "You perform implement, check, and review yourself. You do not delegate to coder, checker, or reviewer files. You still append checker and reviewer outcomes to `result.md`, then run `implementation-loop commit`.",
+            "You implement and review yourself. You do not delegate to coder, checker, or reviewer files. Call `implementation-loop check` for the checker result, write the reviewer `result.md` entry, then run `implementation-loop commit`.",
         ])
     else:
         lines.extend([
             "",
             "## 4-pack duties",
             "",
-            "Delegate to `coder.md`, `checker.md`, and `reviewer.md` as separate subagent passes. Do not implement, check, or review yourself. Call `handoff`, then `accept`, then `commit`.",
+            "Delegate to `coder.md` and `reviewer.md` as separate Cursor passes. Do not implement or review yourself. After the coder, run `implementation-loop check` (Python checker infrastructure). Call `handoff`, then `accept`, then `commit`.",
         ])
     return "\n".join(lines) + "\n"
 
@@ -541,17 +542,11 @@ You implement the single task named in `.hive/implementation-loop/handoff.md`. Y
 def render_role_checker() -> str:
     return """# Implementation loop checker
 
-You verify the coder's changes. You do not edit product code. You do not commit.
+Python owns this pass. Run `py -3.11 -m hive_planner implementation-loop check` (or Home **Loop check**). Do not re-run the gates by hand unless `check` is missing.
 
-## Steps
+`check` runs `build` and `test:quick` from `.hive/implementation-loop/commands.json`, then the wiring audit when the project enforces it, and appends the checker `result.md` entry. You do not edit product code. You do not commit.
 
-1. Read `.hive/implementation-loop/handoff.md` and the coder's diff.
-2. Run the `build` command from `.hive/implementation-loop/commands.json`.
-3. Run `test:quick` from `.hive/implementation-loop/commands.json`.
-4. Run the integration wiring audit checklist (`.cursor/rules/integration-wiring-audit.mdc`).
-5. Append a `result.md` entry with `outcome: pass` and the evidence, or `outcome: fail` and the failing step. Do not overwrite other roles.
-
-If any step fails, report it and stop. Do not edit `AGENTS.md`. Do not commit.
+Do not edit `AGENTS.md`. Do not commit.
 """
 
 
@@ -1123,6 +1118,55 @@ def _reset_result(root: Path, task: str) -> None:
         raise CoordinatorError(f"cannot write result.md: {exc}", action="handoff") from exc
 
 
+def _evidence_line(label: str, proc: subprocess.CompletedProcess[str]) -> str:
+    blob = (proc.stderr or proc.stdout or "").strip().replace("\n", " ")
+    if len(blob) > 400:
+        blob = blob[:400] + "…"
+    extra = f": {blob}" if blob else ""
+    return f"{label} exit {proc.returncode}{extra}"
+
+
+def _append_result_entry(
+    root: Path,
+    task: str,
+    role: str,
+    outcome: str,
+    evidence: str,
+    *,
+    action: str,
+) -> None:
+    path = _result_path(root)
+    existing = _read_result_text(root, action)
+    if not existing.strip():
+        existing = f"# result — {task or 'current task'}\n"
+    safe = evidence.replace("\n", " ").strip() or "(no evidence)"
+    block = (
+        f"\n- task: {task}\n"
+        f"  role: {role}\n"
+        f"  outcome: {outcome}\n"
+        f"  evidence: {safe}\n"
+    )
+    try:
+        path.write_text(existing + block, encoding="utf-8")
+    except OSError as exc:
+        raise CoordinatorError(f"cannot write result.md: {exc}", action=action) from exc
+
+
+def _checker_wiring_audit_step(root: Path, feature: str) -> tuple[str, bool] | None:
+    from hive_planner.config import RepoPaths
+    from hive_planner.wiring_audit import check_wiring_audit, wiring_audit_enforced
+
+    paths = RepoPaths(root=root)
+    if not wiring_audit_enforced(paths):
+        return None
+    report = check_wiring_audit(paths, feature=feature)
+    detail = (report.detail or "").replace("\n", " ").strip()
+    if len(detail) > 400:
+        detail = detail[:400] + "…"
+    extra = f": {detail}" if detail else ""
+    return (f"wiring-audit {'pass' if report.ok else 'fail'}{extra}", report.ok)
+
+
 def _completed_feature_count(text: str) -> int:
     return len(re.findall(r"^\d{4}-\d{2}-\d{2} \| completed=", text, re.MULTILINE))
 
@@ -1402,6 +1446,81 @@ def coordinator_handoff(
         role=role,
         round_trips=state.round_trips,
         next_role=role,
+    )
+
+
+def coordinator_check(root: Path) -> CoordinatorReport:
+    root = root.resolve()
+    state = _load_state(root)
+    if state.status != "running" or not state.feature:
+        raise CoordinatorError("loop is not running — start first", action="check")
+    _require_loop_branch(root, state, "check")
+    pack = state.pack if state.pack in VALID_PACKS else PACK_4
+    entries = parse_result_entries(_read_result_text(root, "check"))
+    task = state.current_task
+    if pack == PACK_4:
+        if _force_coder_after_fail(entries, task, "reviewer"):
+            raise CoordinatorError(
+                "reviewer fail returns to coder",
+                action="check",
+                feature=state.feature,
+                task=task,
+                role="checker",
+            )
+        if _force_coder_after_fail(entries, task, "checker"):
+            raise CoordinatorError(
+                "checker fail returns to coder",
+                action="check",
+                feature=state.feature,
+                task=task,
+                role="checker",
+            )
+        if _last_outcome(entries, task, "coder") != "pass":
+            raise CoordinatorError(
+                "check requires last coder outcome pass",
+                action="check",
+                feature=state.feature,
+                task=task,
+                role="checker",
+            )
+        if _last_outcome(entries, task, "reviewer") == "needs-sign-off" or _last_outcome(
+            entries, task, "checker"
+        ) == "needs-sign-off":
+            raise CoordinatorError(
+                "needs-sign-off pauses; do not start the checker",
+                action="check",
+                feature=state.feature,
+                task=task,
+                role="checker",
+            )
+
+    steps: list[str] = []
+    outcome = "pass"
+    for key in ("build", "test:quick"):
+        proc = _run_named_command(root, key)
+        steps.append(_evidence_line(key, proc))
+        if proc.returncode != 0:
+            outcome = "fail"
+            break
+    if outcome == "pass":
+        wiring = _checker_wiring_audit_step(root, state.feature)
+        if wiring is not None:
+            line, ok = wiring
+            steps.append(line)
+            if not ok:
+                outcome = "fail"
+
+    _append_result_entry(root, task, "checker", outcome, "; ".join(steps), action="check")
+    failed = outcome == "fail"
+    return CoordinatorReport(
+        ok=not failed,
+        action="check",
+        feature=state.feature,
+        task=task,
+        role="checker",
+        round_trips=state.round_trips,
+        blocked_reason="fail" if failed else "",
+        next_role="coder" if failed else "checker",
     )
 
 

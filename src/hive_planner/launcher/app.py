@@ -45,6 +45,7 @@ from hive_planner.launcher.service import (
     run_project_bug_hunt_install,
     peek_implementation_loop_pack,
     run_project_implementation_loop_accept,
+    run_project_implementation_loop_check,
     run_project_implementation_loop_commit,
     run_project_implementation_loop_handoff,
     run_project_implementation_loop_install,
@@ -957,6 +958,12 @@ class HivePlannerApp:
             "Loop handoff",
             self._on_implementation_loop_handoff,
             tooltip="Same as implementation-loop handoff: write handoff.md and increment round trips for a role.",
+        )
+        secondary_button(
+            loop_actions,
+            "Loop check",
+            self._on_implementation_loop_check,
+            tooltip="Same as implementation-loop check: run build, tests, and wiring audit for this task (not a bug hunt).",
         )
         secondary_button(
             loop_actions,
@@ -3010,6 +3017,16 @@ class HivePlannerApp:
             self._log_loop_gate(result)
             return
         self._log_loop_gate(result)
+
+    def _on_implementation_loop_check(self) -> None:
+        link = self._require_active_link()
+        if link is None:
+            return
+        self._start_home_action("Running implementation-loop check…")
+        self._run_bg(
+            lambda r=link: run_project_implementation_loop_check(r),
+            self._project_done_callback("Implementation loop check", self._log_loop_gate),
+        )
 
     def _on_implementation_loop_accept(self) -> None:
         link = self._require_active_link()
