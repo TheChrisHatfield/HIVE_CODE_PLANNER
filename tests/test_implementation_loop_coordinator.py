@@ -254,7 +254,11 @@ def test_fifth_completed_feature_writes_proposal_stub(tmp_path: Path) -> None:
     (loop / "retrospective.log").write_text("".join(lines), encoding="utf-8")
     completed = _append_retrospective(tmp_path, "feat-5")
     assert completed == 5
-    assert _retrospective_due(completed) is True
+    assert _retrospective_due(completed, 0) is True
+    assert _retrospective_due(6, 0) is True
+    assert _retrospective_due(10, 5) is True
+    assert _retrospective_due(6, 5) is False
+    assert _retrospective_due(5, 5) is False
     _ensure_proposal_stub(tmp_path)
     text = (tmp_path / "docs/proposals/implementation-loop-candidates.md").read_text(encoding="utf-8")
     assert "# operational" in text
@@ -299,6 +303,80 @@ def test_task_id_is_not_a_prefix_of_a_longer_id() -> None:
     checked = _check_off_task(text, "T001", "T001 short")
     assert "- [x] T001 short" in checked
     assert "- [ ] T0010 longer" in checked
+
+
+def test_commit_refuses_trunk_branch(loop_root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import hive_planner.implementation_loop as mod
+
+    _install_ready(loop_root)
+    coordinator_start(loop_root, "feature-x")
+    coordinator_handoff(loop_root, "coder")
+    _write_result(loop_root, "T001", "coder", "pass")
+    coordinator_accept(loop_root, "coder")
+    coordinator_handoff(loop_root, "checker")
+    _write_result(loop_root, "T001", "checker", "pass")
+    coordinator_accept(loop_root, "checker")
+    coordinator_handoff(loop_root, "reviewer")
+    _write_result(loop_root, "T001", "reviewer", "pass")
+    coordinator_accept(loop_root, "reviewer")
+    monkeypatch.setattr(mod, "_current_branch", lambda root: "main")
+    monkeypatch.setattr(mod, "_resolve_trunk", lambda root: "main")
+    with pytest.raises(CoordinatorError, match="trunk"):
+        coordinator_commit(loop_root)
+
+
+def test_handoff_describes_current_task_not_first_open(loop_root: Path) -> None:
+    tasks = loop_root / "docs/specs/feature-x/tasks.md"
+    tasks.write_text("# tasks\n\n## Slice\n\n- [ ] T001 do the thing\n- [ ] T002 later\n", encoding="utf-8")
+    _install_ready(loop_root)
+    coordinator_start(loop_root, "feature-x")
+    tasks.write_text(
+        "# tasks\n\n## Slice\n\n- [ ] T000 inserted first\n- [ ] T001 do the thing\n- [ ] T002 later\n",
+        encoding="utf-8",
+    )
+    coordinator_handoff(loop_root, "coder")
+    text = (loop_root / ".hive/implementation-loop/handoff.md").read_text(encoding="utf-8")
+    assert "task: T001" in text
+    assert "T001 do the thing" in text
+    assert "T000" not in text
+
+
+def test_reviewer_fail_returns_to_coder(loop_root: Path) -> None:
+    _install_ready(loop_root)
+    coordinator_start(loop_root, "feature-x")
+    coordinator_handoff(loop_root, "coder")
+    _write_result(loop_root, "T001", "coder", "pass")
+    coordinator_accept(loop_root, "coder")
+    coordinator_handoff(loop_root, "checker")
+    _write_result(loop_root, "T001", "checker", "pass")
+    coordinator_accept(loop_root, "checker")
+    coordinator_handoff(loop_root, "reviewer")
+    _write_result(loop_root, "T001", "reviewer", "fail")
+    accepted = coordinator_accept(loop_root, "reviewer")
+    assert accepted.next_role == "coder"
+    with pytest.raises(CoordinatorError, match="returns to coder"):
+        coordinator_handoff(loop_root, "reviewer")
+    again = coordinator_handoff(loop_root, "coder")
+    assert again.ok is True
+
+
+def test_needs_sign_off_blocks_commit_and_coder(loop_root: Path) -> None:
+    _install_ready(loop_root)
+    coordinator_start(loop_root, "feature-x")
+    coordinator_handoff(loop_root, "coder")
+    _write_result(loop_root, "T001", "coder", "pass")
+    coordinator_accept(loop_root, "coder")
+    coordinator_handoff(loop_root, "checker")
+    _write_result(loop_root, "T001", "checker", "pass")
+    coordinator_accept(loop_root, "checker")
+    coordinator_handoff(loop_root, "reviewer")
+    _write_result(loop_root, "T001", "reviewer", "needs-sign-off")
+    accepted = coordinator_accept(loop_root, "reviewer")
+    assert accepted.blocked_reason == "needs-sign-off"
+    with pytest.raises(CoordinatorError, match="needs-sign-off"):
+        coordinator_commit(loop_root)
+    with pytest.raises(CoordinatorError, match="needs-sign-off"):
+        coordinator_handoff(loop_root, "coder")
 
 
 def test_cli_start_subcommand_is_wired(loop_root: Path, capsys: pytest.CaptureFixture[str]) -> None:

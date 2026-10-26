@@ -111,6 +111,7 @@ class LoopState:
     pr_url: str = ""
     slice_signoff: str = "continue"
     baseline_dirty: list[str] = field(default_factory=list)
+    last_retrospective_n: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -123,6 +124,7 @@ class LoopState:
             "pr_url": self.pr_url,
             "slice_signoff": self.slice_signoff,
             "baseline_dirty": list(self.baseline_dirty),
+            "last_retrospective_n": self.last_retrospective_n,
         }
 
     @classmethod
@@ -140,6 +142,7 @@ class LoopState:
             pr_url=str(raw.get("pr_url", "")),
             slice_signoff=str(raw.get("slice_signoff", "continue")),
             baseline_dirty=[str(p).replace("\\", "/") for p in baseline],
+            last_retrospective_n=_coerce_round_trips(raw.get("last_retrospective_n", 0)),
         )
 
 
@@ -249,6 +252,19 @@ def _resolve_trunk(root: Path) -> str:
     return "main"
 
 
+def _require_non_trunk(root: Path, action: str) -> str:
+    branch = _current_branch(root)
+    trunk = _resolve_trunk(root)
+    if not branch:
+        raise CoordinatorError("no current git branch", action=action)
+    if branch == trunk:
+        raise CoordinatorError(
+            f"current branch '{branch}' is trunk '{trunk}'",
+            action=action,
+        )
+    return branch
+
+
 def _current_branch(root: Path) -> str:
     try:
         out = subprocess.run(
@@ -290,6 +306,24 @@ def _discover_commands(root: Path) -> dict[str, str]:
                 commands["build"] = "make build"
             if "test:quick" not in commands and re.search(r"^test:", text, re.MULTILINE):
                 commands["test:quick"] = "make test"
+            break
+    for name in ("Justfile", "justfile"):
+        p = root / name
+        if p.is_file():
+            text = p.read_text(encoding="utf-8", errors="replace")
+            if "build" not in commands and re.search(r"^build[\s:]", text, re.MULTILINE):
+                commands["build"] = "just build"
+            if "test:quick" not in commands and re.search(r"^test[\s:]", text, re.MULTILINE):
+                commands["test:quick"] = "just test"
+            break
+    for name in ("Taskfile.yml", "Taskfile.yaml", "taskfile.yml"):
+        p = root / name
+        if p.is_file():
+            text = p.read_text(encoding="utf-8", errors="replace")
+            if "build" not in commands and re.search(r"^  build:", text, re.MULTILINE):
+                commands["build"] = "task build"
+            if "test:quick" not in commands and re.search(r"^  test:", text, re.MULTILINE):
+                commands["test:quick"] = "task test"
             break
     pkg = root / "package.json"
     if pkg.is_file():
@@ -931,8 +965,8 @@ def _completed_feature_count(text: str) -> int:
     return len(re.findall(r"^\d{4}-\d{2}-\d{2} \| completed=", text, re.MULTILINE))
 
 
-def _retrospective_due(completed: int) -> bool:
-    return completed > 0 and completed % 5 == 0
+def _retrospective_due(completed: int, last: int = 0) -> bool:
+    return completed > 0 and completed >= last + 5
 
 
 def _ensure_proposal_stub(root: Path) -> None:
@@ -1018,8 +1052,9 @@ def coordinator_start(
         state.round_trips = 0
         completed = _append_retrospective(root, feature)
         next_role = ""
-        if _retrospective_due(completed):
+        if _retrospective_due(completed, state.last_retrospective_n):
             _ensure_proposal_stub(root)
+            state.last_retrospective_n = completed
             next_role = "retrospective"
         _save_state(root, state)
         return CoordinatorReport(
@@ -1112,6 +1147,23 @@ def coordinator_handoff(
     entries = parse_result_entries(_result_path(root).read_text(encoding="utf-8") if _result_path(root).is_file() else "")
     task = state.current_task
     if pack == PACK_4:
+        last_reviewer = _last_outcome(entries, task, "reviewer")
+        if last_reviewer == "needs-sign-off" and role == "coder":
+            raise CoordinatorError(
+                "needs-sign-off pauses; do not start the coder",
+                action="handoff",
+                feature=state.feature,
+                task=task,
+                role=role,
+            )
+        if last_reviewer == "fail" and role != "coder":
+            raise CoordinatorError(
+                "reviewer fail returns to coder",
+                action="handoff",
+                feature=state.feature,
+                task=task,
+                role=role,
+            )
         if role == "checker" and _last_outcome(entries, task, "coder") != "pass":
             raise CoordinatorError(
                 "checker handoff requires last coder outcome pass",
@@ -1130,9 +1182,16 @@ def coordinator_handoff(
             )
 
     tasks_text = (root / f"docs/specs/{state.feature}/tasks.md").read_text(encoding="utf-8")
-    task_id, heading, body = _first_open_task(tasks_text)
+    task_id, heading, body = _open_task_for_current(tasks_text, state.current_task)
     if not state.current_task:
         state.current_task = task_id or body
+        task = state.current_task
+        _reset_result(root, state.current_task)
+        entries = []
+    has_current = any(
+        _task_token_matches(str(entry.get("task", "")), task, task) for entry in entries
+    )
+    if not has_current and role in {"coder", "coordinator"}:
         _reset_result(root, state.current_task)
     state.round_trips += 1
     _write_handoff(root, state, role, heading, body)
@@ -1158,7 +1217,7 @@ def coordinator_accept(root: Path, role: str) -> CoordinatorReport:
         raise CoordinatorError("result.md is missing", action="accept", feature=state.feature, role=role)
     entries = parse_result_entries(path.read_text(encoding="utf-8"))
     outcome = _last_outcome(entries, state.current_task, role)
-    if outcome not in {"pass", "fail"}:
+    if outcome not in {"pass", "fail", "needs-sign-off"}:
         raise CoordinatorError(
             f"missing result for task '{state.current_task}' role '{role}'",
             action="accept",
@@ -1167,6 +1226,17 @@ def coordinator_accept(root: Path, role: str) -> CoordinatorReport:
             role=role,
             round_trips=state.round_trips,
         )
+    if outcome == "needs-sign-off":
+        state.slice_signoff = "needs-sign-off"
+        _save_state(root, state)
+    elif state.slice_signoff == "needs-sign-off" and outcome == "pass" and role == "reviewer":
+        state.slice_signoff = "continue"
+        _save_state(root, state)
+    blocked = ""
+    if outcome == "fail":
+        blocked = "fail"
+    elif outcome == "needs-sign-off":
+        blocked = "needs-sign-off"
     return CoordinatorReport(
         ok=True,
         action="accept",
@@ -1174,8 +1244,8 @@ def coordinator_accept(root: Path, role: str) -> CoordinatorReport:
         task=state.current_task,
         role=role,
         round_trips=state.round_trips,
-        blocked_reason="" if outcome == "pass" else "fail",
-        next_role=role,
+        blocked_reason=blocked,
+        next_role="coder" if outcome == "fail" and role == "reviewer" else role,
     )
 
 
@@ -1204,6 +1274,7 @@ def coordinator_commit(root: Path) -> CoordinatorReport:
     state = _load_state(root)
     if state.status != "running" or not state.feature:
         raise CoordinatorError("loop is not running — start first", action="commit")
+    _require_non_trunk(root, "commit")
     feature = state.feature
     tasks_path = root / f"docs/specs/{feature}/tasks.md"
     tasks_text = tasks_path.read_text(encoding="utf-8")
@@ -1218,6 +1289,9 @@ def coordinator_commit(root: Path) -> CoordinatorReport:
         )
 
     entries = parse_result_entries(_result_path(root).read_text(encoding="utf-8") if _result_path(root).is_file() else "")
+    reviewer_outcome = _last_outcome(entries, current, "reviewer")
+    if reviewer_outcome == "needs-sign-off" or state.slice_signoff == "needs-sign-off":
+        raise CoordinatorError("needs-sign-off blocks commit", action="commit", feature=feature, task=current)
     for role in COMMIT_ROLES:
         if _last_outcome(entries, current, role) != "pass":
             raise CoordinatorError(
@@ -1226,8 +1300,6 @@ def coordinator_commit(root: Path) -> CoordinatorReport:
                 feature=feature,
                 task=current,
             )
-    if _last_outcome(entries, current, "reviewer") == "needs-sign-off" or state.slice_signoff == "needs-sign-off":
-        raise CoordinatorError("needs-sign-off blocks commit", action="commit", feature=feature, task=current)
 
     dirty = _dirty_paths(root)
     if any(p == "AGENTS.md" or p.endswith("/AGENTS.md") for p in dirty):
@@ -1319,8 +1391,9 @@ def coordinator_commit(root: Path) -> CoordinatorReport:
 
     next_role = ""
     if not more:
-        if _retrospective_due(completed):
+        if _retrospective_due(completed, state.last_retrospective_n):
             _ensure_proposal_stub(root)
+            state.last_retrospective_n = completed
             next_role = "retrospective"
     else:
         next_role = "coordinator" if state.pack == PACK_1 else "coder"

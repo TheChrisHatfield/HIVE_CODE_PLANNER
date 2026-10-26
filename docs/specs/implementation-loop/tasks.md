@@ -54,10 +54,11 @@ Load [`docs/planning-rosetta-stone.md`](../../planning-rosetta-stone.md) (`plann
 - [x] T019 Python `start` / `handoff` / `accept` / `commit` gates: dirty-tree block, 10-pass cap, refuse commit without checker and reviewer `pass`, check off the task, leave `.hive/` unstaged; installed coordinator text calls these commands; tests in `tests/test_implementation_loop_coordinator.py`
 - [x] T020 Close deploy gaps: spec status implemented; `baseline_dirty` in state table; first successful push opens `gh pr create` and stores `pr_url`; every five completed features writes the proposal stub; commit leftover spec/docs
 - [x] T021 Live 4-pack proof: add an Implementation loop pointer to `START_HERE.md`
+- [x] T022 Fix coordinator gaps: refuse commit on trunk; handoff uses current task; reviewer fail returns to coder; `needs-sign-off` is a real accept/commit outcome; Justfile/Taskfile discovery; retrospective due every +5 completed
 
 ## Active task
 
-**T021** — live 4-pack proof on START_HERE.
+**None** — T022 coordinator gap fixes checked.
 
 ## Validation log
 
@@ -109,5 +110,11 @@ Load [`docs/planning-rosetta-stone.md`](../../planning-rosetta-stone.md) (`plann
 - spec/plan/micro Status: implemented
 - gh pr create stores pr_url; five completes write proposal stub
 - tests: 40 passed
+
+2026-10-26 — T022 coordinator gap fixes
+- commit refuses trunk; handoff uses current_task; reviewer fail -> coder; needs-sign-off accept/commit
+- Justfile/Taskfile discovery; last_retrospective_n
+- tests: 46 passed
 ```
+
 

@@ -332,6 +332,24 @@ def test_discover_does_not_overwrite_pytest_with_makefile(project_root: Path) ->
     assert commands["test:quick"] == "py -3.11 -m pytest"
 
 
+def test_discover_build_from_justfile(project_root: Path) -> None:
+    (project_root / "Justfile").write_text("build:\n\techo ok\n", encoding="utf-8")
+    install_implementation_loop(project_root, PACK_4)
+    commands = json.loads(
+        (project_root / ".hive/implementation-loop/commands.json").read_text(encoding="utf-8")
+    )
+    assert commands["build"] == "just build"
+
+
+def test_discover_build_from_taskfile(project_root: Path) -> None:
+    (project_root / "Taskfile.yml").write_text("tasks:\n  build:\n    cmds: [echo ok]\n", encoding="utf-8")
+    install_implementation_loop(project_root, PACK_4)
+    commands = json.loads(
+        (project_root / ".hive/implementation-loop/commands.json").read_text(encoding="utf-8")
+    )
+    assert commands["build"] == "task build"
+
+
 def test_discover_build_from_src_and_setuptools(project_root: Path) -> None:
     (project_root / "src").mkdir()
     (project_root / "src" / "pkg").mkdir()
