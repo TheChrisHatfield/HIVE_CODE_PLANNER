@@ -60,6 +60,17 @@ GIT_IDENTITY = {
     "GIT_COMMITTER_NAME": "Hive implementation-loop",
     "GIT_COMMITTER_EMAIL": "implementation-loop@hive.local",
 }
+_SKIP_DIRTY_NAMES = frozenset(
+    {
+        "__pycache__",
+        ".pytest_cache",
+        ".mypy_cache",
+        ".ruff_cache",
+        ".tox",
+        "node_modules",
+        ".eggs",
+    }
+)
 
 
 def validate_pack(pack: str) -> str:
@@ -758,7 +769,8 @@ def _unrelated_dirty(paths: list[str]) -> list[str]:
     for posix in paths:
         if posix.startswith(".hive/") or posix == ".hive":
             continue
-        if "__pycache__" in posix.split("/") or posix.endswith(".pyc"):
+        parts = posix.split("/")
+        if posix.endswith((".pyc", ".pyo")) or any(part in _SKIP_DIRTY_NAMES for part in parts):
             continue
         unrelated.append(posix)
     return unrelated
