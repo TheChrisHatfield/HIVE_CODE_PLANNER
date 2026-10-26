@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -657,6 +658,28 @@ def test_missing_test_full_binary_blocks_without_crash(loop_root: Path) -> None:
     state = json.loads((loop_root / ".hive/implementation-loop/state.json").read_text(encoding="utf-8"))
     assert state["status"] == "blocked"
     assert state["current_task"] == "T001"
+
+
+def test_run_named_command_preserves_windows_exe_path(loop_root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    if sys.platform != "win32":
+        pytest.skip("Windows command splitting")
+    import hive_planner.implementation_loop as mod
+
+    _install_ready(loop_root)
+    captured: dict[str, object] = {}
+
+    def fake_run(args, **_kwargs):  # type: ignore[no-untyped-def]
+        captured["args"] = list(args)
+        return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(mod.subprocess, "run", fake_run)
+    commands_path = loop_root / ".hive/implementation-loop/commands.json"
+    commands = json.loads(commands_path.read_text(encoding="utf-8"))
+    commands["test:full"] = r"C:\Python311\python.exe -m pytest"
+    commands_path.write_text(json.dumps(commands), encoding="utf-8")
+    proc = _run_named_command(loop_root, "test:full")
+    assert proc.returncode == 0
+    assert captured["args"] == [r"C:\Python311\python.exe", "-m", "pytest"]
 
 
 def test_run_named_command_unbalanced_quotes_do_not_raise(loop_root: Path) -> None:

@@ -10,6 +10,7 @@ import os
 import re
 import shlex
 import subprocess
+import sys
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
@@ -1473,7 +1474,7 @@ def _run_named_command(root: Path, key: str) -> subprocess.CompletedProcess[str]
     if not raw:
         raise CoordinatorError(f"commands.json missing {key}", action="commit")
     try:
-        args = shlex.split(raw, posix=True)
+        args = shlex.split(raw, posix=(sys.platform != "win32"))
     except ValueError as exc:
         return subprocess.CompletedProcess([raw], 127, stdout="", stderr=str(exc))
     try:
