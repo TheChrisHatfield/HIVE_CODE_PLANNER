@@ -47,10 +47,16 @@ Load [`docs/planning-rosetta-stone.md`](../../planning-rosetta-stone.md) (`plann
 - [x] T015 Add the module and test rows in `docs/change-impact/project-map.md` and `test-map.md` after the module exists
 - [x] T016 Wiring audit: CLI, init flag, and Home all call install; status exit `2` on a blocked fixture; spec-drift-check for `implementation-loop`
 - [x] T017 Status reports `complete` (exit 0) when every task is checked and the other R1 files exist, even if `state.json` is not already `complete`. Do not treat "no open task" as blocked in that case. Trunk still blocks starting work, not this complete report.
+- [x] T018 Close remaining R1/R5/R6/R7/R8 prompt and status gaps: status JSON reports `round_trips` from `state.json`; coordinator text covers dirty tree, commit slug, slice `test:full`, and five-feature retrospective; always-on rule picks or asks for the feature; spec R1 documents `origin/` trunk strip
+
+## Phase 8 — Python coordinator gates (US6)
+
+- [x] T019 Python `start` / `handoff` / `accept` / `commit` gates: dirty-tree block, 10-pass cap, refuse commit without checker and reviewer `pass`, check off the task, leave `.hive/` unstaged; installed coordinator text calls these commands; tests in `tests/test_implementation_loop_coordinator.py`
+- [x] T020 Close deploy gaps: spec status implemented; `baseline_dirty` in state table; first successful push opens `gh pr create` and stores `pr_url`; every five completed features writes the proposal stub; commit leftover spec/docs
 
 ## Active task
 
-**None** — T017 complete-status gate checked.
+**None** — T020 deploy-gap close-out checked.
 
 ## Validation log
 
@@ -84,4 +90,23 @@ Load [`docs/planning-rosetta-stone.md`](../../planning-rosetta-stone.md) (`plann
 2026-10-25 — T017 complete-status gate
 - assess_implementation_readiness: all boxes checked + commands/pack => complete (exit 0) without state.status already complete
 - tests/test_implementation_loop.py: 21 passed
+
+2026-10-26 — T018 remaining spec/code gaps
+- ReadinessReport.to_dict includes round_trips, current_task, pack, pr_url, state_status
+- coordinator.md: dirty tree, commit slug, slice ## + test:full, five-feature retrospective
+- always-on rule: several features / exactly one / none ready
+- spec R1: strip origin/ from trunk; status JSON fields
+- tests/test_implementation_loop.py: 25 passed
+- spec-drift-check --feature implementation-loop: ok
+
+2026-10-26 — T019 Python coordinator gates
+- CLI start / handoff / accept / commit
+- tests/test_implementation_loop.py + tests/test_implementation_loop_coordinator.py: 31 passed
+- spec-drift-check --feature implementation-loop: ok
+
+2026-10-26 — T020 deploy-gap close-out
+- spec/plan/micro Status: implemented
+- gh pr create stores pr_url; five completes write proposal stub
+- tests: 40 passed
 ```
+

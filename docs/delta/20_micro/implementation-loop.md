@@ -1,7 +1,7 @@
 # Feature Micro Brief: implementation-loop
 
 **Hook:** `spec.flow`, `workflow.tools`, `integration.cl_spec`  
-**Status:** draft
+**Status:** implemented
 
 <!-- ROSETTA-NAV -->
 
@@ -23,11 +23,12 @@ Implementation loop — code a finished Hive spec in separate passes.
 | Install a Cursor loop that reads `docs/specs/<feature>/{spec,plan,tasks}.md` | Writing or regenerating the spec, plan, or tasks |
 | 1-pack and 4-pack | 5-pack tracker, personas, Copilot install |
 | One task per cycle: implement, check, review, then coordinator commit | Merge, deploy, force-push |
-| Readiness command that blocks when the spec stack or commands are missing | Running the coding loop inside Python |
+| Readiness command that blocks when the spec stack or commands are missing | Running coder, checker, or reviewer inside Python |
+| Python coordinator gates: start, handoff, accept, commit | Agent-owned git commit or hand-edited round trips |
 | Retrospective every five completed features, human-approved | Editing `AGENTS.md` during a coding task |
 | Chat start phrase and Home enable | Install on every `init` without a pack |
 
-**Files:** `src/hive_planner/implementation_loop.py`, `src/hive_planner/cli.py`, `src/hive_planner/bootstrap.py`, `src/hive_planner/launcher/app.py`, `src/hive_planner/launcher/service.py`, `tests/test_implementation_loop.py`
+**Files:** `src/hive_planner/implementation_loop.py`, `src/hive_planner/cli.py`, `src/hive_planner/bootstrap.py`, `src/hive_planner/launcher/app.py`, `src/hive_planner/launcher/service.py`, `tests/test_implementation_loop.py`, `tests/test_implementation_loop_coordinator.py`
 
 ## Acceptance Criteria
 
@@ -44,3 +45,5 @@ Implementation loop — code a finished Hive spec in separate passes.
 py -3.11 -m pytest tests/test_implementation_loop.py -v
 py -3.11 -m hive_planner spec-drift-check --feature implementation-loop
 ```
+
+T018: status JSON includes `round_trips` from `state.json`. Installed coordinator text covers dirty tree, commit slug, slice `test:full`, and five-feature retrospective. Always-on rule picks or asks for the feature.

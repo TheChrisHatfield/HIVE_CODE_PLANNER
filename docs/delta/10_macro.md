@@ -87,7 +87,7 @@ See [shared-graph-memory-v1.md](./20_micro/shared-graph-memory-v1.md).
 | Planning (Perplexity) | Upstream research and blueprint |
 | Spec (Spec Kit) | spec.md / plan.md / tasks.md |
 | Coding (Cursor) | Implementation against active task |
-| Implementation loop (optional) | After spec, plan, and tasks exist: separate coder, checker, and reviewer passes, then one commit. See [implementation-loop](../specs/implementation-loop/spec.md). |
+| Implementation loop (optional) | After spec, plan, and tasks exist: Python coordinator gates; Cursor coder, checker, and reviewer passes; then one Python commit. See [implementation-loop](../specs/implementation-loop/spec.md). |
 | Compiler (automated) | Ingest sources, emit cartridge |
 
 ## Workflow Graph
@@ -100,7 +100,7 @@ Perplexity research
   -> cartridge/ + indexes
   -> Cursor reads START_HERE + Rosetta + active task
   -> Spec Kit spec.md + plan.md + tasks.md
-  -> optional implementation loop (one task per cycle, separate passes, commit after gates)
+  -> optional implementation loop (Python start/handoff/accept/commit; Cursor role passes)
   -> validate -> retrospective proposals -> optional AGENTS.md promotion
 ```
 

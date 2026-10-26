@@ -1,7 +1,7 @@
 # Spec: implementation-loop
 
 **Hook:** `spec.flow`, `workflow.tools`, `integration.cl_spec`, `integration.wiring_audit`  
-**Status:** draft  
+**Status:** implemented  
 **Created:** 2026-10-25  
 **Delta:** [implementation-loop.md](../../delta/20_micro/implementation-loop.md)
 
@@ -25,7 +25,7 @@ Hive Planner already produces the specification: `spec.md`, `plan.md`, and `task
 
 The loop is adapted from [microsoft/agentic-loops](https://github.com/microsoft/agentic-loops) (MIT, copyright Mr. Das, 2026). Hive keeps Spec Kit as the specification stage. The loop is the execution stage. Each role is a separate agent pass. Git state, the task file, and a handoff file carry the work between passes.
 
-The Python CLI installs the loop and reports whether a feature is ready. It does not implement the feature.
+The Python CLI installs the loop, reports whether a feature is ready, and enforces coordinator gates (`start`, `handoff`, `accept`, `commit`). It does not implement the feature and does not run coder, checker, or reviewer duties.
 
 ## Layers
 
@@ -67,6 +67,12 @@ Saying the start phrase in a project chat starts the loop in that turn. Home can
 
 **Independent test:** trigger matcher, Home install call, and init without a pack leaves the loop files absent.
 
+### US6 — Python strict coordinator (P1)
+
+The agent must not commit, increment round trips, or write the handoff by hand. Python owns those gates. Cursor still implements, checks, and reviews.
+
+**Independent test:** `start` blocks unrelated dirty paths; `handoff` stops at 10 round trips; `commit` refuses without checker and reviewer `pass`; a valid commit checks the task box and leaves `.hive/implementation-loop/` unstaged.
+
 ## Requirements
 
 ### R1 — Ready to code
@@ -81,9 +87,9 @@ Saying the start phrase in a project chat starts the loop in that turn. Home can
 - The current Git branch is not trunk.
 - Pack is `1-pack` or `4-pack`.
 
-Trunk is `git symbolic-ref --short refs/remotes/origin/HEAD` when that ref exists. Otherwise trunk is `main` if that branch exists, else `master`.
+Trunk is `git symbolic-ref --short refs/remotes/origin/HEAD` when that ref exists. Strip a leading `origin/` so `origin/main` matches branch `main`. Otherwise trunk is `main` if that branch exists, else `master`.
 
-Status exit code is `0` when ready **or** when the feature is `complete` (every box checked and the other R1 files exist). Exit `2` when blocked. The blocked message names each missing piece. The command does not create spec, plan, or tasks.
+Status exit code is `0` when ready **or** when the feature is `complete` (every box checked and the other R1 files exist). Exit `2` when blocked. The blocked message names each missing piece. The command does not create spec, plan, or tasks. Status JSON includes `round_trips`, `current_task`, `pack`, `pr_url`, and `state_status` from `state.json` when that file exists.
 
 Install is allowed on trunk. Readiness still blocks until the current branch is not trunk.
 
@@ -217,6 +223,21 @@ The always-on rule tells the agent to read `.cursor/commands/implementation-loop
 
 Home **Enable implementation loop** asks for `1-pack` or `4-pack`, then calls the same install function as the CLI on the active linked project. Same pack refreshes prompts. A different pack asks before `--force-pack`. Cancel leaves the project unchanged.
 
+### R10 — Python coordinator gates
+
+Python enforces coordinator rules. It does not edit product code, does not run `test:quick` as the checker, and does not write checker or reviewer judgments.
+
+| Command | Does |
+|---------|------|
+| `implementation-loop start --feature <id>` | Readiness must be ready. Unrelated dirty paths block (`--allow-dirty` after the human chooses). Paths under `.hive/` are expected dirt. Sets `status` to `running`, `feature`, `branch`, and `current_task` to the first open checkbox. A different running feature blocks unless `--force-feature`. When every box is already checked, sets `complete`, appends the retrospective line if missing, and does not start work. |
+| `implementation-loop handoff --role <role>` | Writes `handoff.md`. Replaces `result.md` on the first handoff of a task. Increments `round_trips`. At 10, blocks unless `--continue-after-cap`. 4-pack roles: `coder`, `checker`, `reviewer`. Checker requires last coder `pass`. Reviewer requires last checker `pass`. 1-pack role: `coordinator` only. Feature comes from `state.json`. |
+| `implementation-loop accept --role <role>` | Passes only when `result.md` has an entry for this task and role with `outcome` `pass` or `fail`. Missing or stale is a failed pass (exit 2). |
+| `implementation-loop commit` | Requires last checker and last reviewer `pass` for the current task. Blocks on `Assumption: unresolved`, `needs-sign-off`, or a dirty `AGENTS.md`. Checks off the **current** task, commits new product files plus `tasks.md` and changed `plan.md`, leaves `.hive/` unstaged, skips paths dirty at `start` and tool caches, resets `round_trips` to 0. Message is `implementation-loop <feature> <task-id-or-slug>`. Does not merge, force-push, or push to trunk. When `push` is true and `origin` exists, pushes the current branch; on failure keeps the commit, sets `blocked`, and does not retry. After the first successful push, if `pr_url` is empty, run `gh pr create` when `gh` is available; store the URL in `state.json`. If `gh` is missing, leave `pr_url` empty. When completed-feature count in `retrospective.log` is a multiple of 5, write `docs/proposals/implementation-loop-candidates.md` if missing (`# operational` and `# behavioral`) and set `next_role` to `retrospective`. |
+
+Exit `0` on success. Exit `2` on a gate block. JSON stdout includes `ok`, `action`, `feature`, `task`, `role`, `round_trips`, `blocked_reason`.
+
+Installed coordinator and command text tell the agent to call these commands. The agent still runs coder, checker, and reviewer passes and appends `result.md`.
+
 ## State
 
 `.hive/implementation-loop/state.json`:
@@ -231,6 +252,7 @@ Home **Enable implementation loop** asks for `1-pack` or `4-pack`, then calls th
 | `status` | `idle`, `running`, `blocked`, or `complete` |
 | `pr_url` | Open pull request, or empty |
 | `slice_signoff` | `continue` or `needs-sign-off` |
+| `baseline_dirty` | Paths that were dirty at `start` (not under `.hive/`). `commit` does not stage these except `tasks.md` / `plan.md` |
 
 `.hive/implementation-loop/commands.json`:
 
@@ -243,7 +265,7 @@ Home **Enable implementation loop** asks for `1-pack` or `4-pack`, then calls th
 
 ## Out of scope
 
-- Running the coding loop inside the Python process.
+- Running coder, checker, or reviewer duties inside the Python process (implementing product code, judging the spec, or running `test:quick` as the checker). Coordinator gates in R10 are in scope.
 - Generating or replacing Spec Kit specification, plan, or tasks.
 - Copilot paths, Copilot model pins, Jarvis or Friday personas, and the `bro` / `yagni` user skills.
 - A 5-pack CI tracker, worktree-per-item workflow, and `vibe/` or `wi/` branch names.
@@ -259,6 +281,7 @@ Home **Enable implementation loop** asks for `1-pack` or `4-pack`, then calls th
 - The installed script forbids merge and deploy in every pack.
 - Five completed features produce a proposal file the human must approve before memory or role files change.
 - `tests/test_implementation_loop.py` covers install, readiness, the trigger phrase, pack handling, and the prohibitions in the installed text.
+- Coordinator gate tests cover dirty-tree start, the 10-pass cap, refused commit, and a successful commit that checks the task box.
 
 ## Assumptions
 

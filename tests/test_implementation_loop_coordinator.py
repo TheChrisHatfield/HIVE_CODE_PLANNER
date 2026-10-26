@@ -13,8 +13,13 @@ from hive_planner.implementation_loop import (
     GIT_IDENTITY,
     PACK_1,
     PACK_4,
+    RETROSPECTIVE_HEADER,
     CoordinatorError,
     LoopState,
+    _append_retrospective,
+    _ensure_proposal_stub,
+    _open_or_reuse_pull_request,
+    _retrospective_due,
     _check_off_task,
     _last_outcome,
     _push_enabled,
@@ -238,6 +243,34 @@ def test_1pack_rejects_coder_handoff(loop_root: Path) -> None:
         coordinator_handoff(loop_root, "coder")
     handed = coordinator_handoff(loop_root, "coordinator")
     assert handed.ok is True
+
+
+def test_fifth_completed_feature_writes_proposal_stub(tmp_path: Path) -> None:
+    loop = tmp_path / ".hive" / "implementation-loop"
+    loop.mkdir(parents=True)
+    lines = [RETROSPECTIVE_HEADER]
+    for i in range(1, 5):
+        lines.append(f"2026-01-0{i} | completed={i} | feat-{i}\n")
+    (loop / "retrospective.log").write_text("".join(lines), encoding="utf-8")
+    completed = _append_retrospective(tmp_path, "feat-5")
+    assert completed == 5
+    assert _retrospective_due(completed) is True
+    _ensure_proposal_stub(tmp_path)
+    text = (tmp_path / "docs/proposals/implementation-loop-candidates.md").read_text(encoding="utf-8")
+    assert "# operational" in text
+    assert "# behavioral" in text
+
+
+def test_open_or_reuse_pull_request(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    def fake_gh(_root: Path, *args: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(args, 0, stdout="https://github.com/org/repo/pull/9\n", stderr="")
+
+    monkeypatch.setattr("hive_planner.implementation_loop._gh", fake_gh)
+    state = LoopState()
+    url = _open_or_reuse_pull_request(tmp_path, state, "feature-x")
+    assert url == "https://github.com/org/repo/pull/9"
+    state.pr_url = url
+    assert _open_or_reuse_pull_request(tmp_path, state, "feature-x") == url
 
 
 def test_loop_state_round_trips_survives_bad_json_values() -> None:

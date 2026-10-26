@@ -709,6 +709,7 @@ class CoordinatorReport:
     dirty: list[str] = field(default_factory=list)
     commit: str = ""
     next_role: str = ""
+    pr_url: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -722,6 +723,7 @@ class CoordinatorReport:
             "dirty": self.dirty,
             "commit": self.commit,
             "next_role": self.next_role,
+            "pr_url": self.pr_url,
         }
 
 
@@ -925,16 +927,56 @@ def _reset_result(root: Path, task: str) -> None:
     _result_path(root).write_text(f"# result — {task or 'current task'}\n", encoding="utf-8")
 
 
-def _append_retrospective(root: Path, feature: str) -> None:
+def _completed_feature_count(text: str) -> int:
+    return len(re.findall(r"^\d{4}-\d{2}-\d{2} \| completed=", text, re.MULTILINE))
+
+
+def _retrospective_due(completed: int) -> bool:
+    return completed > 0 and completed % 5 == 0
+
+
+def _ensure_proposal_stub(root: Path) -> None:
+    path = root / "docs" / "proposals" / "implementation-loop-candidates.md"
+    if path.is_file() and path.read_text(encoding="utf-8").strip():
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("# operational\n\n# behavioral\n", encoding="utf-8")
+
+
+def _append_retrospective(root: Path, feature: str) -> int:
     log_path = _loop_dir(root) / "retrospective.log"
     existing = log_path.read_text(encoding="utf-8") if log_path.is_file() else RETROSPECTIVE_HEADER
     if re.search(rf"\| {re.escape(feature)}\s*$", existing, re.MULTILINE):
-        return
-    n = len(re.findall(r"^\d{4}-\d{2}-\d{2} \| completed=", existing, re.MULTILINE)) + 1
+        return _completed_feature_count(existing)
+    n = _completed_feature_count(existing) + 1
     line = f"{date.today().isoformat()} | completed={n} | {feature}\n"
     if not existing.endswith("\n"):
         existing += "\n"
     log_path.write_text(existing + line, encoding="utf-8")
+    return n
+
+
+def _gh(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(["gh", *args], cwd=root, capture_output=True, text=True)
+
+
+def _open_or_reuse_pull_request(root: Path, state: LoopState, feature: str) -> str:
+    existing = state.pr_url.strip()
+    if existing:
+        return existing
+    created = _gh(
+        root,
+        "pr",
+        "create",
+        "--title",
+        f"implementation-loop {feature}",
+        "--body",
+        f"Implementation-loop commits for `{feature}`.",
+    )
+    if created.returncode != 0:
+        return ""
+    lines = [line.strip() for line in created.stdout.splitlines() if line.strip()]
+    return lines[-1] if lines else ""
 
 
 def _write_handoff(root: Path, state: LoopState, role: str, heading: str, body: str) -> None:
@@ -974,14 +1016,20 @@ def coordinator_start(
         state.feature = feature
         state.current_task = ""
         state.round_trips = 0
+        completed = _append_retrospective(root, feature)
+        next_role = ""
+        if _retrospective_due(completed):
+            _ensure_proposal_stub(root)
+            next_role = "retrospective"
         _save_state(root, state)
-        _append_retrospective(root, feature)
         return CoordinatorReport(
             ok=True,
             action="start",
             feature=feature,
             round_trips=0,
             blocked_reason="complete",
+            next_role=next_role,
+            pr_url=state.pr_url,
         )
 
     if not report_ready.ready:
@@ -1221,10 +1269,11 @@ def coordinator_commit(root: Path) -> CoordinatorReport:
     more = _has_open_task_text(checked)
     slice_open = _slice_has_open_after(checked, heading)
     blocked_reason = ""
+    completed = 0
     if not more:
         state.status = "complete"
         state.current_task = ""
-        _append_retrospective(root, feature)
+        completed = _append_retrospective(root, feature)
         blocked_reason = "complete"
     else:
         next_id, _, next_body = _first_open_task(checked)
@@ -1246,7 +1295,11 @@ def coordinator_commit(root: Path) -> CoordinatorReport:
                 round_trips=0,
                 blocked_reason=pushed.stderr.strip() or "git push failed",
                 commit=sha,
+                pr_url=state.pr_url,
             )
+        url = _open_or_reuse_pull_request(root, state, feature)
+        if url:
+            state.pr_url = url
 
     if not slice_open:
         full = _run_named_command(root, "test:full")
@@ -1261,7 +1314,16 @@ def coordinator_commit(root: Path) -> CoordinatorReport:
                 round_trips=0,
                 blocked_reason=full.stderr.strip() or full.stdout.strip() or "test:full failed",
                 commit=sha,
+                pr_url=state.pr_url,
             )
+
+    next_role = ""
+    if not more:
+        if _retrospective_due(completed):
+            _ensure_proposal_stub(root)
+            next_role = "retrospective"
+    else:
+        next_role = "coordinator" if state.pack == PACK_1 else "coder"
 
     _save_state(root, state)
     return CoordinatorReport(
@@ -1273,5 +1335,6 @@ def coordinator_commit(root: Path) -> CoordinatorReport:
         blocked_reason=blocked_reason,
         commit=sha,
         dirty=leaked,
-        next_role="" if not more else ("coordinator" if state.pack == PACK_1 else "coder"),
+        next_role=next_role,
+        pr_url=state.pr_url,
     )

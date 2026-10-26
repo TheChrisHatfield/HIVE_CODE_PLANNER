@@ -63,6 +63,9 @@ def test_render_cursor_rule_mentions_command_and_questions() -> None:
     assert ".cursor/commands/implementation-loop.md" in text
     assert "question" in text.lower()
     assert "bug-hunt" in text.lower()
+    assert "several features" in text.lower()
+    assert "exactly one feature" in text.lower()
+    assert "none are ready" in text.lower()
 
 
 def test_install_4pack_writes_all_files(project_root: Path) -> None:
@@ -150,6 +153,9 @@ def test_readiness_ready(project_root: Path, monkeypatch: pytest.MonkeyPatch) ->
     report = assess_implementation_readiness(project_root, "feature-x")
     assert report.ready is True
     assert report.missing == []
+    assert report.round_trips == 0
+    assert report.pack == PACK_4
+    assert "round_trips" in report.to_dict()
 
 
 def test_readiness_missing_tasks(project_root: Path) -> None:
@@ -226,6 +232,11 @@ def test_installed_text_forbids_merge_deploy_and_agents_md(project_root: Path) -
     assert "Do not edit `AGENTS.md`" in coordinator
     assert "Do not edit `AGENTS.md`" in coder
     assert "Do not edit `AGENTS.md` directly" in retro
+    assert "Unrelated dirty paths" in coordinator
+    assert "6–10 word slug" in coordinator
+    assert "test:full" in coordinator
+    assert "first `##` section that contains a checkbox" in coordinator
+    assert "grown by 5" in coordinator
 
 
 def test_reinstall_fills_empty_commands_and_refreshes_retrospective(project_root: Path) -> None:
@@ -279,10 +290,18 @@ def test_readiness_complete_is_exit_ready(project_root: Path, monkeypatch: pytes
     state = json.loads(state_path.read_text(encoding="utf-8"))
     state["feature"] = "feature-x"
     state["status"] = "complete"
+    state["round_trips"] = 3
+    state["current_task"] = "T001"
     state_path.write_text(json.dumps(state), encoding="utf-8")
     report = assess_implementation_readiness(project_root, "feature-x")
     assert report.ready is True
     assert report.blocked_reason == "complete"
+    assert report.round_trips == 3
+    payload = report.to_dict()
+    assert payload["round_trips"] == 3
+    assert payload["state_status"] == "complete"
+    assert payload["current_task"] == "T001"
+    assert payload["pack"] == PACK_4
 
 
 def test_init_without_pack_skips_loop(tmp_path: Path) -> None:

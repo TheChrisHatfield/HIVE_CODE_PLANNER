@@ -2,7 +2,7 @@
 
 **Hook:** `spec.flow`, `workflow.tools`, `integration.cl_spec`, `integration.wiring_audit`  
 **Spec:** [spec.md](./spec.md)  
-**Status:** draft
+**Status:** implemented
 
 <!-- ROSETTA-NAV -->
 
@@ -20,7 +20,7 @@ Load [`docs/planning-rosetta-stone.md`](../../planning-rosetta-stone.md) (`plann
 |-------|---------|
 | Holistic | Agents implement an approved spec. This feature does not replace Spec Kit or Cursor. |
 | Macro | New opt-in step after `tasks.md` exists: Agent loader installs the loop; compiler and cartridge stay unchanged. |
-| Micro | `implementation_loop.py` renders prompts, installs them, and reports readiness. Cursor runs the passes. |
+| Micro | `implementation_loop.py` renders prompts, installs them, reports readiness, and enforces coordinator gates. Cursor still runs coder, checker, and reviewer. |
 
 ## Approach
 
@@ -28,7 +28,7 @@ Mirror bug hunt: the durable behavior lives in Python-rendered markdown, and the
 
 Pack templates live in `src/hive_planner/implementation_loop.py` (or a package directory of the same name if the role texts are long). They are Hive texts adapted from agentic-loops, with the MIT notice copied to `.hive/implementation-loop/NOTICE` on install. Do not vendor `.github/copilot-instructions.md` or the persona files.
 
-The 4-pack command tells the coordinator to launch coder, checker, and reviewer as separate Cursor agent passes. The handoff file and the result file are the only completion signal. The 1-pack command tells the same coordinator file to perform those duties in sequence inside its own passes, still one task at a time, and still to commit only after the fast gate and the spec check.
+The 4-pack command tells the agent to launch coder, checker, and reviewer as separate Cursor agent passes. Python writes the handoff, counts round trips, accepts `result.md`, and commits. The 1-pack command tells the agent to implement, check, and review in its own passes, then call the same Python `commit` gate.
 
 Command discovery at install scans, in order, `.github/workflows`, `pyproject.toml` scripts, `Makefile` / `Justfile` / `Taskfile`, and `package.json` scripts. It fills only commands it can point at an existing script. Hive defaults apply when `pyproject` exposes pytest and `hive_planner ci-check` is importable from the target. `push` is `true` only when `git remote` shows `origin`.
 
@@ -38,8 +38,8 @@ State and command files are created once. Later installs must not reset round tr
 
 | File | Change |
 |------|--------|
-| `src/hive_planner/implementation_loop.py` | Render, install, readiness, trigger matcher, command discovery |
-| `src/hive_planner/cli.py` | `implementation-loop install` and `implementation-loop status` |
+| `src/hive_planner/implementation_loop.py` | Render, install, readiness, trigger matcher, command discovery, coordinator gates |
+| `src/hive_planner/cli.py` | `implementation-loop install`, `status`, `start`, `handoff`, `accept`, `commit` |
 | `src/hive_planner/bootstrap.py` | Optional `--implementation-loop-pack` |
 | `src/hive_planner/launcher/service.py` | `run_project_implementation_loop_install` |
 | `src/hive_planner/launcher/app.py` | Home **Enable implementation loop** pack prompt |
@@ -55,9 +55,11 @@ Chat phrase or Home
   -> install_implementation_loop (once)
   -> .cursor/rules + command
   -> agent reads command
-  -> implementation-loop status --feature <id>
-  -> ready: handoff.md -> role pass -> result.md
-  -> coordinator commit
+  -> implementation-loop start --feature <id>
+  -> implementation-loop handoff --role <role>
+  -> role pass appends result.md
+  -> implementation-loop accept --role <role>
+  -> implementation-loop commit
   -> five completes: proposals file -> human -> agents-propose or spec edit
 ```
 
