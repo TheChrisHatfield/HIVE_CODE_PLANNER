@@ -47,3 +47,11 @@ py -3.11 -m hive_planner spec-drift-check --feature implementation-loop
 ```
 
 T018: status JSON includes `round_trips` from `state.json`. Installed coordinator text covers dirty tree, commit slug, slice `test:full`, and five-feature retrospective. Always-on rule picks or asks for the feature.
+
+T023: reviewer/checker fail returns to coder then checker; missing `gh` leaves `pr_url` empty; push and slice `test:full` failures do not advance `current_task`.
+
+T024: reviewer requires a checker pass after the last coder; `start` stays blocked unless `--force-feature`.
+
+T025: thirty-cycle gap loop — commit order, trigger questions, discovery, feature id, 1-pack commit.
+
+T026: role names case-insensitive; malformed `test:full` does not crash after commit.

@@ -53,9 +53,11 @@ def test_trigger_phrases() -> None:
     assert is_implementation_loop_request("start the implementation loop")
     assert is_implementation_loop_request("/implementation-loop")
     assert not is_implementation_loop_request("what is the implementation loop")
+    assert not is_implementation_loop_request("tell me what the implementation loop is")
     assert not is_implementation_loop_request("how do I install it")
     assert not is_implementation_loop_request("bug hunt")
     assert not is_implementation_loop_request("hunt for bugs")
+    assert is_implementation_loop_request("please run the implementation loop")
 
 
 def test_render_cursor_rule_mentions_command_and_questions() -> None:
@@ -235,8 +237,9 @@ def test_installed_text_forbids_merge_deploy_and_agents_md(project_root: Path) -
     assert "Unrelated dirty paths" in coordinator
     assert "6–10 word slug" in coordinator
     assert "test:full" in coordinator
-    assert "first `##` section that contains a checkbox" in coordinator
+    assert "Each `##` section that contains a checkbox" in coordinator
     assert "grown by 5" in coordinator
+    assert "bug hunt" in command.lower()
 
 
 def test_reinstall_fills_empty_commands_and_refreshes_retrospective(project_root: Path) -> None:
@@ -342,12 +345,23 @@ def test_discover_build_from_justfile(project_root: Path) -> None:
 
 
 def test_discover_build_from_taskfile(project_root: Path) -> None:
-    (project_root / "Taskfile.yml").write_text("tasks:\n  build:\n    cmds: [echo ok]\n", encoding="utf-8")
+    (project_root / "Taskfile.yml").write_text("tasks:\n    build:\n      cmds: [echo ok]\n", encoding="utf-8")
     install_implementation_loop(project_root, PACK_4)
     commands = json.loads(
         (project_root / ".hive/implementation-loop/commands.json").read_text(encoding="utf-8")
     )
     assert commands["build"] == "task build"
+
+
+def test_discover_test_full_from_yaml_workflow(project_root: Path) -> None:
+    wf = project_root / ".github" / "workflows"
+    wf.mkdir(parents=True)
+    (wf / "ci.yaml").write_text("run: hive_planner ci-check\n", encoding="utf-8")
+    install_implementation_loop(project_root, PACK_4)
+    commands = json.loads(
+        (project_root / ".hive/implementation-loop/commands.json").read_text(encoding="utf-8")
+    )
+    assert commands["test:full"] == "py -3.11 -m hive_planner ci-check"
 
 
 def test_discover_build_from_src_and_setuptools(project_root: Path) -> None:

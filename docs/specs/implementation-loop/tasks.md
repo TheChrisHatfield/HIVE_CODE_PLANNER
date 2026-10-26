@@ -55,10 +55,14 @@ Load [`docs/planning-rosetta-stone.md`](../../planning-rosetta-stone.md) (`plann
 - [x] T020 Close deploy gaps: spec status implemented; `baseline_dirty` in state table; first successful push opens `gh pr create` and stores `pr_url`; every five completed features writes the proposal stub; commit leftover spec/docs
 - [x] T021 Live 4-pack proof: add an Implementation loop pointer to `START_HERE.md`
 - [x] T022 Fix coordinator gaps: refuse commit on trunk; handoff uses current task; reviewer fail returns to coder; `needs-sign-off` is a real accept/commit outcome; Justfile/Taskfile discovery; retrospective due every +5 completed
+- [x] T023 Fix coordinator recovery: reviewer/checker fail then coder then checker; missing `gh` does not raise; push/`test:full` failure does not advance the next task; restore `tasks.md` if git commit fails; handoff/commit stay on `state.branch`
+- [x] T024 Fix leftover gates: reviewer requires checker after last coder; accept `next_role` after fail/question; missing `test:full` binary does not crash; `start` stays blocked unless `--force-feature`
+- [x] T025 Thirty-cycle spec/code gap loop: commit after recode, result case, questions, discovery, blocked start, feature id, 1-pack commit, atomic state write
+- [x] T026 Follow-up gap loop: case-insensitive roles, `result.md`/`test:full` OSError and bad quotes, `state.json` write errors
 
 ## Active task
 
-**None** — T022 coordinator gap fixes checked.
+**None** — T026 follow-up gap loop checked.
 
 ## Validation log
 
@@ -115,6 +119,25 @@ Load [`docs/planning-rosetta-stone.md`](../../planning-rosetta-stone.md) (`plann
 - commit refuses trunk; handoff uses current_task; reviewer fail -> coder; needs-sign-off accept/commit
 - Justfile/Taskfile discovery; last_retrospective_n
 - tests: 46 passed
+
+2026-10-26 — T023 coordinator recovery
+- reviewer/checker fail then coder then checker; missing gh; delayed task advance; restore checkoff
+- tests: 52 passed (test_implementation_loop.py + test_implementation_loop_coordinator.py)
+- spec-drift-check --feature implementation-loop: ok
+
+2026-10-26 — T024 leftover gates
+- reviewer requires checker after last coder; accept next_role; missing test:full binary; start blocked unless --force-feature
+- tests: 55 passed
+- spec-drift-check --feature implementation-loop: ok
+
+2026-10-26 — T025 thirty-cycle gap loop
+- commit order after recode; result case; trigger questions; Taskfile/yaml; feature id; 1-pack commit; atomic JSON
+- tests: 63 passed
+- spec-drift-check --feature implementation-loop: ok
+
+2026-10-26 — T026 follow-up gap loop
+- role case; result/test:full OSError and bad quotes; state.json write
+- tests: 65 passed
 ```
 
 

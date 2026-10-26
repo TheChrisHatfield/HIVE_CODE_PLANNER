@@ -30,7 +30,7 @@ Pack templates live in `src/hive_planner/implementation_loop.py` (or a package d
 
 The 4-pack command tells the agent to launch coder, checker, and reviewer as separate Cursor agent passes. Python writes the handoff, counts round trips, accepts `result.md`, and commits. The 1-pack command tells the agent to implement, check, and review in its own passes, then call the same Python `commit` gate.
 
-Command discovery at install scans, in order, `.github/workflows`, `pyproject.toml` scripts, `Makefile` / `Justfile` / `Taskfile`, and `package.json` scripts. It fills only commands it can point at an existing script. Hive defaults apply when `pyproject` exposes pytest and `hive_planner ci-check` is importable from the target. `push` is `true` only when `git remote` shows `origin`.
+Command discovery at install scans, in order, `pyproject.toml`, `Makefile` / `Justfile` / `Taskfile`, `package.json` scripts, then `.github/workflows`. It fills only commands it can point at an existing script and does not overwrite a value already found. Hive defaults apply when `pyproject` exposes pytest and `hive_planner ci-check` is importable from the target. `push` is `true` only when `git remote` shows `origin`.
 
 State and command files are created once. Later installs must not reset round trips or human-filled commands.
 

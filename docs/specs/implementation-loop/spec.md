@@ -71,7 +71,7 @@ Saying the start phrase in a project chat starts the loop in that turn. Home can
 
 The agent must not commit, increment round trips, or write the handoff by hand. Python owns those gates. Cursor still implements, checks, and reviews.
 
-**Independent test:** `start` blocks unrelated dirty paths; `handoff` stops at 10 round trips; `commit` refuses without checker and reviewer `pass`; a valid commit checks the task box and leaves `.hive/implementation-loop/` unstaged.
+**Independent test:** `start` blocks unrelated dirty paths; `handoff` stops at 10 round trips; `commit` refuses without checker and reviewer `pass` (4-pack: those passes must follow the last coder); a valid commit checks the task box and leaves `.hive/implementation-loop/` unstaged.
 
 ## Requirements
 
@@ -142,11 +142,11 @@ Delegated passes return to the coordinator. They do not start other passes.
 
 The coordinator writes `.hive/implementation-loop/handoff.md` before each delegated pass. Fields: feature, task (id if present, else the checkbox line text plus its `##` heading), role, repo root, and the spec/plan/tasks paths.
 
-`result.md` is a list of role outcomes for the **current** task. Each entry has `task`, `role`, `outcome`, `evidence`, and `question` when `outcome` is `fail`. A later pass **appends**. It does not overwrite. The coordinator replaces `result.md` when the next task's handoff is written, and when a new feature's first handoff is written. The coordinator accepts a pass only when an entry for that task and role exists with `pass` or `fail`. A missing result is a failed pass.
+`result.md` is a list of role outcomes for the **current** task. Each entry has `task`, `role`, `outcome`, `evidence`, and `question` when `outcome` is `fail`. A later pass **appends**. It does not overwrite. The coordinator replaces `result.md` when the next task's handoff is written, and when a new feature's first handoff is written. The coordinator accepts a pass only when an entry for that task and role exists with `pass`, `fail`, or `needs-sign-off`. A missing result is a failed pass.
 
 The 1-pack coordinator writes its own check and review entries. It does not write `coder.md`, `checker.md`, or `reviewer.md`.
 
-A role with a blocking question returns `fail` with `question` set. The coordinator asks the human, then re-hands the same role. That re-handoff counts as one round trip. The 10-pass cap is checked **before every** delegation, including a re-handoff. Reviewer `fail` returns to the coder. `needs-sign-off` pauses for the human and does not start the coder.
+A role with a blocking question returns `fail` with `question` set. The coordinator asks the human, then re-hands the same role. That re-handoff counts as one round trip. The 10-pass cap is checked **before every** delegation, including a re-handoff. Checker or reviewer `fail` without `question` returns to the coder, then checker, then reviewer. `needs-sign-off` pauses for the human and does not start the coder.
 
 Order for each open task in a 4-pack:
 
@@ -173,7 +173,7 @@ The loop does not run Spec Kit `/specify`, `/plan`, or `/tasks`. If those files 
 
 ### R5 — Git
 
-The coordinator commits on the current non-trunk branch after a task passes. The message includes the feature id and the task id when present, else a 6–10 word slug from the task text.
+The coordinator commits on the current non-trunk branch after a task passes. The message is `implementation-loop <feature> <task-id-or-slug>`.
 
 Commit the task's product files, `tasks.md`, and any approved `plan.md` edit. Leave `.hive/implementation-loop/` runtime files unstaged.
 
@@ -189,7 +189,7 @@ The loop does not merge, does not push to trunk, does not force-push, and does n
 
 ### R6 — Slice pause
 
-A slice is the first `##` section that contains a checkbox. A heading with no checkboxes is not a slice. If no such heading exists, the whole file is one slice.
+Each `##` section that contains a checkbox is a slice. A heading with no checkboxes is not a slice. If no such heading exists, the whole file is one slice.
 
 At the end of a slice run `test:full`. On failure, set `status` to `blocked`, keep the commits, add no repair task, and ask the human.
 
@@ -201,7 +201,7 @@ When no unchecked tasks remain, the coordinator sets `status` to `complete`, app
 
 After a feature reaches `status: complete`, the coordinator counts completed features in `retrospective.log`. Lines use `YYYY-MM-DD | completed=N | summary`. The template line does not count.
 
-When `N` has grown by 5 or more since the last log line, the next session runs `.hive/implementation-loop/retrospective.md` before starting another feature. It reviews task notes, results, and commits since the last log line. It keeps lessons that recur. It drops notes that apply to one task only.
+When completed-feature count `N` is at least 5 more than `last_retrospective_n`, the next session runs `.hive/implementation-loop/retrospective.md` before starting another feature. It reviews task notes, results, and commits since the last log line. It keeps lessons that recur. It drops notes that apply to one task only.
 
 Proposals are written to `docs/proposals/implementation-loop-candidates.md` with `# operational` and `# behavioral` sections. The human approves each item.
 
@@ -215,7 +215,7 @@ The coding passes do not modify `AGENTS.md`. The retrospective does not run betw
 
 `is_implementation_loop_request(text)` is true for a request to run this loop, including "implementation loop", "implement the spec", "run the implementation loop", "start the implementation loop", and `/implementation-loop`.
 
-A question about the loop (what it is, where it is installed, whether it is enabled) is not a start signal. Bug-hunt phrases are not a start signal.
+A question about the loop (what it is, where it is installed, whether it is enabled) is not a start signal, including when that question is not at the start of the message. Bug-hunt phrases are not a start signal.
 
 The always-on rule tells the agent to read `.cursor/commands/implementation-loop.md` and start in that turn. If several features have open tasks and the message names none, the agent asks which feature. If exactly one feature has open tasks, that feature is the target. If none are ready, the agent reports status and stops.
 
@@ -229,10 +229,10 @@ Python enforces coordinator rules. It does not edit product code, does not run `
 
 | Command | Does |
 |---------|------|
-| `implementation-loop start --feature <id>` | Readiness must be ready. Unrelated dirty paths block (`--allow-dirty` after the human chooses). Paths under `.hive/` are expected dirt. Sets `status` to `running`, `feature`, `branch`, and `current_task` to the first open checkbox. A different running feature blocks unless `--force-feature`. When every box is already checked, sets `complete`, appends the retrospective line if missing, and does not start work. |
-| `implementation-loop handoff --role <role>` | Writes `handoff.md` for the **current** task (not merely the first open checkbox). Replaces `result.md` on the first coder/coordinator handoff of a task. Increments `round_trips`. At 10, blocks unless `--continue-after-cap`. 4-pack roles: `coder`, `checker`, `reviewer`. Checker requires last coder `pass`. Reviewer requires last checker `pass`. Reviewer `fail` requires the next handoff to be `coder`. `needs-sign-off` forbids a coder handoff. 1-pack role: `coordinator` only. Feature comes from `state.json`. |
-| `implementation-loop accept --role <role>` | Passes only when `result.md` has an entry for this task and role with `outcome` `pass`, `fail`, or `needs-sign-off`. Missing is a failed pass (exit 2). `needs-sign-off` sets `slice_signoff`. Reviewer `fail` sets `next_role` to `coder`. |
-| `implementation-loop commit` | Refuses when the current branch is trunk. Requires last checker and last reviewer `pass` for the current task. Blocks on `Assumption: unresolved`, `needs-sign-off`, or a dirty `AGENTS.md`. Checks off the **current** task, commits new product files plus `tasks.md` and changed `plan.md`, leaves `.hive/` unstaged, skips paths dirty at `start` and tool caches, resets `round_trips` to 0. Message is `implementation-loop <feature> <task-id-or-slug>`. Does not merge, force-push, or push to trunk. When `push` is true and `origin` exists, pushes the current branch; on failure keeps the commit, sets `blocked`, and does not retry. After the first successful push, if `pr_url` is empty, run `gh pr create` when `gh` is available; store the URL in `state.json`. If `gh` is missing, leave `pr_url` empty. When completed-feature count is at least 5 more than `last_retrospective_n`, write `docs/proposals/implementation-loop-candidates.md` if missing (`# operational` and `# behavioral`), set `last_retrospective_n`, and set `next_role` to `retrospective`. |
+| `implementation-loop start --feature <id>` | Readiness must be ready. Unrelated dirty paths block (`--allow-dirty` after the human chooses). Paths under `.hive/` are expected dirt. Sets `status` to `running`, `feature`, `branch`, and `current_task` to the first open checkbox. A different running feature blocks unless `--force-feature`. `status` `blocked` (push or slice `test:full` failure) blocks start unless `--force-feature` after the human agrees. When every box is already checked, sets `complete`, appends the retrospective line if missing, and does not start work. |
+| `implementation-loop handoff --role <role>` | Writes `handoff.md` for the **current** task (not merely the first open checkbox). Replaces `result.md` on the first coder/coordinator handoff of a task. Increments `round_trips`. At 10, blocks unless `--continue-after-cap`. 4-pack roles: `coder`, `checker`, `reviewer` (role names are case-insensitive). Checker requires last coder `pass`. Reviewer requires last checker `pass` **after** the last coder (a recode invalidates the previous checker). Checker or reviewer `fail` without `question` requires the next handoff to be `coder`; after that coder result, checker then reviewer are allowed again. A `fail` with `question` re-hands the same role. Checker or reviewer `needs-sign-off` forbids a coder handoff. Current branch must match `state.branch`. Detached `HEAD` is not a branch. 1-pack role: `coordinator` only. Feature comes from `state.json`. |
+| `implementation-loop accept --role <role>` | Passes only when `result.md` has an entry for this task and role with `outcome` `pass`, `fail`, or `needs-sign-off`. Missing is a failed pass (exit 2). `needs-sign-off` sets `slice_signoff`. Checker or reviewer `fail` without `question` sets `next_role` to `coder`. A `fail` with `question` sets `next_role` to the same role. |
+| `implementation-loop commit` | Refuses when the current branch is trunk or is not `state.branch`. Requires last checker and last reviewer `pass` for the current task. In 4-pack, that checker `pass` must be after the last coder, and that reviewer `pass` after the last checker. Blocks on `Assumption: unresolved`, `needs-sign-off`, or a dirty `AGENTS.md`. Checks off the **current** task, commits new product files plus `tasks.md` and changed `plan.md`, leaves `.hive/` unstaged, skips paths dirty at `start` and tool caches, resets `round_trips` to 0. If `git add` or `git commit` fails, restore the previous `tasks.md` checkbox and do not keep a partial checkoff. Message is `implementation-loop <feature> <task-id-or-slug>`. Does not merge, force-push, or push to trunk. When `push` is true and `origin` exists, pushes the current branch; on failure keeps the commit, sets `blocked`, does not advance `current_task`, and does not retry. After the first successful push, if `pr_url` is empty, run `gh pr create` when `gh` is available; store the URL in `state.json`. If `gh` is missing, leave `pr_url` empty and do not raise. Slice-end `test:full` failure (including a missing executable or a malformed command string) keeps the commit, sets `blocked`, and does not advance `current_task` or append a retrospective line. `handoff` and `accept` treat role names as case-insensitive. Advance to the next task (or `complete`) only after push and slice `test:full` succeed. When completed-feature count is at least 5 more than `last_retrospective_n`, write `docs/proposals/implementation-loop-candidates.md` if missing (`# operational` and `# behavioral`), set `last_retrospective_n`, and set `next_role` to `retrospective`. |
 
 Exit `0` on success. Exit `2` on a gate block. JSON stdout includes `ok`, `action`, `feature`, `task`, `role`, `round_trips`, `blocked_reason`.
 

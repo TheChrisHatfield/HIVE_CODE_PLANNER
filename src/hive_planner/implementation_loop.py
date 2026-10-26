@@ -83,8 +83,20 @@ def is_implementation_loop_request(text: str) -> bool:
     lowered = text.strip().lower()
     if not lowered:
         return False
-    question_starters = ("what is", "where is", "how do", "how does", "is it", "does it", "can i")
-    if any(lowered.startswith(q) for q in question_starters):
+    run_phrases = (
+        "run the implementation loop",
+        "start the implementation loop",
+        "implement the spec",
+        "/implementation-loop",
+    )
+    about_loop = re.search(
+        r"\b(what is|what's|what are|where is|how do|how does|is it|does it|can i)\b",
+        lowered,
+    ) or (
+        "implementation loop" in lowered
+        and re.search(r"\b(what|where|how|whether)\b", lowered)
+    )
+    if about_loop and not any(p in lowered for p in run_phrases):
         return False
     phrases = [
         "implementation loop",
@@ -148,9 +160,16 @@ class LoopState:
 
 def _coerce_round_trips(value: Any) -> int:
     try:
-        return int(value or 0)
+        return max(0, int(value or 0))
     except (TypeError, ValueError):
         return 0
+
+
+def _validate_feature_id(feature: str, action: str = "start") -> str:
+    name = (feature or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", name):
+        raise CoordinatorError("invalid feature id", action=action, feature=name)
+    return name
 
 
 @dataclass
@@ -204,7 +223,10 @@ def _read_existing_json_object(path: Path, label: str) -> dict[str, Any] | None:
 
 def _write_json(path: Path, data: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    payload = json.dumps(data, indent=2) + "\n"
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(payload, encoding="utf-8")
+    tmp.replace(path)
 
 
 def _posix_rel(root: Path, path: Path) -> str:
@@ -255,12 +277,25 @@ def _resolve_trunk(root: Path) -> str:
 def _require_non_trunk(root: Path, action: str) -> str:
     branch = _current_branch(root)
     trunk = _resolve_trunk(root)
-    if not branch:
+    if not branch or branch == "HEAD":
         raise CoordinatorError("no current git branch", action=action)
     if branch == trunk:
         raise CoordinatorError(
             f"current branch '{branch}' is trunk '{trunk}'",
             action=action,
+        )
+    return branch
+
+
+def _require_loop_branch(root: Path, state: LoopState, action: str) -> str:
+    branch = _current_branch(root)
+    if not branch or branch == "HEAD":
+        raise CoordinatorError("no current git branch", action=action)
+    if state.branch and branch != state.branch:
+        raise CoordinatorError(
+            f"current branch '{branch}' is not loop branch '{state.branch}'",
+            action=action,
+            feature=state.feature,
         )
     return branch
 
@@ -284,7 +319,7 @@ def _has_open_task(tasks_path: Path) -> bool:
     if not tasks_path.is_file():
         return False
     text = tasks_path.read_text(encoding="utf-8", errors="replace")
-    return re.search(r"^- \[ \]", text, re.MULTILINE) is not None
+    return re.search(r"^[ \t]{0,3}- \[ \]", text, re.MULTILINE) is not None
 
 
 def _discover_commands(root: Path) -> dict[str, str]:
@@ -320,9 +355,9 @@ def _discover_commands(root: Path) -> dict[str, str]:
         p = root / name
         if p.is_file():
             text = p.read_text(encoding="utf-8", errors="replace")
-            if "build" not in commands and re.search(r"^  build:", text, re.MULTILINE):
+            if "build" not in commands and re.search(r"^ {2,4}build:", text, re.MULTILINE):
                 commands["build"] = "task build"
-            if "test:quick" not in commands and re.search(r"^  test:", text, re.MULTILINE):
+            if "test:quick" not in commands and re.search(r"^ {2,4}test:", text, re.MULTILINE):
                 commands["test:quick"] = "task test"
             break
     pkg = root / "package.json"
@@ -336,12 +371,14 @@ def _discover_commands(root: Path) -> dict[str, str]:
                 commands["test:quick"] = "npm test"
         except Exception:
             pass
-    for wf in (root / ".github" / "workflows").glob("*.yml") if (root / ".github" / "workflows").is_dir() else []:
-        text = wf.read_text(encoding="utf-8", errors="replace")
-        if "pytest" in text and "test:quick" not in commands:
-            commands["test:quick"] = "py -3.11 -m pytest"
-        if "hive_planner ci-check" in text and "test:full" not in commands:
-            commands["test:full"] = "py -3.11 -m hive_planner ci-check"
+    workflows = root / ".github" / "workflows"
+    if workflows.is_dir():
+        for wf in [*workflows.glob("*.yml"), *workflows.glob("*.yaml")]:
+            text = wf.read_text(encoding="utf-8", errors="replace")
+            if "pytest" in text and "test:quick" not in commands:
+                commands["test:quick"] = "py -3.11 -m pytest"
+            if "hive_planner ci-check" in text and "test:full" not in commands:
+                commands["test:full"] = "py -3.11 -m hive_planner ci-check"
     return commands
 
 
@@ -407,6 +444,8 @@ py -3.11 -m hive_planner implementation-loop commit
 
 If this is a {pack}, the coordinator {'performs implement, check, and review, then calls commit' if pack == PACK_1 else 'delegates to coder, checker, and reviewer as separate subagent passes, then calls commit'}.
 
+If a bug hunt is already in progress, finish or pause it before starting this loop.
+
 Do not merge, push to trunk, force-push, or deploy.
 """
 
@@ -439,7 +478,7 @@ def render_role_coordinator(pack: str) -> str:
         "",
         "Python checks `round_trips` on each `handoff`, including a re-handoff after a human answer. At 10, `handoff` exits 2 unless the human passed `--continue-after-cap`. The count resets to `0` on `commit`.",
         "",
-        "A role `fail` with `question` set: ask the human, then re-hand the same role (one round trip). Reviewer `fail` without a question returns to the coder. `needs-sign-off` pauses; do not start the coder.",
+        "A role `fail` with `question` set: ask the human, then re-hand the same role (one round trip). Checker or reviewer `fail` without a question returns to the coder, then checker, then reviewer. `needs-sign-off` pauses; do not start the coder.",
         "",
         "## Git",
         "",
@@ -451,7 +490,7 @@ def render_role_coordinator(pack: str) -> str:
         "",
         "## Slice pause",
         "",
-        "A slice is the first `##` section that contains a checkbox. A heading with no checkboxes is not a slice. If no such heading exists, the whole file is one slice.",
+        "Each `##` section that contains a checkbox is a slice. A heading with no checkboxes is not a slice. If no such heading exists, the whole file is one slice.",
         "",
         "At the end of a slice run `test:full` from `commands.json`. On failure, set `status` to `blocked`, keep the commits, add no repair task, and ask the human.",
         "",
@@ -525,8 +564,7 @@ You compare the diff to `docs/specs/<feature>/spec.md` and `plan.md`. You do not
 1. Read `.hive/implementation-loop/handoff.md` and the coder's diff.
 2. Check that the change matches the task and does not change what the product must do.
 3. If the build approach changed, note the `plan.md` edit that is needed.
-4. Append a `result.md` entry with `outcome: pass`, `outcome: fail`, or `outcome: fail` plus `question` when you need human input. Do not overwrite other roles.
-5. Mark `needs-sign-off` in `result.md` when the slice assumptions need human validation.
+4. Append a `result.md` entry with `outcome: pass`, `outcome: fail`, `outcome: fail` plus `question` when you need human input, or `outcome: needs-sign-off`. Do not overwrite other roles.
 
 Do not edit `AGENTS.md`. Do not commit.
 """
@@ -647,6 +685,14 @@ def _state_report_fields(state: dict[str, Any] | None) -> dict[str, Any]:
 
 def assess_implementation_readiness(root: Path, feature: str) -> ReadinessReport:
     root = root.resolve()
+    feature = (feature or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", feature):
+        return ReadinessReport(
+            ready=False,
+            feature=feature,
+            missing=["invalid feature id"],
+            blocked_reason="invalid feature id",
+        )
     missing: list[str] = []
 
     project_json = root / ".hive" / "project.json"
@@ -697,7 +743,7 @@ def assess_implementation_readiness(root: Path, feature: str) -> ReadinessReport
 
     trunk = _resolve_trunk(root)
     branch = _current_branch(root)
-    if not branch:
+    if not branch or branch == "HEAD":
         missing.append("no current git branch")
     elif branch == trunk:
         missing.append(f"current branch '{branch}' is trunk '{trunk}'")
@@ -765,6 +811,24 @@ def _loop_dir(root: Path) -> Path:
     return root / LOOP_DIR
 
 
+def _read_feature_tasks(root: Path, feature: str, action: str) -> str:
+    path = root / f"docs/specs/{feature}/tasks.md"
+    if not path.is_file():
+        raise CoordinatorError(
+            f"docs/specs/{feature}/tasks.md is missing",
+            action=action,
+            feature=feature,
+        )
+    try:
+        return path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise CoordinatorError(
+            f"cannot read tasks.md: {exc}",
+            action=action,
+            feature=feature,
+        ) from exc
+
+
 def _load_state(root: Path) -> LoopState:
     path = _loop_dir(root) / "state.json"
     data = _read_existing_json_object(path, "state.json")
@@ -774,18 +838,26 @@ def _load_state(root: Path) -> LoopState:
 
 
 def _save_state(root: Path, state: LoopState) -> None:
-    _write_json(_loop_dir(root) / "state.json", state.to_dict())
+    try:
+        _write_json(_loop_dir(root) / "state.json", state.to_dict())
+    except OSError as exc:
+        raise CoordinatorError(f"cannot write state.json: {exc}", action="save") from exc
 
 
 def _git(root: Path, *args: str, extra_env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     if extra_env:
         env.update(extra_env)
-    return subprocess.run(["git", *args], cwd=root, capture_output=True, text=True, env=env)
+    try:
+        return subprocess.run(["git", *args], cwd=root, capture_output=True, text=True, env=env)
+    except FileNotFoundError:
+        return subprocess.CompletedProcess(["git", *args], 127, stdout="", stderr="git not found")
 
 
 def _dirty_paths(root: Path) -> list[str]:
     proc = _git(root, "status", "--porcelain", "-uall")
+    if proc.returncode != 0:
+        raise CoordinatorError(proc.stderr.strip() or "git status failed", action="git")
     paths: list[str] = []
     for line in proc.stdout.splitlines():
         if len(line) < 4:
@@ -820,7 +892,7 @@ def _unrelated_dirty(paths: list[str]) -> list[str]:
 
 
 def _parse_open_task_line(line: str, heading: str) -> tuple[str, str, str] | None:
-    match = re.match(r"^- \[ \] (.+)$", line)
+    match = re.match(r"^[ \t]{0,3}- \[ \] (.+)$", line)
     if not match:
         return None
     body = match.group(1).strip()
@@ -876,12 +948,13 @@ def _check_off_task(text: str, task_id: str, body: str) -> str:
     out: list[str] = []
     for line in lines:
         if not done:
-            match = re.match(r"^(- \[ \] )(.+?)(\r?\n)?$", line)
+            match = re.match(r"^([ \t]{0,3}- \[ \] )(.+?)(\r?\n)?$", line)
             if match:
                 rest = match.group(2).strip()
                 if _task_token_matches(rest, task_id, body):
                     nl = match.group(3) or ""
-                    line = f"- [x] {rest}{nl}"
+                    indent = match.group(1)[: len(match.group(1)) - len("- [ ] ")]
+                    line = f"{indent}- [x] {rest}{nl}"
                     done = True
         out.append(line)
     if not done:
@@ -891,12 +964,12 @@ def _check_off_task(text: str, task_id: str, body: str) -> str:
 
 def _task_line_unresolved(text: str, task_id: str, body: str) -> bool:
     for line in text.splitlines():
-        match = re.match(r"^- \[ \] (.+)$", line)
+        match = re.match(r"^[ \t]{0,3}- \[ \] (.+)$", line)
         if not match:
             continue
         rest = match.group(1).strip()
         if _task_token_matches(rest, task_id, body):
-            return "Assumption: unresolved" in line
+            return "assumption: unresolved" in line.lower()
     return False
 
 
@@ -908,13 +981,13 @@ def _slice_has_open_after(text: str, heading: str) -> bool:
         if line.startswith("## "):
             in_slice = line[3:].strip() == heading
             continue
-        if in_slice and re.match(r"^- \[ \]", line):
+        if in_slice and re.match(r"^[ \t]{0,3}- \[ \]", line):
             return True
     return False
 
 
 def _has_open_task_text(text: str) -> bool:
-    return re.search(r"^- \[ \]", text, re.MULTILINE) is not None
+    return re.search(r"^[ \t]{0,3}- \[ \]", text, re.MULTILINE) is not None
 
 
 def parse_result_entries(text: str) -> list[dict[str, str]]:
@@ -931,34 +1004,117 @@ def parse_result_entries(text: str) -> list[dict[str, str]]:
             rest = line[2:]
             if ":" in rest:
                 key, value = rest.split(":", 1)
-                current[key.strip()] = value.strip()
+                _set_result_field(current, key, value)
             continue
         if current is not None and ":" in line:
             key, value = line.split(":", 1)
-            current[key.strip()] = value.strip()
+            _set_result_field(current, key, value)
     if current:
         entries.append(current)
     return entries
 
 
-def _last_outcome(entries: list[dict[str, str]], task: str, role: str) -> str | None:
-    found: str | None = None
+def _set_result_field(entry: dict[str, str], key: str, value: str) -> None:
+    name = key.strip().lower()
+    text = value.strip()
+    if name in {"role", "outcome"}:
+        text = text.lower()
+    entry[name] = text
+
+
+def _entry_task_matches(entry: dict[str, str], task: str) -> bool:
+    if not task:
+        return True
+    return _task_token_matches(str(entry.get("task", "")).strip(), task, task)
+
+
+def _last_entry(entries: list[dict[str, str]], task: str, role: str) -> dict[str, str] | None:
+    found: dict[str, str] | None = None
     for entry in entries:
         if entry.get("role") != role:
             continue
-        entry_task = str(entry.get("task", "")).strip()
-        if task and not _task_token_matches(entry_task, task, task):
+        if not _entry_task_matches(entry, task):
             continue
-        found = entry.get("outcome", "")
+        found = entry
     return found
+
+
+def _last_outcome(entries: list[dict[str, str]], task: str, role: str) -> str | None:
+    entry = _last_entry(entries, task, role)
+    if entry is None:
+        return None
+    return entry.get("outcome", "")
+
+
+def _next_role_after_accept(role: str, outcome: str, question: str) -> str:
+    if outcome == "fail":
+        if question.strip():
+            return role
+        if role in {"checker", "reviewer"}:
+            return "coder"
+    return role
+
+
+def _role_pass_after(entries: list[dict[str, str]], task: str, later_role: str, earlier_role: str) -> bool:
+    later_idx = _last_role_index(entries, task, later_role)
+    if later_idx is None or entries[later_idx].get("outcome") != "pass":
+        return False
+    earlier_idx = _last_role_index(entries, task, earlier_role)
+    if earlier_idx is None:
+        return False
+    return later_idx > earlier_idx
+
+
+def _checker_pass_after_coder(entries: list[dict[str, str]], task: str) -> bool:
+    return _role_pass_after(entries, task, "checker", "coder")
+
+
+def _last_role_index(entries: list[dict[str, str]], task: str, role: str) -> int | None:
+    found: int | None = None
+    for index, entry in enumerate(entries):
+        if entry.get("role") != role:
+            continue
+        if not _entry_task_matches(entry, task):
+            continue
+        found = index
+    return found
+
+
+def _force_coder_after_fail(entries: list[dict[str, str]], task: str, failed_role: str) -> bool:
+    """True when the last outcome for failed_role is fail without question and no later coder."""
+    index = _last_role_index(entries, task, failed_role)
+    if index is None:
+        return False
+    entry = entries[index]
+    if entry.get("outcome") != "fail":
+        return False
+    if str(entry.get("question", "")).strip():
+        return False
+    for later in entries[index + 1 :]:
+        if later.get("role") == "coder" and _entry_task_matches(later, task):
+            return False
+    return True
 
 
 def _result_path(root: Path) -> Path:
     return _loop_dir(root) / "result.md"
 
 
+def _read_result_text(root: Path, action: str) -> str:
+    path = _result_path(root)
+    if not path.is_file():
+        return ""
+    try:
+        return path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise CoordinatorError(f"cannot read result.md: {exc}", action=action) from exc
+
+
 def _reset_result(root: Path, task: str) -> None:
-    _result_path(root).write_text(f"# result — {task or 'current task'}\n", encoding="utf-8")
+    try:
+        _result_path(root).write_text(f"# result — {task or 'current task'}\n", encoding="utf-8")
+    except OSError as exc:
+        raise CoordinatorError(f"cannot write result.md: {exc}", action="handoff") from exc
 
 
 def _completed_feature_count(text: str) -> int:
@@ -991,7 +1147,10 @@ def _append_retrospective(root: Path, feature: str) -> int:
 
 
 def _gh(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(["gh", *args], cwd=root, capture_output=True, text=True)
+    try:
+        return subprocess.run(["gh", *args], cwd=root, capture_output=True, text=True)
+    except FileNotFoundError:
+        return subprocess.CompletedProcess(["gh", *args], 127, stdout="", stderr="gh not found")
 
 
 def _open_or_reuse_pull_request(root: Path, state: LoopState, feature: str) -> str:
@@ -1009,8 +1168,12 @@ def _open_or_reuse_pull_request(root: Path, state: LoopState, feature: str) -> s
     )
     if created.returncode != 0:
         return ""
-    lines = [line.strip() for line in created.stdout.splitlines() if line.strip()]
-    return lines[-1] if lines else ""
+    blob = "\n".join((created.stdout or "", created.stderr or ""))
+    lines = [line.strip() for line in blob.splitlines() if line.strip()]
+    for line in reversed(lines):
+        if line.startswith("http://") or line.startswith("https://"):
+            return line
+    return ""
 
 
 def _write_handoff(root: Path, state: LoopState, role: str, heading: str, body: str) -> None:
@@ -1031,7 +1194,14 @@ def _write_handoff(root: Path, state: LoopState, role: str, heading: str, body: 
             "",
         ]
     )
-    (_loop_dir(root) / "handoff.md").write_text(text, encoding="utf-8")
+    try:
+        (_loop_dir(root) / "handoff.md").write_text(text, encoding="utf-8")
+    except OSError as exc:
+        raise CoordinatorError(
+            f"cannot write handoff.md: {exc}",
+            action="handoff",
+            feature=feature,
+        ) from exc
 
 
 def coordinator_start(
@@ -1042,8 +1212,16 @@ def coordinator_start(
     force_feature: bool = False,
 ) -> CoordinatorReport:
     root = root.resolve()
+    feature = _validate_feature_id(feature, "start")
     report_ready = assess_implementation_readiness(root, feature)
     state = _load_state(root)
+
+    if state.status == "blocked" and not force_feature:
+        raise CoordinatorError(
+            "loop is blocked — pass --force-feature after the human agrees",
+            action="start",
+            feature=feature,
+        )
 
     if report_ready.blocked_reason == "complete" and report_ready.ready:
         state.status = "complete"
@@ -1090,7 +1268,7 @@ def coordinator_start(
             dirty=unrelated,
         )
 
-    tasks_text = (root / f"docs/specs/{feature}/tasks.md").read_text(encoding="utf-8")
+    tasks_text = _read_feature_tasks(root, feature, "start")
     task_id, _heading, body = _first_open_task(tasks_text)
     current = task_id or body
     previous = state.current_task
@@ -1123,8 +1301,10 @@ def coordinator_handoff(
 ) -> CoordinatorReport:
     root = root.resolve()
     state = _load_state(root)
+    role = (role or "").strip().lower()
     if state.status != "running" or not state.feature:
         raise CoordinatorError("loop is not running — start first", action="handoff", role=role)
+    _require_loop_branch(root, state, "handoff")
     pack = state.pack if state.pack in VALID_PACKS else PACK_4
     allowed = HANDOFF_ROLES_1 if pack == PACK_1 else HANDOFF_ROLES_4
     if role not in allowed:
@@ -1144,11 +1324,14 @@ def coordinator_handoff(
             round_trips=state.round_trips,
         )
 
-    entries = parse_result_entries(_result_path(root).read_text(encoding="utf-8") if _result_path(root).is_file() else "")
+    entries = parse_result_entries(_read_result_text(root, "handoff"))
     task = state.current_task
     if pack == PACK_4:
         last_reviewer = _last_outcome(entries, task, "reviewer")
-        if last_reviewer == "needs-sign-off" and role == "coder":
+        last_checker = _last_outcome(entries, task, "checker")
+        if role == "coder" and (
+            last_reviewer == "needs-sign-off" or last_checker == "needs-sign-off"
+        ):
             raise CoordinatorError(
                 "needs-sign-off pauses; do not start the coder",
                 action="handoff",
@@ -1156,9 +1339,17 @@ def coordinator_handoff(
                 task=task,
                 role=role,
             )
-        if last_reviewer == "fail" and role != "coder":
+        if _force_coder_after_fail(entries, task, "reviewer") and role != "coder":
             raise CoordinatorError(
                 "reviewer fail returns to coder",
+                action="handoff",
+                feature=state.feature,
+                task=task,
+                role=role,
+            )
+        if _force_coder_after_fail(entries, task, "checker") and role != "coder":
+            raise CoordinatorError(
+                "checker fail returns to coder",
                 action="handoff",
                 feature=state.feature,
                 task=task,
@@ -1172,16 +1363,16 @@ def coordinator_handoff(
                 task=task,
                 role=role,
             )
-        if role == "reviewer" and _last_outcome(entries, task, "checker") != "pass":
+        if role == "reviewer" and not _checker_pass_after_coder(entries, task):
             raise CoordinatorError(
-                "reviewer handoff requires last checker outcome pass",
+                "reviewer handoff requires checker pass after the last coder",
                 action="handoff",
                 feature=state.feature,
                 task=task,
                 role=role,
             )
 
-    tasks_text = (root / f"docs/specs/{state.feature}/tasks.md").read_text(encoding="utf-8")
+    tasks_text = _read_feature_tasks(root, state.feature, "handoff")
     task_id, heading, body = _open_task_for_current(tasks_text, state.current_task)
     if not state.current_task:
         state.current_task = task_id or body
@@ -1210,13 +1401,24 @@ def coordinator_handoff(
 def coordinator_accept(root: Path, role: str) -> CoordinatorReport:
     root = root.resolve()
     state = _load_state(root)
+    role = (role or "").strip().lower()
     if state.status != "running" or not state.feature:
         raise CoordinatorError("loop is not running — start first", action="accept", role=role)
-    path = _result_path(root)
-    if not path.is_file():
+    pack = state.pack if state.pack in VALID_PACKS else PACK_4
+    allowed = {"coordinator", "checker", "reviewer"} if pack == PACK_1 else HANDOFF_ROLES_4
+    if role not in allowed:
+        raise CoordinatorError(
+            f"role '{role}' is not valid for {pack}",
+            action="accept",
+            feature=state.feature,
+            role=role,
+        )
+    text = _read_result_text(root, "accept")
+    if not text.strip():
         raise CoordinatorError("result.md is missing", action="accept", feature=state.feature, role=role)
-    entries = parse_result_entries(path.read_text(encoding="utf-8"))
-    outcome = _last_outcome(entries, state.current_task, role)
+    entries = parse_result_entries(text)
+    entry = _last_entry(entries, state.current_task, role)
+    outcome = entry.get("outcome", "") if entry else None
     if outcome not in {"pass", "fail", "needs-sign-off"}:
         raise CoordinatorError(
             f"missing result for task '{state.current_task}' role '{role}'",
@@ -1245,7 +1447,7 @@ def coordinator_accept(root: Path, role: str) -> CoordinatorReport:
         role=role,
         round_trips=state.round_trips,
         blocked_reason=blocked,
-        next_role="coder" if outcome == "fail" and role == "reviewer" else role,
+        next_role=_next_role_after_accept(role, outcome, str(entry.get("question", "") if entry else "")),
     )
 
 
@@ -1265,8 +1467,32 @@ def _run_named_command(root: Path, key: str) -> subprocess.CompletedProcess[str]
     raw = str(commands.get(key, "")).strip()
     if not raw:
         raise CoordinatorError(f"commands.json missing {key}", action="commit")
-    args = shlex.split(raw, posix=os.name != "nt")
-    return subprocess.run(args, cwd=root, capture_output=True, text=True)
+    try:
+        args = shlex.split(raw, posix=True)
+    except ValueError as exc:
+        return subprocess.CompletedProcess([raw], 127, stdout="", stderr=str(exc))
+    try:
+        return subprocess.run(args, cwd=root, capture_output=True, text=True)
+    except OSError as exc:
+        name = args[0] if args else raw
+        detail = str(exc).strip() or "not found"
+        return subprocess.CompletedProcess(
+            args or [raw],
+            127,
+            stdout="",
+            stderr=f"{name} not found: {detail}",
+        )
+
+
+def _restore_tasks_after_git_failure(
+    root: Path,
+    tasks_path: Path,
+    original: str,
+    staged: list[str],
+) -> None:
+    tasks_path.write_text(original, encoding="utf-8")
+    if staged:
+        _git(root, "reset", "HEAD", "--", *[path.replace("\\", "/") for path in staged])
 
 
 def coordinator_commit(root: Path) -> CoordinatorReport:
@@ -1275,9 +1501,10 @@ def coordinator_commit(root: Path) -> CoordinatorReport:
     if state.status != "running" or not state.feature:
         raise CoordinatorError("loop is not running — start first", action="commit")
     _require_non_trunk(root, "commit")
+    _require_loop_branch(root, state, "commit")
     feature = state.feature
     tasks_path = root / f"docs/specs/{feature}/tasks.md"
-    tasks_text = tasks_path.read_text(encoding="utf-8")
+    tasks_text = _read_feature_tasks(root, feature, "commit")
     task_id, heading, body = _open_task_for_current(tasks_text, state.current_task)
     current = state.current_task or task_id or body
     if _task_line_unresolved(tasks_text, task_id, body):
@@ -1288,7 +1515,7 @@ def coordinator_commit(root: Path) -> CoordinatorReport:
             task=current,
         )
 
-    entries = parse_result_entries(_result_path(root).read_text(encoding="utf-8") if _result_path(root).is_file() else "")
+    entries = parse_result_entries(_read_result_text(root, "commit"))
     reviewer_outcome = _last_outcome(entries, current, "reviewer")
     if reviewer_outcome == "needs-sign-off" or state.slice_signoff == "needs-sign-off":
         raise CoordinatorError("needs-sign-off blocks commit", action="commit", feature=feature, task=current)
@@ -1296,6 +1523,21 @@ def coordinator_commit(root: Path) -> CoordinatorReport:
         if _last_outcome(entries, current, role) != "pass":
             raise CoordinatorError(
                 f"commit requires {role} outcome pass",
+                action="commit",
+                feature=feature,
+                task=current,
+            )
+    if (state.pack if state.pack in VALID_PACKS else PACK_4) == PACK_4:
+        if not _checker_pass_after_coder(entries, current):
+            raise CoordinatorError(
+                "commit requires checker pass after the last coder",
+                action="commit",
+                feature=feature,
+                task=current,
+            )
+        if not _role_pass_after(entries, current, "reviewer", "checker"):
+            raise CoordinatorError(
+                "commit requires reviewer pass after the last checker",
                 action="commit",
                 feature=feature,
                 task=current,
@@ -1310,27 +1552,37 @@ def coordinator_commit(root: Path) -> CoordinatorReport:
 
     to_add = _paths_for_commit(root, feature, state.baseline_dirty)
     if not to_add:
+        _restore_tasks_after_git_failure(root, tasks_path, tasks_text, [])
         raise CoordinatorError("nothing to commit", action="commit", feature=feature, task=current)
-    for rel in to_add:
-        add = _git(root, "add", "--", rel.replace("/", os.sep))
-        if add.returncode != 0:
+    staged: list[str] = []
+    try:
+        for rel in to_add:
+            add = _git(root, "add", "--", rel.replace("\\", "/"))
+            if add.returncode != 0:
+                raise CoordinatorError(
+                    add.stderr.strip() or f"git add failed for {rel}",
+                    action="commit",
+                    feature=feature,
+                    task=current,
+                )
+            staged.append(rel)
+
+        label = task_id or _task_slug(body)
+        message = f"implementation-loop {feature} {label}"
+        committed = _git(root, "commit", "-m", message, extra_env=GIT_IDENTITY)
+        if committed.returncode != 0:
             raise CoordinatorError(
-                add.stderr.strip() or f"git add failed for {rel}",
+                committed.stderr.strip() or committed.stdout.strip() or "git commit failed",
                 action="commit",
                 feature=feature,
                 task=current,
             )
-
-    label = task_id or _task_slug(body)
-    message = f"implementation-loop {feature} {label}"
-    committed = _git(root, "commit", "-m", message, extra_env=GIT_IDENTITY)
-    if committed.returncode != 0:
-        raise CoordinatorError(
-            committed.stderr.strip() or committed.stdout.strip() or "git commit failed",
-            action="commit",
-            feature=feature,
-            task=current,
-        )
+    except CoordinatorError:
+        _restore_tasks_after_git_failure(root, tasks_path, tasks_text, staged)
+        raise
+    except OSError as exc:
+        _restore_tasks_after_git_failure(root, tasks_path, tasks_text, staged)
+        raise CoordinatorError(str(exc), action="commit", feature=feature, task=current) from exc
     sha = _git(root, "rev-parse", "HEAD").stdout.strip()
 
     still_dirty = _dirty_paths(root)
@@ -1340,22 +1592,10 @@ def coordinator_commit(root: Path) -> CoordinatorReport:
     state.round_trips = 0
     more = _has_open_task_text(checked)
     slice_open = _slice_has_open_after(checked, heading)
-    blocked_reason = ""
-    completed = 0
-    if not more:
-        state.status = "complete"
-        state.current_task = ""
-        completed = _append_retrospective(root, feature)
-        blocked_reason = "complete"
-    else:
-        next_id, _, next_body = _first_open_task(checked)
-        state.status = "running"
-        state.current_task = next_id or next_body
-        _reset_result(root, state.current_task)
 
     commands = _read_json(_loop_dir(root) / "commands.json") or {}
     if _push_enabled(commands) and _detect_push_default(root):
-        pushed = _git(root, "push", "-u", "origin", "HEAD")
+        pushed = _git(root, "push", "-u", "origin", state.branch or "HEAD")
         if pushed.returncode != 0:
             state.status = "blocked"
             _save_state(root, state)
@@ -1389,13 +1629,23 @@ def coordinator_commit(root: Path) -> CoordinatorReport:
                 pr_url=state.pr_url,
             )
 
+    blocked_reason = ""
+    completed = 0
     next_role = ""
     if not more:
+        state.status = "complete"
+        state.current_task = ""
+        completed = _append_retrospective(root, feature)
+        blocked_reason = "complete"
         if _retrospective_due(completed, state.last_retrospective_n):
             _ensure_proposal_stub(root)
             state.last_retrospective_n = completed
             next_role = "retrospective"
     else:
+        next_id, _, next_body = _first_open_task(checked)
+        state.status = "running"
+        state.current_task = next_id or next_body
+        _reset_result(root, state.current_task)
         next_role = "coordinator" if state.pack == PACK_1 else "coder"
 
     _save_state(root, state)

@@ -520,7 +520,7 @@ def main(argv: list[str] | None = None) -> int:
     impl_start.add_argument(
         "--force-feature",
         action="store_true",
-        help="Switch from a different running feature",
+        help="Switch from a different running feature, or continue after status blocked",
     )
     impl_handoff = impl_sub.add_parser("handoff", help="Write handoff.md and increment round_trips")
     impl_handoff.add_argument(
