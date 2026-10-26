@@ -2812,7 +2812,7 @@ class HivePlannerApp:
         pack = result.get("pack", "")
         self._queue_home_log(
             f"Implementation loop enabled ({pack}, {count} file(s)). "
-            "Use Home Loop status / start / handoff / accept / commit, or say implementation loop in Cursor chat."
+            "Use Home Loop status / start / handoff / check / accept / commit, or say implementation loop in Cursor chat."
         )
         self._refresh_home_dashboard()
 

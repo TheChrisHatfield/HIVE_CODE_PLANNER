@@ -2037,6 +2037,7 @@ def test_implementation_loop_prompt_template_keeps_chat_and_home() -> None:
     assert found.prompt.lstrip().startswith("implementation loop")
     assert "@.cursor/commands/implementation-loop.md" in found.prompt
     assert "Loop status" in found.prompt
+    assert "Loop check" in found.prompt
     assert "Loop commit" in found.prompt
 
 
