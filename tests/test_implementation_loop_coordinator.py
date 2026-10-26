@@ -705,6 +705,22 @@ def test_run_named_command_preserves_windows_exe_path(loop_root: Path, monkeypat
     assert captured["args"] == [r"C:\Python311\python.exe", "-m", "pytest"]
 
 
+def test_run_named_command_decodes_utf8_stdout(loop_root: Path) -> None:
+    _install_ready(loop_root)
+    script = loop_root / "emit_utf8.py"
+    script.write_text(
+        "import sys\nsys.stdout.buffer.write(b'\\xe2\\x9c\\x93\\n')\n",
+        encoding="utf-8",
+    )
+    commands_path = loop_root / ".hive/implementation-loop/commands.json"
+    commands = json.loads(commands_path.read_text(encoding="utf-8"))
+    commands["test:full"] = f"{sys.executable} emit_utf8.py"
+    commands_path.write_text(json.dumps(commands), encoding="utf-8")
+    proc = _run_named_command(loop_root, "test:full")
+    assert proc.returncode == 0
+    assert "\u2713" in (proc.stdout or "")
+
+
 def test_run_named_command_unbalanced_quotes_do_not_raise(loop_root: Path) -> None:
     _install_ready(loop_root)
     commands_path = loop_root / ".hive/implementation-loop/commands.json"

@@ -1603,7 +1603,14 @@ def _run_named_command(root: Path, key: str) -> subprocess.CompletedProcess[str]
     except ValueError as exc:
         return subprocess.CompletedProcess([raw], 127, stdout="", stderr=str(exc))
     try:
-        return subprocess.run(args, cwd=root, capture_output=True, text=True)
+        return subprocess.run(
+            args,
+            cwd=root,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
     except OSError as exc:
         name = args[0] if args else raw
         detail = str(exc).strip() or "not found"
