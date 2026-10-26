@@ -845,7 +845,15 @@ def _git(root: Path, *args: str, extra_env: dict[str, str] | None = None) -> sub
     if extra_env:
         env.update(extra_env)
     try:
-        return subprocess.run(["git", *args], cwd=root, capture_output=True, text=True, env=env)
+        return subprocess.run(
+            ["git", *args],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            env=env,
+        )
     except FileNotFoundError:
         return subprocess.CompletedProcess(["git", *args], 127, stdout="", stderr="git not found")
 

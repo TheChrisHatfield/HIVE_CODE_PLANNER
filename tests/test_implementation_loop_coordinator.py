@@ -24,6 +24,7 @@ from hive_planner.implementation_loop import (
     _check_off_task,
     _last_outcome,
     _push_enabled,
+    _git as loop_git,
     _run_named_command,
     coordinator_accept,
     coordinator_check,
@@ -730,6 +731,22 @@ def test_run_named_command_unbalanced_quotes_do_not_raise(loop_root: Path) -> No
     proc = _run_named_command(loop_root, "test:full")
     assert proc.returncode == 127
     assert proc.stderr
+
+
+def test_git_decodes_utf8_output(loop_root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import hive_planner.implementation_loop as mod
+
+    captured: dict[str, object] = {}
+
+    def fake_run(*_args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        captured.update(kwargs)
+        return subprocess.CompletedProcess(["git"], 0, stdout="ok", stderr="")
+
+    monkeypatch.setattr(mod.subprocess, "run", fake_run)
+    proc = loop_git(loop_root, "status")
+    assert proc.returncode == 0
+    assert captured.get("encoding") == "utf-8"
+    assert captured.get("errors") == "replace"
 
 
 def test_missing_gh_leaves_pr_url_empty(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
