@@ -152,6 +152,28 @@ def test_start_allow_dirty_and_handoff_cap(loop_root: Path) -> None:
     assert again.round_trips == 11
 
 
+def test_start_force_feature_resets_result_when_task_id_matches(loop_root: Path) -> None:
+    _install_ready(loop_root)
+    coordinator_start(loop_root, "feature-x")
+    coordinator_handoff(loop_root, "coder")
+    _write_result(loop_root, "T001", "coder", "pass")
+    spec = loop_root / "docs" / "specs" / "feature-y"
+    spec.mkdir(parents=True)
+    (spec / "spec.md").write_text("# spec\n", encoding="utf-8")
+    (spec / "plan.md").write_text("# plan\n", encoding="utf-8")
+    (spec / "tasks.md").write_text("# tasks\n\n## Slice\n\n- [ ] T001 other work\n", encoding="utf-8")
+    (loop_root / "docs" / "delta" / "20_micro" / "feature-y.md").write_text("# micro\n", encoding="utf-8")
+    started = coordinator_start(loop_root, "feature-y", allow_dirty=True, force_feature=True)
+    assert started.ok is True
+    assert started.round_trips == 0
+    result = (loop_root / ".hive/implementation-loop/result.md").read_text(encoding="utf-8")
+    assert "outcome: pass" not in result
+    assert "feature-y" in result or "T001" in result
+    state = json.loads((loop_root / ".hive/implementation-loop/state.json").read_text(encoding="utf-8"))
+    assert state["feature"] == "feature-y"
+    assert state["round_trips"] == 0
+
+
 def test_handoff_refuses_when_current_task_already_checked(loop_root: Path) -> None:
     tasks = loop_root / "docs/specs/feature-x/tasks.md"
     _install_ready(loop_root)

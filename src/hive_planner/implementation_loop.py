@@ -1277,14 +1277,15 @@ def coordinator_start(
     tasks_text = _read_feature_tasks(root, feature, "start")
     task_id, _heading, body = _first_open_task(tasks_text)
     current = task_id or body
-    previous = state.current_task
+    previous_task = state.current_task
+    previous_feature = state.feature
     state.feature = feature
     state.branch = _current_branch(root)
     state.status = "running"
     state.current_task = current
     state.slice_signoff = "continue"
     state.baseline_dirty = list(unrelated)
-    if previous != current:
+    if previous_task != current or previous_feature != feature:
         state.round_trips = 0
         _reset_result(root, current)
     _save_state(root, state)
