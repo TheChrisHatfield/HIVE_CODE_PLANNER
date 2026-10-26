@@ -135,12 +135,19 @@ class LoopState:
             pack=str(raw.get("pack", "")),
             branch=str(raw.get("branch", "")),
             current_task=str(raw.get("current_task", "")),
-            round_trips=int(raw.get("round_trips", 0)),
+            round_trips=_coerce_round_trips(raw.get("round_trips", 0)),
             status=str(raw.get("status", "idle")),
             pr_url=str(raw.get("pr_url", "")),
             slice_signoff=str(raw.get("slice_signoff", "continue")),
             baseline_dirty=[str(p).replace("\\", "/") for p in baseline],
         )
+
+
+def _coerce_round_trips(value: Any) -> int:
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
 
 
 @dataclass

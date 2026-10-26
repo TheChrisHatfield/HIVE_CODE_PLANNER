@@ -14,6 +14,7 @@ from hive_planner.implementation_loop import (
     PACK_1,
     PACK_4,
     CoordinatorError,
+    LoopState,
     _check_off_task,
     _last_outcome,
     _push_enabled,
@@ -237,6 +238,13 @@ def test_1pack_rejects_coder_handoff(loop_root: Path) -> None:
         coordinator_handoff(loop_root, "coder")
     handed = coordinator_handoff(loop_root, "coordinator")
     assert handed.ok is True
+
+
+def test_loop_state_round_trips_survives_bad_json_values() -> None:
+    assert LoopState.from_dict({"round_trips": ""}).round_trips == 0
+    assert LoopState.from_dict({"round_trips": None}).round_trips == 0
+    assert LoopState.from_dict({"round_trips": "7"}).round_trips == 7
+    assert LoopState.from_dict({"round_trips": "nope"}).round_trips == 0
 
 
 def test_push_enabled_accepts_json_and_string_true() -> None:
