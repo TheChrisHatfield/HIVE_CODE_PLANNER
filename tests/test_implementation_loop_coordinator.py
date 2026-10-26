@@ -792,6 +792,25 @@ def test_check_appends_fail_when_build_exits_nonzero(loop_root: Path) -> None:
     assert _last_outcome(entries, "T001", "checker") == "fail"
 
 
+def test_check_appends_fail_when_build_command_missing(loop_root: Path) -> None:
+    _install_ready(loop_root)
+    coordinator_start(loop_root, "feature-x")
+    coordinator_handoff(loop_root, "coder")
+    _write_result(loop_root, "T001", "coder", "pass")
+    coordinator_accept(loop_root, "coder")
+    commands_path = loop_root / ".hive/implementation-loop/commands.json"
+    commands = json.loads(commands_path.read_text(encoding="utf-8"))
+    commands["build"] = ""
+    commands_path.write_text(json.dumps(commands), encoding="utf-8")
+    report = coordinator_check(loop_root)
+    assert report.ok is False
+    assert report.blocked_reason == "fail"
+    assert report.next_role == "coder"
+    text = (loop_root / ".hive/implementation-loop/result.md").read_text(encoding="utf-8")
+    assert "commands.json missing build" in text
+    assert _last_outcome(parse_result_entries(text), "T001", "checker") == "fail"
+
+
 def test_cli_check_exits_2_when_checker_fails(loop_root: Path, capsys: pytest.CaptureFixture[str]) -> None:
     from hive_planner.cli import main
 

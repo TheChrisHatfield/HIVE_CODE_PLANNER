@@ -1592,7 +1592,12 @@ def _run_named_command(root: Path, key: str) -> subprocess.CompletedProcess[str]
     commands = _read_json(_loop_dir(root) / "commands.json") or {}
     raw = str(commands.get(key, "")).strip()
     if not raw:
-        raise CoordinatorError(f"commands.json missing {key}", action="commit")
+        return subprocess.CompletedProcess(
+            [key],
+            127,
+            stdout="",
+            stderr=f"commands.json missing {key}",
+        )
     try:
         args = shlex.split(raw, posix=(sys.platform != "win32"))
     except ValueError as exc:
