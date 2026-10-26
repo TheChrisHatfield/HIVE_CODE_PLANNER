@@ -1,0 +1,6 @@
+{
+  "build": "py -3.11 -m compileall -q src",
+  "test:quick": "py -3.11 -m pytest",
+  "test:full": "py -3.11 -m hive_planner ci-check",
+  "push": true
+}

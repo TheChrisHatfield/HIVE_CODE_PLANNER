@@ -41,7 +41,7 @@ The Python CLI installs the loop and reports whether a feature is ready. It does
 
 A person enables the loop on a Hive project, picks a pack, and can see whether a named feature is ready to code.
 
-**Independent test:** install into a temp project and run status. A feature with spec, plan, tasks, commands, and a non-trunk branch is ready. A feature missing `tasks.md` is blocked.
+**Independent test:** install into a temp project and run status. Ready means R1: project profile, spec, plan, tasks, micro brief, one open task, pack, non-trunk branch, and non-empty `build`, `test:quick`, and `test:full`. A feature missing `tasks.md` is blocked. All boxes checked with the other inputs present is `status: complete` and exit 0.
 
 ### US2 — One task, several passes (P1)
 
@@ -83,7 +83,9 @@ Saying the start phrase in a project chat starts the loop in that turn. Home can
 
 Trunk is `git symbolic-ref --short refs/remotes/origin/HEAD` when that ref exists. Otherwise trunk is `main` if that branch exists, else `master`.
 
-Status exit code is `0` when ready and `2` when blocked. The blocked message names each missing piece. The command does not create spec, plan, or tasks.
+Status exit code is `0` when ready **or** when the feature is `complete` (every box checked and the other R1 files exist). Exit `2` when blocked. The blocked message names each missing piece. The command does not create spec, plan, or tasks.
+
+Install is allowed on trunk. Readiness still blocks until the current branch is not trunk.
 
 A Hive project whose `pyproject` or `ci-check` entry point is present may record `py -3.11 -m pytest` as `test:quick` and `py -3.11 -m hive_planner ci-check` as `test:full` during install. Any required command that cannot be read from CI, `pyproject`, Make, Task, or package scripts stays empty. Empty required commands block readiness. The installer does not invent a command.
 
@@ -111,7 +113,7 @@ A Hive project whose `pyproject` or `ci-check` entry point is present may record
 
 Install does not edit `AGENTS.md`, `docs/specs/`, Delta docs, or `.github/copilot-instructions.md`.
 
-Reinstall of the same pack refreshes prompts, the command, and the rule. It keeps `commands.json` values, `state.json`, `retrospective.log`, and an existing handoff or result file.
+Reinstall of the same pack refreshes prompts (including `retrospective.md` and role files), the command, and the rule. It keeps `state.json`, `retrospective.log`, and an existing handoff or result file. It fills only **empty** `commands.json` strings from discovery. It never clears a human-set command value.
 
 Reinstall with a different pack exits with an error unless `--force-pack` is set.
 
@@ -132,7 +134,13 @@ A 4-pack has four passes. A 1-pack has one pass, the coordinator, which also imp
 
 Delegated passes return to the coordinator. They do not start other passes.
 
-The coordinator writes `.hive/implementation-loop/handoff.md` before each delegated pass. The pass writes `.hive/implementation-loop/result.md` before returning. The coordinator accepts a pass only when `result.md` names that task and a `pass` or `fail` outcome. A missing result is a failed pass.
+The coordinator writes `.hive/implementation-loop/handoff.md` before each delegated pass. Fields: feature, task (id if present, else the checkbox line text plus its `##` heading), role, repo root, and the spec/plan/tasks paths.
+
+`result.md` is a list of role outcomes for the **current** task. Each entry has `task`, `role`, `outcome`, `evidence`, and `question` when `outcome` is `fail`. A later pass **appends**. It does not overwrite. The coordinator replaces `result.md` when the next task's handoff is written, and when a new feature's first handoff is written. The coordinator accepts a pass only when an entry for that task and role exists with `pass` or `fail`. A missing result is a failed pass.
+
+The 1-pack coordinator writes its own check and review entries. It does not write `coder.md`, `checker.md`, or `reviewer.md`.
+
+A role with a blocking question returns `fail` with `question` set. The coordinator asks the human, then re-hands the same role. That re-handoff counts as one round trip. The 10-pass cap is checked **before every** delegation, including a re-handoff. Reviewer `fail` returns to the coder. `needs-sign-off` pauses for the human and does not start the coder.
 
 Order for each open task in a 4-pack:
 
@@ -159,23 +167,29 @@ The loop does not run Spec Kit `/specify`, `/plan`, or `/tasks`. If those files 
 
 ### R5 — Git
 
-The coordinator commits on the current non-trunk branch after a task passes. The message includes the feature id and the task id.
+The coordinator commits on the current non-trunk branch after a task passes. The message includes the feature id and the task id when present, else a 6–10 word slug from the task text.
+
+Commit the task's product files, `tasks.md`, and any approved `plan.md` edit. Leave `.hive/implementation-loop/` runtime files unstaged.
+
+Unrelated dirty paths at loop **start** block until the human chooses. Paths under `.hive/implementation-loop/` and paths this task touched are expected dirt. The loop does not stash or discard unrelated changes.
 
 When `origin` exists and `commands.json` has `"push": true` (the install default when `origin` exists), the coordinator pushes that branch. The first pushed task opens one pull request for the feature when `gh` can see a GitHub remote. Later task commits update that same pull request. The PR URL is stored in `state.json`.
 
 When `origin` is missing, or `"push": false`, the coordinator commits locally and reports that no pull request was opened.
 
-The loop does not merge, does not push to trunk, does not force-push, and does not deploy.
+A push failure keeps the commit, sets `status` to `blocked`, and asks the human. It does not retry silently.
 
-An unrelated dirty tree at start blocks the loop until the human chooses how to handle it. The loop does not stash or discard those changes.
+The loop does not merge, does not push to trunk, does not force-push, and does not deploy.
 
 ### R6 — Slice pause
 
-A slice is one `##` section in `tasks.md` that contains task checkboxes. When the section has no such heading, the whole file is one slice.
+A slice is the first `##` section that contains a checkbox. A heading with no checkboxes is not a slice. If no such heading exists, the whole file is one slice.
 
-At the end of a slice the coordinator continues to the next task when the reviewer passed and no assumption needs a decision. It pauses for the human when the reviewer marked the slice `needs-sign-off`, or when an assumption is unresolved. A blocking disagreement is asked immediately, in the pass where it appears.
+At the end of a slice run `test:full`. On failure, set `status` to `blocked`, keep the commits, add no repair task, and ask the human.
 
-When no unchecked tasks remain, the coordinator sets state `status` to `complete`, asks the human to approve the pull request, and does not add new tasks.
+The coordinator continues to the next task when the reviewer passed and no assumption is unresolved. It pauses when the reviewer marked `needs-sign-off`, or when a task line still has `Assumption: unresolved`. Assumptions are marked `Assumption:` on the task line.
+
+When no unchecked tasks remain, the coordinator sets `status` to `complete`, appends `YYYY-MM-DD | completed=N | feature-id` to `retrospective.log` (header comment does not count; only date lines count), and asks for pull-request approval only when `pr_url` is set. Otherwise it asks for local merge approval. It does not add new tasks.
 
 ### R7 — Learning
 
@@ -201,7 +215,7 @@ The always-on rule tells the agent to read `.cursor/commands/implementation-loop
 
 ### R9 — Home
 
-Home **Enable implementation loop** asks for `1-pack` or `4-pack`, then calls the same install function as the CLI on the active linked project. Cancel leaves the project unchanged.
+Home **Enable implementation loop** asks for `1-pack` or `4-pack`, then calls the same install function as the CLI on the active linked project. Same pack refreshes prompts. A different pack asks before `--force-pack`. Cancel leaves the project unchanged.
 
 ## State
 
@@ -223,7 +237,7 @@ Home **Enable implementation loop** asks for `1-pack` or `4-pack`, then calls th
 | Field | Meaning |
 |-------|---------|
 | `build` | Required command |
-| `test:quick` | Required fast gate. Includes the wiring audit |
+| `test:quick` | Required fast gate (tests). The wiring audit is a separate checker checklist, not this command |
 | `test:full` | Required full gate, run at slice end |
 | `push` | `true` or `false` |
 

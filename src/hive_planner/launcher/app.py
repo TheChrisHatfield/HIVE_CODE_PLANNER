@@ -2723,7 +2723,7 @@ class HivePlannerApp:
         if not self.config.active_project:
             messagebox.showwarning("No project", "Link a workspace first.")
             return
-        from hive_planner.implementation_loop import PACK_1, PACK_4
+        from hive_planner.implementation_loop import PACK_1, PACK_4, read_installed_pack
 
         pack = simpledialog.askstring(
             "Implementation loop pack",
@@ -2737,9 +2737,20 @@ class HivePlannerApp:
             messagebox.showwarning("Invalid pack", f"Use {PACK_1} or {PACK_4}.")
             return
         link = Path(self.config.active_project)
+        probe = link if link.is_dir() else link.parent
+        existing = read_installed_pack(probe)
+        force_pack = False
+        if existing and existing != pack:
+            if not messagebox.askyesno(
+                "Replace pack",
+                f"This project already has {existing}. Replace it with {pack}?",
+                parent=self.root,
+            ):
+                return
+            force_pack = True
         self._start_home_action(f"Installing implementation loop ({pack})…")
         self._run_bg(
-            lambda r=link, p=pack: run_project_implementation_loop_install(r, p),
+            lambda r=link, p=pack, f=force_pack: run_project_implementation_loop_install(r, p, force_pack=f),
             self._project_done_callback("Implementation loop install", self._implementation_loop_install_done),
         )
 

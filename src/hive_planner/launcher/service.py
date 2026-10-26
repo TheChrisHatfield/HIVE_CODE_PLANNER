@@ -1450,6 +1450,8 @@ def run_project_bug_hunt_install(
 def run_project_implementation_loop_install(
     project_root: Path,
     pack: str,
+    *,
+    force_pack: bool = False,
 ) -> dict:
     """Install the post-spec coding loop into a linked project."""
     from hive_planner.implementation_loop import install_implementation_loop
@@ -1465,7 +1467,7 @@ def run_project_implementation_loop_install(
     if not target.is_dir():
         return {"ok": False, "error": "Path is not a project directory"}
     try:
-        written = install_implementation_loop(target, pack, force_pack=False)
+        written = install_implementation_loop(target, pack, force_pack=force_pack)
     except (ValueError, OSError) as exc:
         return {"ok": False, "error": str(exc)}
     return {"ok": True, "files_written": written, "pack": pack}

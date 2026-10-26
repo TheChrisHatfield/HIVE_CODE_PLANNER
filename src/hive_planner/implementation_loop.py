@@ -143,6 +143,18 @@ def _write_json(path: Path, data: dict[str, Any]) -> None:
     path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 
 
+def _posix_rel(root: Path, path: Path) -> str:
+    return path.relative_to(root).as_posix()
+
+
+def _write_if_changed(path: Path, text: str, root: Path, written: list[str]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.is_file() and path.read_text(encoding="utf-8") == text:
+        return
+    path.write_text(text, encoding="utf-8")
+    written.append(_posix_rel(root, path))
+
+
 def _resolve_trunk(root: Path) -> str:
     try:
         out = subprocess.run(
@@ -200,6 +212,8 @@ def _discover_commands(root: Path) -> dict[str, str]:
             commands["test:quick"] = "py -3.11 -m pytest"
         if "ci-check" in text or "hive_planner" in text or "hive-planner" in text:
             commands["test:full"] = "py -3.11 -m hive_planner ci-check"
+        if (root / "src").is_dir() and "setuptools" in text:
+            commands["build"] = "py -3.11 -m compileall -q src"
     for name in ("Makefile", "makefile", "GNUmakefile"):
         p = root / name
         if p.is_file():
@@ -302,15 +316,19 @@ def render_role_coordinator(pack: str) -> str:
         "",
         "## One task",
         "",
-        "Write `.hive/implementation-loop/handoff.md` before each pass. It names the feature, the task, the role, the repo root, and the spec/plan/tasks paths.",
+        "Write `.hive/implementation-loop/handoff.md` before each pass. It names the feature, the task (id or checkbox line plus heading), the role, the repo root, and the spec/plan/tasks paths. Replace `result.md` when this task's first handoff is written.",
         "",
-        "The pass writes `.hive/implementation-loop/result.md` before returning. Each entry has `task`, `role`, `outcome`, `evidence`, and `question` (when `outcome` is `fail`).",
+        "The pass **appends** to `.hive/implementation-loop/result.md`. Each entry has `task`, `role`, `outcome`, `evidence`, and `question` (when `outcome` is `fail`). Do not overwrite earlier role entries for this task.",
         "",
         "A missing or stale result is a failed pass.",
         "",
+        "Do not edit `AGENTS.md`.",
+        "",
         "## Round trips",
         "",
-        "One round trip is one delegation plus its return, including a clarification handoff. `state.json` field `round_trips` increments on each one. At 10, stop and ask the human before another pass. The count resets to `0` when the task is committed.",
+        "Check `round_trips` before every delegation, including a re-handoff after a human answer. One round trip is one delegation plus its return. Increment `round_trips` on each one. At 10, stop and ask the human before another pass. The count resets to `0` when the task is committed.",
+        "",
+        "A role `fail` with `question` set: ask the human, then re-hand the same role (one round trip). Reviewer `fail` without a question returns to the coder. `needs-sign-off` pauses; do not start the coder.",
         "",
         "## Git",
         "",
@@ -328,7 +346,7 @@ def render_role_coordinator(pack: str) -> str:
         "",
         "## Retrospective",
         "",
-        "When a feature reaches `status: complete`, append `YYYY-MM-DD | completed=N | feature-id` to `.hive/implementation-loop/retrospective.log` before starting another feature.",
+        "When a feature reaches `status: complete`, append `YYYY-MM-DD | completed=N | feature-id` to `.hive/implementation-loop/retrospective.log` before starting another feature. Count only date lines. Ask for pull-request approval only when `pr_url` is set; otherwise ask for local merge approval.",
         "",
         "## Behavior stop",
         "",
@@ -362,7 +380,8 @@ You implement the single task named in `.hive/implementation-loop/handoff.md`. Y
 - Change only what the task asks for.
 - Record assumptions on the task in `tasks.md` as a marked line: `Assumption: ...` or `Assumption: unresolved ...`.
 - Leave the work uncommitted when you return.
-- If you hit a blocking question, write `result.md` with `outcome: fail` and the `question` field. Do not guess.
+- If you hit a blocking question, append a `result.md` entry with `outcome: fail` and the `question` field. Do not guess.
+- Do not edit `AGENTS.md`. Do not commit.
 """
 
 
@@ -377,9 +396,9 @@ You verify the coder's changes. You do not edit product code. You do not commit.
 2. Run the `build` command from `.hive/implementation-loop/commands.json`.
 3. Run `test:quick` from `.hive/implementation-loop/commands.json`.
 4. Run the integration wiring audit checklist (`.cursor/rules/integration-wiring-audit.mdc`).
-5. Write `result.md` with `outcome: pass` and the evidence, or `outcome: fail` and the failing step.
+5. Append a `result.md` entry with `outcome: pass` and the evidence, or `outcome: fail` and the failing step. Do not overwrite other roles.
 
-If any step fails, report it and stop.
+If any step fails, report it and stop. Do not edit `AGENTS.md`. Do not commit.
 """
 
 
@@ -393,8 +412,10 @@ You compare the diff to `docs/specs/<feature>/spec.md` and `plan.md`. You do not
 1. Read `.hive/implementation-loop/handoff.md` and the coder's diff.
 2. Check that the change matches the task and does not change what the product must do.
 3. If the build approach changed, note the `plan.md` edit that is needed.
-4. Write `result.md` with `outcome: pass`, `outcome: fail`, or `outcome: fail` plus `question` when you need human input.
+4. Append a `result.md` entry with `outcome: pass`, `outcome: fail`, or `outcome: fail` plus `question` when you need human input. Do not overwrite other roles.
 5. Mark `needs-sign-off` in `result.md` when the slice assumptions need human validation.
+
+Do not edit `AGENTS.md`. Do not commit.
 """
 
 
@@ -435,16 +456,16 @@ def install_implementation_loop(root: Path, pack: str, *, force_pack: bool = Fal
         if existing_pack != pack:
             existing_state["pack"] = pack
             _write_json(state_path, existing_state)
-            written.append(str(state_path.relative_to(root)))
+            written.append(_posix_rel(root, state_path))
     else:
         state = LoopState(pack=pack, branch=_current_branch(root))
         _write_json(state_path, state.to_dict())
-        written.append(str(state_path.relative_to(root)))
+        written.append(_posix_rel(root, state_path))
 
     commands_path = loop_dir / "commands.json"
     existing_commands = _read_json(commands_path)
+    discovered = _discover_commands(root)
     if existing_commands is None:
-        discovered = _discover_commands(root)
         commands = {
             "build": discovered.get("build", ""),
             "test:quick": discovered.get("test:quick", ""),
@@ -452,55 +473,45 @@ def install_implementation_loop(root: Path, pack: str, *, force_pack: bool = Fal
             "push": _detect_push_default(root),
         }
         _write_json(commands_path, commands)
-        written.append(str(commands_path.relative_to(root)))
+        written.append(_posix_rel(root, commands_path))
+    else:
+        changed = False
+        for key in ("build", "test:quick", "test:full"):
+            if not str(existing_commands.get(key, "")).strip() and discovered.get(key):
+                existing_commands[key] = discovered[key]
+                changed = True
+        if "push" not in existing_commands:
+            existing_commands["push"] = _detect_push_default(root)
+            changed = True
+        if changed:
+            _write_json(commands_path, existing_commands)
+            written.append(_posix_rel(root, commands_path))
 
     log_path = loop_dir / "retrospective.log"
     if not log_path.is_file():
         log_path.write_text(RETROSPECTIVE_HEADER, encoding="utf-8")
-        written.append(str(log_path.relative_to(root)))
+        written.append(_posix_rel(root, log_path))
 
     notice_path = loop_dir / "NOTICE"
     if not notice_path.is_file():
         notice_path.write_text(NOTICE_TEXT, encoding="utf-8")
-        written.append(str(notice_path.relative_to(root)))
+        written.append(_posix_rel(root, notice_path))
 
-    retro_path = loop_dir / "retrospective.md"
-    if not retro_path.is_file():
-        retro_path.write_text(render_retrospective(), encoding="utf-8")
-        written.append(str(retro_path.relative_to(root)))
-
-    coordinator_path = role_dir / "coordinator.md"
-    coordinator_text = render_role_coordinator(pack)
-    if not coordinator_path.is_file() or coordinator_path.read_text(encoding="utf-8") != coordinator_text:
-        coordinator_path.parent.mkdir(parents=True, exist_ok=True)
-        coordinator_path.write_text(coordinator_text, encoding="utf-8")
-        written.append(str(coordinator_path.relative_to(root)))
+    _write_if_changed(loop_dir / "retrospective.md", render_retrospective(), root, written)
+    _write_if_changed(role_dir / "coordinator.md", render_role_coordinator(pack), root, written)
 
     if pack == PACK_4:
         for name, renderer in (("coder", render_role_coder), ("checker", render_role_checker), ("reviewer", render_role_reviewer)):
-            p = role_dir / f"{name}.md"
-            t = renderer()
-            if not p.is_file() or p.read_text(encoding="utf-8") != t:
-                p.write_text(t, encoding="utf-8")
-                written.append(str(p.relative_to(root)))
+            _write_if_changed(role_dir / f"{name}.md", renderer(), root, written)
     else:
         for name in ("coder", "checker", "reviewer"):
             p = role_dir / f"{name}.md"
             if p.is_file():
                 p.unlink()
-                written.append(str(p.relative_to(root)) + " (removed)")
+                written.append(_posix_rel(root, p) + " (removed)")
 
-    command_text = render_cursor_command(pack)
-    if not command_path.is_file() or command_path.read_text(encoding="utf-8") != command_text:
-        command_path.parent.mkdir(parents=True, exist_ok=True)
-        command_path.write_text(command_text, encoding="utf-8")
-        written.append(str(command_path.relative_to(root)))
-
-    rule_text = render_cursor_rule()
-    if not rule_path.is_file() or rule_path.read_text(encoding="utf-8") != rule_text:
-        rule_path.parent.mkdir(parents=True, exist_ok=True)
-        rule_path.write_text(rule_text, encoding="utf-8")
-        written.append(str(rule_path.relative_to(root)))
+    _write_if_changed(command_path, render_cursor_command(pack), root, written)
+    _write_if_changed(rule_path, render_cursor_rule(), root, written)
 
     return written
 
@@ -566,3 +577,11 @@ def assess_implementation_readiness(root: Path, feature: str) -> ReadinessReport
 def preview_agent_prompt(pack: str) -> str:
     validate_pack(pack)
     return render_role_coordinator(pack)
+
+
+def read_installed_pack(root: Path) -> str | None:
+    state = _read_json(root.resolve() / LOOP_DIR / "state.json")
+    if not state:
+        return None
+    pack = str(state.get("pack", ""))
+    return pack if pack in VALID_PACKS else None

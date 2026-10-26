@@ -72,4 +72,11 @@ Load [`docs/planning-rosetta-stone.md`](../../planning-rosetta-stone.md) (`plann
 - py -3.11 -m hive_planner wiring-audit record --feature implementation-loop: recorded
 - docs/change-impact/project-map.md + test-map.md: rows added
 - Pre-existing failure: tests/test_launcher.py::test_run_unified_verify_on_bootstrapped_project (fails on main without this feature)
+
+2026-10-25 — gap-cascade close-out
+- spec.md R1–R9 patched with cascade rules (result list, complete status, reinstall fill, clarification, push failure)
+- reinstall refreshes retrospective.md and fills empty command strings
+- tests T008/T011/T013: 19 passed
+- Home asks before force-pack
+- 4-pack installed into this repo
 ```

@@ -60,7 +60,7 @@ def test_render_cursor_rule_mentions_command_and_questions() -> None:
 
 def test_install_4pack_writes_all_files(project_root: Path) -> None:
     written = install_implementation_loop(project_root, PACK_4)
-    rels = {str(Path(w)) for w in written}
+    rels = set(written)
     expected = {
         ".cursor/commands/implementation-loop.md",
         ".cursor/rules/implementation-loop.mdc",
@@ -72,9 +72,10 @@ def test_install_4pack_writes_all_files(project_root: Path) -> None:
         ".hive/implementation-loop/commands.json",
         ".hive/implementation-loop/state.json",
         ".hive/implementation-loop/retrospective.log",
+        ".hive/implementation-loop/retrospective.md",
     }
     for rel in expected:
-        assert rel.replace("/", "\\") in rels, f"missing {rel}"
+        assert rel in rels, f"missing {rel}"
 
     state = json.loads((project_root / ".hive/implementation-loop/state.json").read_text(encoding="utf-8"))
     assert state["pack"] == PACK_4
@@ -189,3 +190,118 @@ def test_preview_agent_prompt_4pack() -> None:
 def test_invalid_pack() -> None:
     with pytest.raises(ValueError):
         install_implementation_loop(Path("dummy"), "5-pack")
+
+
+def test_installed_text_forbids_merge_deploy_and_agents_md(project_root: Path) -> None:
+    install_implementation_loop(project_root, PACK_4)
+    command = (project_root / ".cursor/commands/implementation-loop.md").read_text(encoding="utf-8")
+    coordinator = (project_root / ".hive/implementation-loop/roles/coordinator.md").read_text(encoding="utf-8")
+    coder = (project_root / ".hive/implementation-loop/roles/coder.md").read_text(encoding="utf-8")
+    checker = (project_root / ".hive/implementation-loop/roles/checker.md").read_text(encoding="utf-8")
+    reviewer = (project_root / ".hive/implementation-loop/roles/reviewer.md").read_text(encoding="utf-8")
+    retro = (project_root / ".hive/implementation-loop/retrospective.md").read_text(encoding="utf-8")
+    assert "do not merge" in command.lower()
+    assert "do not merge" in coordinator.lower()
+    assert "deploy" in command.lower()
+    assert "deploy" in coder.lower()
+    assert "Do not commit" in coder
+    assert "Do not commit" in checker
+    assert "Do not commit" in reviewer
+    assert "force-push" in command.lower() or "force-push" in coordinator
+    assert "Do not edit `AGENTS.md`" in coordinator
+    assert "Do not edit `AGENTS.md`" in coder
+    assert "Do not edit `AGENTS.md` directly" in retro
+
+
+def test_reinstall_fills_empty_commands_and_refreshes_retrospective(project_root: Path) -> None:
+    install_implementation_loop(project_root, PACK_4)
+    commands_path = project_root / ".hive/implementation-loop/commands.json"
+    commands = json.loads(commands_path.read_text(encoding="utf-8"))
+    commands["test:quick"] = ""
+    commands["build"] = "keep-me"
+    commands_path.write_text(json.dumps(commands), encoding="utf-8")
+    retro_path = project_root / ".hive/implementation-loop/retrospective.md"
+    retro_path.write_text("stale retro\n", encoding="utf-8")
+    install_implementation_loop(project_root, PACK_4)
+    refreshed = json.loads(commands_path.read_text(encoding="utf-8"))
+    assert refreshed["build"] == "keep-me"
+    assert refreshed["test:quick"] == "py -3.11 -m pytest"
+    assert "stale retro" not in retro_path.read_text(encoding="utf-8")
+    assert "agents-propose" in retro_path.read_text(encoding="utf-8")
+
+
+def test_readiness_complete_is_exit_ready(project_root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import hive_planner.implementation_loop as mod
+
+    monkeypatch.setattr(mod, "_current_branch", lambda root: "feature-x")
+    monkeypatch.setattr(mod, "_resolve_trunk", lambda root: "main")
+    install_implementation_loop(project_root, PACK_4)
+    commands_path = project_root / ".hive/implementation-loop/commands.json"
+    commands = json.loads(commands_path.read_text(encoding="utf-8"))
+    commands["build"] = "echo build"
+    commands["test:full"] = "echo test-full"
+    commands_path.write_text(json.dumps(commands), encoding="utf-8")
+    (project_root / "docs/specs/feature-x/tasks.md").write_text("# tasks\n\n- [x] T001 done\n", encoding="utf-8")
+    state_path = project_root / ".hive/implementation-loop/state.json"
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    state["feature"] = "feature-x"
+    state["status"] = "complete"
+    state_path.write_text(json.dumps(state), encoding="utf-8")
+    report = assess_implementation_readiness(project_root, "feature-x")
+    assert report.ready is True
+    assert report.blocked_reason == "complete"
+
+
+def test_init_without_pack_skips_loop(tmp_path: Path) -> None:
+    from hive_planner.bootstrap import init_project
+    from hive_planner.config import RepoPaths
+
+    source_root = tmp_path / "hive-planner"
+    kit = source_root / "starter-kit"
+    rules = source_root / ".cursor" / "rules"
+    rules.mkdir(parents=True)
+    kit.mkdir(parents=True)
+    (rules / "architecture.mdc").write_text("# Architecture\n", encoding="utf-8")
+    (rules / "task-execution.mdc").write_text("# Task Execution\n", encoding="utf-8")
+    (rules / "validation.mdc").write_text("# Validation\n", encoding="utf-8")
+    (kit / "spec-kit-agent-integration.md").write_text("# Spec Kit\n", encoding="utf-8")
+    target = tmp_path / "new-project"
+    init_project(RepoPaths(root=source_root), target)
+    assert not (target / ".cursor" / "commands" / "implementation-loop.md").exists()
+    assert not (target / ".hive" / "implementation-loop").exists()
+
+
+def test_discover_build_from_src_and_setuptools(project_root: Path) -> None:
+    (project_root / "src").mkdir()
+    (project_root / "src" / "pkg").mkdir()
+    (project_root / "src" / "pkg" / "__init__.py").write_text("", encoding="utf-8")
+    pyproject = project_root / "pyproject.toml"
+    pyproject.write_text(
+        pyproject.read_text(encoding="utf-8") + '\n[build-system]\nrequires = ["setuptools>=61"]\n',
+        encoding="utf-8",
+    )
+    install_implementation_loop(project_root, PACK_4)
+    commands = json.loads(
+        (project_root / ".hive/implementation-loop/commands.json").read_text(encoding="utf-8")
+    )
+    assert commands["build"] == "py -3.11 -m compileall -q src"
+
+
+def test_init_with_pack_installs_loop(tmp_path: Path) -> None:
+    from hive_planner.bootstrap import init_project
+    from hive_planner.config import RepoPaths
+
+    source_root = tmp_path / "hive-planner"
+    kit = source_root / "starter-kit"
+    rules = source_root / ".cursor" / "rules"
+    rules.mkdir(parents=True)
+    kit.mkdir(parents=True)
+    (rules / "architecture.mdc").write_text("# Architecture\n", encoding="utf-8")
+    (rules / "task-execution.mdc").write_text("# Task Execution\n", encoding="utf-8")
+    (rules / "validation.mdc").write_text("# Validation\n", encoding="utf-8")
+    (kit / "spec-kit-agent-integration.md").write_text("# Spec Kit\n", encoding="utf-8")
+    target = tmp_path / "new-project"
+    init_project(RepoPaths(root=source_root), target, implementation_loop_pack=PACK_1)
+    assert (target / ".cursor" / "commands" / "implementation-loop.md").is_file()
+    assert (target / ".hive" / "implementation-loop" / "roles" / "coordinator.md").is_file()
+    assert not (target / ".hive" / "implementation-loop" / "roles" / "coder.md").exists()

@@ -31,12 +31,12 @@ Implementation loop — code a finished Hive spec in separate passes.
 
 ## Acceptance Criteria
 
-- [ ] Install requires an explicit pack and writes the command, rule, roles, and NOTICE
-- [ ] Status is ready only when spec, plan, tasks, micro brief, commands, and a non-trunk branch are present
-- [ ] 4-pack commits only after checker and reviewer result files pass
-- [ ] 1-pack keeps a single coordinator and still forbids merge and deploy
-- [ ] Retrospective proposals split operational and behavioral, and coding passes leave `AGENTS.md` alone
-- [ ] Chat phrase and Home install use the same installer; plain init does not
+- [x] Install requires an explicit pack and writes the command, rule, roles, and NOTICE
+- [x] Status is ready only when spec, plan, tasks, micro brief, commands, pack, and a non-trunk branch are present
+- [x] 4-pack commits only after checker and reviewer result files pass
+- [x] 1-pack keeps a single coordinator and still forbids merge and deploy
+- [x] Retrospective proposals split operational and behavioral, and coding passes leave `AGENTS.md` alone
+- [x] Chat phrase and Home install use the same installer; plain init does not
 
 ## Validation
 
