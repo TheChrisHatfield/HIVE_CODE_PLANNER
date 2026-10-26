@@ -510,6 +510,32 @@ def main(argv: list[str] | None = None) -> int:
     )
     impl_status = impl_sub.add_parser("status", help="Report whether a feature is ready to code")
     impl_status.add_argument("--feature", required=True, help="Feature id to check")
+    impl_start = impl_sub.add_parser("start", help="Start coordinator gates for a feature")
+    impl_start.add_argument("--feature", required=True, help="Feature id")
+    impl_start.add_argument(
+        "--allow-dirty",
+        action="store_true",
+        help="Continue despite unrelated dirty paths after the human chooses",
+    )
+    impl_start.add_argument(
+        "--force-feature",
+        action="store_true",
+        help="Switch from a different running feature",
+    )
+    impl_handoff = impl_sub.add_parser("handoff", help="Write handoff.md and increment round_trips")
+    impl_handoff.add_argument(
+        "--role",
+        required=True,
+        help="coder, checker, reviewer (4-pack) or coordinator (1-pack)",
+    )
+    impl_handoff.add_argument(
+        "--continue-after-cap",
+        action="store_true",
+        help="Allow another handoff after 10 round trips when the human agrees",
+    )
+    impl_accept = impl_sub.add_parser("accept", help="Accept a result.md entry for a role")
+    impl_accept.add_argument("--role", required=True, help="Role that just returned")
+    impl_sub.add_parser("commit", help="Commit after checker and reviewer pass")
 
     args = parser.parse_args(argv)
     root, auto_detected = resolve_root(args.root)
@@ -1164,7 +1190,12 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "implementation-loop":
         from hive_planner.implementation_loop import (
+            CoordinatorError,
             assess_implementation_readiness,
+            coordinator_accept,
+            coordinator_commit,
+            coordinator_handoff,
+            coordinator_start,
             install_implementation_loop,
             preview_agent_prompt,
         )
@@ -1190,5 +1221,32 @@ def main(argv: list[str] | None = None) -> int:
             if report.ready and report.blocked_reason == "complete":
                 return 0
             return 0 if report.ready else 2
+
+        try:
+            if args.implementation_loop_command == "start":
+                gate = coordinator_start(
+                    root,
+                    args.feature,
+                    allow_dirty=args.allow_dirty,
+                    force_feature=args.force_feature,
+                )
+            elif args.implementation_loop_command == "handoff":
+                gate = coordinator_handoff(
+                    root,
+                    args.role,
+                    continue_after_cap=args.continue_after_cap,
+                )
+            elif args.implementation_loop_command == "accept":
+                gate = coordinator_accept(root, args.role)
+            elif args.implementation_loop_command == "commit":
+                gate = coordinator_commit(root)
+            else:
+                return 1
+        except CoordinatorError as exc:
+            payload = {"ok": False, "blocked_reason": str(exc), **exc.fields}
+            print(json.dumps(payload, indent=2))
+            return 2
+        print(json.dumps(gate.to_dict(), indent=2))
+        return 0 if gate.ok else 2
 
     return 1

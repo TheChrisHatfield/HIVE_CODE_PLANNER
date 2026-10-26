@@ -197,6 +197,18 @@ def test_task_id_is_not_a_prefix_of_a_longer_id() -> None:
     assert "- [ ] T0010 longer" in checked
 
 
+def test_cli_start_subcommand_is_wired(loop_root: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    from hive_planner.cli import main
+
+    code = main(
+        ["--root", str(loop_root), "implementation-loop", "start", "--feature", "feature-x"]
+    )
+    assert code == 2
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is False
+    assert "state.json" in payload["blocked_reason"] or payload.get("action") == "start"
+
+
 def test_installed_text_calls_python_gates() -> None:
     command = render_cursor_command(PACK_4)
     coordinator = render_role_coordinator(PACK_4)
