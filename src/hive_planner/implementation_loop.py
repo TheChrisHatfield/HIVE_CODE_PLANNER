@@ -912,7 +912,7 @@ def _first_open_task(text: str) -> tuple[str, str, str]:
     return "", "", ""
 
 
-def _open_task_for_current(text: str, current: str) -> tuple[str, str, str]:
+def _open_task_for_current(text: str, current: str, *, action: str) -> tuple[str, str, str]:
     heading = ""
     if current:
         for line in text.splitlines():
@@ -921,6 +921,11 @@ def _open_task_for_current(text: str, current: str) -> tuple[str, str, str]:
             parsed = _parse_open_task_line(line, heading)
             if parsed and _task_token_matches(parsed[2], current, current):
                 return parsed
+        raise CoordinatorError(
+            "current task is not an open checkbox",
+            action=action,
+            task=current,
+        )
     return _first_open_task(text)
 
 
@@ -1373,7 +1378,7 @@ def coordinator_handoff(
             )
 
     tasks_text = _read_feature_tasks(root, state.feature, "handoff")
-    task_id, heading, body = _open_task_for_current(tasks_text, state.current_task)
+    task_id, heading, body = _open_task_for_current(tasks_text, state.current_task, action="handoff")
     if not state.current_task:
         state.current_task = task_id or body
         task = state.current_task
@@ -1505,7 +1510,7 @@ def coordinator_commit(root: Path) -> CoordinatorReport:
     feature = state.feature
     tasks_path = root / f"docs/specs/{feature}/tasks.md"
     tasks_text = _read_feature_tasks(root, feature, "commit")
-    task_id, heading, body = _open_task_for_current(tasks_text, state.current_task)
+    task_id, heading, body = _open_task_for_current(tasks_text, state.current_task, action="commit")
     current = state.current_task or task_id or body
     if _task_line_unresolved(tasks_text, task_id, body):
         raise CoordinatorError(

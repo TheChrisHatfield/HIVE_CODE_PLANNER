@@ -151,6 +151,37 @@ def test_start_allow_dirty_and_handoff_cap(loop_root: Path) -> None:
     assert again.round_trips == 11
 
 
+def test_handoff_refuses_when_current_task_already_checked(loop_root: Path) -> None:
+    tasks = loop_root / "docs/specs/feature-x/tasks.md"
+    _install_ready(loop_root)
+    coordinator_start(loop_root, "feature-x")
+    tasks.write_text("# tasks\n\n## Slice\n\n- [x] T001 do the thing\n- [ ] T002 later\n", encoding="utf-8")
+    with pytest.raises(CoordinatorError, match="not an open checkbox") as exc:
+        coordinator_handoff(loop_root, "coder")
+    assert exc.value.fields.get("task") == "T001"
+
+
+def test_commit_refuses_when_current_task_already_checked(loop_root: Path) -> None:
+    tasks = loop_root / "docs/specs/feature-x/tasks.md"
+    _install_ready(loop_root)
+    coordinator_start(loop_root, "feature-x")
+    (loop_root / "src").mkdir()
+    (loop_root / "src" / "ok.py").write_text("x = 1\n", encoding="utf-8")
+    coordinator_handoff(loop_root, "coder")
+    _write_result(loop_root, "T001", "coder", "pass")
+    coordinator_accept(loop_root, "coder")
+    coordinator_handoff(loop_root, "checker")
+    _write_result(loop_root, "T001", "checker", "pass")
+    coordinator_accept(loop_root, "checker")
+    coordinator_handoff(loop_root, "reviewer")
+    _write_result(loop_root, "T001", "reviewer", "pass")
+    coordinator_accept(loop_root, "reviewer")
+    tasks.write_text("# tasks\n\n## Slice\n\n- [x] T001 do the thing\n- [ ] T002 later\n", encoding="utf-8")
+    with pytest.raises(CoordinatorError, match="not an open checkbox"):
+        coordinator_commit(loop_root)
+    assert "- [ ] T002 later" in tasks.read_text(encoding="utf-8")
+
+
 def test_commit_checks_off_current_task_not_first_open(loop_root: Path) -> None:
     tasks = loop_root / "docs/specs/feature-x/tasks.md"
     tasks.write_text("# tasks\n\n## Slice\n\n- [ ] T001 do the thing\n- [ ] T002 later\n", encoding="utf-8")
