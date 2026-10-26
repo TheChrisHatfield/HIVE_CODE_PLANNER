@@ -46,10 +46,11 @@ Load [`docs/planning-rosetta-stone.md`](../../planning-rosetta-stone.md) (`plann
 
 - [x] T015 Add the module and test rows in `docs/change-impact/project-map.md` and `test-map.md` after the module exists
 - [x] T016 Wiring audit: CLI, init flag, and Home all call install; status exit `2` on a blocked fixture; spec-drift-check for `implementation-loop`
+- [x] T017 Status reports `complete` (exit 0) when every task is checked and the other R1 files exist, even if `state.json` is not already `complete`. Do not treat "no open task" as blocked in that case. Trunk still blocks starting work, not this complete report.
 
 ## Active task
 
-**None** — install, readiness, trigger, and Home enable are implemented.
+**None** — T017 complete-status gate checked.
 
 ## Validation log
 
@@ -79,4 +80,8 @@ Load [`docs/planning-rosetta-stone.md`](../../planning-rosetta-stone.md) (`plann
 - tests T008/T011/T013: 19 passed
 - Home asks before force-pack
 - 4-pack installed into this repo
+
+2026-10-25 — T017 complete-status gate
+- assess_implementation_readiness: all boxes checked + commands/pack => complete (exit 0) without state.status already complete
+- tests/test_implementation_loop.py: 21 passed
 ```

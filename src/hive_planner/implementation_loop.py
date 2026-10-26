@@ -534,11 +534,7 @@ def assess_implementation_readiness(root: Path, feature: str) -> ReadinessReport
             missing.append(rel)
 
     tasks_path = root / f"docs/specs/{feature}/tasks.md"
-    if tasks_path.is_file() and not _has_open_task(tasks_path):
-        state = _read_json(root / LOOP_DIR / "state.json")
-        if state and str(state.get("feature", "")) == feature and str(state.get("status", "")) == "complete":
-            return ReadinessReport(ready=True, feature=feature, missing=[], blocked_reason="complete")
-        missing.append(f"docs/specs/{feature}/tasks.md has no open task")
+    all_checked = tasks_path.is_file() and not _has_open_task(tasks_path)
 
     commands_path = root / LOOP_DIR / "commands.json"
     commands = _read_json(commands_path)
@@ -557,6 +553,12 @@ def assess_implementation_readiness(root: Path, feature: str) -> ReadinessReport
         pack = str(state.get("pack", ""))
         if pack not in VALID_PACKS:
             missing.append(f"invalid pack '{pack}'")
+
+    if all_checked and not missing:
+        return ReadinessReport(ready=True, feature=feature, missing=[], blocked_reason="complete")
+
+    if tasks_path.is_file() and not _has_open_task(tasks_path):
+        missing.append(f"docs/specs/{feature}/tasks.md has no open task")
 
     trunk = _resolve_trunk(root)
     branch = _current_branch(root)

@@ -230,6 +230,24 @@ def test_reinstall_fills_empty_commands_and_refreshes_retrospective(project_root
     assert "agents-propose" in retro_path.read_text(encoding="utf-8")
 
 
+def test_readiness_complete_without_state_flag(project_root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import hive_planner.implementation_loop as mod
+
+    monkeypatch.setattr(mod, "_current_branch", lambda root: "main")
+    monkeypatch.setattr(mod, "_resolve_trunk", lambda root: "main")
+    install_implementation_loop(project_root, PACK_4)
+    commands_path = project_root / ".hive/implementation-loop/commands.json"
+    commands = json.loads(commands_path.read_text(encoding="utf-8"))
+    commands["build"] = "echo build"
+    commands["test:full"] = "echo test-full"
+    commands_path.write_text(json.dumps(commands), encoding="utf-8")
+    (project_root / "docs/specs/feature-x/tasks.md").write_text("# tasks\n\n- [x] T001 done\n", encoding="utf-8")
+    report = assess_implementation_readiness(project_root, "feature-x")
+    assert report.ready is True
+    assert report.blocked_reason == "complete"
+    assert report.missing == []
+
+
 def test_readiness_complete_is_exit_ready(project_root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     import hive_planner.implementation_loop as mod
 
