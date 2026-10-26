@@ -25,7 +25,7 @@ Hive Planner already produces the specification: `spec.md`, `plan.md`, and `task
 
 The loop is adapted from [microsoft/agentic-loops](https://github.com/microsoft/agentic-loops) (MIT, copyright Mr. Das, 2026). Hive keeps Spec Kit as the specification stage. The loop is the execution stage. Each role is a separate agent pass. Git state, the task file, and a handoff file carry the work between passes.
 
-The Python CLI installs the loop, reports whether a feature is ready, and enforces coordinator gates (`start`, `handoff`, `accept`, `commit`). It does not implement the feature and does not run coder, checker, or reviewer duties.
+The Python CLI installs the loop, reports whether a feature is ready, and enforces coordinator gates (`start`, `handoff`, `check`, `accept`, `commit`). It does not implement the feature and does not write reviewer judgments. `check` runs the checker infrastructure (R10).
 
 ## Layers
 
@@ -63,13 +63,13 @@ Every five completed features, the loop proposes durable lessons. The human appr
 
 ### US5 — Start from chat or Home (P2)
 
-Saying the start phrase in a project chat starts the loop in that turn. Home can install it after the pack is chosen. After install, Home **Loop status**, **Loop start**, **Loop handoff**, **Loop accept**, and **Loop commit** call the same Python coordinator gates as the CLI, so the user can click or type. Project init does not install it unless a pack is passed.
+Saying the start phrase in a project chat starts the loop in that turn. Home can install it after the pack is chosen. After install, Home **Loop status**, **Loop start**, **Loop handoff**, **Loop check**, **Loop accept**, and **Loop commit** call the same Python coordinator gates as the CLI, so the user can click or type. Project init does not install it unless a pack is passed.
 
 **Independent test:** trigger matcher, Home install call, Home gate wrappers call the same coordinator functions as the CLI, and init without a pack leaves the loop files absent.
 
 ### US6 — Python strict coordinator (P1)
 
-The agent must not commit, increment round trips, or write the handoff by hand. Python owns those gates. Cursor still implements, checks, and reviews.
+The agent must not commit, increment round trips, or write the handoff by hand. Python owns those gates and the checker command (`check`). Cursor still implements and reviews.
 
 **Independent test:** `start` blocks unrelated dirty paths; `handoff` stops at 10 round trips; `commit` refuses without checker and reviewer `pass` (4-pack: those passes must follow the last coder); a valid commit checks the task box and leaves `.hive/implementation-loop/` unstaged.
 
