@@ -10,6 +10,7 @@ import pytest
 from hive_planner.implementation_loop import (
     PACK_1,
     PACK_4,
+    _normalize_git_branch,
     assess_implementation_readiness,
     install_implementation_loop,
     is_implementation_loop_request,
@@ -37,6 +38,12 @@ def project_root(tmp_path: Path) -> Path:
         encoding="utf-8",
     )
     return root
+
+
+def test_normalize_git_branch_strips_origin_prefix() -> None:
+    assert _normalize_git_branch("origin/main") == "main"
+    assert _normalize_git_branch("origin/master") == "master"
+    assert _normalize_git_branch("main") == "main"
 
 
 def test_trigger_phrases() -> None:

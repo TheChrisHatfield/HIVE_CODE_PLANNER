@@ -155,6 +155,13 @@ def _write_if_changed(path: Path, text: str, root: Path, written: list[str]) -> 
     written.append(_posix_rel(root, path))
 
 
+def _normalize_git_branch(ref: str) -> str:
+    name = ref.strip()
+    if name.startswith("origin/"):
+        return name.split("/", 1)[1]
+    return name
+
+
 def _resolve_trunk(root: Path) -> str:
     try:
         out = subprocess.run(
@@ -164,7 +171,7 @@ def _resolve_trunk(root: Path) -> str:
             cwd=root,
         )
         if out.returncode == 0 and out.stdout.strip():
-            return out.stdout.strip()
+            return _normalize_git_branch(out.stdout)
     except Exception:
         pass
     for candidate in ("main", "master"):
