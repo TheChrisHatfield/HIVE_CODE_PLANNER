@@ -776,18 +776,37 @@ def _unrelated_dirty(paths: list[str]) -> list[str]:
     return unrelated
 
 
+def _parse_open_task_line(line: str, heading: str) -> tuple[str, str, str] | None:
+    match = re.match(r"^- \[ \] (.+)$", line)
+    if not match:
+        return None
+    body = match.group(1).strip()
+    id_match = re.match(r"^(T\d+)\b", body, re.IGNORECASE)
+    task_id = id_match.group(1) if id_match else ""
+    return task_id, heading, body
+
+
 def _first_open_task(text: str) -> tuple[str, str, str]:
     heading = ""
     for line in text.splitlines():
         if line.startswith("## "):
             heading = line[3:].strip()
-        match = re.match(r"^- \[ \] (.+)$", line)
-        if match:
-            body = match.group(1).strip()
-            id_match = re.match(r"^(T\d+)\b", body, re.IGNORECASE)
-            task_id = id_match.group(1) if id_match else ""
-            return task_id, heading, body
+        parsed = _parse_open_task_line(line, heading)
+        if parsed:
+            return parsed
     return "", "", ""
+
+
+def _open_task_for_current(text: str, current: str) -> tuple[str, str, str]:
+    heading = ""
+    if current:
+        for line in text.splitlines():
+            if line.startswith("## "):
+                heading = line[3:].strip()
+            parsed = _parse_open_task_line(line, heading)
+            if parsed and _task_token_matches(parsed[2], current, current):
+                return parsed
+    return _first_open_task(text)
 
 
 def _task_slug(body: str) -> str:
@@ -1122,7 +1141,7 @@ def coordinator_commit(root: Path) -> CoordinatorReport:
     feature = state.feature
     tasks_path = root / f"docs/specs/{feature}/tasks.md"
     tasks_text = tasks_path.read_text(encoding="utf-8")
-    task_id, heading, body = _first_open_task(tasks_text)
+    task_id, heading, body = _open_task_for_current(tasks_text, state.current_task)
     current = state.current_task or task_id or body
     if _task_line_unresolved(tasks_text, task_id, body):
         raise CoordinatorError(
