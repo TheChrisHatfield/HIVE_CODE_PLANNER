@@ -43,6 +43,7 @@ from hive_planner.launcher.service import (
     run_legacy_deployment_scan,
     run_cl_migrate,
     run_project_bug_hunt_install,
+    peek_implementation_loop_pack,
     run_project_implementation_loop_install,
     run_project_ci_check,
     run_project_init,
@@ -2723,7 +2724,7 @@ class HivePlannerApp:
         if not self.config.active_project:
             messagebox.showwarning("No project", "Link a workspace first.")
             return
-        from hive_planner.implementation_loop import PACK_1, PACK_4, read_installed_pack
+        from hive_planner.implementation_loop import PACK_1, PACK_4
 
         pack = simpledialog.askstring(
             "Implementation loop pack",
@@ -2737,8 +2738,11 @@ class HivePlannerApp:
             messagebox.showwarning("Invalid pack", f"Use {PACK_1} or {PACK_4}.")
             return
         link = Path(self.config.active_project)
-        probe = link if link.is_dir() else link.parent
-        existing = read_installed_pack(probe)
+        peek = peek_implementation_loop_pack(link)
+        if peek.get("ok") is not True:
+            messagebox.showwarning("No project", peek.get("error") or "Could not resolve the linked project.")
+            return
+        existing = peek.get("pack")
         force_pack = False
         if existing and existing != pack:
             if not messagebox.askyesno(

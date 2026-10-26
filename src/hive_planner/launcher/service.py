@@ -1447,6 +1447,30 @@ def run_project_bug_hunt_install(
     return payload
 
 
+def linked_install_directory(project_root: Path) -> tuple[Path | None, str | None]:
+    target = project_root.resolve()
+    if not target.exists():
+        return None, "Path does not exist"
+    if target.is_file() and target.suffix.lower() == ".code-workspace":
+        folder = resolve_linked_project_root(target)
+        if folder is None:
+            return None, "Workspace file has no folder on disk"
+        target = folder
+    if not target.is_dir():
+        return None, "Path is not a project directory"
+    return target, None
+
+
+def peek_implementation_loop_pack(project_root: Path) -> dict:
+    """Read the installed pack from the same folder install will use."""
+    from hive_planner.implementation_loop import read_installed_pack
+
+    target, error = linked_install_directory(project_root)
+    if error:
+        return {"ok": False, "error": error, "pack": None}
+    return {"ok": True, "pack": read_installed_pack(target), "root": str(target)}
+
+
 def run_project_implementation_loop_install(
     project_root: Path,
     pack: str,
@@ -1456,16 +1480,9 @@ def run_project_implementation_loop_install(
     """Install the post-spec coding loop into a linked project."""
     from hive_planner.implementation_loop import install_implementation_loop
 
-    target = project_root.resolve()
-    if not target.exists():
-        return {"ok": False, "error": "Path does not exist"}
-    if target.is_file() and target.suffix.lower() == ".code-workspace":
-        folder = resolve_linked_project_root(target)
-        if folder is None:
-            return {"ok": False, "error": "Workspace file has no folder on disk"}
-        target = folder
-    if not target.is_dir():
-        return {"ok": False, "error": "Path is not a project directory"}
+    target, error = linked_install_directory(project_root)
+    if error:
+        return {"ok": False, "error": error}
     try:
         written = install_implementation_loop(target, pack, force_pack=force_pack)
     except (ValueError, OSError) as exc:

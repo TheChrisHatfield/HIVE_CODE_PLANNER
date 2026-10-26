@@ -93,7 +93,9 @@ from hive_planner.launcher.service import (
     resolve_cursor_cli_launch,
     probe_python_command,
     run_install,
+    peek_implementation_loop_pack,
     run_project_bug_hunt_install,
+    run_project_implementation_loop_install,
     run_project_ci_check,
     run_project_init,
     run_project_map_sync,
@@ -1275,6 +1277,23 @@ def test_run_deploy_agent_handoff_ok_when_unified_complete(tmp_path: Path) -> No
     assert (project / "spec-kit-agent-integration.md").is_file()
     assert (project / ".cursor" / "commands" / "bug-hunt.md").is_file()
     assert (project / ".cursor" / "rules" / "bug-hunt.mdc").is_file()
+
+
+def test_peek_implementation_loop_pack_uses_workspace_folder(tmp_path: Path) -> None:
+    from hive_planner.implementation_loop import PACK_4, install_implementation_loop
+
+    folder = tmp_path / "app"
+    folder.mkdir()
+    (folder / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    install_implementation_loop(folder, PACK_4)
+    workspace = tmp_path / "hive.code-workspace"
+    workspace.write_text(json.dumps({"folders": [{"path": "app"}]}), encoding="utf-8")
+    peek = peek_implementation_loop_pack(workspace)
+    assert peek["ok"] is True
+    assert peek["pack"] == PACK_4
+    parent_peek = peek_implementation_loop_pack(workspace.parent)
+    assert parent_peek["ok"] is True
+    assert parent_peek.get("pack") is None
 
 
 def test_run_project_bug_hunt_install_resolves_workspace_file(tmp_path: Path) -> None:
