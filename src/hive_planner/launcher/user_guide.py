@@ -108,6 +108,27 @@ Operator guide: `docs/unified-handoff-upstream-forks.md`
 """
 
 UNIFIED_VENDOR_SECTION_MARKER = "## Unified vendor path"
+IMPLEMENTATION_LOOP_SECTION_MARKER = "## Implementation loop"
+
+
+def implementation_loop_help_text() -> str:
+    """Plain-English launcher help for Home Loop buttons (appended if scripts/README.md is stale)."""
+    return """## Implementation loop
+
+Use this after a feature already has `spec.md`, `plan.md`, and `tasks.md`. It codes that task list; it does not write a new spec.
+
+1. **Home → Enable implementation loop** — pick **1-pack** (one coordinator) or **4-pack** (coder + Python check + reviewer).
+2. **Loop status** — is the feature ready to code?
+3. **Loop start** — start coordinator gates for that feature.
+4. **Loop handoff** — write `handoff.md` and count a round trip for a role.
+5. **Loop check** — run `build`, `test:quick`, and the wiring audit for this task (not a bug hunt).
+6. **Loop accept** — accept the role’s `result.md` entry.
+7. **Loop commit** — one Python commit after checker and reviewer pass.
+
+CLI: `py -3.11 -m hive_planner implementation-loop` with `status`, `start`, `handoff`, `check`, `accept`, or `commit`. Init installs the loop only with `--implementation-loop-pack`.
+
+Do not merge, push to trunk, force-push, or deploy from this loop.
+"""
 
 
 def user_guide_path(config: LauncherConfig | None = None) -> Path:
@@ -135,4 +156,6 @@ def load_user_guide(config: LauncherConfig | None = None) -> str:
         readme_on_disk = False
     if readme_on_disk and UNIFIED_VENDOR_SECTION_MARKER not in text:
         text = text.rstrip() + "\n\n" + unified_vendor_help_text().strip() + "\n"
+    if readme_on_disk and IMPLEMENTATION_LOOP_SECTION_MARKER not in text:
+        text = text.rstrip() + "\n\n" + implementation_loop_help_text().strip() + "\n"
     return text

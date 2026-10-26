@@ -113,6 +113,9 @@ The **active project** is the folder Hive Planner is “pointing at” right now
 | **Open in Cursor** | Opens the active project folder in the Cursor editor |
 | **Sync impact maps** | Updates planning “impact map” files after you change code |
 | **Deploy agent handoff** | Writes unified Spec Kit + Continual Learning overlays (`.hive/spec-kit/`, `.cursor/plugins/hive-continual-learning/`, `.hive/upstream-pins.json`). Re-run after Hive upgrades. |
+| **Enable bug hunt** | Installs the chat trigger so saying **bug hunt** in Cursor starts a find/fix/commit loop. Separate from the implementation loop. |
+| **Enable implementation loop** | Installs the post-spec coding loop (**1-pack** or **4-pack**). Same as `implementation-loop install`. |
+| **Loop status / start / handoff / check / accept / commit** | Same Python coordinator gates as the CLI. Hover each button for the matching command. You can also say **implementation loop** in Cursor chat, or copy **Start the implementation loop** from Agent prompt templates. |
 | **Load cartridge…** | Add reference docs, translate research markdown into draft `cartridge/`, or import an existing cartridge folder. With **unified handoff**, optionally **promote drafts** (force overwrite optional), write CL candidate files, and run **spec-drift**. Import + promote requires a valid feature id. |
 | **Load Sources…** | Upload `.txt` and `.pdf` reference files into `context-library/sources/source4s/`, index them for retrieval, and refresh `cartridge/source-context.md` for the active feature. Image-only PDFs are OCR'd via bundled or system Tesseract when available. |
 | **Open in Explorer** | Opens the project folder in Windows File Explorer |
@@ -120,6 +123,24 @@ The **active project** is the folder Hive Planner is “pointing at” right now
 The **Output** area at the bottom shows what just ran — read it if something fails.
 
 **No project selected?** Go to **Projects** first (see below).
+
+---
+
+## Implementation loop
+
+Use this after a feature already has `spec.md`, `plan.md`, and `tasks.md`. It codes that task list; it does not write a new spec.
+
+1. **Home → Enable implementation loop** — pick **1-pack** (one coordinator) or **4-pack** (coder + Python check + reviewer).
+2. **Loop status** — is the feature ready to code?
+3. **Loop start** — start coordinator gates for that feature.
+4. **Loop handoff** — write `handoff.md` and count a round trip for a role.
+5. **Loop check** — run `build`, `test:quick`, and the wiring audit for this task (not a bug hunt).
+6. **Loop accept** — accept the role’s `result.md` entry.
+7. **Loop commit** — one Python commit after checker and reviewer pass.
+
+CLI: `py -3.11 -m hive_planner implementation-loop` with `status`, `start`, `handoff`, `check`, `accept`, or `commit`. Init installs the loop only with `--implementation-loop-pack`.
+
+Do not merge, push to trunk, force-push, or deploy from this loop.
 
 ---
 
@@ -175,6 +196,14 @@ Each project remembers its profile (**full** or **minimal**) for labels and chec
 2. **Open in Cursor**
 3. Use `START_HERE.md` in the new folder as your entry point for planning
 
+### “I have a finished spec and want to code it”
+
+1. **Home → Enable implementation loop** (once per project) — pick a pack
+2. **Loop status**, then **Loop start**
+3. After the coder: **Loop check** (build / tests / wiring audit)
+4. **Loop accept**, then **Loop commit** when checker and reviewer passed
+5. Or say **implementation loop** in Cursor chat instead of clicking
+
 ### “Something is broken (Python / install / health check)”
 
 1. **Settings → Scan for Python** → pick one → save
@@ -191,6 +220,8 @@ Each project remembers its profile (**full** or **minimal**) for labels and chec
 | **Health check / ci-check** | Automated sanity checks on planning files and project layout |
 | **Profile (full / minimal)** | How much starter structure a new project gets |
 | **Impact maps** | Files that track which code areas planning docs refer to |
+| **Implementation loop** | Opt-in coding loop for a finished spec — Home Loop buttons or the chat phrase **implementation loop** |
+| **Loop check** | Python checker: `build`, `test:quick`, and wiring audit for the current task (not a bug hunt) |
 | **Handoff** | When you finish a chunk of work and pass it to another person or agent |
 | **Unified handoff** | Spec Kit + Continual Learning deployed together (symbiotic pair) |
 | **Vendor overlays** | `.hive/spec-kit/` + `.cursor/plugins/hive-continual-learning/` + `.hive/upstream-pins.json` |

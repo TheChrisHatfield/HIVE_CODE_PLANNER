@@ -1859,6 +1859,18 @@ def test_scripts_readme_documents_unified_vendor_path() -> None:
     assert "Deploy agent handoff" in text
 
 
+def test_scripts_readme_documents_implementation_loop() -> None:
+    from hive_planner.launcher.user_guide import IMPLEMENTATION_LOOP_SECTION_MARKER
+
+    guide = Path(__file__).resolve().parents[1] / "scripts" / "README.md"
+    text = guide.read_text(encoding="utf-8")
+    assert IMPLEMENTATION_LOOP_SECTION_MARKER in text
+    assert "Enable implementation loop" in text
+    assert "Loop check" in text
+    assert "implementation-loop" in text
+    assert "not a bug hunt" in text.lower()
+
+
 def test_unified_vendor_repair_hints_for_overlay_gaps() -> None:
     from hive_planner.launcher.service import unified_vendor_repair_hints
 
@@ -1951,7 +1963,12 @@ def test_load_user_guide_fallback_does_not_duplicate_unified_section(tmp_path: P
 
 
 def test_load_user_guide_appends_unified_vendor_section_when_readme_stale(tmp_path: Path) -> None:
-    from hive_planner.launcher.user_guide import UNIFIED_VENDOR_SECTION_MARKER, load_user_guide, user_guide_path
+    from hive_planner.launcher.user_guide import (
+        IMPLEMENTATION_LOOP_SECTION_MARKER,
+        UNIFIED_VENDOR_SECTION_MARKER,
+        load_user_guide,
+        user_guide_path,
+    )
 
     hive = tmp_path / "hive"
     scripts = hive / "scripts"
@@ -1966,6 +1983,8 @@ def test_load_user_guide_appends_unified_vendor_section_when_readme_stale(tmp_pa
     assert UNIFIED_VENDOR_SECTION_MARKER in text
     assert "vendor-sync" in text
     assert "Legacy guide" in text
+    assert IMPLEMENTATION_LOOP_SECTION_MARKER in text
+    assert "Loop check" in text
 
 
 def test_load_user_guide_does_not_duplicate_unified_section(tmp_path: Path) -> None:
@@ -1983,6 +2002,23 @@ def test_load_user_guide_does_not_duplicate_unified_section(tmp_path: Path) -> N
     text = load_user_guide(cfg)
 
     assert text.count("## Unified vendor path") == 1
+
+
+def test_load_user_guide_does_not_duplicate_implementation_loop_section(tmp_path: Path) -> None:
+    from hive_planner.launcher.user_guide import load_user_guide
+
+    hive = tmp_path / "hive"
+    scripts = hive / "scripts"
+    scripts.mkdir(parents=True)
+    scripts.joinpath("README.md").write_text(
+        "# Guide\n\n## Implementation loop\n\nAlready documented.\n",
+        encoding="utf-8",
+    )
+    cfg = LauncherConfig(hive_planner_root=str(hive))
+
+    text = load_user_guide(cfg)
+
+    assert text.count("## Implementation loop") == 1
 
 
 def test_default_agent_prompt_templates_are_non_empty_and_unique() -> None:

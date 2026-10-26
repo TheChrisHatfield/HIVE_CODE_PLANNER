@@ -936,7 +936,7 @@ class HivePlannerApp:
             actions,
             "Enable implementation loop",
             self._on_implementation_loop_install,
-            tooltip="Install the post-spec coding loop so a finished spec, plan, and task list are coded in separate passes.",
+            tooltip="Install the post-spec coding loop (1-pack or 4-pack). Then use Loop status / start / handoff / check / accept / commit, or say implementation loop in chat.",
         )
 
         loop_actions = tk.Frame(body, bg=COLORS["bg"])
