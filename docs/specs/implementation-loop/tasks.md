@@ -53,10 +53,11 @@ Load [`docs/planning-rosetta-stone.md`](../../planning-rosetta-stone.md) (`plann
 
 - [x] T019 Python `start` / `handoff` / `accept` / `commit` gates: dirty-tree block, 10-pass cap, refuse commit without checker and reviewer `pass`, check off the task, leave `.hive/` unstaged; installed coordinator text calls these commands; tests in `tests/test_implementation_loop_coordinator.py`
 - [x] T020 Close deploy gaps: spec status implemented; `baseline_dirty` in state table; first successful push opens `gh pr create` and stores `pr_url`; every five completed features writes the proposal stub; commit leftover spec/docs
+- [x] T021 Live 4-pack proof: add an Implementation loop pointer to `START_HERE.md`
 
 ## Active task
 
-**None** — T020 deploy-gap close-out checked.
+**T021** — live 4-pack proof on START_HERE.
 
 ## Validation log
 

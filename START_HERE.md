@@ -49,6 +49,10 @@ To **author or extend** a Rosetta Stone (any agentic system), follow [`docs/plan
 
 To **upload to Perplexity / Gemini / ChatGPT** at the start of a planning session, upload [`docs/ROSETTA-PLANNING-SESSION-CONTRACT.md`](docs/ROSETTA-PLANNING-SESSION-CONTRACT.md) (standalone — inline markers + Rosetta output rules).
 
+## Implementation loop
+
+After `spec.md`, `plan.md`, and `tasks.md` exist, install the opt-in coding loop with `py -3.11 -m hive_planner implementation-loop install --pack 4-pack` (or `1-pack`). In chat, say **implementation loop**. Spec: [`docs/specs/implementation-loop/spec.md`](docs/specs/implementation-loop/spec.md).
+
 ## Execution rule
 
 Before editing code:
