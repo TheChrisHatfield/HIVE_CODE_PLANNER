@@ -1124,6 +1124,17 @@ def coordinator_accept(root: Path, role: str) -> CoordinatorReport:
     )
 
 
+def _push_enabled(commands: dict[str, Any] | None) -> bool:
+    if not commands:
+        return False
+    value = commands.get("push")
+    if value is True or value == 1:
+        return True
+    if isinstance(value, str) and value.strip().lower() in {"true", "1", "yes"}:
+        return True
+    return False
+
+
 def _run_named_command(root: Path, key: str) -> subprocess.CompletedProcess[str]:
     commands = _read_json(_loop_dir(root) / "commands.json") or {}
     raw = str(commands.get(key, "")).strip()
@@ -1215,8 +1226,7 @@ def coordinator_commit(root: Path) -> CoordinatorReport:
         _reset_result(root, state.current_task)
 
     commands = _read_json(_loop_dir(root) / "commands.json") or {}
-    push_wanted = commands.get("push") is True
-    if push_wanted and _detect_push_default(root):
+    if _push_enabled(commands) and _detect_push_default(root):
         pushed = _git(root, "push", "-u", "origin", "HEAD")
         if pushed.returncode != 0:
             state.status = "blocked"

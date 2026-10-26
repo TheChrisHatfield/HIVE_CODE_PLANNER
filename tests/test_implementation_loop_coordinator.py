@@ -16,6 +16,7 @@ from hive_planner.implementation_loop import (
     CoordinatorError,
     _check_off_task,
     _last_outcome,
+    _push_enabled,
     coordinator_accept,
     coordinator_commit,
     coordinator_handoff,
@@ -236,6 +237,15 @@ def test_1pack_rejects_coder_handoff(loop_root: Path) -> None:
         coordinator_handoff(loop_root, "coder")
     handed = coordinator_handoff(loop_root, "coordinator")
     assert handed.ok is True
+
+
+def test_push_enabled_accepts_json_and_string_true() -> None:
+    assert _push_enabled({"push": True}) is True
+    assert _push_enabled({"push": "true"}) is True
+    assert _push_enabled({"push": "True"}) is True
+    assert _push_enabled({"push": False}) is False
+    assert _push_enabled({"push": "false"}) is False
+    assert _push_enabled({}) is False
 
 
 def test_task_id_is_not_a_prefix_of_a_longer_id() -> None:
