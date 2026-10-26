@@ -126,6 +126,30 @@ def test_commit_refuses_without_reviewer_pass(loop_root: Path) -> None:
         coordinator_commit(loop_root)
 
 
+def test_commit_skips_dirty_paths_from_start(loop_root: Path) -> None:
+    _install_ready(loop_root)
+    (loop_root / "notes.txt").write_text("leftover\n", encoding="utf-8")
+    coordinator_start(loop_root, "feature-x", allow_dirty=True)
+    (loop_root / "src").mkdir()
+    (loop_root / "src" / "ok.py").write_text("x = 1\n", encoding="utf-8")
+    coordinator_handoff(loop_root, "coder")
+    _write_result(loop_root, "T001", "coder", "pass")
+    coordinator_accept(loop_root, "coder")
+    coordinator_handoff(loop_root, "checker")
+    _write_result(loop_root, "T001", "checker", "pass")
+    coordinator_accept(loop_root, "checker")
+    coordinator_handoff(loop_root, "reviewer")
+    _write_result(loop_root, "T001", "reviewer", "pass")
+    coordinator_accept(loop_root, "reviewer")
+    report = coordinator_commit(loop_root)
+    assert report.ok is True
+    show = _git(loop_root, "show", "--name-only", "--pretty=format:", "HEAD")
+    names = {line.replace("\\", "/") for line in show.stdout.splitlines() if line.strip()}
+    assert "notes.txt" not in names
+    assert "src/ok.py" in names
+    assert (loop_root / "notes.txt").is_file()
+
+
 def test_commit_checks_off_task_and_leaves_hive_unstaged(loop_root: Path) -> None:
     _install_ready(loop_root)
     coordinator_start(loop_root, "feature-x")

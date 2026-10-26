@@ -99,6 +99,7 @@ class LoopState:
     status: str = "idle"
     pr_url: str = ""
     slice_signoff: str = "continue"
+    baseline_dirty: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -110,10 +111,14 @@ class LoopState:
             "status": self.status,
             "pr_url": self.pr_url,
             "slice_signoff": self.slice_signoff,
+            "baseline_dirty": list(self.baseline_dirty),
         }
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> LoopState:
+        baseline = raw.get("baseline_dirty") or []
+        if not isinstance(baseline, list):
+            baseline = []
         return cls(
             feature=str(raw.get("feature", "")),
             pack=str(raw.get("pack", "")),
@@ -123,6 +128,7 @@ class LoopState:
             status=str(raw.get("status", "idle")),
             pr_url=str(raw.get("pr_url", "")),
             slice_signoff=str(raw.get("slice_signoff", "continue")),
+            baseline_dirty=[str(p).replace("\\", "/") for p in baseline],
         )
 
 
@@ -737,6 +743,16 @@ def _dirty_paths(root: Path) -> list[str]:
     return paths
 
 
+def _paths_for_commit(root: Path, feature: str, baseline: list[str]) -> list[str]:
+    now = _unrelated_dirty(_dirty_paths(root))
+    baseline_set = set(baseline)
+    keep = {
+        f"docs/specs/{feature}/tasks.md",
+        f"docs/specs/{feature}/plan.md",
+    }
+    return [path for path in now if path in keep or path not in baseline_set]
+
+
 def _unrelated_dirty(paths: list[str]) -> list[str]:
     unrelated: list[str] = []
     for posix in paths:
@@ -962,6 +978,7 @@ def coordinator_start(
     state.status = "running"
     state.current_task = current
     state.slice_signoff = "continue"
+    state.baseline_dirty = list(unrelated)
     if previous != current:
         state.round_trips = 0
         _reset_result(root, current)
@@ -1122,7 +1139,7 @@ def coordinator_commit(root: Path) -> CoordinatorReport:
     checked = _check_off_task(tasks_text, task_id, body)
     tasks_path.write_text(checked, encoding="utf-8")
 
-    to_add = _unrelated_dirty(_dirty_paths(root))
+    to_add = _paths_for_commit(root, feature, state.baseline_dirty)
     if not to_add:
         raise CoordinatorError("nothing to commit", action="commit", feature=feature, task=current)
     for rel in to_add:
