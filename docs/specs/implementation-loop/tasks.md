@@ -41,6 +41,8 @@ Load [`docs/planning-rosetta-stone.md`](../../planning-rosetta-stone.md) (`plann
 - [x] T012 `is_implementation_loop_request` and always-on `.cursor/rules/implementation-loop.mdc` start phrases; questions and bug-hunt phrases do not match
 - [x] T013 `init_project` installs only when `--implementation-loop-pack` is set
 - [x] T014 Home **Enable implementation loop** asks for a pack and calls the install function
+- [x] T027 Home **Loop status / start / handoff / check / accept / commit** call the same Python coordinator gates as the CLI; Agent prompt template **Start the implementation loop** keeps chat as the other half of the duality
+- [x] T028 Python `implementation-loop check` (Home **Loop check**) runs `build` / `test:quick` / wiring audit and appends the checker `result.md` entry; bug hunt stays separate
 
 ## Phase 7 — Maps and audit
 
@@ -62,7 +64,7 @@ Load [`docs/planning-rosetta-stone.md`](../../planning-rosetta-stone.md) (`plann
 
 ## Active task
 
-**None** — T026 follow-up gap loop checked.
+**None** — T028 Python checker infrastructure checked.
 
 ## Validation log
 
@@ -138,6 +140,17 @@ Load [`docs/planning-rosetta-stone.md`](../../planning-rosetta-stone.md) (`plann
 2026-10-26 — T026 follow-up gap loop
 - role case; result/test:full OSError and bad quotes; state.json write
 - tests: 65 passed
+
+2026-10-26 — T027 Home duality
+- Home Loop status/start/handoff/accept/commit wrap CLI coordinator functions
+- Agent prompt template Start the implementation loop
+- tests: 75 passed (implementation_loop + launcher -k implementation_loop)
+- spec-drift-check --feature implementation-loop: ok
+
+2026-10-26 — T028 Python checker
+- implementation-loop check / Home Loop check runs build, test:quick, wiring audit
+- appends checker result.md; bug hunt unchanged
+- spec-drift-check --feature implementation-loop: ok
 ```
 
 
