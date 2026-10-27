@@ -100,6 +100,16 @@ def test_install_4pack_writes_all_files(project_root: Path) -> None:
     assert commands["test:full"] == ""
 
 
+def test_install_overwrites_non_utf8_command_file(project_root: Path) -> None:
+    target = project_root / ".cursor" / "commands" / "implementation-loop.md"
+    target.parent.mkdir(parents=True)
+    target.write_bytes(b"\xff\xfe not utf-8")
+    written = install_implementation_loop(project_root, PACK_4)
+    assert ".cursor/commands/implementation-loop.md" in written
+    text = target.read_text(encoding="utf-8")
+    assert "implementation-loop" in text
+
+
 def test_install_1pack_removes_delegated_roles(project_root: Path) -> None:
     install_implementation_loop(project_root, PACK_4)
     install_implementation_loop(project_root, PACK_1, force_pack=True)

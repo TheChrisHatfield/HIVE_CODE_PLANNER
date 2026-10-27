@@ -236,7 +236,13 @@ def _posix_rel(root: Path, path: Path) -> str:
 
 def _write_if_changed(path: Path, text: str, root: Path, written: list[str]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    if path.is_file() and path.read_text(encoding="utf-8") == text:
+    previous = None
+    if path.is_file():
+        try:
+            previous = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            previous = None
+    if previous == text:
         return
     path.write_text(text, encoding="utf-8")
     written.append(_posix_rel(root, path))
