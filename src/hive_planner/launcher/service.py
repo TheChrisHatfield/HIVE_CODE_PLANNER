@@ -1704,9 +1704,11 @@ def run_project_implementation_loop_status(project_root: Path, feature: str | No
         return {"ok": False, "error": ferr, "action": "status"}
     report = assess_implementation_readiness(target, feat)
     payload = report.to_dict()
-    payload["ok"] = True
+    payload["ok"] = bool(report.ready)
     payload["action"] = "status"
     payload["root"] = str(target)
+    if not payload["ok"]:
+        payload["error"] = payload.get("blocked_reason") or "not ready"
     return payload
 
 

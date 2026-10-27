@@ -1312,10 +1312,11 @@ def test_run_project_implementation_loop_status_uses_workspace_folder(tmp_path: 
     workspace = tmp_path / "hive.code-workspace"
     workspace.write_text(json.dumps({"folders": [{"path": "app"}]}), encoding="utf-8")
     result = run_project_implementation_loop_status(workspace, "feature-x")
-    assert result["ok"] is True
+    assert result["ok"] is False
     assert result["action"] == "status"
     assert result["feature"] == "feature-x"
     assert result["ready"] is False
+    assert result.get("error")
     assert result["root"] == str(folder.resolve())
 
 
@@ -1327,8 +1328,10 @@ def test_run_project_implementation_loop_status_reads_agents_feature(tmp_path: P
     install_implementation_loop(folder, PACK_1)
     (folder / "AGENTS.md").write_text("## Active feature\n\n**demo-feature** — loop\n", encoding="utf-8")
     result = run_project_implementation_loop_status(folder, None)
-    assert result["ok"] is True
+    assert result["ok"] is result["ready"]
     assert result["feature"] == "demo-feature"
+    if not result["ready"]:
+        assert result.get("error")
 
 
 def test_run_project_implementation_loop_start_requires_feature(tmp_path: Path) -> None:
