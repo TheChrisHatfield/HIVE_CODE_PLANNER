@@ -5982,6 +5982,67 @@ def test_note_stale_bg_result_clears_controls_in_progress() -> None:
     assert "Starting implementation loop" not in app.controls_last.get()
 
 
+def test_choose_without_arm_ignores_invalid_cycles(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pathlib import Path
+
+    from hive_planner.launcher.app import HivePlannerApp
+
+    class _Var:
+        def __init__(self, value) -> None:
+            self._value = value
+
+        def get(self):
+            return self._value
+
+    warned: list[object] = []
+    monkeypatch.setattr(
+        "hive_planner.launcher.app.messagebox.showwarning",
+        lambda *a, **k: warned.append(a),
+    )
+    started: list[str] = []
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app._require_active_link = lambda: Path("C:/proj")  # type: ignore[method-assign]
+    app.controls_agn_open = _Var("")
+    app.controls_agn_arm_choose = _Var(False)
+    app.controls_agn_cycles = _Var("not-a-number")
+    app._start_home_action = lambda message: started.append(message)  # type: ignore[method-assign]
+    app._run_bg = lambda work, done: started.append("bg")  # type: ignore[method-assign]
+    app._project_done_callback = lambda label, on_done: on_done  # type: ignore[method-assign]
+    app._on_agnostic_loop_choose()
+    assert not warned
+    assert started == ["Choosing agnostic-loop reward…", "bg"]
+
+
+def test_choose_with_arm_rejects_invalid_cycles(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pathlib import Path
+
+    from hive_planner.launcher.app import HivePlannerApp
+
+    class _Var:
+        def __init__(self, value) -> None:
+            self._value = value
+
+        def get(self):
+            return self._value
+
+    warned: list[object] = []
+    monkeypatch.setattr(
+        "hive_planner.launcher.app.messagebox.showwarning",
+        lambda *a, **k: warned.append(a),
+    )
+    started: list[str] = []
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app._require_active_link = lambda: Path("C:/proj")  # type: ignore[method-assign]
+    app.controls_agn_open = _Var("")
+    app.controls_agn_arm_choose = _Var(True)
+    app.controls_agn_cycles = _Var("not-a-number")
+    app._start_home_action = lambda message: started.append(message)  # type: ignore[method-assign]
+    app._run_bg = lambda work, done: started.append("bg")  # type: ignore[method-assign]
+    app._on_agnostic_loop_choose()
+    assert warned
+    assert started == []
+
+
 def test_note_stale_bg_result_refreshes_dashboard_for_cartridge() -> None:
     from hive_planner.launcher.app import HivePlannerApp
 

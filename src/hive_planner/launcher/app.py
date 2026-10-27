@@ -3564,9 +3564,12 @@ class HivePlannerApp:
             return
         open_text = str(self.controls_agn_open.get() if hasattr(self, "controls_agn_open") else "").strip() or None
         do_arm = bool(self.controls_agn_arm_choose.get()) if hasattr(self, "controls_agn_arm_choose") else False
-        cycles = self._controls_agn_cycles()
-        if cycles is None:
-            return
+        cycles = 1
+        if do_arm:
+            parsed = self._controls_agn_cycles()
+            if parsed is None:
+                return
+            cycles = parsed
         self._start_home_action("Choosing agnostic-loop reward…")
         self._run_bg(
             lambda r=link, o=open_text, a=do_arm, n=cycles: run_project_agnostic_loop_choose(
