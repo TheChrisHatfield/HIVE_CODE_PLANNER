@@ -212,7 +212,7 @@ def test_install_writes_full_kit(tmp_path: Path) -> None:
     assert "hive_planner is required" not in engine
 
 
-def test_malformed_catalog_falls_back_to_default(tmp_path: Path) -> None:
+def test_malformed_refill_keeps_valid_rewards(tmp_path: Path) -> None:
     root = tmp_path / "proj"
     root.mkdir()
     folder = root / ".hive" / "agnostic-loop"
@@ -225,6 +225,18 @@ def test_malformed_catalog_falls_back_to_default(tmp_path: Path) -> None:
     assert "inspect" in names
     payload, code = arm(root, "inspect", 1)
     assert code == 0
+
+
+def test_invalid_catalog_refuses_arm(tmp_path: Path) -> None:
+    root = tmp_path / "proj"
+    root.mkdir()
+    folder = root / ".hive" / "agnostic-loop"
+    folder.mkdir(parents=True)
+    (folder / "catalog.json").write_text("[]", encoding="utf-8")
+    payload, code = arm(root, "inspect", 1)
+    assert code == 3
+    assert payload["ok"] is False
+    assert "catalog.json" in payload["blocked_reason"]
 
 
 def test_replaced_catalog_is_used(tmp_path: Path) -> None:

@@ -170,23 +170,37 @@ def _catalog_path(root: Path) -> Path:
     return _loop_dir(root) / CATALOG_NAME
 
 
-def load_catalog(root: Path | None = None) -> LoopCatalog:
+def try_load_catalog(root: Path | None = None) -> tuple[LoopCatalog, str | None]:
     if root is None:
-        return default_catalog()
+        return default_catalog(), None
     path = _catalog_path(root)
     if not path.is_file():
-        return default_catalog()
+        return default_catalog(), None
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return default_catalog()
+    except (OSError, UnicodeDecodeError):
+        return default_catalog(), "catalog.json could not be read"
+    except json.JSONDecodeError:
+        return default_catalog(), "catalog.json is not valid JSON"
     if not isinstance(data, dict):
-        return default_catalog()
+        return default_catalog(), "catalog.json must be a JSON object"
     try:
         parsed = parse_catalog(data)
     except (TypeError, ValueError, AttributeError, KeyError):
-        return default_catalog()
-    return parsed if parsed.rewards else default_catalog()
+        return default_catalog(), "catalog.json could not be parsed"
+    if not parsed.rewards:
+        return default_catalog(), "catalog.json has no rewards"
+    return parsed, None
+
+
+def load_catalog(root: Path | None = None) -> LoopCatalog:
+    catalog, _err = try_load_catalog(root)
+    return catalog
+
+
+def catalog_problem(root: Path | None) -> str | None:
+    _catalog, err = try_load_catalog(root)
+    return err
 
 
 def reward_tables(root: Path | None = None) -> dict[str, tuple[tuple[str, ...], str]]:
@@ -299,7 +313,17 @@ def _payload(ok: bool, **fields: Any) -> dict[str, Any]:
     return data
 
 
+def _catalog_refuse(root: Path, action: str) -> tuple[dict[str, Any], int] | None:
+    err = catalog_problem(root)
+    if not err:
+        return None
+    return _payload(False, action=action, blocked_reason=err), 3
+
+
 def arm(root: Path, reward: str, cycles: int) -> tuple[dict[str, Any], int]:
+    refused = _catalog_refuse(root, "arm")
+    if refused:
+        return refused
     catalog = load_catalog(root)
     if reward not in catalog.rewards:
         return _payload(False, action="arm", blocked_reason=f"unknown reward {reward}"), 3
@@ -342,6 +366,9 @@ def arm(root: Path, reward: str, cycles: int) -> tuple[dict[str, Any], int]:
 
 
 def begin(root: Path) -> tuple[dict[str, Any], int]:
+    refused = _catalog_refuse(root, "begin")
+    if refused:
+        return refused
     catalog = load_catalog(root)
     state = _load_state(root)
     if state.get("completed", 0) >= _limit(state):
@@ -388,6 +415,9 @@ def begin(root: Path) -> tuple[dict[str, Any], int]:
 
 
 def review(root: Path, note: str) -> tuple[dict[str, Any], int]:
+    refused = _catalog_refuse(root, "review")
+    if refused:
+        return refused
     catalog = load_catalog(root)
     state = _load_state(root)
     if state.get("status") != "running":
@@ -665,6 +695,9 @@ def principal_variation(root: _Node, arms: dict, rng: random.Random) -> list[str
 
 
 def observe(root: Path, reward: str, hit: bool, names: tuple[str, ...] | None = None) -> tuple[dict[str, Any], int]:
+    refused = _catalog_refuse(root, "observe")
+    if refused:
+        return refused
     names = names or rewards(root)
     if reward not in names:
         return _payload(False, action="observe", blocked_reason=f"unknown reward {reward}"), 3
@@ -703,6 +736,9 @@ def choose(
 ) -> tuple[dict[str, Any], int]:
     if sims < 1 or horizon < 1 or cycles < 1:
         return _payload(False, action="choose", blocked_reason="sims, horizon, and cycles must be positive"), 3
+    refused = _catalog_refuse(root, "choose")
+    if refused:
+        return refused
     catalog = load_catalog(root)
     names = names or catalog.names()
     policy = load_policy(root, names)
@@ -752,6 +788,9 @@ def choose(
 
 
 def status(root: Path) -> dict[str, Any]:
+    refused = _catalog_refuse(root, "status")
+    if refused:
+        return refused[0]
     catalog = load_catalog(root)
     names = catalog.names()
     state = _load_state(root)
@@ -1049,6 +1088,10 @@ def main(argv: list[str] | None = None, *, root: Path | None = None) -> int:
         cmd.add_argument("--arm", action="store_true")
         cmd.add_argument("--cycles", type=int, default=1)
     args = parser.parse_args(argv)
+    err = catalog_problem(root)
+    if err and args.cmd in {"rewards", "status", "arm", "begin", "review", "observe", "choose", "plan"}:
+        print(json.dumps({"ok": False, "action": args.cmd, "blocked_reason": err}))
+        return 3
     names = rewards(root)
     if args.cmd == "rewards":
         print(json.dumps(sorted(names)))
@@ -1066,8 +1109,9 @@ def main(argv: list[str] | None = None, *, root: Path | None = None) -> int:
         print(json.dumps(payload))
         return code
     if args.cmd == "status":
-        print(json.dumps(status(root)))
-        return 0
+        report = status(root)
+        print(json.dumps(report))
+        return 0 if report.get("ok") is not False else 3
     if args.cmd == "observe":
         payload, code = observe(root, args.reward, args.hit, names)
         print(json.dumps(payload))

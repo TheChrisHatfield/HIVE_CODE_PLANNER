@@ -37,7 +37,7 @@ This is not the implementation loop and not bug hunt. Those remain separate. Sou
 
 Default rewards (generic work kinds): `inspect`, `fill`, `extend`, `method`, `infer`, `script`, `goal-infer`, `goal-extend`.
 
-Each reward has a hook list and a one-tick rule stored in `.hive/agnostic-loop/catalog.json`. Tick rules describe one slice of work. They must not mention mining papers, reconstruction, training launches, UV, or a host product. A landed tick may refill other rewards (`refill`). Rollouts prefer `chain` but every reward stays legal at the root. Replacing `catalog.json` is how another tool changes names and hooks.
+Each reward has a hook list and a one-tick rule stored in `.hive/agnostic-loop/catalog.json`. Tick rules describe one slice of work. They must not mention mining papers, reconstruction, training launches, UV, or a host product. A landed tick may refill other rewards (`refill`). Rollouts prefer `chain` but every reward stays legal at the root. Replacing `catalog.json` is how another tool changes names and hooks. If that file exists but is not a usable object, gates refuse (exit 3) instead of silently using the default table.
 
 The catalog must not name SeamFlow, UV seam, training launches, source-kit ids (`boundary`, `fill-unknown`, `train-script`, …), or Hive spec-gap / implement / wiring work ids. Default hook ids are generic (`inspect.00` … `fill.00` …).
 
@@ -98,4 +98,5 @@ Home **Enable agnostic loop** calls the same install as the CLI on the linked pr
 - Replacing `catalog.json` changes reward ids used by `arm`.
 - `choose --seed` is deterministic for the same open counts.
 - Catalog tests reject SeamFlow ids, source-kit reconstruction language, and Hive spec-gap ids.
+- An invalid `catalog.json` makes `arm` refuse instead of using the default table.
 - Bug hunt and implementation-loop stay unwired to this module.

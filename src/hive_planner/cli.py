@@ -1304,6 +1304,7 @@ def main(argv: list[str] | None = None) -> int:
             arm,
             begin,
             choose,
+            catalog_problem,
             install_agnostic_loop,
             missing_agnostic_loop_artifacts,
             observe,
@@ -1335,11 +1336,16 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         try:
             if cmd == "rewards":
+                err = catalog_problem(root)
+                if err:
+                    print(json.dumps({"ok": False, "action": "rewards", "blocked_reason": err}, indent=2))
+                    return 3
                 print(json.dumps(sorted(rewards(root)), indent=2))
                 return 0
             if cmd == "status":
-                print(json.dumps(status(root), indent=2))
-                return 0
+                report = status(root)
+                print(json.dumps(report, indent=2))
+                return 0 if report.get("ok") is not False else 3
             if cmd == "arm":
                 payload, code = arm(root, args.reward, args.cycles)
                 print(json.dumps(payload, indent=2))
