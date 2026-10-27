@@ -1624,7 +1624,15 @@ def _push_enabled(commands: dict[str, Any] | None) -> bool:
 
 
 def _run_named_command(root: Path, key: str) -> subprocess.CompletedProcess[str]:
-    commands = _read_json(_loop_dir(root) / "commands.json") or {}
+    try:
+        commands = _read_existing_json_object(_loop_dir(root) / "commands.json", "commands.json") or {}
+    except ValueError as exc:
+        return subprocess.CompletedProcess(
+            [key],
+            127,
+            stdout="",
+            stderr=str(exc),
+        )
     raw = str(commands.get(key, "")).strip()
     if not raw:
         return subprocess.CompletedProcess(
@@ -1766,7 +1774,10 @@ def coordinator_commit(root: Path) -> CoordinatorReport:
     more = _has_open_task_text(checked)
     slice_open = _slice_has_open_after(checked, heading)
 
-    commands = _read_json(_loop_dir(root) / "commands.json") or {}
+    try:
+        commands = _read_existing_json_object(_loop_dir(root) / "commands.json", "commands.json") or {}
+    except ValueError as exc:
+        raise CoordinatorError(str(exc), action="commit", feature=feature, task=current) from exc
     if _push_enabled(commands) and _detect_push_default(root):
         pushed = _git(root, "push", "-u", "origin", state.branch or "HEAD")
         if pushed.returncode != 0:

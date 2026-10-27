@@ -734,6 +734,15 @@ def test_run_named_command_unbalanced_quotes_do_not_raise(loop_root: Path) -> No
     assert proc.stderr
 
 
+def test_run_named_command_reports_corrupt_commands_json(loop_root: Path) -> None:
+    _install_ready(loop_root)
+    (loop_root / ".hive/implementation-loop/commands.json").write_text("{not json", encoding="utf-8")
+    proc = _run_named_command(loop_root, "build")
+    assert proc.returncode == 127
+    assert "not valid JSON" in proc.stderr
+    assert "missing build" not in proc.stderr
+
+
 def test_git_decodes_utf8_output(loop_root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     import hive_planner.implementation_loop as mod
 
