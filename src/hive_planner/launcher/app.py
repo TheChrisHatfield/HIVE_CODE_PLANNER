@@ -53,7 +53,9 @@ from hive_planner.launcher.service import (
     run_project_agnostic_loop_rewards,
     run_project_agnostic_loop_status,
     run_project_bug_hunt_install,
+    peek_hive_planner_mcp,
     peek_implementation_loop_pack,
+    run_set_hive_planner_mcp,
     run_project_implementation_loop_accept,
     run_project_implementation_loop_check,
     run_project_implementation_loop_commit,
@@ -615,6 +617,7 @@ class HivePlannerApp:
         self._update_header_detail()
         self._update_status_cards()
         self._sync_controls_for_active()
+        self._sync_mcp_status_for_active()
         self._sync_rosetta_eject_for_active()
         if hasattr(self, "recent_list"):
             try:
@@ -1555,7 +1558,8 @@ class HivePlannerApp:
         )
 
     def _build_settings_tab(self, parent: tk.Frame) -> None:
-        form = card(parent)
+        body, canvas = self._scrollable_tab(parent)
+        form = card(body)
         card_title(form, "Configuration")
         self.cfg_hive = tk.StringVar(value=str(self.config.normalized_hive_root()))
         self.cfg_python = tk.StringVar(value=self.config.python_executable)
@@ -1564,7 +1568,7 @@ class HivePlannerApp:
         self.cfg_agent_handoff = tk.StringVar(value=self.config.default_agent_handoff)
         portable = self.setup.portable_mode
         if portable:
-            portable_card = card(parent)
+            portable_card = card(body)
             card_title(portable_card, "Portable runtime")
             bundle_status = self.setup.unified_handoff_detail or "unknown"
             tk.Label(
@@ -1704,7 +1708,54 @@ class HivePlannerApp:
             if console_win.is_console_visible():
                 self.console_btn.config(text="Hide console")
 
-        tip = card(parent)
+        mcp = card(body)
+        card_title(mcp, "Agent MCP (control Hive Planner)")
+        tk.Label(
+            mcp,
+            text=(
+                "Let a Cursor agent in the active project call this Hive Planner "
+                "(health check, loops, map sync). Writes a hive-planner server into "
+                "that project's .cursor/mcp.json. Reload MCP in Cursor after Enable."
+            ),
+            wraplength=760,
+            justify="left",
+            bg=COLORS["card"],
+            fg=COLORS["muted"],
+            font=FONT,
+        ).pack(anchor="w", padx=12, pady=(0, 8))
+        self.mcp_status_label = tk.Label(
+            mcp,
+            text="",
+            wraplength=760,
+            justify="left",
+            bg=COLORS["card"],
+            fg=COLORS["fg"],
+            font=FONT,
+        )
+        self.mcp_status_label.pack(anchor="w", padx=12, pady=(0, 8))
+        mcp_row = tk.Frame(mcp, bg=COLORS["card"])
+        mcp_row.pack(fill="x", padx=12, pady=(0, 12))
+        primary_button(
+            mcp_row,
+            "Enable",
+            self._on_enable_hive_mcp,
+            tooltip="Allow a Cursor agent in the active project to control this Hive Planner over MCP.",
+        )
+        secondary_button(
+            mcp_row,
+            "Disable",
+            self._on_disable_hive_mcp,
+            tooltip="Stop the agent MCP entry in the active project's .cursor/mcp.json.",
+        )
+        secondary_button(
+            mcp_row,
+            "Copy launch command",
+            self._on_copy_hive_mcp_command,
+            tooltip="Copy the stdio command Cursor uses to start Hive Planner as an MCP server.",
+        )
+        self._sync_mcp_status_for_active()
+
+        tip = card(body)
         card_title(tip, "Pro tip")
         tk.Label(
             tip,
@@ -1715,6 +1766,66 @@ class HivePlannerApp:
             fg=COLORS["muted"],
             font=FONT,
         ).pack(anchor="w", padx=12, pady=(0, 12))
+        self._bind_page_wheel(body, canvas)
+
+    def _sync_mcp_status_for_active(self) -> None:
+        if not hasattr(self, "mcp_status_label"):
+            return
+        try:
+            if not self.config.active_project:
+                self.mcp_status_label.config(
+                    text="Link a project first. Enable writes hive-planner into that repo's .cursor/mcp.json."
+                )
+                return
+            result = peek_hive_planner_mcp(Path(self.config.active_project), self.config)
+            if not result.get("ok"):
+                self.mcp_status_label.config(text=str(result.get("error") or "Could not read MCP config."))
+                return
+            state = "on" if result.get("enabled") else "off"
+            snippet = str(result.get("launch_snippet") or "")
+            path = str(result.get("path") or "")
+            self.mcp_status_label.config(
+                text=f"Active project: {state}\nConfig: {path}\nLaunch: {snippet}"
+            )
+        except tk.TclError:
+            return
+
+    def _on_enable_hive_mcp(self) -> None:
+        path = self._require_active_link()
+        if path is None:
+            return
+        result = run_set_hive_planner_mcp(path, self.config, enabled=True)
+        self._sync_mcp_status_for_active()
+        if not result.get("ok"):
+            messagebox.showerror("Agent MCP", result.get("error") or "Could not enable Hive Planner MCP.")
+            return
+        messagebox.showinfo(
+            "Agent MCP",
+            "Enabled. Reload MCP in Cursor (or reopen the project) so an agent can call Hive Planner.",
+        )
+
+    def _on_disable_hive_mcp(self) -> None:
+        path = self._require_active_link()
+        if path is None:
+            return
+        result = run_set_hive_planner_mcp(path, self.config, enabled=False)
+        self._sync_mcp_status_for_active()
+        if not result.get("ok"):
+            messagebox.showerror("Agent MCP", result.get("error") or "Could not disable Hive Planner MCP.")
+            return
+
+    def _on_copy_hive_mcp_command(self) -> None:
+        path = self._require_active_link()
+        if path is None:
+            return
+        result = peek_hive_planner_mcp(path, self.config)
+        snippet = str(result.get("launch_snippet") or "").strip()
+        if not result.get("ok") or not snippet:
+            messagebox.showerror("Agent MCP", result.get("error") or "No launch command to copy.")
+            return
+        self.root.clipboard_clear()
+        self.root.clipboard_append(snippet)
+        messagebox.showinfo("Agent MCP", "Launch command copied.")
 
     def _field(
         self,
