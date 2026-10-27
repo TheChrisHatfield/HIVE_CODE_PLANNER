@@ -105,14 +105,13 @@ def _should_count_turn(payload: dict) -> bool:
 
 
 def _notice_stayed_open(proc: subprocess.Popen[bytes]) -> bool:
+    """True only while the popup process is still running."""
     try:
         code = proc.wait(timeout=0.6)
     except subprocess.TimeoutExpired:
         return True
-    if code != 0:
-        print(f"[continual-learning-stop] notify exited {code}", file=sys.stderr)
-        return False
-    return True
+    print(f"[continual-learning-stop] notify exited {code}", file=sys.stderr)
+    return False
 
 
 def _show_user_notice() -> bool:

@@ -28,11 +28,22 @@ _NOTICE_SETTLE_S = 0.6
 
 
 def _stayed_open(proc: subprocess.Popen[bytes]) -> bool:
+    """True only while the notice process is still running.
+
+    A real window lasts at least a second. Exiting inside the settle window
+    means the window never stayed up, including an exit code of 0.
+    """
     try:
-        code = proc.wait(timeout=_NOTICE_SETTLE_S)
+        proc.wait(timeout=_NOTICE_SETTLE_S)
     except subprocess.TimeoutExpired:
         return True
-    return code == 0
+    return False
+
+
+def failure_message() -> str:
+    if notifier_script().is_file():
+        return "Error: Hive notice exited before it stayed open."
+    return "Error: Hive notify script is missing."
 
 
 def notify(title: str, body: str, *, seconds: int = 12, script: Path | None = None) -> bool:
@@ -87,7 +98,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     ok = notify(args.title, args.body, seconds=args.seconds)
     if not ok:
-        sys.stderr.write("Hive notify script is missing.\n")
+        sys.stderr.write(failure_message() + "\n")
         return 1
     return 0
 

@@ -603,13 +603,10 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     if args.command == "notify":
-        from hive_planner.notify import notify, notifier_script
+        from hive_planner.notify import failure_message, notify
 
-        if not notifier_script().is_file():
-            print("Error: Hive notify script is missing.", file=sys.stderr)
-            return 1
         if not notify(args.title, args.body, seconds=args.seconds):
-            print("Error: Hive notice exited before it stayed open.", file=sys.stderr)
+            print(failure_message(), file=sys.stderr)
             return 1
         print(json.dumps({"ok": True, "title": args.title}))
         return 0

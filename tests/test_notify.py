@@ -25,6 +25,32 @@ def test_notify_returns_false_when_the_process_exits(tmp_path: Path) -> None:
     assert notify("Hive Planner", "Hello", script=bad) is False
 
 
+def test_immediate_clean_exit_is_not_a_shown_notice(tmp_path: Path) -> None:
+    bad = tmp_path / "hive_notify.py"
+    bad.write_text("raise SystemExit(0)\n", encoding="utf-8")
+    assert notify("Hive Planner", "Hello", script=bad) is False
+
+
+def test_module_main_names_a_missing_script(tmp_path: Path, monkeypatch, capsys) -> None:
+    from hive_planner.notify import main
+
+    monkeypatch.setattr("hive_planner.notify.notifier_script", lambda: tmp_path / "missing.py")
+    assert main(["--body", "x"]) == 1
+    assert "missing" in capsys.readouterr().err
+
+
+def test_module_main_names_an_early_exit(tmp_path: Path, monkeypatch, capsys) -> None:
+    from hive_planner.notify import main
+
+    bad = tmp_path / "hive_notify.py"
+    bad.write_text("raise SystemExit(0)\n", encoding="utf-8")
+    monkeypatch.setattr("hive_planner.notify.notifier_script", lambda: bad)
+    assert main(["--body", "x"]) == 1
+    err = capsys.readouterr().err
+    assert "stayed open" in err
+    assert "missing" not in err
+
+
 def test_notify_cli_dry_run(tmp_path: Path) -> None:
     log = tmp_path / "notice.json"
     env = os.environ.copy()

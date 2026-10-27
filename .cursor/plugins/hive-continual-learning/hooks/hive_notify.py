@@ -13,7 +13,8 @@ import sys
 from pathlib import Path
 
 
-def show_popup(title: str, body: str, *, seconds: int = 12) -> None:
+def show_popup(title: str, body: str, *, seconds: int = 12) -> bool:
+    """True when a window was shown. A log-only fallback is not a shown notice."""
     if os.environ.get("HIVE_NOTIFY_DRY_RUN") == "1":
         payload = json.dumps({"ok": True, "title": title, "body": body}) + "\n"
         log = os.environ.get("HIVE_NOTIFY_LOG")
@@ -21,11 +22,12 @@ def show_popup(title: str, body: str, *, seconds: int = 12) -> None:
             Path(log).write_text(payload, encoding="utf-8")
         else:
             sys.stdout.write(payload)
-        return
+        return True
     try:
         _tk_popup(title, body, seconds)
     except Exception:
-        _fallback(title, body)
+        return _fallback(title, body)
+    return True
 
 
 def _tk_popup(title: str, body: str, seconds: int) -> None:
@@ -58,14 +60,15 @@ def _tk_popup(title: str, body: str, seconds: int) -> None:
     root.mainloop()
 
 
-def _fallback(title: str, body: str) -> None:
+def _fallback(title: str, body: str) -> bool:
     if sys.platform == "win32":
         import ctypes
 
-        # MB_ICONINFORMATION | MB_TOPMOST | MB_SETFOREGROUND
-        ctypes.windll.user32.MessageBoxW(0, body, title, 0x00000040 | 0x00040000 | 0x00010000)
-        return
+        # MB_ICONINFORMATION | MB_TOPMOST | MB_SETFOREGROUND. Zero means the dialog did not open.
+        shown = ctypes.windll.user32.MessageBoxW(0, body, title, 0x00000040 | 0x00040000 | 0x00010000)
+        return shown != 0
     sys.stderr.write(f"{title}: {body}\n")
+    return False
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -74,8 +77,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--body", required=True)
     parser.add_argument("--seconds", type=int, default=12)
     args = parser.parse_args(argv)
-    show_popup(args.title, args.body, seconds=max(1, args.seconds))
-    return 0
+    return 0 if show_popup(args.title, args.body, seconds=max(1, args.seconds)) else 1
 
 
 if __name__ == "__main__":
