@@ -100,6 +100,13 @@ def test_install_4pack_writes_all_files(project_root: Path) -> None:
     assert commands["test:full"] == ""
 
 
+def test_install_leaves_no_tmp_loop_files(project_root: Path) -> None:
+    install_implementation_loop(project_root, PACK_4)
+    leftovers = [path for path in project_root.rglob("*.tmp") if path.is_file()]
+    assert leftovers == []
+    assert (project_root / ".cursor" / "commands" / "implementation-loop.md").is_file()
+
+
 def test_install_overwrites_non_utf8_command_file(project_root: Path) -> None:
     target = project_root / ".cursor" / "commands" / "implementation-loop.md"
     target.parent.mkdir(parents=True)

@@ -222,12 +222,15 @@ def _read_existing_json_object(path: Path, label: str) -> dict[str, Any] | None:
     return data
 
 
-def _write_json(path: Path, data: dict[str, Any]) -> None:
+def _write_text_atomic(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    payload = json.dumps(data, indent=2) + "\n"
     tmp = path.with_name(path.name + ".tmp")
-    tmp.write_text(payload, encoding="utf-8")
+    tmp.write_text(text, encoding="utf-8")
     tmp.replace(path)
+
+
+def _write_json(path: Path, data: dict[str, Any]) -> None:
+    _write_text_atomic(path, json.dumps(data, indent=2) + "\n")
 
 
 def _posix_rel(root: Path, path: Path) -> str:
@@ -244,7 +247,7 @@ def _write_if_changed(path: Path, text: str, root: Path, written: list[str]) -> 
             previous = None
     if previous == text:
         return
-    path.write_text(text, encoding="utf-8")
+    _write_text_atomic(path, text)
     written.append(_posix_rel(root, path))
 
 
