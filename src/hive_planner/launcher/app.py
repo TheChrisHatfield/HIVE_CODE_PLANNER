@@ -3209,7 +3209,7 @@ class HivePlannerApp:
         if dirty:
             parts.append("dirty=" + ", ".join(str(item) for item in dirty))
         err = result.get("error")
-        if err:
+        if err and result.get("blocked_reason") != err:
             parts.append(str(err))
         if parts:
             return "Implementation loop: " + "; ".join(parts)

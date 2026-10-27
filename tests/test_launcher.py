@@ -2253,6 +2253,24 @@ def test_format_loop_gate_includes_dirty_paths() -> None:
     assert "unrelated dirty" in text
 
 
+def test_format_loop_gate_does_not_repeat_blocked_reason() -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    text = app._format_loop_gate(
+        {
+            "ok": False,
+            "ready": False,
+            "action": "status",
+            "blocked_reason": "not ready",
+            "error": "not ready",
+            "missing": ["docs/specs/x/spec.md"],
+        }
+    )
+    assert text.count("not ready") == 1
+    assert "spec.md" in text
+
+
 def test_implementation_loop_prompt_template_keeps_chat_and_home() -> None:
     from hive_planner.launcher.agent_prompt_templates import get_agent_prompt_template
 
