@@ -1634,6 +1634,14 @@ def test_on_bug_hunt_install_sends_workspace_link_to_service(
     assert not any("Bug hunt enabled" in line for line in lines)
 
 
+def test_sync_controls_command_choices_without_command_var() -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.controls_loop = type("Var", (), {"get": lambda self: "Bug hunt"})()
+    app._sync_controls_command_choices()
+
+
 def test_start_home_action_updates_controls_last_when_home_log_exists() -> None:
     from hive_planner.launcher.app import HivePlannerApp
 

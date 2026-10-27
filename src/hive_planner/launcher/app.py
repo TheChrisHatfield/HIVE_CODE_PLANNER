@@ -1273,7 +1273,7 @@ class HivePlannerApp:
         if box is not None:
             box.configure(values=choices)
         current = str(self.controls_command.get() if hasattr(self, "controls_command") else "")
-        if current not in choices:
+        if current not in choices and hasattr(self, "controls_command"):
             self.controls_command.set(choices[0])
 
     def _on_controls_loop_changed(self, _event=None) -> None:
