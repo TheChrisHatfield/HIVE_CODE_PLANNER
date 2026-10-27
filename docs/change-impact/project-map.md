@@ -14,6 +14,7 @@ Manual v1 map of modules → dependencies. Use `impact-sync-maps` to merge new s
 | `src/hive_planner/bootstrap.py` | bootstrap | (auto-sync) |
 | `src/hive_planner/bug_hunt.py` | Chat-triggered find/fix/commit loop install | `docs/specs/bug-hunt` |
 | `src/hive_planner/implementation_loop.py` | Post-spec coding loop install and readiness | `docs/specs/implementation-loop` |
+| `src/hive_planner/agnostic_loop.py` | hive-loop-kit install + pause-cycle chooser | `docs/specs/agnostic-loop` |
 | `src/hive_planner/call_graph.py` | call graph | (auto-sync) |
 | `src/hive_planner/cartridge_adapt.py` | Adapt custom-named cartridge imports into promotable Hive layout. | (auto-sync) |
 | `src/hive_planner/cartridge_pack.py` | cartridge pack | (auto-sync) |

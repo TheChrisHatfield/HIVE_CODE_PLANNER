@@ -11,6 +11,7 @@ Maps source modules to tests (v1 manual + Stage 5B import merge via `impact-sync
 | `src/hive_planner/bootstrap.py` | `tests/test_agent_handoff.py`, `tests/test_bootstrap.py`, `tests/test_cl_runtime.py`, `tests/test_security_validation.py`, `tests/test_unified_handoff.py` |
 | `src/hive_planner/bug_hunt.py` | `tests/test_bug_hunt.py`, `tests/test_bootstrap.py` |
 | `src/hive_planner/implementation_loop.py` | `tests/test_implementation_loop.py`, `tests/test_implementation_loop_coordinator.py`, `tests/test_launcher.py` |
+| `src/hive_planner/agnostic_loop.py` | `tests/test_agnostic_loop.py` |
 | `src/hive_planner/call_graph.py` | `tests/test_impact.py`, `tests/test_security_validation.py` |
 | `src/hive_planner/cartridge_adapt.py` | `tests/test_cartridge_adapt.py` |
 | `src/hive_planner/cartridge_pack.py` | `tests/test_cartridge_pack.py` |
