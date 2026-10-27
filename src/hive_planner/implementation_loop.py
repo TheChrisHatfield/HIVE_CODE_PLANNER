@@ -717,19 +717,27 @@ def assess_implementation_readiness(root: Path, feature: str) -> ReadinessReport
     all_checked = tasks_path.is_file() and not _has_open_task(tasks_path)
 
     commands_path = root / LOOP_DIR / "commands.json"
-    commands = _read_json(commands_path)
-    if commands is None:
+    try:
+        commands = _read_existing_json_object(commands_path, "commands.json")
+    except ValueError:
+        commands = None
+        missing.append("commands.json is not valid JSON")
+    if commands is None and "commands.json is not valid JSON" not in missing:
         missing.append(".hive/implementation-loop/commands.json")
-    else:
+    elif commands is not None:
         for key in ("build", "test:quick", "test:full"):
             if not str(commands.get(key, "")).strip():
                 missing.append(f"commands.json missing {key}")
 
     state_path = root / LOOP_DIR / "state.json"
-    state = _read_json(state_path)
-    if state is None:
+    try:
+        state = _read_existing_json_object(state_path, "state.json")
+    except ValueError:
+        state = None
+        missing.append("state.json is not valid JSON")
+    if state is None and "state.json is not valid JSON" not in missing:
         missing.append(".hive/implementation-loop/state.json")
-    else:
+    elif state is not None:
         pack = str(state.get("pack", ""))
         if pack not in VALID_PACKS:
             missing.append(f"invalid pack '{pack}'")
@@ -836,7 +844,10 @@ def _read_feature_tasks(root: Path, feature: str, action: str) -> str:
 
 def _load_state(root: Path) -> LoopState:
     path = _loop_dir(root) / "state.json"
-    data = _read_existing_json_object(path, "state.json")
+    try:
+        data = _read_existing_json_object(path, "state.json")
+    except ValueError as exc:
+        raise CoordinatorError(str(exc), action="load") from exc
     if data is None:
         raise CoordinatorError("state.json is missing — install the loop first", action="load")
     return LoopState.from_dict(data)

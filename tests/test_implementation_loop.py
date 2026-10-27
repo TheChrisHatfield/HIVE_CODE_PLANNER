@@ -10,8 +10,10 @@ import pytest
 from hive_planner.implementation_loop import (
     PACK_1,
     PACK_4,
+    CoordinatorError,
     _normalize_git_branch,
     assess_implementation_readiness,
+    coordinator_start,
     install_implementation_loop,
     is_implementation_loop_request,
     preview_agent_prompt,
@@ -150,6 +152,28 @@ def test_install_rejects_corrupt_state_json(project_root: Path) -> None:
     with pytest.raises(ValueError, match="state.json is not valid JSON"):
         install_implementation_loop(project_root, PACK_4)
     assert (project_root / ".hive/implementation-loop/state.json").read_text(encoding="utf-8") == "{not json"
+
+
+def test_readiness_reports_corrupt_state_json(
+    project_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import hive_planner.implementation_loop as mod
+
+    monkeypatch.setattr(mod, "_current_branch", lambda root: "feature-x")
+    monkeypatch.setattr(mod, "_resolve_trunk", lambda root: "main")
+    install_implementation_loop(project_root, PACK_4)
+    (project_root / ".hive/implementation-loop/state.json").write_text("{not json", encoding="utf-8")
+    report = assess_implementation_readiness(project_root, "feature-x")
+    assert report.ready is False
+    assert "state.json is not valid JSON" in report.missing
+    assert ".hive/implementation-loop/state.json" not in report.missing
+
+
+def test_start_raises_coordinator_error_on_corrupt_state(project_root: Path) -> None:
+    install_implementation_loop(project_root, PACK_4)
+    (project_root / ".hive/implementation-loop/state.json").write_text("{not json", encoding="utf-8")
+    with pytest.raises(CoordinatorError, match="state.json is not valid JSON"):
+        coordinator_start(project_root, "feature-x")
 
 
 def test_force_pack_required_for_pack_change(project_root: Path) -> None:
