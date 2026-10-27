@@ -707,7 +707,9 @@ class HivePlannerApp:
 
     def _note_stale_bg_result(self, result: object) -> None:
         if isinstance(result, dict) and result.get("cancelled"):
-            self._queue_home_log(self._result_detail(result))
+            line = self._result_detail(result)
+            self._queue_home_log(line)
+            self._set_controls_last(line)
             self._clear_memory_work_context()
             self._refresh_home_dashboard()
             return
@@ -716,7 +718,9 @@ class HivePlannerApp:
             return
         if isinstance(result, dict) and result.get("mode") in ("sources", "import", "translate"):
             self._queue_cartridge_result_log(result)
-            self._queue_home_log("(Cartridge load finished after dashboard refresh — output preserved above.)")
+            line = "(Cartridge load finished after dashboard refresh — output preserved above.)"
+            self._queue_home_log(line)
+            self._set_controls_last(line)
             self._refresh_home_dashboard()
             return
         if isinstance(result, dict):
@@ -734,6 +738,7 @@ class HivePlannerApp:
         else:
             message = f"Background task finished after dashboard refresh: {result}"
         self._queue_home_log(message)
+        self._set_controls_last(message)
         self._refresh_home_dashboard()
 
     def _home_log_scope_key(self) -> str:

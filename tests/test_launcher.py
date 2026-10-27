@@ -5960,6 +5960,28 @@ def test_note_stale_bg_result_lazy_inits_pending_log() -> None:
     assert refreshed["value"] is True
 
 
+def test_note_stale_bg_result_clears_controls_in_progress() -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    class _Var:
+        def __init__(self, value: str = "") -> None:
+            self._value = value
+
+        def set(self, value: str) -> None:
+            self._value = value
+
+        def get(self) -> str:
+            return self._value
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app._pending_home_log = []
+    app.controls_last = _Var("Starting implementation loop…")
+    app._refresh_home_dashboard = lambda **_k: None  # type: ignore[method-assign]
+    app._note_stale_bg_result({"ok": True, "action": "start"})
+    assert "dashboard refresh" in app.controls_last.get()
+    assert "Starting implementation loop" not in app.controls_last.get()
+
+
 def test_note_stale_bg_result_refreshes_dashboard_for_cartridge() -> None:
     from hive_planner.launcher.app import HivePlannerApp
 
