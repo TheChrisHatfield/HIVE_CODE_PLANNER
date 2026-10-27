@@ -3317,26 +3317,30 @@ class HivePlannerApp:
                     + extra,
                     parent=self.root,
                 ):
-                    self._run_loop_start(
-                        ctx["link"],
-                        ctx["feature"],
-                        allow_dirty=True,
-                        force_feature=bool(ctx.get("force_feature")),
-                    )
-                    return
+                    link = ctx.get("link")
+                    if link is not None:
+                        self._run_loop_start(
+                            link,
+                            ctx.get("feature") or "",
+                            allow_dirty=True,
+                            force_feature=bool(ctx.get("force_feature")),
+                        )
+                        return
             if ("loop is blocked" in err or "loop is running for" in err) and not ctx.get("force_feature"):
                 if messagebox.askyesno(
                     "Force start",
                     "The loop is blocked or already running for another feature. Force start (same as --force-feature)?",
                     parent=self.root,
                 ):
-                    self._run_loop_start(
-                        ctx["link"],
-                        ctx["feature"],
-                        allow_dirty=bool(ctx.get("allow_dirty")),
-                        force_feature=True,
-                    )
-                    return
+                    link = ctx.get("link")
+                    if link is not None:
+                        self._run_loop_start(
+                            link,
+                            ctx.get("feature") or "",
+                            allow_dirty=bool(ctx.get("allow_dirty")),
+                            force_feature=True,
+                        )
+                        return
             self._log_loop_gate(result)
             return
         self._log_loop_gate(result)
@@ -3380,8 +3384,11 @@ class HivePlannerApp:
                     "This slice has 10 round trips. Continue anyway (same as --continue-after-cap)?",
                     parent=self.root,
                 ):
-                    self._run_loop_handoff(ctx["link"], ctx["role"], continue_after_cap=True)
-                    return
+                    link = ctx.get("link")
+                    role = ctx.get("role")
+                    if link is not None and role:
+                        self._run_loop_handoff(link, role, continue_after_cap=True)
+                        return
             self._log_loop_gate(result)
             return
         self._log_loop_gate(result)

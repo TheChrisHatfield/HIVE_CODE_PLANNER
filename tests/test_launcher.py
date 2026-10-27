@@ -2282,6 +2282,44 @@ def test_format_loop_gate_does_not_repeat_blocked_reason() -> None:
     assert "spec.md" in text
 
 
+def test_start_done_dirty_retry_without_ctx_does_not_throw(monkeypatch: pytest.MonkeyPatch) -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    logged: list[dict] = []
+    monkeypatch.setattr(
+        "hive_planner.launcher.app.messagebox.askyesno",
+        lambda *a, **k: True,
+    )
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.root = object()
+    app._log_loop_gate = lambda result: logged.append(result)  # type: ignore[method-assign]
+    app._run_loop_start = lambda *a, **k: logged.append({"ran": True})  # type: ignore[method-assign]
+    app._implementation_loop_start_done(
+        {"ok": False, "error": "unrelated dirty paths block start", "dirty": ["notes.txt"]}
+    )
+    assert logged
+    assert logged[0].get("ran") is not True
+
+
+def test_handoff_done_cap_retry_without_ctx_does_not_throw(monkeypatch: pytest.MonkeyPatch) -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    logged: list[dict] = []
+    monkeypatch.setattr(
+        "hive_planner.launcher.app.messagebox.askyesno",
+        lambda *a, **k: True,
+    )
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.root = object()
+    app._log_loop_gate = lambda result: logged.append(result)  # type: ignore[method-assign]
+    app._run_loop_handoff = lambda *a, **k: logged.append({"ran": True})  # type: ignore[method-assign]
+    app._implementation_loop_handoff_done(
+        {"ok": False, "error": "pass --continue-after-cap", "blocked_reason": "continue-after-cap"}
+    )
+    assert logged
+    assert logged[0].get("ran") is not True
+
+
 def test_implementation_loop_prompt_template_keeps_chat_and_home() -> None:
     from hive_planner.launcher.agent_prompt_templates import get_agent_prompt_template
 
