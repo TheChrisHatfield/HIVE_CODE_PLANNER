@@ -185,6 +185,18 @@ def test_trigger_phrases() -> None:
     assert not is_agnostic_loop_request("run a bug hunt")
 
 
+def test_install_overwrites_non_utf8_kit_file(tmp_path: Path) -> None:
+    root = tmp_path / "proj"
+    root.mkdir()
+    target = root / "scripts" / "agnostic_loop.py"
+    target.parent.mkdir(parents=True)
+    target.write_bytes(b"\xff\xfe not utf-8")
+    written = install_agnostic_loop(root)
+    assert "scripts/agnostic_loop.py" in written
+    text = target.read_text(encoding="utf-8")
+    assert "def arm(" in text
+
+
 def test_install_writes_full_kit(tmp_path: Path) -> None:
     root = tmp_path / "proj"
     root.mkdir()

@@ -1008,7 +1008,12 @@ Do not commit unless the same message asked for a commit. End the user-facing re
 
 def _write_if_changed(path: Path, text: str, root: Path, written: list[str]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    previous = path.read_text(encoding="utf-8") if path.is_file() else None
+    previous = None
+    if path.is_file():
+        try:
+            previous = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            previous = None
     if previous == text:
         return
     path.write_text(text, encoding="utf-8")
