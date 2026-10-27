@@ -591,7 +591,16 @@ def main(argv: list[str] | None = None) -> int:
     agn_choose.add_argument("--arm", action="store_true", help="Arm the first planned reward")
     agn_choose.add_argument("--cycles", type=int, default=1)
 
+    sub.add_parser(
+        "mcp-serve",
+        help="Run stdio MCP so a Cursor agent can call Hive Planner (no extra stdout)",
+    )
+
     args = parser.parse_args(argv)
+    if args.command == "mcp-serve":
+        from hive_planner.mcp_server import serve
+
+        return serve()
     root, auto_detected = resolve_root(args.root)
     paths = RepoPaths(root=root)
 
