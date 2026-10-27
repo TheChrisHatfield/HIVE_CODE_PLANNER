@@ -75,6 +75,23 @@ def test_unknown_tool_is_error() -> None:
     assert payload["ok"] is False
 
 
+def test_blocked_hive_tool_is_not_mcp_is_error(tmp_path: Path) -> None:
+    reply = handle_rpc(
+        {
+            "jsonrpc": "2.0",
+            "id": 6,
+            "method": "tools/call",
+            "params": {
+                "name": "hive_implementation_loop_status",
+                "arguments": {"root": str(tmp_path)},
+            },
+        }
+    )
+    assert reply["result"]["isError"] is False
+    payload = json.loads(reply["result"]["content"][0]["text"])
+    assert payload["ok"] is False
+
+
 def test_unknown_method() -> None:
     reply = handle_rpc({"jsonrpc": "2.0", "id": 5, "method": "nope", "params": {}})
     assert reply["error"]["code"] == -32601

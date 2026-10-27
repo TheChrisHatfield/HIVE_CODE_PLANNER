@@ -447,7 +447,7 @@ def handle_rpc(message: dict[str, Any]) -> dict[str, Any] | None:
             if not isinstance(arguments, dict):
                 arguments = {}
             payload = call_tool(name, arguments)
-            is_error = bool(payload.get("ok") is False) or name not in _HANDLERS
+            is_error = name not in _HANDLERS
             result = {
                 "content": [{"type": "text", "text": json.dumps(payload, indent=2, default=str)}],
                 "isError": is_error,
