@@ -419,13 +419,34 @@ def load_policy(root: Path, names: tuple[str, ...] | None = None) -> dict[str, A
     path = _policy_path(root)
     if not path.is_file():
         return _fresh(names)
-    policy = json.loads(path.read_text(encoding="utf-8"))
+    try:
+        policy = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+        return _fresh(names)
+    if not isinstance(policy, dict):
+        return _fresh(names)
     arms = policy.setdefault("arms", {})
+    if not isinstance(arms, dict):
+        arms = {}
+        policy["arms"] = arms
     for name in names:
-        arm = arms.setdefault(name, {"alpha": 1.0, "beta": 1.0})
-        arm["alpha"] = float(arm.get("alpha", 1.0))
-        arm["beta"] = float(arm.get("beta", 1.0))
-    policy["observations"] = int(policy.get("observations", 0))
+        raw = arms.get(name)
+        if not isinstance(raw, dict):
+            raw = {}
+        try:
+            alpha = float(raw.get("alpha", 1.0) or 1.0)
+            beta = float(raw.get("beta", 1.0) or 1.0)
+        except (TypeError, ValueError):
+            alpha, beta = 1.0, 1.0
+        if alpha <= 0:
+            alpha = 1.0
+        if beta <= 0:
+            beta = 1.0
+        arms[name] = {"alpha": alpha, "beta": beta}
+    try:
+        policy["observations"] = int(policy.get("observations", 0) or 0)
+    except (TypeError, ValueError):
+        policy["observations"] = 0
     return policy
 
 

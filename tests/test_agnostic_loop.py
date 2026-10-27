@@ -119,6 +119,19 @@ def test_corrupt_state_does_not_crash_status(tmp_path: Path) -> None:
     assert payload["ok"] is True
 
 
+def test_corrupt_policy_does_not_crash_choose(tmp_path: Path) -> None:
+    root = tmp_path / "proj"
+    root.mkdir()
+    folder = root / ".hive" / "agnostic-loop"
+    folder.mkdir(parents=True)
+    (folder / "policy.json").write_text("[]", encoding="utf-8")
+    names = rewards(root)
+    opens = parse_open(None, names)
+    payload, code = choose(root, opens, sims=8, horizon=2, seed=1)
+    assert code == 0
+    assert payload["ok"] is True
+
+
 def test_observe_and_choose_seed(tmp_path: Path) -> None:
     root = tmp_path / "proj"
     root.mkdir()
