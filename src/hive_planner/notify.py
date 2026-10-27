@@ -47,7 +47,7 @@ def failure_message() -> str:
 
 
 def notify(title: str, body: str, *, seconds: int = 12, script: Path | None = None) -> bool:
-    """Show a popup. True only when the notice process stays up or exits 0."""
+    """Show a popup. True only while the notice process is still running."""
     path = script if script is not None else notifier_script()
     if not path.is_file():
         return False

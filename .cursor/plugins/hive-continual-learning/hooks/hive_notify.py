@@ -30,7 +30,91 @@ def show_popup(title: str, body: str, *, seconds: int = 12) -> bool:
     return True
 
 
+def _bottom_right(
+    work: tuple[int, int, int, int],
+    width: int,
+    height: int,
+    *,
+    margin_x: int = 24,
+    margin_y: int = 72,
+) -> tuple[int, int]:
+    """Bottom-right of one monitor's work area, inside that rectangle."""
+    left, top, right, bottom = work
+    x = min(max(right - width - margin_x, left), max(left, right - width))
+    y = min(max(bottom - height - margin_y, top), max(top, bottom - height))
+    return x, y
+
+
+def _geometry(width: int, height: int, work: tuple[int, int, int, int]) -> str:
+    x, y = _bottom_right(work, width, height)
+    # Tk wants a sign on a negative origin, as in ``400x130+-424+1190``.
+    return f"{width}x{height}+{x}+{y}"
+
+
+def _foreground_work_area() -> tuple[int, int, int, int] | None:
+    """Work area of the monitor that holds the window in front.
+
+    The primary screen origin is not that monitor when the IDE sits on
+    another display. A minimized window lives far off the desktop, so the
+    pointer is the fallback.
+    """
+    if sys.platform != "win32":
+        return None
+    import ctypes
+
+    user = ctypes.windll.user32
+
+    class RECT(ctypes.Structure):
+        _fields_ = [
+            ("left", ctypes.c_long),
+            ("top", ctypes.c_long),
+            ("right", ctypes.c_long),
+            ("bottom", ctypes.c_long),
+        ]
+
+    class POINT(ctypes.Structure):
+        _fields_ = [("x", ctypes.c_long), ("y", ctypes.c_long)]
+
+    class MONITORINFO(ctypes.Structure):
+        _fields_ = [
+            ("cbSize", ctypes.c_ulong),
+            ("rcMonitor", RECT),
+            ("rcWork", RECT),
+            ("dwFlags", ctypes.c_ulong),
+        ]
+
+    point = POINT()
+    hwnd = user.GetForegroundWindow()
+    if hwnd:
+        rect = RECT()
+        if user.GetWindowRect(hwnd, ctypes.byref(rect)):
+            width = rect.right - rect.left
+            height = rect.bottom - rect.top
+            if width > 0 and height > 0 and rect.left > -20000 and rect.top > -20000:
+                point.x = rect.left + width // 2
+                point.y = rect.top + height // 2
+    if point.x == 0 and point.y == 0 and not user.GetCursorPos(ctypes.byref(point)):
+        return None
+    monitor = user.MonitorFromPoint(point, 2)
+    if not monitor:
+        return None
+    info = MONITORINFO()
+    info.cbSize = ctypes.sizeof(MONITORINFO)
+    if not user.GetMonitorInfoW(monitor, ctypes.byref(info)):
+        return None
+    work = info.rcWork
+    if work.right <= work.left or work.bottom <= work.top:
+        return None
+    return int(work.left), int(work.top), int(work.right), int(work.bottom)
+
+
 def _tk_popup(title: str, body: str, seconds: int) -> None:
+    if sys.platform == "win32":
+        import ctypes
+
+        ctypes.windll.user32.SetProcessDPIAware()
+    # Tk becomes the foreground window, so the monitor is read before Tk().
+    work = _foreground_work_area()
     import tkinter as tk
 
     root = tk.Tk()
@@ -51,11 +135,9 @@ def _tk_popup(title: str, body: str, seconds: int) -> None:
     root.update_idletasks()
     width = max(root.winfo_reqwidth(), 400)
     height = max(root.winfo_reqheight(), 130)
-    margin_x = 24
-    margin_y = 72
-    x = max(0, root.winfo_screenwidth() - width - margin_x)
-    y = max(0, root.winfo_screenheight() - height - margin_y)
-    root.geometry(f"{width}x{height}+{x}+{y}")
+    if work is None:
+        work = (0, 0, int(root.winfo_screenwidth()), int(root.winfo_screenheight()))
+    root.geometry(_geometry(width, height, work))
     root.after(max(1, seconds) * 1000, root.destroy)
     root.mainloop()
 
