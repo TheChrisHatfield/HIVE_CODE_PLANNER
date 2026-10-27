@@ -42,7 +42,16 @@ from hive_planner.launcher.service import (
     run_install,
     run_legacy_deployment_scan,
     run_cl_migrate,
+    peek_agnostic_loop_status,
+    peek_bug_hunt_status,
+    run_project_agnostic_loop_arm,
+    run_project_agnostic_loop_begin,
+    run_project_agnostic_loop_choose,
     run_project_agnostic_loop_install,
+    run_project_agnostic_loop_observe,
+    run_project_agnostic_loop_review,
+    run_project_agnostic_loop_rewards,
+    run_project_agnostic_loop_status,
     run_project_bug_hunt_install,
     peek_implementation_loop_pack,
     run_project_implementation_loop_accept,
@@ -174,6 +183,12 @@ class HivePlannerApp:
         self._dashboard_tab = 0
         self._home_scroll_y = 0.0
         self.notebook: ttk.Notebook | None = None
+        self.controls_last = tk.StringVar(
+            master=root,
+            value="Pick the active project on Projects, then use these controls.",
+        )
+        self.controls_active_label = tk.StringVar(master=root, value="")
+        self._controls_link_key = ""
         self._header_detail_label: tk.Label | None = None
         self._status_value_labels: dict[str, tk.Label] = {}
         self._home_canvas: tk.Canvas | None = None
@@ -599,6 +614,7 @@ class HivePlannerApp:
         self._sync_ci_report_for_active()
         self._update_header_detail()
         self._update_status_cards()
+        self._sync_controls_for_active()
         self._sync_rosetta_eject_for_active()
         if hasattr(self, "recent_list"):
             try:
@@ -650,13 +666,16 @@ class HivePlannerApp:
         notebook.bind("<<NotebookTabChanged>>", self._on_dashboard_tab_changed)
 
         home = tk.Frame(notebook, bg=COLORS["bg"])
+        controls = tk.Frame(notebook, bg=COLORS["bg"])
         projects = tk.Frame(notebook, bg=COLORS["bg"])
         settings = tk.Frame(notebook, bg=COLORS["bg"])
         notebook.add(home, text="Home")
+        notebook.add(controls, text="Controls")
         notebook.add(projects, text="Projects")
         notebook.add(settings, text="Settings")
 
         self._build_home_tab(home)
+        self._build_controls_tab(controls)
         self._build_projects_tab(projects)
         self._build_settings_tab(settings)
 
@@ -929,60 +948,9 @@ class HivePlannerApp:
         )
         secondary_button(
             actions,
-            "Enable bug hunt",
-            self._on_bug_hunt_install,
-            tooltip="Install the chat trigger so saying bug hunt (or a similar phrase) starts a find/fix/commit loop in Cursor.",
-        )
-        secondary_button(
-            actions,
-            "Enable implementation loop",
-            self._on_implementation_loop_install,
-            tooltip="Install the post-spec coding loop (1-pack or 4-pack). Then use Loop status / start / handoff / check / accept / commit, or say implementation loop in chat.",
-        )
-        secondary_button(
-            actions,
-            "Enable agnostic loop",
-            self._on_agnostic_loop_install,
-            tooltip="Install the hive-loop-kit (scripts, catalog, skill). Arm a catalog reward, open one hook, pause, review. Not a bug hunt and not the implementation loop.",
-        )
-
-        loop_actions = tk.Frame(body, bg=COLORS["bg"])
-        loop_actions.pack(fill="x", padx=16, pady=(0, 8))
-        secondary_button(
-            loop_actions,
-            "Loop status",
-            self._on_implementation_loop_status,
-            tooltip="Same as the CLI status command: show whether the active feature is ready to code.",
-        )
-        secondary_button(
-            loop_actions,
-            "Loop start",
-            self._on_implementation_loop_start,
-            tooltip="Same as implementation-loop start. You can still type the start phrase in Cursor chat instead.",
-        )
-        secondary_button(
-            loop_actions,
-            "Loop handoff",
-            self._on_implementation_loop_handoff,
-            tooltip="Same as implementation-loop handoff: write handoff.md and increment round trips for a role.",
-        )
-        secondary_button(
-            loop_actions,
-            "Loop check",
-            self._on_implementation_loop_check,
-            tooltip="Same as implementation-loop check: run build, tests, and wiring audit for this task (not a bug hunt).",
-        )
-        secondary_button(
-            loop_actions,
-            "Loop accept",
-            self._on_implementation_loop_accept,
-            tooltip="Same as implementation-loop accept: check the role's result.md entry.",
-        )
-        secondary_button(
-            loop_actions,
-            "Loop commit",
-            self._on_implementation_loop_commit,
-            tooltip="Same as implementation-loop commit: one Python commit after checker and reviewer pass.",
+            "Loop controls",
+            self._on_open_loop_controls,
+            tooltip="Open the Controls tab: one Run command for bug hunt, implementation loop, and agnostic loop on the active repo.",
         )
         secondary_button(
             actions,
@@ -1084,6 +1052,279 @@ class HivePlannerApp:
         self._bind_page_wheel(body, canvas)
         self._restore_home_log_history()
         self._pending_home_log.clear()
+
+    LOOP_CONTROL_COMMANDS = {
+        "Bug hunt": ("Enable", "Check install"),
+        "Implementation loop": (
+            "Enable",
+            "Check pack",
+            "Status",
+            "Start",
+            "Handoff",
+            "Check",
+            "Accept",
+            "Commit",
+        ),
+        "Agnostic loop": (
+            "Enable",
+            "Check install",
+            "Rewards",
+            "Status",
+            "Arm",
+            "Begin",
+            "Review",
+            "Observe hit",
+            "Observe miss",
+            "Choose",
+        ),
+    }
+
+    def _build_controls_tab(self, parent: tk.Frame) -> None:
+        from hive_planner.bug_hunt import DEFAULT_ITERATIONS
+        from hive_planner.implementation_loop import PACK_1, PACK_4
+
+        body, canvas = self._scrollable_tab(parent)
+        panel = card(body)
+        card_title(panel, "Loop command — active repo")
+        tk.Label(
+            panel,
+            textvariable=self.controls_active_label,
+            wraplength=760,
+            justify="left",
+            bg=COLORS["card"],
+            fg=COLORS["muted"],
+            font=FONT,
+        ).pack(anchor="w", padx=12, pady=(0, 8))
+        tk.Label(
+            panel,
+            textvariable=self.controls_last,
+            wraplength=760,
+            justify="left",
+            bg=COLORS["card"],
+            fg=COLORS["fg"],
+            font=FONT,
+        ).pack(anchor="w", padx=12, pady=(0, 8))
+
+        if not hasattr(self, "controls_loop"):
+            self.controls_loop = tk.StringVar(value="Implementation loop")
+        if not hasattr(self, "controls_command"):
+            self.controls_command = tk.StringVar(value="Status")
+        if not hasattr(self, "controls_bug_iterations"):
+            self.controls_bug_iterations = tk.StringVar(value=str(DEFAULT_ITERATIONS))
+        if not hasattr(self, "controls_impl_pack"):
+            self.controls_impl_pack = tk.StringVar(value=PACK_1)
+        if not hasattr(self, "controls_impl_feature"):
+            feature = self._active_feature_label()
+            self.controls_impl_feature = tk.StringVar(value="" if feature == "—" else feature)
+        if not hasattr(self, "controls_impl_role"):
+            self.controls_impl_role = tk.StringVar(value="coder")
+        if not hasattr(self, "controls_impl_allow_dirty"):
+            self.controls_impl_allow_dirty = tk.BooleanVar(value=False)
+        if not hasattr(self, "controls_impl_force_feature"):
+            self.controls_impl_force_feature = tk.BooleanVar(value=False)
+        if not hasattr(self, "controls_impl_continue_cap"):
+            self.controls_impl_continue_cap = tk.BooleanVar(value=False)
+        if not hasattr(self, "controls_agn_reward"):
+            self.controls_agn_reward = tk.StringVar(value="inspect")
+        if not hasattr(self, "controls_agn_cycles"):
+            self.controls_agn_cycles = tk.StringVar(value="1")
+        if not hasattr(self, "controls_agn_note"):
+            self.controls_agn_note = tk.StringVar(value="")
+        if not hasattr(self, "controls_agn_open"):
+            self.controls_agn_open = tk.StringVar(value="")
+        if not hasattr(self, "controls_agn_arm_choose"):
+            self.controls_agn_arm_choose = tk.BooleanVar(value=False)
+
+        loop_row = tk.Frame(panel, bg=COLORS["card"])
+        loop_row.pack(fill="x", padx=12, pady=4)
+        tk.Label(loop_row, text="Loop", width=14, anchor="w", bg=COLORS["card"], fg=COLORS["fg"], font=FONT).pack(side="left")
+        loop_box = ttk.Combobox(
+            loop_row,
+            textvariable=self.controls_loop,
+            values=tuple(self.LOOP_CONTROL_COMMANDS),
+            state="readonly",
+            width=28,
+        )
+        loop_box.pack(side="left", fill="x", expand=True)
+        loop_box.bind("<<ComboboxSelected>>", self._on_controls_loop_changed)
+
+        cmd_row = tk.Frame(panel, bg=COLORS["card"])
+        cmd_row.pack(fill="x", padx=12, pady=4)
+        tk.Label(cmd_row, text="Command", width=14, anchor="w", bg=COLORS["card"], fg=COLORS["fg"], font=FONT).pack(side="left")
+        self.controls_command_box = ttk.Combobox(
+            cmd_row,
+            textvariable=self.controls_command,
+            values=self.LOOP_CONTROL_COMMANDS[self.controls_loop.get()],
+            state="readonly",
+            width=28,
+        )
+        self.controls_command_box.pack(side="left", fill="x", expand=True)
+        self._sync_controls_command_choices()
+
+        self._field(panel, "Iterations", self.controls_bug_iterations, tooltip="Bug hunt: cycles written into the installed command.")
+        pack_row = tk.Frame(panel, bg=COLORS["card"])
+        pack_row.pack(fill="x", padx=12, pady=4)
+        tk.Label(pack_row, text="Pack", width=14, anchor="w", bg=COLORS["card"], fg=COLORS["fg"], font=FONT).pack(side="left")
+        ttk.Combobox(
+            pack_row,
+            textvariable=self.controls_impl_pack,
+            values=[PACK_1, PACK_4],
+            state="readonly",
+            width=28,
+        ).pack(side="left", fill="x", expand=True)
+        self._field(panel, "Feature id", self.controls_impl_feature, tooltip="Implementation loop. Blank uses AGENTS.md Active feature.")
+        role_row = tk.Frame(panel, bg=COLORS["card"])
+        role_row.pack(fill="x", padx=12, pady=4)
+        tk.Label(role_row, text="Role", width=14, anchor="w", bg=COLORS["card"], fg=COLORS["fg"], font=FONT).pack(side="left")
+        ttk.Combobox(
+            role_row,
+            textvariable=self.controls_impl_role,
+            values=["coder", "checker", "reviewer", "coordinator"],
+            state="readonly",
+            width=28,
+        ).pack(side="left", fill="x", expand=True)
+        self._field(panel, "Reward", self.controls_agn_reward, tooltip="Agnostic loop catalog reward.")
+        self._field(panel, "Cycles", self.controls_agn_cycles, tooltip="Agnostic loop arm / choose cycles.")
+        self._field(panel, "Review note", self.controls_agn_note, tooltip="Agnostic loop review note.")
+        self._field(panel, "Choose open", self.controls_agn_open, tooltip="Agnostic choose, e.g. inspect=4,fill=1.")
+        flags = tk.Frame(panel, bg=COLORS["card"])
+        flags.pack(fill="x", padx=12, pady=4)
+        tk.Checkbutton(
+            flags,
+            text="Allow dirty start",
+            variable=self.controls_impl_allow_dirty,
+            bg=COLORS["card"],
+            fg=COLORS["fg"],
+            selectcolor=COLORS["card"],
+            activebackground=COLORS["card"],
+            font=FONT,
+        ).pack(side="left", padx=(0, 12))
+        tk.Checkbutton(
+            flags,
+            text="Force feature",
+            variable=self.controls_impl_force_feature,
+            bg=COLORS["card"],
+            fg=COLORS["fg"],
+            selectcolor=COLORS["card"],
+            activebackground=COLORS["card"],
+            font=FONT,
+        ).pack(side="left", padx=(0, 12))
+        tk.Checkbutton(
+            flags,
+            text="Continue after cap",
+            variable=self.controls_impl_continue_cap,
+            bg=COLORS["card"],
+            fg=COLORS["fg"],
+            selectcolor=COLORS["card"],
+            activebackground=COLORS["card"],
+            font=FONT,
+        ).pack(side="left", padx=(0, 12))
+        tk.Checkbutton(
+            flags,
+            text="Arm after choose",
+            variable=self.controls_agn_arm_choose,
+            bg=COLORS["card"],
+            fg=COLORS["fg"],
+            selectcolor=COLORS["card"],
+            activebackground=COLORS["card"],
+            font=FONT,
+        ).pack(side="left")
+
+        run_row = tk.Frame(panel, bg=COLORS["card"])
+        run_row.pack(fill="x", padx=12, pady=(8, 12))
+        primary_button(
+            run_row,
+            "Run",
+            self._on_controls_run,
+            tooltip="Run the selected loop command on the active repo.",
+        )
+
+        self._sync_controls_for_active()
+        self._bind_page_wheel(body, canvas)
+
+    def _controls_active_caption(self) -> str:
+        active = self.config.active_project or "No project linked. Open Projects and set an active folder."
+        return f"Pick a loop and one command, then Run. Same functions as the CLI on:\n{active}"
+
+    def _sync_controls_for_active(self) -> None:
+        """Keep Controls pointed at the live active repo after a project switch."""
+        if hasattr(self, "controls_active_label"):
+            self.controls_active_label.set(self._controls_active_caption())
+        key = self._active_link_key()
+        last = getattr(self, "_controls_link_key", None)
+        if last == key:
+            return
+        self._controls_link_key = key
+        if not hasattr(self, "controls_impl_feature"):
+            return
+        feature = self._active_feature_label() if key else ""
+        self.controls_impl_feature.set("" if feature == "—" else feature)
+
+    def _sync_controls_command_choices(self) -> None:
+        loop = str(self.controls_loop.get() if hasattr(self, "controls_loop") else "Implementation loop")
+        choices = self.LOOP_CONTROL_COMMANDS.get(loop) or self.LOOP_CONTROL_COMMANDS["Implementation loop"]
+        box = getattr(self, "controls_command_box", None)
+        if box is not None:
+            box.configure(values=choices)
+        current = str(self.controls_command.get() if hasattr(self, "controls_command") else "")
+        if current not in choices:
+            self.controls_command.set(choices[0])
+
+    def _on_controls_loop_changed(self, _event=None) -> None:
+        self._sync_controls_command_choices()
+
+    def _on_open_loop_controls(self) -> None:
+        notebook = self.notebook
+        if notebook is None:
+            return
+        try:
+            tabs = notebook.tabs()
+        except tk.TclError:
+            return
+        if len(tabs) > 1:
+            notebook.select(1)
+            self._dashboard_tab = 1
+
+    def _on_controls_run(self) -> None:
+        loop = str(self.controls_loop.get() if hasattr(self, "controls_loop") else "")
+        command = str(self.controls_command.get() if hasattr(self, "controls_command") else "")
+        if loop == "Bug hunt":
+            if command == "Enable":
+                self._on_bug_hunt_install()
+            else:
+                self._on_bug_hunt_status()
+            return
+        if loop == "Implementation loop":
+            actions = {
+                "Enable": lambda: self._on_implementation_loop_install(from_controls=True),
+                "Check pack": self._on_implementation_loop_peek_pack,
+                "Status": lambda: self._on_implementation_loop_status(from_controls=True),
+                "Start": lambda: self._on_implementation_loop_start(from_controls=True),
+                "Handoff": lambda: self._on_implementation_loop_handoff(from_controls=True),
+                "Check": self._on_implementation_loop_check,
+                "Accept": lambda: self._on_implementation_loop_accept(from_controls=True),
+                "Commit": self._on_implementation_loop_commit,
+            }
+            handler = actions.get(command)
+            if handler:
+                handler()
+            return
+        if loop == "Agnostic loop":
+            actions = {
+                "Enable": self._on_agnostic_loop_install,
+                "Check install": self._on_agnostic_loop_peek,
+                "Rewards": self._on_agnostic_loop_rewards,
+                "Status": self._on_agnostic_loop_status,
+                "Arm": self._on_agnostic_loop_arm,
+                "Begin": self._on_agnostic_loop_begin,
+                "Review": self._on_agnostic_loop_review,
+                "Observe hit": lambda: self._on_agnostic_loop_observe(True),
+                "Observe miss": lambda: self._on_agnostic_loop_observe(False),
+                "Choose": self._on_agnostic_loop_choose,
+            }
+            handler = actions.get(command)
+            if handler:
+                handler()
 
     def _build_projects_tab(self, parent: tk.Frame) -> None:
         top_row = tk.Frame(parent, bg=COLORS["bg"])
@@ -2753,9 +2994,19 @@ class HivePlannerApp:
             messagebox.showwarning("No project", "Link a workspace first.")
             return
         link = Path(self.config.active_project)
+        iterations = 50
+        raw = ""
+        if hasattr(self, "controls_bug_iterations"):
+            raw = str(self.controls_bug_iterations.get() or "").strip()
+        if raw:
+            try:
+                iterations = int(raw)
+            except ValueError:
+                messagebox.showwarning("Iterations", "Iterations must be a whole number.")
+                return
         self._start_home_action("Installing bug-hunt chat trigger…")
         self._run_bg(
-            lambda r=link: run_project_bug_hunt_install(r),
+            lambda r=link, n=iterations: run_project_bug_hunt_install(r, iterations=n),
             self._project_done_callback("Bug-hunt install", self._bug_hunt_install_done),
         )
 
@@ -2766,10 +3017,12 @@ class HivePlannerApp:
             return
         count = len(result.get("files_written") or [])
         iterations = result.get("iterations", 50)
-        self._queue_home_log(
+        message = (
             f"Bug hunt enabled ({count} file(s), {iterations} iterations). "
             "In any Cursor chat on this project, say bug hunt — or hunt for bugs / start a bug hunt."
         )
+        self._queue_home_log(message)
+        self._set_controls_last(message)
         self._refresh_home_dashboard()
 
     def _on_agnostic_loop_install(self) -> None:
@@ -2789,26 +3042,31 @@ class HivePlannerApp:
             self._refresh_home_dashboard()
             return
         count = len(result.get("files_written") or [])
-        self._queue_home_log(
+        message = (
             f"Agnostic loop enabled ({count} file(s)). "
-            "Say agnostic loop or hive loop kit in Cursor chat, or use CLI agnostic-loop arm/begin/review."
+            "Use Controls → Agnostic loop, or say agnostic loop / hive loop kit in Cursor chat."
         )
+        self._queue_home_log(message)
+        self._set_controls_last(message)
         self._refresh_home_dashboard()
 
-    def _on_implementation_loop_install(self) -> None:
+    def _on_implementation_loop_install(self, *, from_controls: bool = False) -> None:
         if not self.config.active_project:
             messagebox.showwarning("No project", "Link a workspace first.")
             return
         from hive_planner.implementation_loop import PACK_1, PACK_4
 
-        pack = simpledialog.askstring(
-            "Implementation loop pack",
-            f"Pack ({PACK_1} or {PACK_4}):",
-            parent=self.root,
-        )
-        if not pack:
-            return
-        pack = pack.strip()
+        if from_controls and hasattr(self, "controls_impl_pack"):
+            pack = str(self.controls_impl_pack.get() or "").strip()
+        else:
+            pack = simpledialog.askstring(
+                "Implementation loop pack",
+                f"Pack ({PACK_1} or {PACK_4}):",
+                parent=self.root,
+            )
+            if not pack:
+                return
+            pack = pack.strip()
         if pack not in (PACK_1, PACK_4):
             messagebox.showwarning("Invalid pack", f"Use {PACK_1} or {PACK_4}.")
             return
@@ -2840,10 +3098,12 @@ class HivePlannerApp:
             return
         count = len(result.get("files_written") or [])
         pack = result.get("pack", "")
-        self._queue_home_log(
+        message = (
             f"Implementation loop enabled ({pack}, {count} file(s)). "
-            "Use Home Loop status / start / handoff / check / accept / commit, or say implementation loop in Cursor chat."
+            "Use Controls → Implementation loop, or say implementation loop in Cursor chat."
         )
+        self._queue_home_log(message)
+        self._set_controls_last(message)
         self._refresh_home_dashboard()
 
     def _require_active_link(self) -> Path | None:
@@ -2915,35 +3175,57 @@ class HivePlannerApp:
             return "Implementation loop: " + "; ".join(parts)
         return "Implementation loop: " + str(result)
 
+    def _set_controls_last(self, text: str) -> None:
+        if hasattr(self, "controls_last"):
+            self.controls_last.set(text)
+
     def _log_loop_gate(self, result: dict) -> None:
-        if self._is_bg_error(result) or result.get("ok") is not True:
-            self._queue_home_log(self._format_loop_gate(result) if isinstance(result, dict) else self._result_detail(result))
-            self._refresh_home_dashboard()
-            return
-        self._queue_home_log(self._format_loop_gate(result))
+        line = self._format_loop_gate(result) if isinstance(result, dict) else self._result_detail(result)
+        self._queue_home_log(line)
+        self._set_controls_last(line)
         self._refresh_home_dashboard()
 
-    def _on_implementation_loop_status(self) -> None:
+    def _controls_feature_value(self) -> str:
+        if hasattr(self, "controls_impl_feature"):
+            return str(self.controls_impl_feature.get() or "").strip()
+        return ""
+
+    def _controls_role_value(self) -> str:
+        if hasattr(self, "controls_impl_role"):
+            return str(self.controls_impl_role.get() or "").strip()
+        return ""
+
+    def _on_implementation_loop_status(self, *, from_controls: bool = False) -> None:
         link = self._require_active_link()
         if link is None:
             return
-        feature = self._ask_loop_feature()
-        if feature is None:
-            return
+        if from_controls:
+            feature = self._controls_feature_value()
+        else:
+            feature = self._ask_loop_feature()
+            if feature is None:
+                return
         self._start_home_action("Checking implementation-loop status…")
         self._run_bg(
             lambda r=link, f=feature: run_project_implementation_loop_status(r, f or None),
             self._project_done_callback("Implementation loop status", self._log_loop_gate),
         )
 
-    def _on_implementation_loop_start(self) -> None:
+    def _on_implementation_loop_start(self, *, from_controls: bool = False) -> None:
         link = self._require_active_link()
         if link is None:
             return
-        feature = self._ask_loop_feature()
-        if feature is None:
-            return
-        self._run_loop_start(link, feature, allow_dirty=False, force_feature=False)
+        if from_controls:
+            feature = self._controls_feature_value()
+            allow_dirty = bool(self.controls_impl_allow_dirty.get()) if hasattr(self, "controls_impl_allow_dirty") else False
+            force_feature = bool(self.controls_impl_force_feature.get()) if hasattr(self, "controls_impl_force_feature") else False
+        else:
+            feature = self._ask_loop_feature()
+            if feature is None:
+                return
+            allow_dirty = False
+            force_feature = False
+        self._run_loop_start(link, feature, allow_dirty=allow_dirty, force_feature=force_feature)
 
     def _run_loop_start(
         self,
@@ -3012,14 +3294,22 @@ class HivePlannerApp:
             return
         self._log_loop_gate(result)
 
-    def _on_implementation_loop_handoff(self) -> None:
+    def _on_implementation_loop_handoff(self, *, from_controls: bool = False) -> None:
         link = self._require_active_link()
         if link is None:
             return
-        role = self._ask_loop_role()
-        if role is None:
-            return
-        self._run_loop_handoff(link, role, continue_after_cap=False)
+        if from_controls:
+            role = self._controls_role_value()
+            if not role:
+                messagebox.showwarning("Role required", "Pick a role on the Controls tab.")
+                return
+            continue_after_cap = bool(self.controls_impl_continue_cap.get()) if hasattr(self, "controls_impl_continue_cap") else False
+        else:
+            role = self._ask_loop_role()
+            if role is None:
+                return
+            continue_after_cap = False
+        self._run_loop_handoff(link, role, continue_after_cap=continue_after_cap)
 
     def _run_loop_handoff(self, link: Path, role: str, *, continue_after_cap: bool) -> None:
         self._loop_handoff_ctx = {"link": link, "role": role, "continue_after_cap": continue_after_cap}
@@ -3059,13 +3349,19 @@ class HivePlannerApp:
             self._project_done_callback("Implementation loop check", self._log_loop_gate),
         )
 
-    def _on_implementation_loop_accept(self) -> None:
+    def _on_implementation_loop_accept(self, *, from_controls: bool = False) -> None:
         link = self._require_active_link()
         if link is None:
             return
-        role = self._ask_loop_role()
-        if role is None:
-            return
+        if from_controls:
+            role = self._controls_role_value()
+            if not role:
+                messagebox.showwarning("Role required", "Pick a role on the Controls tab.")
+                return
+        else:
+            role = self._ask_loop_role()
+            if role is None:
+                return
         self._start_home_action(f"Accepting implementation-loop result ({role})…")
         self._run_bg(
             lambda r=link, n=role: run_project_implementation_loop_accept(r, n),
@@ -3081,6 +3377,202 @@ class HivePlannerApp:
             lambda r=link: run_project_implementation_loop_commit(r),
             self._project_done_callback("Implementation loop commit", self._log_loop_gate),
         )
+
+    def _on_bug_hunt_status(self) -> None:
+        link = self._require_active_link()
+        if link is None:
+            return
+        self._start_home_action("Checking bug-hunt install…")
+        self._run_bg(
+            lambda r=link: peek_bug_hunt_status(r),
+            self._project_done_callback("Bug-hunt status", self._log_controls_result),
+        )
+
+    def _on_implementation_loop_peek_pack(self) -> None:
+        link = self._require_active_link()
+        if link is None:
+            return
+        self._start_home_action("Checking implementation-loop pack…")
+        self._run_bg(
+            lambda r=link: peek_implementation_loop_pack(r),
+            self._project_done_callback("Implementation loop pack", self._log_controls_result),
+        )
+
+    def _on_agnostic_loop_peek(self) -> None:
+        link = self._require_active_link()
+        if link is None:
+            return
+        self._start_home_action("Checking agnostic-loop install…")
+        self._run_bg(
+            lambda r=link: peek_agnostic_loop_status(r),
+            self._project_done_callback("Agnostic-loop install check", self._log_controls_result),
+        )
+
+    def _on_agnostic_loop_rewards(self) -> None:
+        link = self._require_active_link()
+        if link is None:
+            return
+        self._start_home_action("Listing agnostic-loop rewards…")
+        self._run_bg(
+            lambda r=link: run_project_agnostic_loop_rewards(r),
+            self._project_done_callback("Agnostic-loop rewards", self._log_agnostic_gate),
+        )
+
+    def _on_agnostic_loop_status(self) -> None:
+        link = self._require_active_link()
+        if link is None:
+            return
+        self._start_home_action("Reading agnostic-loop status…")
+        self._run_bg(
+            lambda r=link: run_project_agnostic_loop_status(r),
+            self._project_done_callback("Agnostic-loop status", self._log_agnostic_gate),
+        )
+
+    def _controls_agn_cycles(self) -> int | None:
+        raw = str(self.controls_agn_cycles.get() if hasattr(self, "controls_agn_cycles") else "1").strip() or "1"
+        try:
+            value = int(raw)
+        except ValueError:
+            messagebox.showwarning("Cycles", "Cycles must be a whole number.")
+            return None
+        if value < 1:
+            messagebox.showwarning("Cycles", "Cycles must be at least 1.")
+            return None
+        return value
+
+    def _on_agnostic_loop_arm(self) -> None:
+        link = self._require_active_link()
+        if link is None:
+            return
+        reward = str(self.controls_agn_reward.get() if hasattr(self, "controls_agn_reward") else "").strip()
+        if not reward:
+            messagebox.showwarning("Reward", "Enter a catalog reward name.")
+            return
+        cycles = self._controls_agn_cycles()
+        if cycles is None:
+            return
+        self._start_home_action(f"Arming agnostic-loop reward {reward}…")
+        self._run_bg(
+            lambda r=link, w=reward, n=cycles: run_project_agnostic_loop_arm(r, w, n),
+            self._project_done_callback("Agnostic-loop arm", self._log_agnostic_gate),
+        )
+
+    def _on_agnostic_loop_begin(self) -> None:
+        link = self._require_active_link()
+        if link is None:
+            return
+        self._start_home_action("Beginning agnostic-loop tick…")
+        self._run_bg(
+            lambda r=link: run_project_agnostic_loop_begin(r),
+            self._project_done_callback("Agnostic-loop begin", self._log_agnostic_gate),
+        )
+
+    def _on_agnostic_loop_review(self) -> None:
+        link = self._require_active_link()
+        if link is None:
+            return
+        note = str(self.controls_agn_note.get() if hasattr(self, "controls_agn_note") else "").strip()
+        if not note:
+            messagebox.showwarning("Review note", "Enter a review note.")
+            return
+        self._start_home_action("Writing agnostic-loop review…")
+        self._run_bg(
+            lambda r=link, n=note: run_project_agnostic_loop_review(r, n),
+            self._project_done_callback("Agnostic-loop review", self._log_agnostic_gate),
+        )
+
+    def _on_agnostic_loop_observe(self, hit: bool) -> None:
+        link = self._require_active_link()
+        if link is None:
+            return
+        reward = str(self.controls_agn_reward.get() if hasattr(self, "controls_agn_reward") else "").strip()
+        if not reward:
+            messagebox.showwarning("Reward", "Enter a catalog reward name.")
+            return
+        self._start_home_action("Recording agnostic-loop observation…")
+        self._run_bg(
+            lambda r=link, w=reward, h=hit: run_project_agnostic_loop_observe(r, w, h),
+            self._project_done_callback("Agnostic-loop observe", self._log_agnostic_gate),
+        )
+
+    def _on_agnostic_loop_choose(self) -> None:
+        link = self._require_active_link()
+        if link is None:
+            return
+        open_text = str(self.controls_agn_open.get() if hasattr(self, "controls_agn_open") else "").strip() or None
+        do_arm = bool(self.controls_agn_arm_choose.get()) if hasattr(self, "controls_agn_arm_choose") else False
+        cycles = self._controls_agn_cycles()
+        if cycles is None:
+            return
+        self._start_home_action("Choosing agnostic-loop reward…")
+        self._run_bg(
+            lambda r=link, o=open_text, a=do_arm, n=cycles: run_project_agnostic_loop_choose(
+                r, o, do_arm=a, cycles=n
+            ),
+            self._project_done_callback("Agnostic-loop choose", self._log_agnostic_gate),
+        )
+
+    def _format_agnostic_gate(self, result: dict) -> str:
+        parts: list[str] = []
+        for key in (
+            "ok",
+            "action",
+            "reward",
+            "hook",
+            "hit",
+            "completed",
+            "max_cycles",
+            "blocked_reason",
+            "installed",
+            "pack",
+        ):
+            val = result.get(key)
+            if val not in (None, "", []):
+                parts.append(f"{key}={val}")
+        names = result.get("rewards") or []
+        if names:
+            parts.append("rewards=" + ", ".join(str(item) for item in names))
+        missing = result.get("missing") or []
+        if missing:
+            parts.append("missing=" + ", ".join(str(item) for item in missing))
+        err = result.get("error")
+        if err and "blocked_reason" not in (result or {}):
+            parts.append(str(err))
+        elif err and result.get("blocked_reason") != err:
+            parts.append(str(err))
+        if parts:
+            return "Agnostic loop: " + "; ".join(parts)
+        return "Agnostic loop: " + str(result)
+
+    def _log_agnostic_gate(self, result: dict) -> None:
+        line = self._format_agnostic_gate(result) if isinstance(result, dict) else self._result_detail(result)
+        self._queue_home_log(line)
+        self._set_controls_last(line)
+        self._refresh_home_dashboard()
+
+    def _log_controls_result(self, result: dict) -> None:
+        if isinstance(result, dict) and result.get("action", "").startswith("bug-hunt"):
+            installed = result.get("installed")
+            missing = result.get("missing") or []
+            if result.get("ok") is True and installed:
+                line = f"Bug hunt: installed in {result.get('root')}"
+            else:
+                line = "Bug hunt: " + (result.get("error") or ("missing " + ", ".join(str(item) for item in missing) if missing else self._result_detail(result)))
+        elif isinstance(result, dict) and result.get("action") == "agnostic-status":
+            missing = result.get("missing") or []
+            if result.get("ok") is True and result.get("installed"):
+                line = f"Agnostic loop: installed in {result.get('root')}"
+            else:
+                line = "Agnostic loop: " + (result.get("error") or ("missing " + ", ".join(str(item) for item in missing) if missing else self._result_detail(result)))
+        elif isinstance(result, dict) and "pack" in result:
+            line = f"Implementation loop pack: {result.get('pack') or 'not installed'}"
+            if result.get("error"):
+                line = f"Implementation loop pack: {result.get('error')}"
+        else:
+            line = self._result_detail(result)
+        self._queue_home_log(line)
+        self._set_controls_last(line)
+        self._refresh_home_dashboard()
 
     def _on_deploy_agent_handoff(self) -> None:
         root = self._active_linked_root()

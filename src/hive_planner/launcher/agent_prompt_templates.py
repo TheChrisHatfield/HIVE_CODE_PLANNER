@@ -214,22 +214,22 @@ You do not do one bug and then wait. Pause only for your own internal review, co
         AgentPromptTemplate(
             id="change.implementation_loop",
             title="Start the implementation loop",
-            description="Trigger the installed post-spec coding loop from chat, or use Home Loop status / start / handoff / check / accept / commit instead of typing.",
+            description="Trigger the installed post-spec coding loop from chat, or use Home → Loop controls (Controls tab Run) instead of typing.",
             prompt="""implementation loop
 
 Start this project's implementation loop now. Read @.cursor/commands/implementation-loop.md (or @scripts/implementation-loop.md if the command is missing) and execute it in this turn.
 
-Hive Planner Home can run the same Python coordinator gates without typing: Loop status, Loop start, Loop handoff, Loop check, Loop accept, and Loop commit. Chat and Home are both valid. Do not explain how to invoke the command.""",
+Hive Planner Home → Loop controls opens the Controls tab; one Run command is status / start / handoff / check / accept / commit. Chat and Controls are both valid. Do not explain how to invoke the command.""",
         ),
         AgentPromptTemplate(
             id="change.agnostic_loop",
             title="Start the agnostic loop",
-            description="Trigger the pause-cycle kit chooser (hive-loop-kit), or Home Enable agnostic loop.",
+            description="Trigger the pause-cycle kit chooser (hive-loop-kit), or Home → Loop controls (Agnostic loop Run).",
             prompt="""agnostic loop
 
 Start this project's agnostic loop now. Read @.cursor/commands/agnostic-loop.md (or @scripts/agnostic-loop.md if the command is missing) and execute it in this turn.
 
-This is not the implementation loop and not a bug hunt. Home Enable agnostic loop installs the same files. Do not explain how to invoke the command.""",
+This is not the implementation loop and not a bug hunt. Home → Loop controls (Agnostic loop Enable) installs the same files. Do not explain how to invoke the command.""",
         ),
         AgentPromptTemplate(
             id="planning.external_rosetta",

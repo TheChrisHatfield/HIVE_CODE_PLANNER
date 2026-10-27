@@ -19,9 +19,8 @@ Daily use:
   Home → Agent prompt templates — copy-paste into Cursor chat
   Home → Rosetta cartridge eject — export contract for Gemini / Perplexity planning sessions
   Home → Run health check before handoff
-  Home → Enable bug hunt — then say "bug hunt" (or hunt for bugs) in any Cursor chat
-  Home → Enable implementation loop — then Loop status / start / handoff / check / accept / commit, or say "implementation loop" in chat
-  Home → Enable agnostic loop — installs the hive-loop-kit (arm / begin / review), or say "agnostic loop" / "hive loop kit"
+  Home → Loop controls — opens Controls (one Run command for bug hunt, implementation loop, agnostic loop)
+  Controls — pick a loop, pick a command, Run. Talks to the active repo.
   Home → Verify vendor pins / Scan legacy deployment (unified handoff)
   Home → Open in Cursor
 
@@ -114,18 +113,13 @@ AGNOSTIC_LOOP_SECTION_MARKER = "## Agnostic loop"
 
 
 def implementation_loop_help_text() -> str:
-    """Plain-English launcher help for Home Loop buttons (appended if scripts/README.md is stale)."""
+    """Plain-English launcher help for Home Loop controls (appended if scripts/README.md is stale)."""
     return """## Implementation loop
 
 Use this after a feature already has `spec.md`, `plan.md`, and `tasks.md`. It codes that task list; it does not write a new spec.
 
-1. **Home → Enable implementation loop** — pick **1-pack** (one coordinator) or **4-pack** (coder + Python check + reviewer).
-2. **Loop status** — is the feature ready to code?
-3. **Loop start** — start coordinator gates for that feature.
-4. **Loop handoff** — write `handoff.md` and count a round trip for a role.
-5. **Loop check** — run `build`, `test:quick`, and the wiring audit for this task (not a bug hunt).
-6. **Loop accept** — accept the role’s `result.md` entry.
-7. **Loop commit** — one Python commit after checker and reviewer pass.
+1. **Home → Loop controls** opens the Controls tab.
+2. On **Controls**, pick **Implementation loop**, pick a command (**Enable**, **Status**, **Start**, **Handoff**, **Check**, **Accept**, **Commit**), then **Run**.
 
 CLI: `py -3.11 -m hive_planner implementation-loop` with `status`, `start`, `handoff`, `check`, `accept`, or `commit`. Init installs the loop only with `--implementation-loop-pack`.
 
@@ -134,12 +128,12 @@ Do not merge, push to trunk, force-push, or deploy from this loop.
 
 
 def agnostic_loop_help_text() -> str:
-    """Plain-English launcher help for Home Enable agnostic loop (appended if scripts/README.md is stale)."""
+    """Plain-English launcher help for Controls Agnostic loop (appended if scripts/README.md is stale)."""
     return """## Agnostic loop
 
 Pause-cycle work chooser (hive-loop-kit). It picks the next slice of work; it is not a bug hunt and not the implementation loop.
 
-1. **Home → Enable agnostic loop** — installs scripts, catalog, skill, and chat command.
+1. **Home → Loop controls**, then on Controls pick **Agnostic loop** and **Run** (**Enable**, **Arm**, **Begin**, **Review**, …).
 2. CLI or `scripts/agnostic_loop.py`: `arm` / `begin` / `review` / `observe` / `choose` / `status`.
 3. Replace `.hive/agnostic-loop/catalog.json` to change reward names and hooks.
 

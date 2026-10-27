@@ -1347,6 +1347,99 @@ def test_run_project_implementation_loop_commit_wraps_coordinator_error(tmp_path
     assert result.get("error")
 
 
+def test_peek_bug_hunt_status_and_custom_iterations(tmp_path: Path) -> None:
+    from hive_planner.launcher.service import peek_bug_hunt_status
+
+    folder = tmp_path / "app"
+    folder.mkdir()
+    missing = peek_bug_hunt_status(folder)
+    assert missing["ok"] is True
+    assert missing["installed"] is False
+    assert missing["missing"]
+    installed = run_project_bug_hunt_install(folder, iterations=12)
+    assert installed["ok"] is True
+    assert installed["iterations"] == 12
+    present = peek_bug_hunt_status(folder)
+    assert present["installed"] is True
+    assert present["missing"] == []
+    command = (folder / ".cursor" / "commands" / "bug-hunt.md").read_text(encoding="utf-8")
+    assert "12-iteration" in command or "12" in command
+
+
+def test_controls_agnostic_gates_use_linked_repo(tmp_path: Path) -> None:
+    from hive_planner.launcher.service import (
+        peek_agnostic_loop_status,
+        run_project_agnostic_loop_arm,
+        run_project_agnostic_loop_begin,
+        run_project_agnostic_loop_choose,
+        run_project_agnostic_loop_install,
+        run_project_agnostic_loop_observe,
+        run_project_agnostic_loop_review,
+        run_project_agnostic_loop_rewards,
+        run_project_agnostic_loop_status,
+    )
+
+    folder = tmp_path / "app"
+    folder.mkdir()
+    assert peek_agnostic_loop_status(folder)["installed"] is False
+    assert run_project_agnostic_loop_install(folder)["ok"] is True
+    assert peek_agnostic_loop_status(folder)["installed"] is True
+    listed = run_project_agnostic_loop_rewards(folder)
+    assert listed["ok"] is True
+    assert "inspect" in listed["rewards"]
+    armed = run_project_agnostic_loop_arm(folder, "inspect", 1)
+    assert armed["ok"] is True
+    assert armed["root"] == str(folder.resolve())
+    begun = run_project_agnostic_loop_begin(folder)
+    assert begun["ok"] is True
+    reviewed = run_project_agnostic_loop_review(folder, "controls tab")
+    assert reviewed["ok"] is True
+    observed = run_project_agnostic_loop_observe(folder, "inspect", True)
+    assert observed["ok"] is True
+    chosen = run_project_agnostic_loop_choose(folder, None, do_arm=False)
+    assert chosen["ok"] is True
+    status = run_project_agnostic_loop_status(folder)
+    assert status["ok"] is True
+    assert status["action"] == "status"
+
+
+def test_controls_agnostic_choose_rejects_bad_open(tmp_path: Path) -> None:
+    from hive_planner.launcher.service import (
+        run_project_agnostic_loop_choose,
+        run_project_agnostic_loop_install,
+    )
+
+    folder = tmp_path / "app"
+    folder.mkdir()
+    run_project_agnostic_loop_install(folder)
+    result = run_project_agnostic_loop_choose(folder, "not-a-reward=1")
+    assert result["ok"] is False
+    assert "open" in result.get("blocked_reason", "").lower()
+
+
+def test_app_registers_controls_tab() -> None:
+    source = Path(__file__).resolve().parents[1] / "src" / "hive_planner" / "launcher" / "app.py"
+    text = source.read_text(encoding="utf-8")
+    assert 'notebook.add(controls, text="Controls")' in text
+    assert "def _build_controls_tab" in text
+    assert "def _on_open_loop_controls" in text
+    assert "def _on_controls_run" in text
+    assert '"Loop controls"' in text
+    assert '"Loop status"' not in text.split("def _build_home_tab", 1)[-1].split("def _build_controls_tab", 1)[0]
+
+
+def test_controls_follow_active_repo_on_soft_refresh() -> None:
+    source = Path(__file__).resolve().parents[1] / "src" / "hive_planner" / "launcher" / "app.py"
+    text = source.read_text(encoding="utf-8")
+    soft = text.split("def _soft_refresh_dashboard", 1)[-1].split("def _show_dashboard", 1)[0]
+    assert "self._sync_controls_for_active()" in soft
+    assert "textvariable=self.controls_active_label" in text
+    sync = text.split("def _sync_controls_for_active", 1)[-1].split("def _sync_controls_command_choices", 1)[0]
+    assert "controls_active_label.set" in sync
+    assert "controls_impl_feature.set" in sync
+    assert "_controls_link_key" in sync
+
+
 def test_run_project_implementation_loop_check_wraps_not_running(tmp_path: Path) -> None:
     folder = tmp_path / "app"
     folder.mkdir()
@@ -1865,8 +1958,7 @@ def test_scripts_readme_documents_implementation_loop() -> None:
     guide = Path(__file__).resolve().parents[1] / "scripts" / "README.md"
     text = guide.read_text(encoding="utf-8")
     assert IMPLEMENTATION_LOOP_SECTION_MARKER in text
-    assert "Enable implementation loop" in text
-    assert "Loop check" in text
+    assert "Loop controls" in text
     assert "implementation-loop" in text
     assert "not a bug hunt" in text.lower()
 
@@ -1985,9 +2077,9 @@ def test_load_user_guide_appends_unified_vendor_section_when_readme_stale(tmp_pa
     assert "vendor-sync" in text
     assert "Legacy guide" in text
     assert IMPLEMENTATION_LOOP_SECTION_MARKER in text
-    assert "Loop check" in text
+    assert "Loop controls" in text
     assert AGNOSTIC_LOOP_SECTION_MARKER in text
-    assert "Enable agnostic loop" in text
+    assert "Agnostic loop" in text
 
 
 def test_load_user_guide_does_not_duplicate_unified_section(tmp_path: Path) -> None:
@@ -2093,9 +2185,9 @@ def test_implementation_loop_prompt_template_keeps_chat_and_home() -> None:
     assert found.title == "Start the implementation loop"
     assert found.prompt.lstrip().startswith("implementation loop")
     assert "@.cursor/commands/implementation-loop.md" in found.prompt
-    assert "Loop status" in found.prompt
-    assert "Loop check" in found.prompt
-    assert "Loop commit" in found.prompt
+    assert "Loop controls" in found.prompt
+    assert "check" in found.prompt
+    assert "commit" in found.prompt
 
 
 def test_get_agent_prompt_template_by_id() -> None:
@@ -2211,9 +2303,10 @@ def test_load_user_guide_fallback_mentions_agent_prompt_templates(tmp_path: Path
     cfg = LauncherConfig(hive_planner_root=str(tmp_path / "missing"))
     text = load_user_guide(cfg)
     assert "Agent prompt templates" in text
-    assert "Loop status" in text
+    assert "Loop controls" in text
     assert "implementation loop" in text
     assert "agnostic loop" in text
+    assert "Controls" in text
 
 
 def test_ci_check_hints_parses_vendor_missing_from_profile_step(tmp_path: Path) -> None:
@@ -2741,7 +2834,7 @@ def test_create_done_keeps_projects_context_via_soft_refresh(
     cfg = LauncherConfig(hive_planner_root=str(Path(__file__).resolve().parents[1]))
 
     app = HivePlannerApp.__new__(HivePlannerApp)
-    app._dashboard_tab = 1  # Projects
+    app._dashboard_tab = 2  # Projects
     refreshed: list[str] = []
     app._refresh_home_dashboard = lambda **_k: refreshed.append("refresh")  # type: ignore[method-assign]
     cleared: list[bool] = []
@@ -2761,7 +2854,7 @@ def test_create_done_keeps_projects_context_via_soft_refresh(
     app._create_done({"ok": True, "target": str(target.resolve())})
     assert refreshed == ["refresh"]
     assert cleared == [True]
-    assert app._dashboard_tab == 1
+    assert app._dashboard_tab == 2
 
 
 def test_clear_new_project_form_resets_name_and_target() -> None:

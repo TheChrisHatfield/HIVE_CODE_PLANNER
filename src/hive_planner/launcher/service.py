@@ -1466,6 +1466,170 @@ def run_project_agnostic_loop_install(project_root: Path) -> dict:
     return payload
 
 
+def peek_bug_hunt_status(project_root: Path) -> dict:
+    """Whether bug-hunt chat files are present in the linked project."""
+    from hive_planner.bug_hunt import missing_bug_hunt_artifacts
+
+    target, error = linked_install_directory(project_root)
+    if error:
+        return {"ok": False, "error": error, "installed": False, "missing": [], "action": "bug-hunt-status"}
+    missing = missing_bug_hunt_artifacts(target)
+    return {
+        "ok": True,
+        "action": "bug-hunt-status",
+        "installed": not missing,
+        "missing": missing,
+        "root": str(target),
+    }
+
+
+def peek_agnostic_loop_status(project_root: Path) -> dict:
+    """Whether hive-loop-kit files are present in the linked project."""
+    from hive_planner.agnostic_loop import missing_agnostic_loop_artifacts
+
+    target, error = linked_install_directory(project_root)
+    if error:
+        return {"ok": False, "error": error, "installed": False, "missing": [], "action": "agnostic-status"}
+    missing = missing_agnostic_loop_artifacts(target)
+    return {
+        "ok": True,
+        "action": "agnostic-status",
+        "installed": not missing,
+        "missing": missing,
+        "root": str(target),
+    }
+
+
+def _agnostic_linked_or_error(project_root: Path, action: str) -> tuple[Path | None, dict | None]:
+    from hive_planner.agnostic_loop import catalog_problem
+
+    target, error = linked_install_directory(project_root)
+    if error:
+        return None, {"ok": False, "error": error, "action": action}
+    try:
+        problem = catalog_problem(target)
+    except OSError as exc:
+        return None, {"ok": False, "error": str(exc), "action": action, "blocked_reason": str(exc)}
+    if problem:
+        return None, {"ok": False, "error": problem, "action": action, "blocked_reason": problem}
+    return target, None
+
+
+def _agnostic_gate_payload(payload: dict, *, root: Path) -> dict:
+    data = dict(payload)
+    data["root"] = str(root)
+    if data.get("ok") is False and not data.get("error"):
+        data["error"] = data.get("blocked_reason") or "blocked"
+    return data
+
+
+def run_project_agnostic_loop_rewards(project_root: Path) -> dict:
+    from hive_planner.agnostic_loop import rewards
+
+    target, fail = _agnostic_linked_or_error(project_root, "rewards")
+    if fail:
+        return fail
+    try:
+        names = list(rewards(target))
+    except OSError as exc:
+        return {"ok": False, "action": "rewards", "error": str(exc), "blocked_reason": str(exc)}
+    return {"ok": True, "action": "rewards", "rewards": names, "root": str(target)}
+
+
+def run_project_agnostic_loop_status(project_root: Path) -> dict:
+    from hive_planner.agnostic_loop import status
+
+    target, fail = _agnostic_linked_or_error(project_root, "status")
+    if fail:
+        return fail
+    try:
+        report = status(target)
+    except OSError as exc:
+        return {"ok": False, "action": "status", "error": str(exc), "blocked_reason": str(exc)}
+    return _agnostic_gate_payload(report, root=target)
+
+
+def run_project_agnostic_loop_arm(project_root: Path, reward: str, cycles: int) -> dict:
+    from hive_planner.agnostic_loop import arm
+
+    target, fail = _agnostic_linked_or_error(project_root, "arm")
+    if fail:
+        return fail
+    try:
+        payload, _code = arm(target, reward, cycles)
+    except OSError as exc:
+        return {"ok": False, "action": "arm", "error": str(exc), "blocked_reason": str(exc)}
+    return _agnostic_gate_payload(payload, root=target)
+
+
+def run_project_agnostic_loop_begin(project_root: Path) -> dict:
+    from hive_planner.agnostic_loop import begin
+
+    target, fail = _agnostic_linked_or_error(project_root, "begin")
+    if fail:
+        return fail
+    try:
+        payload, _code = begin(target)
+    except OSError as exc:
+        return {"ok": False, "action": "begin", "error": str(exc), "blocked_reason": str(exc)}
+    return _agnostic_gate_payload(payload, root=target)
+
+
+def run_project_agnostic_loop_review(project_root: Path, note: str) -> dict:
+    from hive_planner.agnostic_loop import review
+
+    target, fail = _agnostic_linked_or_error(project_root, "review")
+    if fail:
+        return fail
+    try:
+        payload, _code = review(target, note)
+    except OSError as exc:
+        return {"ok": False, "action": "review", "error": str(exc), "blocked_reason": str(exc)}
+    return _agnostic_gate_payload(payload, root=target)
+
+
+def run_project_agnostic_loop_observe(project_root: Path, reward: str, hit: bool) -> dict:
+    from hive_planner.agnostic_loop import observe
+
+    target, fail = _agnostic_linked_or_error(project_root, "observe")
+    if fail:
+        return fail
+    try:
+        payload, _code = observe(target, reward, hit)
+    except OSError as exc:
+        return {"ok": False, "action": "observe", "error": str(exc), "blocked_reason": str(exc)}
+    return _agnostic_gate_payload(payload, root=target)
+
+
+def run_project_agnostic_loop_choose(
+    project_root: Path,
+    open_text: str | None = None,
+    *,
+    do_arm: bool = False,
+    cycles: int = 1,
+) -> dict:
+    from hive_planner.agnostic_loop import choose, parse_open, rewards
+
+    target, fail = _agnostic_linked_or_error(project_root, "choose")
+    if fail:
+        return fail
+    try:
+        names = rewards(target)
+        opens = parse_open(open_text, names)
+        if opens is None:
+            return {
+                "ok": False,
+                "action": "choose",
+                "error": "invalid --open",
+                "blocked_reason": "invalid --open",
+                "root": str(target),
+            }
+        payload, _code = choose(target, opens, do_arm=do_arm, cycles=cycles, names=names)
+    except OSError as exc:
+        return {"ok": False, "action": "choose", "error": str(exc), "blocked_reason": str(exc)}
+    return _agnostic_gate_payload(payload, root=target)
+
+
 def linked_install_directory(project_root: Path) -> tuple[Path | None, str | None]:
     target = project_root.resolve()
     if not target.exists():
