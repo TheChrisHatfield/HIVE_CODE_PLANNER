@@ -1095,50 +1095,54 @@ def main(argv: list[str] | None = None, *, root: Path | None = None) -> int:
         cmd.add_argument("--arm", action="store_true")
         cmd.add_argument("--cycles", type=int, default=1)
     args = parser.parse_args(argv)
-    err = catalog_problem(root)
-    if err and args.cmd in {"rewards", "status", "arm", "begin", "review", "observe", "choose", "plan"}:
-        print(json.dumps({"ok": False, "action": args.cmd, "blocked_reason": err}))
-        return 3
-    names = rewards(root)
-    if args.cmd == "rewards":
-        print(json.dumps(sorted(names)))
-        return 0
-    if args.cmd == "arm":
-        payload, code = arm(root, args.reward, args.cycles)
+    try:
+        err = catalog_problem(root)
+        if err and args.cmd in {"rewards", "status", "arm", "begin", "review", "observe", "choose", "plan"}:
+            print(json.dumps({"ok": False, "action": args.cmd, "blocked_reason": err}))
+            return 3
+        names = rewards(root)
+        if args.cmd == "rewards":
+            print(json.dumps(sorted(names)))
+            return 0
+        if args.cmd == "arm":
+            payload, code = arm(root, args.reward, args.cycles)
+            print(json.dumps(payload))
+            return code
+        if args.cmd == "begin":
+            payload, code = begin(root)
+            print(json.dumps(payload))
+            return code
+        if args.cmd == "review":
+            payload, code = review(root, args.note)
+            print(json.dumps(payload))
+            return code
+        if args.cmd == "status":
+            report = status(root)
+            print(json.dumps(report))
+            return 0 if report.get("ok") is not False else 3
+        if args.cmd == "observe":
+            payload, code = observe(root, args.reward, args.hit, names)
+            print(json.dumps(payload))
+            return code
+        opens = parse_open(args.open, names)
+        if opens is None:
+            print(json.dumps({"ok": False, "action": "choose", "blocked_reason": "invalid --open"}))
+            return 3
+        payload, code = choose(
+            root,
+            opens,
+            sims=args.sims,
+            horizon=args.horizon,
+            seed=args.seed,
+            do_arm=args.arm,
+            cycles=args.cycles,
+            names=names,
+        )
         print(json.dumps(payload))
         return code
-    if args.cmd == "begin":
-        payload, code = begin(root)
-        print(json.dumps(payload))
-        return code
-    if args.cmd == "review":
-        payload, code = review(root, args.note)
-        print(json.dumps(payload))
-        return code
-    if args.cmd == "status":
-        report = status(root)
-        print(json.dumps(report))
-        return 0 if report.get("ok") is not False else 3
-    if args.cmd == "observe":
-        payload, code = observe(root, args.reward, args.hit, names)
-        print(json.dumps(payload))
-        return code
-    opens = parse_open(args.open, names)
-    if opens is None:
-        print(json.dumps({"ok": False, "action": "choose", "blocked_reason": "invalid --open"}))
-        return 3
-    payload, code = choose(
-        root,
-        opens,
-        sims=args.sims,
-        horizon=args.horizon,
-        seed=args.seed,
-        do_arm=args.arm,
-        cycles=args.cycles,
-        names=names,
-    )
-    print(json.dumps(payload))
-    return code
+    except OSError as exc:
+        print(json.dumps({"ok": False, "action": args.cmd, "blocked_reason": str(exc)}))
+        return 1
 
 
 if __name__ == "__main__":

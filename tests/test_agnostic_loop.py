@@ -360,6 +360,23 @@ def test_cli_rewards_and_status(tmp_path: Path, capsys: pytest.CaptureFixture[st
     assert code == 2
 
 
+def test_kit_main_arm_oserror_returns_json(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from hive_planner import agnostic_loop as engine
+
+    def boom(*_args, **_kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(engine, "arm", boom)
+    code = engine.main(["arm", "--reward", "inspect", "--cycles", "1"], root=tmp_path)
+    assert code == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is False
+    assert payload["action"] == "arm"
+    assert "disk full" in payload["blocked_reason"]
+
+
 def test_installed_kit_script_runs(tmp_path: Path) -> None:
     import subprocess
     import sys
