@@ -1429,6 +1429,9 @@ def test_app_registers_controls_tab() -> None:
     assert "def _on_controls_run" in text
     assert '"Loop controls"' in text
     assert '"Loop status"' not in text.split("def _build_home_tab", 1)[-1].split("def _build_controls_tab", 1)[0]
+    open_fn = text.split("def _on_open_loop_controls", 1)[-1].split("    def ", 1)[0]
+    assert '== "Controls"' in open_fn
+    assert "notebook.select(1)" not in open_fn
 
 
 def test_loop_install_failures_update_controls_last() -> None:

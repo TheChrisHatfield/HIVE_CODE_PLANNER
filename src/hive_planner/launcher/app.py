@@ -1284,12 +1284,13 @@ class HivePlannerApp:
         if notebook is None:
             return
         try:
-            tabs = notebook.tabs()
+            for index, tab in enumerate(notebook.tabs()):
+                if str(notebook.tab(tab, "text")) == "Controls":
+                    notebook.select(tab)
+                    self._dashboard_tab = index
+                    return
         except tk.TclError:
             return
-        if len(tabs) > 1:
-            notebook.select(1)
-            self._dashboard_tab = 1
 
     @classmethod
     def resolved_loop_command(cls, loop: str, command: str) -> tuple[str, str] | None:
