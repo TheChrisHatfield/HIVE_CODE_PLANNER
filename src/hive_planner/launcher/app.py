@@ -1285,9 +1285,27 @@ class HivePlannerApp:
             notebook.select(1)
             self._dashboard_tab = 1
 
+    @classmethod
+    def resolved_loop_command(cls, loop: str, command: str) -> tuple[str, str] | None:
+        loop_name = str(loop or "")
+        cmd = str(command or "")
+        choices = cls.LOOP_CONTROL_COMMANDS.get(loop_name)
+        if not choices or cmd not in choices:
+            return None
+        return loop_name, cmd
+
     def _on_controls_run(self) -> None:
         loop = str(self.controls_loop.get() if hasattr(self, "controls_loop") else "")
         command = str(self.controls_command.get() if hasattr(self, "controls_command") else "")
+        resolved = self.resolved_loop_command(loop, command)
+        if resolved is None:
+            messagebox.showwarning(
+                "Loop command",
+                "Pick a loop and a command that belong together, then Run.",
+            )
+            self._sync_controls_command_choices()
+            return
+        loop, command = resolved
         if loop == "Bug hunt":
             if command == "Enable":
                 self._on_bug_hunt_install()

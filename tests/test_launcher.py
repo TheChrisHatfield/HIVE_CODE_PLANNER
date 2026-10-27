@@ -1428,6 +1428,25 @@ def test_app_registers_controls_tab() -> None:
     assert '"Loop status"' not in text.split("def _build_home_tab", 1)[-1].split("def _build_controls_tab", 1)[0]
 
 
+def test_resolved_loop_command_rejects_pairs_from_another_loop() -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    assert HivePlannerApp.resolved_loop_command("Bug hunt", "Check install") == (
+        "Bug hunt",
+        "Check install",
+    )
+    assert HivePlannerApp.resolved_loop_command("Bug hunt", "Status") is None
+    assert HivePlannerApp.resolved_loop_command("Agnostic loop", "Commit") is None
+    assert HivePlannerApp.resolved_loop_command("Implementation loop", "Choose") is None
+    assert HivePlannerApp.resolved_loop_command("Implementation loop", "Check") == (
+        "Implementation loop",
+        "Check",
+    )
+    for loop, commands in HivePlannerApp.LOOP_CONTROL_COMMANDS.items():
+        for command in commands:
+            assert HivePlannerApp.resolved_loop_command(loop, command) == (loop, command)
+
+
 def test_controls_follow_active_repo_on_soft_refresh() -> None:
     source = Path(__file__).resolve().parents[1] / "src" / "hive_planner" / "launcher" / "app.py"
     text = source.read_text(encoding="utf-8")
