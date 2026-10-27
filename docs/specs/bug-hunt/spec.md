@@ -46,7 +46,7 @@ A core Hive Planner feature that installs the continuous bug-hunt agent script i
 
 ### R4 — Chat start signal
 
-- `is_bug_hunt_request(text)` is true for explicit phrases and derivatives whose meaning is to run a hunt: "bug hunt", typos ("bug hun", "bung hunt"), hyphenation, `/bug-hunt`, "hunt for bugs", "start hunting bugs", "run a bug hunt".
+- `is_bug_hunt_request(text)` is true for explicit phrases and derivatives whose meaning is to run a hunt: "bug hunt", typos ("bug hun", "bung hunt"), hyphenation, `/bug-hunt`, "hunt for bugs", "start hunting bugs", "run a bug hunt", "run another loop to fix bugs", "loop to fix bugs".
 - A question about the command itself (whether it works, where the file is, how to install it) is not a start signal.
 - The always-on rule tells the agent to read `.cursor/commands/bug-hunt.md` (fallback `scripts/bug-hunt.md`) and start the loop in the same turn — not to explain how to invoke it.
 

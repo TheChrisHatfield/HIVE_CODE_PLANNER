@@ -40,6 +40,9 @@ from hive_planner.cli import main
         "hunt some bugs",
         "please hunting for more bugs",
         "bu hunt",
+        "run another loop to fix bugs",
+        "loop to fix bugs",
+        "please run another loop to fix bugs",
     ],
 )
 def test_is_bug_hunt_request_starts_the_loop(text: str) -> None:
@@ -70,6 +73,7 @@ def test_cursor_rule_matches_derivative_phrases() -> None:
     rule = render_cursor_rule()
     assert "alwaysApply: true" in rule
     assert "hunt for bugs" in rule
+    assert "run another loop to fix bugs" in rule
     assert "Match intent" in rule
     assert "how to install" in rule
     assert "Do not stop after one bug" in rule

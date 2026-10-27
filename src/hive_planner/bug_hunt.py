@@ -38,6 +38,8 @@ TRIGGER_PHRASES = (
     "bug hunts",
     "hunt some bugs",
     "hunting for more bugs",
+    "run another loop to fix bugs",
+    "loop to fix bugs",
 )
 
 _COMMAND_QUESTION = re.compile(
@@ -48,6 +50,9 @@ _DOCS_QUESTION = re.compile(
 )
 _HUNT_BUGS = re.compile(
     r"(?i)\bhunt(?:ing)?(?:\s+(?:for|some|those|these|more|any|the))*\s+bugs?\b"
+)
+_LOOP_FIX_BUGS = re.compile(
+    r"(?i)\b(?:run\s+)?(?:another\s+)?loop\s+to\s+fix\s+bugs\b"
 )
 _BUG_HUNT = re.compile(r"(?i)\bbu(?:g|ng|n)?\s*-?\s*hun(?:t(?:s|ing)?)?\b")
 _SLASH = re.compile(r"(?i)(?:^|\s)/bug-?hunt\b")
@@ -100,6 +105,7 @@ def is_bug_hunt_request(text: str) -> bool:
         or _COMPOUND.search(raw)
         or _BUG_HUNT.search(raw)
         or _HUNT_BUGS.search(raw)
+        or _LOOP_FIX_BUGS.search(raw)
     )
     if not has_signal:
         return False
