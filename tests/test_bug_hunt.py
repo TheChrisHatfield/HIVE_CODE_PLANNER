@@ -89,6 +89,13 @@ def test_prompt_keeps_the_loop_moving() -> None:
     assert "I did not reproduce it this session" in text
 
 
+def test_install_leaves_no_tmp_bug_hunt_files(tmp_path: Path) -> None:
+    install_bug_hunt(tmp_path, iterations=50)
+    leftovers = [path for path in tmp_path.rglob("*.tmp") if path.is_file()]
+    assert leftovers == []
+    assert (tmp_path / ".cursor" / "commands" / "bug-hunt.md").is_file()
+
+
 def test_install_writes_command_and_packet(tmp_path: Path) -> None:
     result = install_bug_hunt(tmp_path, iterations=50)
     command = (tmp_path / ".cursor" / "commands" / "bug-hunt.md").read_text(encoding="utf-8")
