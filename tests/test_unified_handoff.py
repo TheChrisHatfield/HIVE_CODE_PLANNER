@@ -594,6 +594,31 @@ def test_deploy_continual_learning_overlay_registers_workspace_open(tmp_path: Pa
     assert ".cursor/hooks/hive_workspace_open.py" in written
 
 
+def test_deploy_cl_overlay_merges_workspace_open_into_existing_hooks(tmp_path: Path) -> None:
+    """Home deploy must not wipe other Cursor hook events already in hooks.json."""
+    from hive_planner.vendor_sync import deploy_continual_learning_overlay
+
+    project = tmp_path / "project"
+    cursor = project / ".cursor"
+    cursor.mkdir(parents=True)
+    (cursor / "hooks.json").write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "hooks": {"sessionStart": [{"command": "echo keep-me"}]},
+            }
+        ),
+        encoding="utf-8",
+    )
+    deploy_continual_learning_overlay(_hive_repo_root(), project, force=True)
+
+    data = json.loads((cursor / "hooks.json").read_text(encoding="utf-8"))
+    assert data["hooks"]["sessionStart"][0]["command"] == "echo keep-me"
+    workspace = json.dumps(data["hooks"]["workspaceOpen"])
+    assert "hive_workspace_open.py" in workspace
+    assert (cursor / "hooks" / "hive_workspace_open.py").is_file()
+
+
 def test_deploy_continual_learning_overlay_refreshes_when_patch_rev_changes(tmp_path: Path) -> None:
     from hive_planner.vendor_sync import deploy_continual_learning_overlay, packaged_continual_learning_overlay_path
 

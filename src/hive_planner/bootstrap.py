@@ -123,6 +123,60 @@ def _cursor_hooks_template_dir() -> Path:
     return Path(__file__).resolve().parent / "bootstrap_templates" / ".cursor"
 
 
+_WORKSPACE_OPEN_COMMAND = "py -3.11 .cursor/hooks/hive_workspace_open.py"
+_WORKSPACE_OPEN_MARKER = "hive_workspace_open.py"
+
+
+def _ensure_workspace_open_hooks_json(
+    target: Path,
+    *,
+    force: bool,
+    written: list[str],
+    warnings: list[str],
+) -> None:
+    """Add workspaceOpen without replacing other Cursor hook events already on disk."""
+    rel = ".cursor/hooks.json"
+    dest = target / rel
+    templates = _cursor_hooks_template_dir()
+    template_path = templates / "hooks.json"
+    if not dest.is_file():
+        _copy_file(template_path, target, rel, force=True, written=written)
+        return
+    try:
+        data = json.loads(dest.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        if force:
+            _copy_file(template_path, target, rel, force=True, written=written)
+        else:
+            warnings.append("Existing .cursor/hooks.json is not valid JSON — workspaceOpen not merged")
+        return
+    if not isinstance(data, dict):
+        if force:
+            _copy_file(template_path, target, rel, force=True, written=written)
+        else:
+            warnings.append("Existing .cursor/hooks.json is not a JSON object — workspaceOpen not merged")
+        return
+    hooks = data.get("hooks")
+    if not isinstance(hooks, dict):
+        hooks = {}
+        data["hooks"] = hooks
+    events = hooks.get("workspaceOpen")
+    if not isinstance(events, list):
+        events = []
+        hooks["workspaceOpen"] = events
+    already = any(
+        isinstance(item, dict) and _WORKSPACE_OPEN_MARKER in str(item.get("command", ""))
+        for item in events
+    )
+    if already:
+        return
+    events.append({"command": _WORKSPACE_OPEN_COMMAND})
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    if rel not in written:
+        written.append(rel)
+
+
 def _copy_cursor_workspace_plugin_hooks(
     target: Path,
     *,
@@ -132,9 +186,8 @@ def _copy_cursor_workspace_plugin_hooks(
 ) -> None:
     """Deploy workspaceOpen so Cursor 3.x loads `.cursor/plugins/hive-continual-learning`."""
     templates = _cursor_hooks_template_dir()
-    hooks_json = templates / "hooks.json"
     hook_script = templates / "hooks" / "hive_workspace_open.py"
-    _copy_file(hooks_json, target, ".cursor/hooks.json", force=force, written=written)
+    _ensure_workspace_open_hooks_json(target, force=force, written=written, warnings=warnings)
     _copy_file(
         hook_script,
         target,
