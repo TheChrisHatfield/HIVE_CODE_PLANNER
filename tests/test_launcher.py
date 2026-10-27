@@ -1302,6 +1302,19 @@ def test_peek_implementation_loop_pack_uses_workspace_folder(tmp_path: Path) -> 
     assert parent_peek.get("pack") is None
 
 
+def test_peek_implementation_loop_pack_reports_corrupt_state(tmp_path: Path) -> None:
+    from hive_planner.implementation_loop import PACK_4, install_implementation_loop
+
+    folder = tmp_path / "app"
+    folder.mkdir()
+    install_implementation_loop(folder, PACK_4)
+    (folder / ".hive" / "implementation-loop" / "state.json").write_text("{not json", encoding="utf-8")
+    peek = peek_implementation_loop_pack(folder)
+    assert peek["ok"] is False
+    assert peek.get("pack") is None
+    assert "not valid JSON" in str(peek.get("error") or "")
+
+
 def test_run_project_implementation_loop_status_uses_workspace_folder(tmp_path: Path) -> None:
     from hive_planner.implementation_loop import PACK_4, install_implementation_loop
 

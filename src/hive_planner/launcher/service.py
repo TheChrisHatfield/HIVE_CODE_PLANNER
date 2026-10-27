@@ -1646,11 +1646,19 @@ def linked_install_directory(project_root: Path) -> tuple[Path | None, str | Non
 
 def peek_implementation_loop_pack(project_root: Path) -> dict:
     """Read the installed pack from the same folder install will use."""
-    from hive_planner.implementation_loop import read_installed_pack
+    from hive_planner.implementation_loop import (
+        LOOP_DIR,
+        _read_existing_json_object,
+        read_installed_pack,
+    )
 
     target, error = linked_install_directory(project_root)
     if error:
         return {"ok": False, "error": error, "pack": None}
+    try:
+        _read_existing_json_object(target / LOOP_DIR / "state.json", "state.json")
+    except ValueError as exc:
+        return {"ok": False, "error": str(exc), "pack": None, "root": str(target)}
     return {"ok": True, "pack": read_installed_pack(target), "root": str(target)}
 
 
