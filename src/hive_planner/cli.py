@@ -280,6 +280,14 @@ def main(argv: list[str] | None = None) -> int:
         help="cursor = Hive vendored Cursor plugin; headless/external = CLI agents-propose path",
     )
 
+    notify_parser = sub.add_parser(
+        "notify",
+        help="Show an IDE-agnostic desktop notice (no chat prompt)",
+    )
+    notify_parser.add_argument("--title", default="Hive Planner")
+    notify_parser.add_argument("--body", required=True)
+    notify_parser.add_argument("--seconds", type=int, default=12)
+
     translate_parser = sub.add_parser("translate", help="Rule-based cartridge draft translation")
     translate_parser.add_argument("--input", required=True, type=Path, help="Research markdown input file")
     translate_parser.add_argument("--feature", required=True, help="Feature name for micro/spec outputs")
@@ -593,6 +601,18 @@ def main(argv: list[str] | None = None) -> int:
             "Use --root or run from the Hive Code Planner directory.",
             file=sys.stderr,
         )
+
+    if args.command == "notify":
+        from hive_planner.notify import notify, notifier_script
+
+        if not notifier_script().is_file():
+            print("Error: Hive notify script is missing.", file=sys.stderr)
+            return 1
+        if not notify(args.title, args.body, seconds=args.seconds):
+            print("Error: Hive notice exited before it stayed open.", file=sys.stderr)
+            return 1
+        print(json.dumps({"ok": True, "title": args.title}))
+        return 0
 
     if args.command == "init":
         from hive_planner.bootstrap import BootstrapError, init_project

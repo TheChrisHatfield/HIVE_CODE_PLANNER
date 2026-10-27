@@ -25,6 +25,8 @@ Unified bootstrap copies this plugin to `.cursor/plugins/hive-continual-learning
 
 Same upstream architecture: `stop` hook → `continual-learning` skill → `agents-memory-updater` subagent.
 
+When a memory check is due, the stop hook returns `{}` and starts `hooks/hive_notify.py`. That opens a desktop popup over whatever IDE is in front. It does not submit a chat prompt, so the model is not handed a new subject. `py -3.11 -m hive_planner notify --body "..."` raises the same popup from any script.
+
 Hive additions: wiring audit gate, behavioral routing, autonomous memory routing via Hive CLI, spec-drift parity with CLI.
 
 ## Runtime (Cursor 3.x)

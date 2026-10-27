@@ -5,17 +5,11 @@ import { dirname, resolve } from "node:path";
 import { stdin } from "bun";
 
 const STATE_PATH = resolve(".cursor/hooks/state/continual-learning.json");
-const INCREMENTAL_INDEX_PATH = resolve(
-  ".cursor/hooks/state/continual-learning-index.json"
-);
 const DEFAULT_MIN_TURNS = 10;
 const DEFAULT_MIN_MINUTES = 120;
 const TRIAL_DEFAULT_MIN_TURNS = 3;
 const TRIAL_DEFAULT_MIN_MINUTES = 15;
 const TRIAL_DEFAULT_DURATION_MINUTES = 24 * 60;
-
-const FOLLOWUP_MESSAGE =
-  `Run the \`continual-learning\` skill now. Use the \`agents-memory-updater\` subagent for the full memory update flow. Use incremental transcript processing with index file \`${INCREMENTAL_INDEX_PATH}\`: only consider transcripts not in the index or transcripts whose mtime is newer than indexed mtime. Have the subagent refresh index mtimes, remove entries for deleted transcripts, and update \`AGENTS.md\` only for high-signal recurring user corrections and durable workspace facts. Exclude one-off/transient details and secrets. If no meaningful updates exist, respond exactly: No high-signal memory updates.`;
 
 interface StopHookInput {
   conversation_id: string;
@@ -224,11 +218,9 @@ async function main(): Promise<number> {
       state.lastTranscriptMtimeMs = transcriptMtimeMs;
       saveState(state);
 
-      console.log(
-        JSON.stringify({
-          followup_message: FOLLOWUP_MESSAGE,
-        })
-      );
+      // The Python hook shows a desktop popup. This TypeScript reference
+      // must not submit a chat prompt.
+      console.log(JSON.stringify({}));
       return 0;
     }
 

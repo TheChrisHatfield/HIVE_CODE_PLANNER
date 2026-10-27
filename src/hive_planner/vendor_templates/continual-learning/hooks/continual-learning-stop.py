@@ -3,33 +3,28 @@
 Cursor 3.x plugin hooks run with cwd = workspace root. Upstream used Bun;
 this repo targets Windows + Python 3.11 without requiring Bun.
 
-Stdout must always be valid JSON (`{}` or `{followup_message: ...}`).
+Stdout must always be valid JSON (`{}`). A due memory check opens a desktop
+popup and does not submit a chat prompt.
 """
 from __future__ import annotations
 
 import json
 import os
+import subprocess
 import sys
 from pathlib import Path
 
 STATE_PATH = Path(".cursor/hooks/state/continual-learning.json")
-INCREMENTAL_INDEX_PATH = Path(".cursor/hooks/state/continual-learning-index.json")
 DEFAULT_MIN_TURNS = 10
 DEFAULT_MIN_MINUTES = 120
 TRIAL_DEFAULT_MIN_TURNS = 3
 TRIAL_DEFAULT_MIN_MINUTES = 15
 TRIAL_DEFAULT_DURATION_MINUTES = 24 * 60
 
-FOLLOWUP_MESSAGE = (
-    "Run the `continual-learning` skill now. Use the `agents-memory-updater` "
-    "subagent for the full memory update flow. Use incremental transcript "
-    f"processing with index file `{INCREMENTAL_INDEX_PATH.as_posix()}`: only "
-    "consider transcripts not in the index or transcripts whose mtime is newer "
-    "than indexed mtime. Have the subagent refresh index mtimes, remove entries "
-    "for deleted transcripts, and update `AGENTS.md` only for high-signal "
-    "recurring user corrections and durable workspace facts. Exclude "
-    "one-off/transient details and secrets. If no meaningful updates exist, "
-    "respond exactly: No high-signal memory updates."
+NOTICE_TITLE = "Hive Planner"
+NOTICE_BODY = (
+    "Automatic memory check. You did not type this. "
+    "Hive left your chat on the task you were doing."
 )
 
 
@@ -107,6 +102,59 @@ def _transcript_mtime_ms(transcript_path: str | None) -> float | None:
 
 def _should_count_turn(payload: dict) -> bool:
     return payload.get("status") == "completed" and payload.get("loop_count") == 0
+
+
+def _notice_stayed_open(proc: subprocess.Popen[bytes]) -> bool:
+    try:
+        code = proc.wait(timeout=0.6)
+    except subprocess.TimeoutExpired:
+        return True
+    if code != 0:
+        print(f"[continual-learning-stop] notify exited {code}", file=sys.stderr)
+        return False
+    return True
+
+
+def _show_user_notice() -> bool:
+    """Popup over the desktop. False when the window never stays up."""
+    script = Path(__file__).with_name("hive_notify.py")
+    if not script.is_file():
+        print(f"[continual-learning-stop] notify script missing: {script}", file=sys.stderr)
+        return False
+    cmd = [
+        sys.executable,
+        str(script),
+        "--title",
+        NOTICE_TITLE,
+        "--body",
+        NOTICE_BODY,
+    ]
+    env = os.environ.copy()
+    dry = env.get("HIVE_NOTIFY_DRY_RUN") == "1"
+    try:
+        if dry:
+            completed = subprocess.run(cmd, check=False, env=env, capture_output=True, text=True)
+            return completed.returncode == 0
+        kwargs: dict = {
+            "stdin": subprocess.DEVNULL,
+            "stdout": subprocess.DEVNULL,
+            "stderr": subprocess.DEVNULL,
+            "close_fds": True,
+            "env": env,
+        }
+        if sys.platform == "win32":
+            kwargs["creationflags"] = (
+                subprocess.DETACHED_PROCESS
+                | subprocess.CREATE_NEW_PROCESS_GROUP
+                | subprocess.CREATE_NO_WINDOW
+            )
+        else:
+            kwargs["start_new_session"] = True
+        proc = subprocess.Popen(cmd, **kwargs)
+    except OSError as exc:
+        print(f"[continual-learning-stop] notify failed: {exc}", file=sys.stderr)
+        return False
+    return _notice_stayed_open(proc)
 
 
 def main() -> int:
@@ -191,11 +239,14 @@ def main() -> int:
         )
 
         if should_trigger:
-            state["lastRunAtMs"] = now
-            state["turnsSinceLastRun"] = 0
-            state["lastTranscriptMtimeMs"] = transcript_mtime_ms
+            if _show_user_notice():
+                state["lastRunAtMs"] = now
+                state["turnsSinceLastRun"] = 0
+                state["lastTranscriptMtimeMs"] = transcript_mtime_ms
+            else:
+                state["turnsSinceLastRun"] = turns_since_last_run
             _save_state(state)
-            print(json.dumps({"followup_message": FOLLOWUP_MESSAGE}))
+            print(json.dumps({}))
             return 0
 
         state["turnsSinceLastRun"] = turns_since_last_run
