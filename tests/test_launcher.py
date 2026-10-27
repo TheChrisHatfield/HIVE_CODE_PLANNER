@@ -1631,6 +1631,25 @@ def test_on_bug_hunt_install_sends_workspace_link_to_service(
     assert not any("Bug hunt enabled" in line for line in lines)
 
 
+def test_start_home_action_updates_controls_last_when_home_log_exists() -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    class Var:
+        def __init__(self) -> None:
+            self.value = ""
+
+        def set(self, text: str) -> None:
+            self.value = text
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.controls_last = Var()
+    app._remember_home_log = lambda *_a, **_k: None  # type: ignore[method-assign]
+    app.home_log = object()
+    app._append_log = lambda *_a, **_k: None  # type: ignore[method-assign]
+    app._start_home_action("Starting implementation loop…")
+    assert app.controls_last.value == "Starting implementation loop…"
+
+
 def test_on_bug_hunt_install_rejects_out_of_range_iterations(monkeypatch: pytest.MonkeyPatch) -> None:
     from hive_planner.launcher.app import HivePlannerApp
 

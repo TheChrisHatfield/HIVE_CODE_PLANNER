@@ -872,6 +872,7 @@ class HivePlannerApp:
         if not text:
             return
         self._remember_home_log(text)
+        self._set_controls_last(text)
         if hasattr(self, "home_log"):
             try:
                 self._append_log(self.home_log, text)
