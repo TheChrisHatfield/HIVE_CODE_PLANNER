@@ -303,6 +303,32 @@ def test_init_with_flag_installs_agnostic_loop(tmp_path: Path) -> None:
     assert (target / "skills" / "lay-footnote" / "SKILL.md").is_file()
 
 
+def test_home_install_wrapper_fails_when_kit_incomplete(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from hive_planner.launcher.service import run_project_agnostic_loop_install
+
+    root = tmp_path / "proj"
+    root.mkdir()
+    monkeypatch.setattr("hive_planner.agnostic_loop.install_agnostic_loop", lambda target: [])
+    monkeypatch.setattr(
+        "hive_planner.agnostic_loop.missing_agnostic_loop_artifacts",
+        lambda target: ["scripts/agnostic_loop.py"],
+    )
+    result = run_project_agnostic_loop_install(root)
+    assert result["ok"] is False
+    assert "incomplete" in result["error"]
+
+
+def test_home_install_wrapper_writes_kit(tmp_path: Path) -> None:
+    from hive_planner.agnostic_loop import missing_agnostic_loop_artifacts
+    from hive_planner.launcher.service import run_project_agnostic_loop_install
+
+    root = tmp_path / "proj"
+    root.mkdir()
+    result = run_project_agnostic_loop_install(root)
+    assert result["ok"] is True
+    assert missing_agnostic_loop_artifacts(root) == []
+
+
 def test_init_with_flag_fails_when_agnostic_install_incomplete(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from hive_planner.bootstrap import BootstrapError, init_project
     from hive_planner.config import RepoPaths

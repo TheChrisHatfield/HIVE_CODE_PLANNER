@@ -1447,6 +1447,25 @@ def run_project_bug_hunt_install(
     return payload
 
 
+def run_project_agnostic_loop_install(project_root: Path) -> dict:
+    """Install the pause-cycle agnostic loop into a linked project."""
+    from hive_planner.agnostic_loop import install_agnostic_loop, missing_agnostic_loop_artifacts
+
+    target, error = linked_install_directory(project_root)
+    if error:
+        return {"ok": False, "error": error}
+    try:
+        written = install_agnostic_loop(target)
+    except OSError as exc:
+        return {"ok": False, "error": str(exc)}
+    payload = {"ok": True, "files_written": written, "root": str(target)}
+    missing = missing_agnostic_loop_artifacts(target)
+    if missing:
+        payload["ok"] = False
+        payload["error"] = "Agnostic-loop install incomplete — missing: " + ", ".join(missing)
+    return payload
+
+
 def linked_install_directory(project_root: Path) -> tuple[Path | None, str | None]:
     target = project_root.resolve()
     if not target.exists():

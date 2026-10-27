@@ -42,6 +42,7 @@ from hive_planner.launcher.service import (
     run_install,
     run_legacy_deployment_scan,
     run_cl_migrate,
+    run_project_agnostic_loop_install,
     run_project_bug_hunt_install,
     peek_implementation_loop_pack,
     run_project_implementation_loop_accept,
@@ -937,6 +938,12 @@ class HivePlannerApp:
             "Enable implementation loop",
             self._on_implementation_loop_install,
             tooltip="Install the post-spec coding loop (1-pack or 4-pack). Then use Loop status / start / handoff / check / accept / commit, or say implementation loop in chat.",
+        )
+        secondary_button(
+            actions,
+            "Enable agnostic loop",
+            self._on_agnostic_loop_install,
+            tooltip="Install the hive-loop-kit (scripts, catalog, skill). Arm a catalog reward, open one hook, pause, review. Not a bug hunt and not the implementation loop.",
         )
 
         loop_actions = tk.Frame(body, bg=COLORS["bg"])
@@ -2762,6 +2769,29 @@ class HivePlannerApp:
         self._queue_home_log(
             f"Bug hunt enabled ({count} file(s), {iterations} iterations). "
             "In any Cursor chat on this project, say bug hunt — or hunt for bugs / start a bug hunt."
+        )
+        self._refresh_home_dashboard()
+
+    def _on_agnostic_loop_install(self) -> None:
+        if not self.config.active_project:
+            messagebox.showwarning("No project", "Link a workspace first.")
+            return
+        link = Path(self.config.active_project)
+        self._start_home_action("Installing hive-loop-kit…")
+        self._run_bg(
+            lambda r=link: run_project_agnostic_loop_install(r),
+            self._project_done_callback("Agnostic-loop install", self._agnostic_loop_install_done),
+        )
+
+    def _agnostic_loop_install_done(self, result: dict) -> None:
+        if self._is_bg_error(result) or result.get("ok") is not True:
+            self._queue_home_log(self._result_detail(result))
+            self._refresh_home_dashboard()
+            return
+        count = len(result.get("files_written") or [])
+        self._queue_home_log(
+            f"Agnostic loop enabled ({count} file(s)). "
+            "Say agnostic loop or hive loop kit in Cursor chat, or use CLI agnostic-loop arm/begin/review."
         )
         self._refresh_home_dashboard()
 

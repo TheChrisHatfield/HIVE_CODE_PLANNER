@@ -222,6 +222,16 @@ Start this project's implementation loop now. Read @.cursor/commands/implementat
 Hive Planner Home can run the same Python coordinator gates without typing: Loop status, Loop start, Loop handoff, Loop check, Loop accept, and Loop commit. Chat and Home are both valid. Do not explain how to invoke the command.""",
         ),
         AgentPromptTemplate(
+            id="change.agnostic_loop",
+            title="Start the agnostic loop",
+            description="Trigger the pause-cycle kit chooser (hive-loop-kit), or Home Enable agnostic loop.",
+            prompt="""agnostic loop
+
+Start this project's agnostic loop now. Read @.cursor/commands/agnostic-loop.md (or @scripts/agnostic-loop.md if the command is missing) and execute it in this turn.
+
+This is not the implementation loop and not a bug hunt. Home Enable agnostic loop installs the same files. Do not explain how to invoke the command.""",
+        ),
+        AgentPromptTemplate(
             id="planning.external_rosetta",
             title="External planning — Rosetta session (Gemini / Perplexity)",
             description="Paste after uploading the ejected Rosetta contract in a non-Cursor planning AI.",

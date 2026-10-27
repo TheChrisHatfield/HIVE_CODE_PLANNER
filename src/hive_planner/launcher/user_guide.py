@@ -21,6 +21,7 @@ Daily use:
   Home → Run health check before handoff
   Home → Enable bug hunt — then say "bug hunt" (or hunt for bugs) in any Cursor chat
   Home → Enable implementation loop — then Loop status / start / handoff / check / accept / commit, or say "implementation loop" in chat
+  Home → Enable agnostic loop — installs the hive-loop-kit (arm / begin / review), or say "agnostic loop" / "hive loop kit"
   Home → Verify vendor pins / Scan legacy deployment (unified handoff)
   Home → Open in Cursor
 
