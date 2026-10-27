@@ -1335,11 +1335,11 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"  - {rel}")
             return 0
         try:
+            err = catalog_problem(root)
+            if err:
+                print(json.dumps({"ok": False, "action": cmd, "blocked_reason": err}, indent=2))
+                return 3
             if cmd == "rewards":
-                err = catalog_problem(root)
-                if err:
-                    print(json.dumps({"ok": False, "action": "rewards", "blocked_reason": err}, indent=2))
-                    return 3
                 print(json.dumps(sorted(rewards(root)), indent=2))
                 return 0
             if cmd == "status":

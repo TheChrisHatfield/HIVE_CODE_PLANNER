@@ -227,6 +227,22 @@ def test_malformed_refill_keeps_valid_rewards(tmp_path: Path) -> None:
     assert code == 0
 
 
+def test_cli_choose_invalid_catalog_not_invalid_open(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    from hive_planner.cli import main
+
+    root = tmp_path / "proj"
+    root.mkdir()
+    folder = root / ".hive" / "agnostic-loop"
+    folder.mkdir(parents=True)
+    (folder / "catalog.json").write_text("[]", encoding="utf-8")
+    code = main(["--root", str(root), "agnostic-loop", "choose", "--open", "custom=1"])
+    assert code == 3
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is False
+    assert "catalog.json" in payload["blocked_reason"]
+    assert payload["action"] == "choose"
+
+
 def test_invalid_catalog_refuses_arm(tmp_path: Path) -> None:
     root = tmp_path / "proj"
     root.mkdir()
