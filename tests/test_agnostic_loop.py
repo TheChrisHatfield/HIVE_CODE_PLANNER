@@ -248,6 +248,21 @@ def test_replaced_catalog_is_used(tmp_path: Path) -> None:
     assert payload["hook"] == "custom.00"
 
 
+def test_cli_arm_oserror_returns_json(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    from hive_planner.cli import main
+
+    def boom(*_args, **_kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr("hive_planner.agnostic_loop.arm", boom)
+    code = main(["--root", str(tmp_path), "agnostic-loop", "arm", "--reward", "inspect", "--cycles", "1"])
+    assert code == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is False
+    assert payload["action"] == "arm"
+    assert "disk full" in payload["blocked_reason"]
+
+
 def test_cli_rewards_and_status(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     from hive_planner.cli import main
 

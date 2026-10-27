@@ -1333,46 +1333,50 @@ def main(argv: list[str] | None = None) -> int:
             for rel in written:
                 print(f"  - {rel}")
             return 0
-        if cmd == "rewards":
-            print(json.dumps(sorted(rewards(root)), indent=2))
-            return 0
-        if cmd == "status":
-            print(json.dumps(status(root), indent=2))
-            return 0
-        if cmd == "arm":
-            payload, code = arm(root, args.reward, args.cycles)
-            print(json.dumps(payload, indent=2))
-            return code
-        if cmd == "begin":
-            payload, code = begin(root)
-            print(json.dumps(payload, indent=2))
-            return code
-        if cmd == "review":
-            payload, code = review(root, args.note)
-            print(json.dumps(payload, indent=2))
-            return code
-        if cmd == "observe":
-            payload, code = observe(root, args.reward, args.hit)
-            print(json.dumps(payload, indent=2))
-            return code
-        if cmd == "choose":
-            names = rewards(root)
-            opens = parse_open(args.open, names)
-            if opens is None:
-                print(json.dumps({"ok": False, "action": "choose", "blocked_reason": "invalid --open"}, indent=2))
-                return 3
-            payload, code = choose(
-                root,
-                opens,
-                sims=args.sims,
-                horizon=args.horizon,
-                seed=args.seed,
-                do_arm=args.arm,
-                cycles=args.cycles,
-                names=names,
-            )
-            print(json.dumps(payload, indent=2))
-            return code
+        try:
+            if cmd == "rewards":
+                print(json.dumps(sorted(rewards(root)), indent=2))
+                return 0
+            if cmd == "status":
+                print(json.dumps(status(root), indent=2))
+                return 0
+            if cmd == "arm":
+                payload, code = arm(root, args.reward, args.cycles)
+                print(json.dumps(payload, indent=2))
+                return code
+            if cmd == "begin":
+                payload, code = begin(root)
+                print(json.dumps(payload, indent=2))
+                return code
+            if cmd == "review":
+                payload, code = review(root, args.note)
+                print(json.dumps(payload, indent=2))
+                return code
+            if cmd == "observe":
+                payload, code = observe(root, args.reward, args.hit)
+                print(json.dumps(payload, indent=2))
+                return code
+            if cmd == "choose":
+                names = rewards(root)
+                opens = parse_open(args.open, names)
+                if opens is None:
+                    print(json.dumps({"ok": False, "action": "choose", "blocked_reason": "invalid --open"}, indent=2))
+                    return 3
+                payload, code = choose(
+                    root,
+                    opens,
+                    sims=args.sims,
+                    horizon=args.horizon,
+                    seed=args.seed,
+                    do_arm=args.arm,
+                    cycles=args.cycles,
+                    names=names,
+                )
+                print(json.dumps(payload, indent=2))
+                return code
+        except OSError as exc:
+            print(json.dumps({"ok": False, "action": cmd, "blocked_reason": str(exc)}, indent=2))
+            return 1
         return 1
 
     return 1
