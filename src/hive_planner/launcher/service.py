@@ -1847,6 +1847,86 @@ def run_project_map_sync(project_root: Path, *, dry_run: bool = False) -> dict:
     }
 
 
+def peek_hive_planner_mcp(project_root: Path, config: LauncherConfig) -> dict:
+    """Whether the active project lets a Cursor agent call this Hive Planner over MCP."""
+    from hive_planner.launcher.mcp_servers import (
+        HIVE_PLANNER_MCP_NAME,
+        McpConfigError,
+        format_mcp_args,
+        hive_planner_mcp_enabled,
+        hive_planner_stdio_launch,
+        load_mcp_document,
+        mcp_config_path,
+    )
+
+    target, error = linked_install_directory(project_root)
+    if error:
+        return {"ok": False, "error": error, "enabled": False}
+    path = mcp_config_path(target)
+    try:
+        command, args = hive_planner_stdio_launch(config)
+    except McpConfigError as exc:
+        return {"ok": False, "error": str(exc), "enabled": False, "root": str(target)}
+    try:
+        doc = load_mcp_document(target)
+    except McpConfigError as exc:
+        return {
+            "ok": False,
+            "error": str(exc),
+            "enabled": False,
+            "path": str(path),
+            "root": str(target),
+        }
+    servers = doc.get("mcpServers")
+    entry = servers.get(HIVE_PLANNER_MCP_NAME) if isinstance(servers, dict) else None
+    enabled = hive_planner_mcp_enabled(doc)
+    proposed = " ".join([command, format_mcp_args(args)]).strip()
+    snippet = proposed
+    if isinstance(entry, dict) and str(entry.get("command") or "").strip():
+        stored_args = entry.get("args") if isinstance(entry.get("args"), list) else []
+        stored = " ".join(
+            [str(entry.get("command")).strip(), format_mcp_args([str(part) for part in stored_args])]
+        ).strip()
+        if stored:
+            snippet = stored
+    return {
+        "ok": True,
+        "enabled": enabled,
+        "path": str(path),
+        "root": str(target),
+        "name": HIVE_PLANNER_MCP_NAME,
+        "launch_command": command,
+        "launch_args": args,
+        "launch_snippet": snippet,
+        "entry": entry if isinstance(entry, dict) else None,
+    }
+
+
+def run_set_hive_planner_mcp(project_root: Path, config: LauncherConfig, *, enabled: bool) -> dict:
+    """Write or disable the hive-planner entry in the linked project's `.cursor/mcp.json`."""
+    from hive_planner.launcher.mcp_servers import (
+        McpConfigError,
+        hive_planner_stdio_launch,
+        load_mcp_document,
+        save_mcp_document,
+        set_hive_planner_mcp,
+    )
+
+    target, error = linked_install_directory(project_root)
+    if error:
+        return {"ok": False, "error": error, "enabled": False}
+    try:
+        command, args = hive_planner_stdio_launch(config)
+        doc = load_mcp_document(target)
+        set_hive_planner_mcp(doc, enabled=enabled, command=command, args=args)
+        save_mcp_document(target, doc)
+    except (McpConfigError, OSError) as exc:
+        return {"ok": False, "error": str(exc), "enabled": False, "root": str(target)}
+    payload = peek_hive_planner_mcp(target, config)
+    payload["action"] = "enable" if enabled else "disable"
+    return payload
+
+
 _CARTRIDGE_IMPORT_SUFFIXES = {".md", ".json", ".mdc", ".seed"}
 
 
