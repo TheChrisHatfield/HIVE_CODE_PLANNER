@@ -101,6 +101,7 @@ Perplexity research
   -> Cursor reads START_HERE + Rosetta + active task
   -> Spec Kit spec.md + plan.md + tasks.md
   -> optional implementation loop (Python start/handoff/accept/commit; Cursor role passes)
+  -> optional agnostic loop (install hive-loop-kit; Python arm/begin/review/choose; replaceable catalog)
   -> validate -> retrospective proposals -> optional AGENTS.md promotion
 ```
 
