@@ -190,6 +190,26 @@ def _install_implementation_loop_artifacts(
             written.append(rel)
 
 
+def _install_agnostic_loop_artifacts(
+    target: Path,
+    *,
+    written: list[str],
+    warnings: list[str],
+) -> None:
+    from hive_planner.agnostic_loop import install_agnostic_loop, missing_agnostic_loop_artifacts
+
+    try:
+        files = install_agnostic_loop(target)
+    except OSError as exc:
+        raise BootstrapError(f"Agnostic-loop install failed: {exc}") from exc
+    missing = missing_agnostic_loop_artifacts(target)
+    if missing:
+        raise BootstrapError("Agnostic-loop install incomplete — missing: " + ", ".join(missing))
+    for rel in files:
+        if rel not in written:
+            written.append(rel)
+
+
 def _write_text(target: Path, rel: str, content: str, *, force: bool, written: list[str]) -> None:
     path = target / rel
     if path.exists() and not force:
@@ -775,6 +795,7 @@ def init_project(
     continual_learning: bool | None = None,
     cl_runtime: str | None = None,
     implementation_loop_pack: str | None = None,
+    agnostic_loop: bool = False,
 ) -> BootstrapResult:
     from hive_planner.agent_handoff import AGENT_HANDOFF_OFF, AGENT_HANDOFF_UNIFIED, integrations_from_mode, normalize_agent_handoff_mode
     from hive_planner.cl_runtime import CL_RUNTIME_CURSOR, normalize_cl_runtime
@@ -827,6 +848,7 @@ def init_project(
             continual_learning=continual_learning_enabled,
             cl_runtime=resolved_cl_runtime,
             implementation_loop_pack=implementation_loop_pack,
+            agnostic_loop=agnostic_loop,
         )
     except OSError as exc:
         raise BootstrapError(f"Failed to write bootstrap files: {exc}") from exc
@@ -861,6 +883,7 @@ def _write_bootstrap_tree(
     continual_learning: bool,
     cl_runtime: str = "cursor",
     implementation_loop_pack: str | None = None,
+    agnostic_loop: bool = False,
 ) -> None:
     from hive_planner.cl_runtime import CL_RUNTIME_CURSOR, normalize_cl_runtime
     from hive_planner.vendor_sync import deploy_unified_vendor_artifacts
@@ -937,6 +960,8 @@ def _write_bootstrap_tree(
     _install_bug_hunt_artifacts(target, force=force, written=written, warnings=warnings)
     if implementation_loop_pack is not None:
         _install_implementation_loop_artifacts(target, implementation_loop_pack, force=force, written=written, warnings=warnings)
+    if agnostic_loop:
+        _install_agnostic_loop_artifacts(target, written=written, warnings=warnings)
 
     if profile == "full":
         _write_full_profile(

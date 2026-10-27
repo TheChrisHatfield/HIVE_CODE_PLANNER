@@ -301,3 +301,17 @@ def test_init_with_flag_installs_agnostic_loop(tmp_path: Path) -> None:
     assert (target / "scripts" / "agnostic_loop.py").is_file()
     assert (target / ".hive" / "agnostic-loop" / "catalog.json").is_file()
     assert (target / "skills" / "lay-footnote" / "SKILL.md").is_file()
+
+
+def test_init_with_flag_fails_when_agnostic_install_incomplete(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from hive_planner.bootstrap import BootstrapError, init_project
+    from hive_planner.config import RepoPaths
+
+    monkeypatch.setattr("hive_planner.agnostic_loop.install_agnostic_loop", lambda target: [])
+    monkeypatch.setattr(
+        "hive_planner.agnostic_loop.missing_agnostic_loop_artifacts",
+        lambda target: ["scripts/agnostic_loop.py"],
+    )
+    target = tmp_path / "new-project"
+    with pytest.raises(BootstrapError, match="Agnostic-loop install incomplete"):
+        init_project(RepoPaths(root=_tiny_hive_source(tmp_path)), target, agnostic_loop=True)
