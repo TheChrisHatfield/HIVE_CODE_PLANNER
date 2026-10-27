@@ -3030,8 +3030,7 @@ class HivePlannerApp:
 
     def _bug_hunt_install_done(self, result: dict) -> None:
         if self._is_bg_error(result) or result.get("ok") is not True:
-            self._queue_home_log(self._result_detail(result))
-            self._refresh_home_dashboard()
+            self._controls_action_failed(result)
             return
         count = len(result.get("files_written") or [])
         iterations = result.get("iterations", 50)
@@ -3056,8 +3055,7 @@ class HivePlannerApp:
 
     def _agnostic_loop_install_done(self, result: dict) -> None:
         if self._is_bg_error(result) or result.get("ok") is not True:
-            self._queue_home_log(self._result_detail(result))
-            self._refresh_home_dashboard()
+            self._controls_action_failed(result)
             return
         count = len(result.get("files_written") or [])
         message = (
@@ -3111,8 +3109,7 @@ class HivePlannerApp:
 
     def _implementation_loop_install_done(self, result: dict) -> None:
         if self._is_bg_error(result) or result.get("ok") is not True:
-            self._queue_home_log(self._result_detail(result))
-            self._refresh_home_dashboard()
+            self._controls_action_failed(result)
             return
         count = len(result.get("files_written") or [])
         pack = result.get("pack", "")
@@ -3196,6 +3193,12 @@ class HivePlannerApp:
     def _set_controls_last(self, text: str) -> None:
         if hasattr(self, "controls_last"):
             self.controls_last.set(text)
+
+    def _controls_action_failed(self, result) -> None:
+        line = self._result_detail(result)
+        self._queue_home_log(line)
+        self._set_controls_last(line)
+        self._refresh_home_dashboard()
 
     def _log_loop_gate(self, result: dict) -> None:
         line = self._format_loop_gate(result) if isinstance(result, dict) else self._result_detail(result)

@@ -1428,6 +1428,21 @@ def test_app_registers_controls_tab() -> None:
     assert '"Loop status"' not in text.split("def _build_home_tab", 1)[-1].split("def _build_controls_tab", 1)[0]
 
 
+def test_loop_install_failures_update_controls_last() -> None:
+    source = Path(__file__).resolve().parents[1] / "src" / "hive_planner" / "launcher" / "app.py"
+    text = source.read_text(encoding="utf-8")
+    assert "def _controls_action_failed" in text
+    helper = text.split("def _controls_action_failed", 1)[-1].split("    def ", 1)[0]
+    assert "_set_controls_last" in helper
+    for name in (
+        "_bug_hunt_install_done",
+        "_agnostic_loop_install_done",
+        "_implementation_loop_install_done",
+    ):
+        body = text.split(f"def {name}", 1)[-1].split("    def ", 1)[0]
+        assert "_controls_action_failed" in body
+
+
 def test_resolved_loop_command_rejects_pairs_from_another_loop() -> None:
     from hive_planner.launcher.app import HivePlannerApp
 
