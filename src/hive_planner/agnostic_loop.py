@@ -262,10 +262,16 @@ def _load_state(root: Path) -> dict[str, Any]:
     return data
 
 
-def _save_state(root: Path, state: dict[str, Any]) -> None:
-    path = _state_path(root)
+def _write_json(path: Path, data: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
+    payload = json.dumps(data, indent=2) + "\n"
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(payload, encoding="utf-8")
+    tmp.replace(path)
+
+
+def _save_state(root: Path, state: dict[str, Any]) -> None:
+    _write_json(_state_path(root), state)
 
 
 def _limit(state: dict[str, Any]) -> int:
@@ -475,9 +481,7 @@ def load_policy(root: Path, names: tuple[str, ...] | None = None) -> dict[str, A
 
 
 def save_policy(root: Path, policy: dict[str, Any]) -> None:
-    path = _policy_path(root)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(policy, indent=2) + "\n", encoding="utf-8")
+    _write_json(_policy_path(root), policy)
 
 
 def _mean(arm: dict[str, float]) -> float:

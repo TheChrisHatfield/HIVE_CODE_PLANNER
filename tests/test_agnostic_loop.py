@@ -99,6 +99,21 @@ def test_arm_begin_review_cycle(tmp_path: Path) -> None:
     assert report["completed"] == 1
 
 
+def test_save_state_leaves_valid_json_without_tmp(tmp_path: Path) -> None:
+    root = tmp_path / "proj"
+    root.mkdir()
+    payload, code = arm(root, "inspect", 1)
+    assert code == 0
+    assert payload["ok"] is True
+    folder = root / ".hive" / "agnostic-loop"
+    state_path = folder / "state.json"
+    assert json.loads(state_path.read_text(encoding="utf-8"))["reward"] == "inspect"
+    assert not (folder / "state.json.tmp").exists()
+    observe(root, "inspect", True)
+    assert json.loads((folder / "policy.json").read_text(encoding="utf-8"))["observations"] == 1
+    assert not (folder / "policy.json.tmp").exists()
+
+
 def test_arm_unknown_reward(tmp_path: Path) -> None:
     payload, code = arm(tmp_path, "spec-gap", 1)
     assert code == 3
