@@ -1672,6 +1672,33 @@ def test_sync_controls_command_choices_without_command_var() -> None:
     app._sync_controls_command_choices()
 
 
+def test_sync_controls_command_choices_survives_destroyed_command_box() -> None:
+    import tkinter as tk
+
+    from hive_planner.launcher.app import HivePlannerApp
+
+    class _Var:
+        def __init__(self, value: str) -> None:
+            self._value = value
+
+        def get(self) -> str:
+            return self._value
+
+        def set(self, value: str) -> None:
+            self._value = value
+
+    class _DeadBox:
+        def configure(self, **_kwargs) -> None:
+            raise tk.TclError("invalid command name")
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.controls_loop = _Var("Bug hunt")
+    app.controls_command = _Var("Status")
+    app.controls_command_box = _DeadBox()
+    app._sync_controls_command_choices()
+    assert app.controls_command.get() == "Enable"
+
+
 def test_start_home_action_updates_controls_last_when_home_log_exists() -> None:
     from hive_planner.launcher.app import HivePlannerApp
 

@@ -1280,7 +1280,10 @@ class HivePlannerApp:
         choices = self.LOOP_CONTROL_COMMANDS.get(loop) or self.LOOP_CONTROL_COMMANDS["Implementation loop"]
         box = getattr(self, "controls_command_box", None)
         if box is not None:
-            box.configure(values=choices)
+            try:
+                box.configure(values=choices)
+            except tk.TclError:
+                pass
         current = str(self.controls_command.get() if hasattr(self, "controls_command") else "")
         if current not in choices and hasattr(self, "controls_command"):
             self.controls_command.set(choices[0])
