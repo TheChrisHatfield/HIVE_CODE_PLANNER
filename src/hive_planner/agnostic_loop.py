@@ -112,28 +112,49 @@ class LoopCatalog:
 
 def parse_catalog(data: dict[str, Any]) -> LoopCatalog:
     raw_rewards = data.get("rewards") or {}
+    if not isinstance(raw_rewards, dict):
+        raw_rewards = {}
     rewards: dict[str, tuple[tuple[str, ...], str]] = {}
     for name, body in raw_rewards.items():
         if not isinstance(body, dict):
             continue
-        hooks = tuple(str(h) for h in (body.get("hooks") or ()) if str(h).strip())
+        hooks_raw = body.get("hooks") or ()
+        if not isinstance(hooks_raw, (list, tuple)):
+            continue
+        hooks = tuple(str(h) for h in hooks_raw if str(h).strip())
         rule = str(body.get("rule") or "Do only this hook's job. Then review and stop.")
         if hooks:
             rewards[str(name)] = (hooks, rule)
     refill: dict[str, dict[str, int]] = {}
-    for name, kids in (data.get("refill") or {}).items():
-        if name not in rewards:
+    raw_refill = data.get("refill") or {}
+    if not isinstance(raw_refill, dict):
+        raw_refill = {}
+    for name, kids in raw_refill.items():
+        if name not in rewards or not isinstance(kids, dict):
             continue
-        refill[str(name)] = {
-            str(child): int(amount)
-            for child, amount in (kids or {}).items()
-            if str(child) in rewards
-        }
+        parsed_kids: dict[str, int] = {}
+        for child, amount in kids.items():
+            if str(child) not in rewards:
+                continue
+            try:
+                value = int(amount)
+            except (TypeError, ValueError):
+                continue
+            if value > 0:
+                parsed_kids[str(child)] = value
+        refill[str(name)] = parsed_kids
     for name in rewards:
         refill.setdefault(name, {})
     chain: dict[str, frozenset[str]] = {}
-    for name, members in (data.get("chain") or {}).items():
+    raw_chain = data.get("chain") or {}
+    if not isinstance(raw_chain, dict):
+        raw_chain = {}
+    for name, members in raw_chain.items():
         if name not in rewards:
+            continue
+        if isinstance(members, str):
+            members = [members]
+        if not isinstance(members, (list, tuple, set, frozenset)):
             continue
         chain[str(name)] = frozenset(str(m) for m in members if str(m) in rewards) or frozenset({str(name)})
     for name in rewards:
@@ -161,7 +182,10 @@ def load_catalog(root: Path | None = None) -> LoopCatalog:
         return default_catalog()
     if not isinstance(data, dict):
         return default_catalog()
-    parsed = parse_catalog(data)
+    try:
+        parsed = parse_catalog(data)
+    except (TypeError, ValueError, AttributeError, KeyError):
+        return default_catalog()
     return parsed if parsed.rewards else default_catalog()
 
 

@@ -197,6 +197,21 @@ def test_install_writes_full_kit(tmp_path: Path) -> None:
     assert "hive_planner is required" not in engine
 
 
+def test_malformed_catalog_falls_back_to_default(tmp_path: Path) -> None:
+    root = tmp_path / "proj"
+    root.mkdir()
+    folder = root / ".hive" / "agnostic-loop"
+    folder.mkdir(parents=True)
+    (folder / "catalog.json").write_text(
+        json.dumps({"rewards": {"inspect": {"hooks": ["inspect.00"]}}, "refill": [], "chain": "nope"}),
+        encoding="utf-8",
+    )
+    names = rewards(root)
+    assert "inspect" in names
+    payload, code = arm(root, "inspect", 1)
+    assert code == 0
+
+
 def test_replaced_catalog_is_used(tmp_path: Path) -> None:
     root = tmp_path / "proj"
     root.mkdir()
