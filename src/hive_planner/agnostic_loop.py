@@ -1020,8 +1020,7 @@ def install_agnostic_loop(root: Path) -> list[str]:
     written: list[str] = []
     catalog_path = root / LOOP_DIR / CATALOG_NAME
     if not catalog_path.is_file():
-        catalog_path.parent.mkdir(parents=True, exist_ok=True)
-        catalog_path.write_text(json.dumps(default_catalog_dict(), indent=2) + "\n", encoding="utf-8")
+        _write_json(catalog_path, default_catalog_dict())
         written.append(catalog_path.relative_to(root).as_posix())
     _write_if_changed(root / COMMAND_PATH, render_cursor_command(), root, written)
     _write_if_changed(root / RULE_PATH, render_cursor_rule(), root, written)
