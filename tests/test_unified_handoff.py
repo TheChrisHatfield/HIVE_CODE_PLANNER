@@ -577,6 +577,23 @@ def test_deploy_spec_kit_overlay_refreshes_when_patch_rev_changes(tmp_path: Path
     assert (project / ".hive" / "spec-kit" / ".hive-overlay-rev").read_text(encoding="utf-8").strip() == "2"
 
 
+def test_deploy_continual_learning_overlay_registers_workspace_open(tmp_path: Path) -> None:
+    """Overlay deploy must register the Cursor 3.x plugin or unified-verify stays red."""
+    from hive_planner.vendor_sync import deploy_continual_learning_overlay
+
+    project = tmp_path / "project"
+    project.mkdir()
+    written: list[str] = []
+    deploy_continual_learning_overlay(_hive_repo_root(), project, force=True, written=written)
+
+    hooks = (project / ".cursor" / "hooks.json").read_text(encoding="utf-8")
+    assert "workspaceOpen" in hooks
+    assert "hive_workspace_open.py" in hooks
+    assert (project / ".cursor" / "hooks" / "hive_workspace_open.py").is_file()
+    assert ".cursor/hooks.json" in written
+    assert ".cursor/hooks/hive_workspace_open.py" in written
+
+
 def test_deploy_continual_learning_overlay_refreshes_when_patch_rev_changes(tmp_path: Path) -> None:
     from hive_planner.vendor_sync import deploy_continual_learning_overlay, packaged_continual_learning_overlay_path
 

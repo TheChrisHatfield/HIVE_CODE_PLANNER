@@ -820,6 +820,18 @@ def deploy_continual_learning_overlay(
             rel_marker = f"{CL_OVERLAY_REL}/{OVERLAY_REV_FILE}"
             if rel_marker not in written:
                 written.append(rel_marker)
+    # Cursor 3.x does not auto-discover `.cursor/plugins/`; workspaceOpen must register them.
+    # Overlay-only deploy (Home handoff / unified-verify) used to skip this and fail verify.
+    from hive_planner.bootstrap import _copy_cursor_workspace_plugin_hooks
+
+    hook_written = written if written is not None else []
+    hook_warnings = warnings if warnings is not None else []
+    _copy_cursor_workspace_plugin_hooks(
+        target,
+        force=overlay_force,
+        written=hook_written,
+        warnings=hook_warnings,
+    )
 
 
 def deploy_unified_vendor_artifacts(
