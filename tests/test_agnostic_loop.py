@@ -216,6 +216,15 @@ def test_install_keeps_valid_custom_catalog(tmp_path: Path) -> None:
     assert json.loads(path.read_text(encoding="utf-8"))["rewards"]["custom"]["hooks"] == ["custom.00"]
 
 
+def test_install_leaves_no_tmp_kit_files(tmp_path: Path) -> None:
+    root = tmp_path / "proj"
+    root.mkdir()
+    install_agnostic_loop(root)
+    leftovers = [path for path in root.rglob("*.tmp") if path.is_file()]
+    assert leftovers == []
+    assert (root / "scripts" / "agnostic_loop.py").is_file()
+
+
 def test_install_overwrites_non_utf8_kit_file(tmp_path: Path) -> None:
     root = tmp_path / "proj"
     root.mkdir()
