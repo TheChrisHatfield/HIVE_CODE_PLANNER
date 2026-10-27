@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 from pathlib import Path
@@ -1964,6 +1964,7 @@ def test_load_user_guide_fallback_does_not_duplicate_unified_section(tmp_path: P
 
 def test_load_user_guide_appends_unified_vendor_section_when_readme_stale(tmp_path: Path) -> None:
     from hive_planner.launcher.user_guide import (
+        AGNOSTIC_LOOP_SECTION_MARKER,
         IMPLEMENTATION_LOOP_SECTION_MARKER,
         UNIFIED_VENDOR_SECTION_MARKER,
         load_user_guide,
@@ -1985,6 +1986,8 @@ def test_load_user_guide_appends_unified_vendor_section_when_readme_stale(tmp_pa
     assert "Legacy guide" in text
     assert IMPLEMENTATION_LOOP_SECTION_MARKER in text
     assert "Loop check" in text
+    assert AGNOSTIC_LOOP_SECTION_MARKER in text
+    assert "Enable agnostic loop" in text
 
 
 def test_load_user_guide_does_not_duplicate_unified_section(tmp_path: Path) -> None:
@@ -2019,6 +2022,23 @@ def test_load_user_guide_does_not_duplicate_implementation_loop_section(tmp_path
     text = load_user_guide(cfg)
 
     assert text.count("## Implementation loop") == 1
+
+
+def test_load_user_guide_does_not_duplicate_agnostic_loop_section(tmp_path: Path) -> None:
+    from hive_planner.launcher.user_guide import load_user_guide
+
+    hive = tmp_path / "hive"
+    scripts = hive / "scripts"
+    scripts.mkdir(parents=True)
+    scripts.joinpath("README.md").write_text(
+        "# Guide\n\n## Agnostic loop\n\nAlready documented.\n",
+        encoding="utf-8",
+    )
+    cfg = LauncherConfig(hive_planner_root=str(hive))
+
+    text = load_user_guide(cfg)
+
+    assert text.count("## Agnostic loop") == 1
 
 
 def test_default_agent_prompt_templates_are_non_empty_and_unique() -> None:
@@ -2193,6 +2213,7 @@ def test_load_user_guide_fallback_mentions_agent_prompt_templates(tmp_path: Path
     assert "Agent prompt templates" in text
     assert "Loop status" in text
     assert "implementation loop" in text
+    assert "agnostic loop" in text
 
 
 def test_ci_check_hints_parses_vendor_missing_from_profile_step(tmp_path: Path) -> None:

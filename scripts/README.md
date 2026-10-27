@@ -145,6 +145,18 @@ Do not merge, push to trunk, force-push, or deploy from this loop.
 
 ---
 
+## Agnostic loop
+
+Pause-cycle work chooser (hive-loop-kit). It picks the next slice of work; it is not a bug hunt and not the implementation loop.
+
+1. **Home → Enable agnostic loop** — installs scripts, catalog, skill, and chat command.
+2. CLI or `scripts/agnostic_loop.py`: `arm` / `begin` / `review` / `observe` / `choose` / `status`.
+3. Replace `.hive/agnostic-loop/catalog.json` to change reward names and hooks.
+
+CLI: `py -3.11 -m hive_planner agnostic-loop`. Init installs it only with `--agnostic-loop`. Say **agnostic loop** or **hive loop kit** in Cursor chat.
+
+---
+
 ### Projects — link or create a Cursor repo
 
 **Already have a Hive/Cursor repo?**

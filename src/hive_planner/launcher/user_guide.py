@@ -110,6 +110,7 @@ Operator guide: `docs/unified-handoff-upstream-forks.md`
 
 UNIFIED_VENDOR_SECTION_MARKER = "## Unified vendor path"
 IMPLEMENTATION_LOOP_SECTION_MARKER = "## Implementation loop"
+AGNOSTIC_LOOP_SECTION_MARKER = "## Agnostic loop"
 
 
 def implementation_loop_help_text() -> str:
@@ -129,6 +130,20 @@ Use this after a feature already has `spec.md`, `plan.md`, and `tasks.md`. It co
 CLI: `py -3.11 -m hive_planner implementation-loop` with `status`, `start`, `handoff`, `check`, `accept`, or `commit`. Init installs the loop only with `--implementation-loop-pack`.
 
 Do not merge, push to trunk, force-push, or deploy from this loop.
+"""
+
+
+def agnostic_loop_help_text() -> str:
+    """Plain-English launcher help for Home Enable agnostic loop (appended if scripts/README.md is stale)."""
+    return """## Agnostic loop
+
+Pause-cycle work chooser (hive-loop-kit). It picks the next slice of work; it is not a bug hunt and not the implementation loop.
+
+1. **Home → Enable agnostic loop** — installs scripts, catalog, skill, and chat command.
+2. CLI or `scripts/agnostic_loop.py`: `arm` / `begin` / `review` / `observe` / `choose` / `status`.
+3. Replace `.hive/agnostic-loop/catalog.json` to change reward names and hooks.
+
+CLI: `py -3.11 -m hive_planner agnostic-loop`. Init installs it only with `--agnostic-loop`. Say **agnostic loop** or **hive loop kit** in Cursor chat.
 """
 
 
@@ -159,4 +174,6 @@ def load_user_guide(config: LauncherConfig | None = None) -> str:
         text = text.rstrip() + "\n\n" + unified_vendor_help_text().strip() + "\n"
     if readme_on_disk and IMPLEMENTATION_LOOP_SECTION_MARKER not in text:
         text = text.rstrip() + "\n\n" + implementation_loop_help_text().strip() + "\n"
+    if readme_on_disk and AGNOSTIC_LOOP_SECTION_MARKER not in text:
+        text = text.rstrip() + "\n\n" + agnostic_loop_help_text().strip() + "\n"
     return text
