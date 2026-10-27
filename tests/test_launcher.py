@@ -1478,6 +1478,36 @@ def test_controls_follow_active_repo_on_soft_refresh() -> None:
     assert "controls_active_label.set" in sync
     assert "controls_impl_feature.set" in sync
     assert "_controls_link_key" in sync
+    assert "controls_last.set" in sync
+
+
+def test_sync_controls_clears_last_line_when_active_repo_changes() -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    class _Var:
+        def __init__(self, value: str = "") -> None:
+            self._value = value
+
+        def set(self, value: str) -> None:
+            self._value = value
+
+        def get(self) -> str:
+            return self._value
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.controls_active_label = _Var()
+    app.controls_last = _Var("Starting implementation loop…")
+    app.controls_impl_feature = _Var("oldfeat")
+    app._controls_link_key = "old"
+    app._active_link_key = lambda: "new"  # type: ignore[method-assign]
+    app._active_feature_label = lambda: "newfeat"  # type: ignore[method-assign]
+    app._controls_active_caption = lambda: "caption"  # type: ignore[method-assign]
+    app._sync_controls_for_active()
+    assert app.controls_last.get() == "Pick the active project on Projects, then use these controls."
+    assert app.controls_impl_feature.get() == "newfeat"
+    app.controls_last.set("Running…")
+    app._sync_controls_for_active()
+    assert app.controls_last.get() == "Running…"
 
 
 def test_run_project_implementation_loop_check_wraps_not_running(tmp_path: Path) -> None:

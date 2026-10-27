@@ -1261,6 +1261,10 @@ class HivePlannerApp:
         if last == key:
             return
         self._controls_link_key = key
+        if hasattr(self, "controls_last"):
+            self.controls_last.set(
+                "Pick the active project on Projects, then use these controls."
+            )
         if not hasattr(self, "controls_impl_feature"):
             return
         feature = self._active_feature_label() if key else ""
