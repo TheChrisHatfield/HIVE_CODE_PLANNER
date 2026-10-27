@@ -1631,6 +1631,26 @@ def test_on_bug_hunt_install_sends_workspace_link_to_service(
     assert not any("Bug hunt enabled" in line for line in lines)
 
 
+def test_on_bug_hunt_install_rejects_out_of_range_iterations(monkeypatch: pytest.MonkeyPatch) -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    shown: list[tuple] = []
+    monkeypatch.setattr(
+        "hive_planner.launcher.app.messagebox.showwarning",
+        lambda *a, **k: shown.append(a),
+    )
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.config = LauncherConfig(active_project=str(Path("C:/linked")))
+    app.controls_bug_iterations = type("Var", (), {"get": lambda self: "0"})()
+    started: list[str] = []
+    app._start_home_action = lambda msg: started.append(str(msg))  # type: ignore[method-assign]
+    app._run_bg = lambda *_a, **_k: started.append("bg")  # type: ignore[method-assign]
+    app._on_bug_hunt_install()
+    assert started == []
+    assert shown
+    assert "1" in shown[0][1] and "200" in shown[0][1]
+
+
 def test_on_bug_hunt_install_warns_when_no_project(monkeypatch: pytest.MonkeyPatch) -> None:
     from hive_planner.launcher.app import HivePlannerApp
 

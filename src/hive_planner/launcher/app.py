@@ -1161,7 +1161,12 @@ class HivePlannerApp:
         self.controls_command_box.pack(side="left", fill="x", expand=True)
         self._sync_controls_command_choices()
 
-        self._field(panel, "Iterations", self.controls_bug_iterations, tooltip="Bug hunt: cycles written into the installed command.")
+        self._field(
+            panel,
+            "Iterations",
+            self.controls_bug_iterations,
+            tooltip="Bug hunt: find/fix cycles written into the installed command (1–200).",
+        )
         pack_row = tk.Frame(panel, bg=COLORS["card"])
         pack_row.pack(fill="x", padx=12, pady=4)
         tk.Label(pack_row, text="Pack", width=14, anchor="w", bg=COLORS["card"], fg=COLORS["fg"], font=FONT).pack(side="left")
@@ -3007,21 +3012,40 @@ class HivePlannerApp:
             self._queue_home_log("Impact maps already up to date.")
         self._refresh_home_dashboard()
 
+    def _controls_bug_hunt_iterations(self) -> int | None:
+        from hive_planner.bug_hunt import (
+            DEFAULT_ITERATIONS,
+            MAX_ITERATIONS,
+            MIN_ITERATIONS,
+            BugHuntError,
+            validate_iterations,
+        )
+
+        raw = str(self.controls_bug_iterations.get() if hasattr(self, "controls_bug_iterations") else "").strip()
+        if not raw:
+            return DEFAULT_ITERATIONS
+        try:
+            value = int(raw)
+        except ValueError:
+            messagebox.showwarning("Iterations", "Iterations must be a whole number.")
+            return None
+        try:
+            return validate_iterations(value)
+        except BugHuntError:
+            messagebox.showwarning(
+                "Iterations",
+                f"Iterations must be between {MIN_ITERATIONS} and {MAX_ITERATIONS}.",
+            )
+            return None
+
     def _on_bug_hunt_install(self) -> None:
         if not self.config.active_project:
             messagebox.showwarning("No project", "Link a workspace first.")
             return
         link = Path(self.config.active_project)
-        iterations = 50
-        raw = ""
-        if hasattr(self, "controls_bug_iterations"):
-            raw = str(self.controls_bug_iterations.get() or "").strip()
-        if raw:
-            try:
-                iterations = int(raw)
-            except ValueError:
-                messagebox.showwarning("Iterations", "Iterations must be a whole number.")
-                return
+        iterations = self._controls_bug_hunt_iterations()
+        if iterations is None:
+            return
         self._start_home_action("Installing bug-hunt chat trigger…")
         self._run_bg(
             lambda r=link, n=iterations: run_project_bug_hunt_install(r, iterations=n),
