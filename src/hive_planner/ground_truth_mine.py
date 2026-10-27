@@ -197,7 +197,9 @@ def _write_if_needed(path: Path, content: str, *, force: bool) -> bool:
     if path.exists() and not force:
         return False
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content, encoding="utf-8", newline="\n")
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(content, encoding="utf-8", newline="\n")
+    tmp.replace(path)
     return True
 
 

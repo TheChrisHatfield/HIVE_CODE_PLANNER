@@ -59,6 +59,13 @@ def test_cursor_rule_names_the_call_and_the_command() -> None:
     assert "how to call it" in rule
 
 
+def test_install_leaves_no_tmp_ground_truth_files(tmp_path: Path) -> None:
+    install_ground_truth_mine(tmp_path)
+    leftovers = [path for path in tmp_path.rglob("*.tmp") if path.is_file()]
+    assert leftovers == []
+    assert (tmp_path / ".cursor" / "commands" / "ground-truth-on-mine.md").is_file()
+
+
 def test_install_writes_hive_packet_and_keeps_overlay(tmp_path: Path) -> None:
     overlay = tmp_path / ".hive" / "ground-truth-on-mine" / "repo-overlay.md"
     overlay.parent.mkdir(parents=True)
