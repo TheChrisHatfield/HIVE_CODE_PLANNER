@@ -261,6 +261,11 @@ def main(argv: list[str] | None = None) -> int:
         choices=("1-pack", "4-pack"),
         help="Install the post-spec coding loop with this pack (optional)",
     )
+    init_parser.add_argument(
+        "--agnostic-loop",
+        action="store_true",
+        help="Install the pause-cycle agnostic loop (optional)",
+    )
 
     cl_runtime_parser = sub.add_parser(
         "cl-runtime",
@@ -541,6 +546,43 @@ def main(argv: list[str] | None = None) -> int:
     impl_accept.add_argument("--role", required=True, help="Role that just returned")
     impl_sub.add_parser("commit", help="Commit after checker and reviewer pass")
 
+    agn_loop = sub.add_parser(
+        "agnostic-loop",
+        help="Pause-cycle work chooser (hook: workflow.tools)",
+    )
+    agn_sub = agn_loop.add_subparsers(dest="agnostic_loop_command", required=True)
+    agn_install = agn_sub.add_parser("install", help="Install the hive-loop-kit into the project")
+    agn_install.add_argument(
+        "--print",
+        dest="print_only",
+        action="store_true",
+        help="Print the command and do not write files",
+    )
+    agn_sub.add_parser("rewards", help="List catalog reward ids")
+    agn_sub.add_parser("status", help="Show cycle state and policy")
+    agn_arm = agn_sub.add_parser("arm", help="Point a paused sequence at a reward")
+    agn_arm.add_argument("--reward", required=True)
+    agn_arm.add_argument("--cycles", type=int, default=30)
+    agn_sub.add_parser("begin", help="Open one hook")
+    agn_rev = agn_sub.add_parser("review", help="Close the open hook and pause")
+    agn_rev.add_argument("--note", required=True)
+    agn_obs = agn_sub.add_parser("observe", help="Record a hit or miss for a reward")
+    agn_obs.add_argument("--reward", required=True)
+    agn_flag = agn_obs.add_mutually_exclusive_group(required=True)
+    agn_flag.add_argument("--hit", action="store_true")
+    agn_flag.add_argument("--miss", action="store_true")
+    agn_choose = agn_sub.add_parser("choose", help="Pick the next reward (MCTS + Thompson)")
+    agn_choose.add_argument(
+        "--open",
+        default=None,
+        help="reward=count pairs, comma separated. Omitted means one of each.",
+    )
+    agn_choose.add_argument("--sims", type=int, default=64)
+    agn_choose.add_argument("--horizon", type=int, default=4)
+    agn_choose.add_argument("--seed", type=int, default=None)
+    agn_choose.add_argument("--arm", action="store_true", help="Arm the first planned reward")
+    agn_choose.add_argument("--cycles", type=int, default=1)
+
     args = parser.parse_args(argv)
     root, auto_detected = resolve_root(args.root)
     paths = RepoPaths(root=root)
@@ -569,6 +611,7 @@ def main(argv: list[str] | None = None) -> int:
                 agent_handoff=agent_handoff,
                 cl_runtime=args.cl_runtime,
                 implementation_loop_pack=args.implementation_loop_pack,
+                agnostic_loop=args.agnostic_loop,
             )
         except BootstrapError as exc:
             print(f"Error: {exc}", file=sys.stderr)
@@ -1255,5 +1298,81 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         print(json.dumps(gate.to_dict(), indent=2))
         return 0 if gate.ok else 2
+
+    if args.command == "agnostic-loop":
+        from hive_planner.agnostic_loop import (
+            arm,
+            begin,
+            choose,
+            install_agnostic_loop,
+            missing_agnostic_loop_artifacts,
+            observe,
+            parse_open,
+            preview_agent_prompt as preview_agnostic_prompt,
+            review,
+            rewards,
+            status,
+        )
+
+        cmd = args.agnostic_loop_command
+        if cmd == "install":
+            try:
+                if args.print_only:
+                    print(preview_agnostic_prompt(), end="")
+                    return 0
+                written = install_agnostic_loop(root)
+            except OSError as exc:
+                print(f"Error: {exc}", file=sys.stderr)
+                return 1
+            missing = missing_agnostic_loop_artifacts(root)
+            if missing:
+                print("Error: Agnostic-loop install incomplete — missing: " + ", ".join(missing), file=sys.stderr)
+                return 1
+            print(f"Root: {root}")
+            print("Written:")
+            for rel in written:
+                print(f"  - {rel}")
+            return 0
+        if cmd == "rewards":
+            print(json.dumps(sorted(rewards(root)), indent=2))
+            return 0
+        if cmd == "status":
+            print(json.dumps(status(root), indent=2))
+            return 0
+        if cmd == "arm":
+            payload, code = arm(root, args.reward, args.cycles)
+            print(json.dumps(payload, indent=2))
+            return code
+        if cmd == "begin":
+            payload, code = begin(root)
+            print(json.dumps(payload, indent=2))
+            return code
+        if cmd == "review":
+            payload, code = review(root, args.note)
+            print(json.dumps(payload, indent=2))
+            return code
+        if cmd == "observe":
+            payload, code = observe(root, args.reward, args.hit)
+            print(json.dumps(payload, indent=2))
+            return code
+        if cmd == "choose":
+            names = rewards(root)
+            opens = parse_open(args.open, names)
+            if opens is None:
+                print(json.dumps({"ok": False, "action": "choose", "blocked_reason": "invalid --open"}, indent=2))
+                return 3
+            payload, code = choose(
+                root,
+                opens,
+                sims=args.sims,
+                horizon=args.horizon,
+                seed=args.seed,
+                do_arm=args.arm,
+                cycles=args.cycles,
+                names=names,
+            )
+            print(json.dumps(payload, indent=2))
+            return code
+        return 1
 
     return 1
