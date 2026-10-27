@@ -185,6 +185,37 @@ def test_trigger_phrases() -> None:
     assert not is_agnostic_loop_request("run a bug hunt")
 
 
+def test_install_repairs_unusable_catalog(tmp_path: Path) -> None:
+    root = tmp_path / "proj"
+    root.mkdir()
+    folder = root / ".hive" / "agnostic-loop"
+    folder.mkdir(parents=True)
+    (folder / "catalog.json").write_text("[]", encoding="utf-8")
+    written = install_agnostic_loop(root)
+    assert ".hive/agnostic-loop/catalog.json" in written
+    catalog = json.loads((folder / "catalog.json").read_text(encoding="utf-8"))
+    assert "inspect" in catalog["rewards"]
+    payload, code = arm(root, "inspect", 1)
+    assert code == 0
+    assert payload["ok"] is True
+
+
+def test_install_keeps_valid_custom_catalog(tmp_path: Path) -> None:
+    root = tmp_path / "proj"
+    root.mkdir()
+    install_agnostic_loop(root)
+    path = root / ".hive" / "agnostic-loop" / "catalog.json"
+    custom = {
+        "rewards": {"custom": {"hooks": ["custom.00"], "rule": "One tick."}},
+        "refill": {"custom": {}},
+        "chain": {"custom": ["custom"]},
+    }
+    path.write_text(json.dumps(custom), encoding="utf-8")
+    written = install_agnostic_loop(root)
+    assert ".hive/agnostic-loop/catalog.json" not in written
+    assert json.loads(path.read_text(encoding="utf-8"))["rewards"]["custom"]["hooks"] == ["custom.00"]
+
+
 def test_install_overwrites_non_utf8_kit_file(tmp_path: Path) -> None:
     root = tmp_path / "proj"
     root.mkdir()

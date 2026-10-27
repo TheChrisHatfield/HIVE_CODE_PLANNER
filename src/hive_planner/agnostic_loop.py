@@ -1024,7 +1024,7 @@ def install_agnostic_loop(root: Path) -> list[str]:
     root = root.resolve()
     written: list[str] = []
     catalog_path = root / LOOP_DIR / CATALOG_NAME
-    if not catalog_path.is_file():
+    if not catalog_path.is_file() or catalog_problem(root):
         _write_json(catalog_path, default_catalog_dict())
         written.append(catalog_path.relative_to(root).as_posix())
     _write_if_changed(root / COMMAND_PATH, render_cursor_command(), root, written)

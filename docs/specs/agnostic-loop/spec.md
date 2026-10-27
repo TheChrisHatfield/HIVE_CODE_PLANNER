@@ -70,7 +70,7 @@ Exit `0` success, `2` cycle cap, `3` refuse. JSON stdout includes `ok` and `acti
 | `scripts/trajectory-loop.md` | One-tick contract |
 | `skills/lay-footnote/SKILL.md` | End-of-reply lay footnote |
 | `.hive/agnostic-loop/README.md` | Kit readme |
-| `.hive/agnostic-loop/catalog.json` | Reward tables (created only if absent) |
+| `.hive/agnostic-loop/catalog.json` | Reward tables (created if absent or unusable; a valid custom catalog is kept) |
 | `.hive/agnostic-loop/loop.md` | Same contract as `trajectory-loop.md` |
 | `.cursor/commands/agnostic-loop.md` | Chat script |
 | `.cursor/rules/agnostic-loop.mdc` | Always-on start rule |
