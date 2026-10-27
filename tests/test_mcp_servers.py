@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from hive_planner.launcher.config import LauncherConfig
@@ -40,3 +41,25 @@ def test_settings_enable_mcp_writes_the_active_project(tmp_path: Path, monkeypat
     app.config = LauncherConfig(active_project=str(tmp_path), python_executable="py -3.11")
     app._on_enable_hive_mcp()
     assert called == [(Path(tmp_path), True)]
+
+
+def test_run_project_ci_check_uses_code_workspace_folder(tmp_path: Path, monkeypatch) -> None:
+    from hive_planner.launcher.service import run_project_ci_check
+
+    folder = tmp_path / "repo"
+    folder.mkdir()
+    (folder / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    workspace = tmp_path / "hive.code-workspace"
+    workspace.write_text(json.dumps({"folders": [{"path": "repo"}]}), encoding="utf-8")
+    seen: list[Path] = []
+
+    def fake_ci_check(paths, **_kwargs):
+        seen.append(Path(paths.root))
+        from hive_planner.ci_handoff import CiCheckReport, CiStepResult
+
+        return CiCheckReport(steps=[CiStepResult("agents-lint", True, "ok")])
+
+    monkeypatch.setattr("hive_planner.launcher.service.run_ci_check", fake_ci_check)
+    result = run_project_ci_check(workspace)
+    assert seen == [folder.resolve()]
+    assert result.get("error") != "Directory not found"

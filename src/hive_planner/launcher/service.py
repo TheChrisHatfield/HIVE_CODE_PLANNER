@@ -1317,7 +1317,9 @@ def run_agents_memory_apply(project_root: Path, candidates_path: Path) -> dict:
 
 
 def run_project_ci_check(project_root: Path) -> dict:
-    target = project_root.resolve()
+    target, error = linked_install_directory(project_root)
+    if error:
+        return {"ok": False, "error": error}
     summary = summarize_project(target)
     if not summary.ok:
         return {"ok": False, "error": summary.detail}
