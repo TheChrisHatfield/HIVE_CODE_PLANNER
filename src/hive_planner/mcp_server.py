@@ -199,7 +199,19 @@ def _optional_str(value: object) -> str | None:
 
 
 def _tool_hive_ping(arguments: dict[str, Any]) -> dict[str, Any]:
-    root = _workspace_root(arguments)
+    from hive_planner.launcher.service import linked_install_directory
+
+    raw = str((arguments or {}).get("root") or "").strip()
+    path = Path(raw).expanduser().resolve() if raw else Path.cwd().resolve()
+    root, error = linked_install_directory(path)
+    if root is None:
+        return {
+            "ok": False,
+            "error": error or "Path is not a project directory",
+            "server": SERVER_NAME,
+            "version": _version(),
+            "cwd": str(Path.cwd().resolve()),
+        }
     return {
         "ok": True,
         "server": SERVER_NAME,

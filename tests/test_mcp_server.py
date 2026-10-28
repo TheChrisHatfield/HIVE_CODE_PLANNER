@@ -182,6 +182,13 @@ def test_call_tool_ping_explicit_root(tmp_path: Path) -> None:
     assert Path(payload["root"]) == tmp_path.resolve()
 
 
+def test_call_tool_ping_rejects_missing_root(tmp_path: Path) -> None:
+    missing = tmp_path / "missing"
+    payload = call_tool("hive_ping", {"root": str(missing)})
+    assert payload["ok"] is False
+    assert "does not exist" in str(payload.get("error") or "").lower()
+
+
 def test_call_tool_ping_resolves_code_workspace_file(tmp_path: Path) -> None:
     folder = tmp_path / "project"
     folder.mkdir()
