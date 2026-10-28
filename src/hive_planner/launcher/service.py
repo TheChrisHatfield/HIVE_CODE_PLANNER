@@ -946,14 +946,8 @@ def match_cursor_workspace_from_title(
             return workspace
     if file_hint:
         for workspace in workspaces:
-            root = Path(workspace.path)
-            if root.name.lower() == file_hint.lower():
+            if Path(workspace.path).name.lower() == file_hint.lower():
                 return workspace
-            try:
-                if (root / file_hint).exists():
-                    return workspace
-            except OSError:
-                continue
     return None
 
 
