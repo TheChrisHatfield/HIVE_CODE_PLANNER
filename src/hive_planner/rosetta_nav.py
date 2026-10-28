@@ -11,10 +11,7 @@ AGENTS_ROSETTA_HEADING = "## Planning Rosetta Stone"
 
 
 def has_rosetta_navigation(text: str) -> bool:
-    if ROSETTA_NAV_MARKER in text or ROSETTA_NAV_HEADING in text:
-        return True
-    lowered = text.lower()
-    return "planning rosetta stone" in lowered and "agent navigation" in lowered
+    return ROSETTA_NAV_MARKER in text or ROSETTA_NAV_HEADING in text
 
 
 def spec_navigation_block(feature: str) -> str:

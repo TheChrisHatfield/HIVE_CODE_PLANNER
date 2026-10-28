@@ -41,6 +41,20 @@ def test_inject_after_header_places_nav_before_first_section() -> None:
     assert nav_idx < req_idx
 
 
+def test_prose_mention_does_not_count_as_rosetta_navigation(tmp_path: Path) -> None:
+    text = "# Spec\n\nSee the Planning Rosetta Stone for agent navigation notes.\n"
+    assert has_rosetta_navigation(text) is False
+    root = tmp_path / "proj"
+    feature = "hive-dev-v1"
+    spec_path = root / "docs" / "specs" / feature / "spec.md"
+    spec_path.parent.mkdir(parents=True)
+    spec_path.write_text(text, encoding="utf-8")
+    patched = ensure_handoff_rosetta_navigation(RepoPaths(root=root), feature)
+    updated = spec_path.read_text(encoding="utf-8")
+    assert has_rosetta_navigation(updated)
+    assert spec_path.relative_to(root).as_posix() in patched
+
+
 def test_ensure_handoff_rosetta_navigation_patches_existing_spec(tmp_path: Path) -> None:
     root = tmp_path / "proj"
     feature = "hive-dev-v1"
