@@ -95,6 +95,10 @@ def _find_wiring_audit_section(tasks_text: str) -> str:
     return section
 
 
+def _has_wiring_audit_section(tasks_text: str) -> bool:
+    return TASKS_WIRING_AUDIT_HEADING in tasks_text or WIRING_AUDIT_SECTION_RE.search(tasks_text) is not None
+
+
 def _unchecked_wiring_items(tasks_text: str) -> list[str]:
     section = _find_wiring_audit_section(tasks_text)
     if not section:
@@ -108,6 +112,22 @@ def _unchecked_wiring_items(tasks_text: str) -> list[str]:
         if UNCHECKED_TASK_RE.match(stripped):
             unchecked.append(stripped)
     return unchecked
+
+
+def _wiring_checklist_problem(tasks_text: str) -> str | None:
+    if not _has_wiring_audit_section(tasks_text):
+        return "tasks.md missing Integration wiring audit checklist"
+    unchecked = _unchecked_wiring_items(tasks_text)
+    if unchecked:
+        return f"tasks.md wiring audit checklist incomplete ({len(unchecked)} unchecked)"
+    return None
+
+
+def _tasks_markdown(paths: RepoPaths, feature: str) -> Path | None:
+    path = handoff_artifact_paths(paths, feature).get(f"docs/specs/{feature}/tasks.md")
+    if path is None or not path.is_file():
+        return None
+    return path
 
 
 def _load_attestation(path: Path) -> dict | None:
@@ -139,6 +159,13 @@ def record_wiring_audit(
     evidence = evidence.strip()
     if not evidence:
         raise WiringAuditError("--evidence is required (integration-level validation command or result)")
+
+    tasks_path = _tasks_markdown(paths, active)
+    if tasks_path is None:
+        raise WiringAuditError("tasks.md missing Integration wiring audit checklist")
+    problem = _wiring_checklist_problem(tasks_path.read_text(encoding="utf-8", errors="replace"))
+    if problem:
+        raise WiringAuditError(problem)
 
     payload = {
         "version": WIRING_AUDIT_VERSION,
@@ -216,11 +243,13 @@ def check_wiring_audit(
         if age.total_seconds() > age_limit * 3600:
             missing.append(f"attestation stale (older than {age_limit}h)")
 
-    tasks_path = handoff_artifact_paths(paths, active).get(f"docs/specs/{active}/tasks.md")
-    if tasks_path and tasks_path.is_file():
-        unchecked = _unchecked_wiring_items(tasks_path.read_text(encoding="utf-8", errors="replace"))
-        if unchecked:
-            missing.append(f"tasks.md wiring audit checklist incomplete ({len(unchecked)} unchecked)")
+    tasks_path = _tasks_markdown(paths, active)
+    if tasks_path is None:
+        missing.append("tasks.md missing Integration wiring audit checklist")
+    else:
+        problem = _wiring_checklist_problem(tasks_path.read_text(encoding="utf-8", errors="replace"))
+        if problem:
+            missing.append(problem)
 
     if missing:
         return WiringAuditReport(
