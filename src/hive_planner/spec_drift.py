@@ -281,6 +281,147 @@ def classify_bullet(text: str) -> ClassifiedBullet:
     return ClassifiedBullet(stripped, "operational", "default operational")
 
 
+_USER_SCENARIOS_HEADING = re.compile(r"(?im)^#{1,6}\s+user scenarios\b")
+_ASSUMPTIONS_HEADING = re.compile(r"(?im)^#{1,6}\s+assumptions\b")
+_SUCCESS_HEADING = re.compile(r"(?im)^#{1,6}\s+success criteria\b")
+
+# Filled sections that satisfy the spec-template.md creation gate. Tests use these tails.
+SPEC_CREATION_SPEC_TAIL = """
+## User Scenarios & Testing
+
+### User Story 1 - Operator accepts the spec (Priority: P1)
+
+The operator finishes the spec and the create gate accepts it.
+
+**Acceptance Scenarios**:
+
+1. **Given** a spec with this scenario, **When** spec-create runs, **Then** the command can set the active feature.
+
+## Success Criteria
+
+- **SC-001**: spec-create exits 0 only when these sections and the wiring-audit checklist are present.
+
+## Assumptions
+
+- The feature id matches the spec folder name.
+"""
+
+SPEC_CREATION_TASKS_TAIL = """
+## After each implementation task — Integration wiring audit (required)
+
+- [ ] Traced caller → handler → core (no layer break)
+- [ ] No false success when a sub-step failed or was skipped
+- [ ] Integration-level validation evidence attached
+- [ ] See `.cursor/rules/integration-wiring-audit.mdc`
+"""
+
+
+def _section_body(text: str, heading: re.Pattern[str]) -> str | None:
+    match = heading.search(text)
+    if not match:
+        return None
+    line_start = text.rfind("\n", 0, match.start()) + 1
+    marks = re.match(r"#+", text[line_start:])
+    level = len(marks.group(0)) if marks else 1
+    rest = text[match.end() :]
+    nxt = re.search(rf"(?m)^#{{1,{level}}}\s+", rest)
+    return rest[: nxt.start()] if nxt else rest
+
+
+def _user_scenarios_filled(body: str) -> bool:
+    for line in body.splitlines():
+        stripped = line.strip()
+        if re.match(r"(?i)^###\s+user story\b", stripped) and "[Brief Title]" not in stripped:
+            return True
+        if re.match(r"(?i)^###\s+US\d+\b", stripped):
+            return True
+    return False
+
+
+def _assumptions_filled(body: str) -> bool:
+    for line in body.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith(("-", "*")):
+            continue
+        if "[Assumption" in stripped or "[Dependency" in stripped:
+            continue
+        return True
+    return False
+
+
+def _success_criteria_filled(body: str) -> bool:
+    for line in body.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("<!--") or stripped.startswith("-->"):
+            continue
+        if "[Measurable metric" in stripped:
+            continue
+        if re.search(r"\d", stripped) and (
+            stripped.startswith(("-", "*")) or re.search(r"\bSC-\d+", stripped)
+        ):
+            return True
+    return False
+
+
+def spec_creation_gaps(paths: RepoPaths, feature: str, *, include_active: bool = True) -> list[str]:
+    """Hard requirements before a spec can be marked complete."""
+    gaps: list[str] = []
+    spec_path = paths.root / "docs" / "specs" / feature / "spec.md"
+    tasks_path = paths.root / "docs" / "specs" / feature / "tasks.md"
+    if spec_path.is_file():
+        spec_text = spec_path.read_text(encoding="utf-8", errors="replace")
+        scenarios = _section_body(spec_text, _USER_SCENARIOS_HEADING)
+        assumptions = _section_body(spec_text, _ASSUMPTIONS_HEADING)
+        success = _section_body(spec_text, _SUCCESS_HEADING)
+        if scenarios is None:
+            gaps.append("spec.md missing User Scenarios section (required by spec-template.md)")
+        elif not _user_scenarios_filled(scenarios):
+            gaps.append("spec.md User Scenarios section has no filled user story")
+        if assumptions is None:
+            gaps.append("spec.md missing Assumptions section (required by spec-template.md)")
+        elif not _assumptions_filled(assumptions):
+            gaps.append("spec.md Assumptions section has no filled assumption")
+        if success is None:
+            gaps.append("spec.md missing Success Criteria section (required by spec-template.md)")
+        elif not _success_criteria_filled(success):
+            gaps.append("spec.md Success Criteria section has no measurable criterion")
+    if tasks_path.is_file():
+        tasks_text = tasks_path.read_text(encoding="utf-8", errors="replace")
+        if "Integration wiring audit" not in tasks_text:
+            gaps.append("tasks.md missing Integration wiring audit checklist")
+    if include_active and parse_active_feature(paths) != feature:
+        current = parse_active_feature(paths) or "unset"
+        gaps.append(f"AGENTS.md active feature is {current}, not {feature}")
+    return gaps
+
+
+def complete_spec_creation(paths: RepoPaths, feature: str) -> SpecHandoffReport:
+    """Refuse completion until the template sections exist, then set the active feature."""
+    try:
+        validate_feature_id(feature)
+    except ValueError:
+        return SpecHandoffReport(feature=feature, ok=False, missing=[f"invalid feature id: {feature}"])
+    gaps = spec_creation_gaps(paths, feature, include_active=False)
+    required = handoff_artifact_paths(paths, feature)
+    gaps.extend(label for label, path in required.items() if not path.exists())
+    if gaps:
+        return SpecHandoffReport(feature=feature, ok=False, missing=gaps)
+    agents_path = paths.root / "AGENTS.md"
+    before = agents_path.read_text(encoding="utf-8") if agents_path.is_file() else None
+    repair = repair_agents_active_feature(paths, feature)
+    if not repair.repaired and repair.detail not in {"already set", "already correct"}:
+        return SpecHandoffReport(
+            feature=feature,
+            ok=False,
+            missing=[repair.detail or "could not set AGENTS.md Active feature"],
+        )
+    report = check_spec_handoff(paths, feature)
+    if not report.ok and before is not None and agents_path.is_file():
+        if agents_path.read_text(encoding="utf-8") != before:
+            agents_path.write_text(before, encoding="utf-8", newline="\n")
+    return report
+
+
 def check_spec_handoff(paths: RepoPaths, feature: str | None = None) -> SpecHandoffReport:
     from hive_planner.rosetta_nav import agents_missing_rosetta_section, missing_handoff_rosetta_navigation
 
@@ -297,6 +438,7 @@ def check_spec_handoff(paths: RepoPaths, feature: str | None = None) -> SpecHand
     missing = [label for label, path in required.items() if not path.exists()]
     if not missing:
         missing.extend(missing_handoff_rosetta_navigation(paths, active))
+        missing.extend(spec_creation_gaps(paths, active, include_active=True))
         if agents_path.is_file():
             agents_text = agents_path.read_text(encoding="utf-8", errors="replace")
             if agents_missing_rosetta_section(agents_text):

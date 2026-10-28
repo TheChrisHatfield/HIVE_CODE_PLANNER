@@ -58,8 +58,10 @@ def _write_full_handoff(paths: RepoPaths, feature: str, spec_body: str = "# Spec
 
     spec_dir = paths.root / "docs" / "specs" / feature
     spec_dir.mkdir(parents=True, exist_ok=True)
+    from hive_planner.spec_drift import SPEC_CREATION_SPEC_TAIL, SPEC_CREATION_TASKS_TAIL
+
     (spec_dir / "spec.md").write_text(
-        inject_after_header(spec_body, spec_navigation_block(feature)),
+        inject_after_header(spec_body, spec_navigation_block(feature)) + SPEC_CREATION_SPEC_TAIL,
         encoding="utf-8",
     )
     (spec_dir / "plan.md").write_text(
@@ -67,7 +69,7 @@ def _write_full_handoff(paths: RepoPaths, feature: str, spec_body: str = "# Spec
         encoding="utf-8",
     )
     (spec_dir / "tasks.md").write_text(
-        inject_after_header(f"# Tasks\n\n", tasks_navigation_block(feature)),
+        inject_after_header(f"# Tasks\n\n", tasks_navigation_block(feature)) + SPEC_CREATION_TASKS_TAIL,
         encoding="utf-8",
     )
     micro = paths.root / "docs" / "delta" / "20_micro"
@@ -351,6 +353,76 @@ def test_repair_agents_active_feature_skips_when_handoff_missing(tmp_path: Path)
     (paths.root / "AGENTS.md").write_text(_minimal_agents("none"), encoding="utf-8")
     result = repair_agents_active_feature(paths)
     assert result.repaired is False
+
+
+def test_spec_create_refuses_without_required_sections(tmp_path: Path) -> None:
+    from hive_planner.spec_drift import complete_spec_creation
+
+    paths = RepoPaths(root=tmp_path)
+    (paths.root / "AGENTS.md").write_text(_minimal_agents("other-feature"), encoding="utf-8")
+    _write_full_handoff(paths, "my-feature", spec_body="# Spec\n")
+    spec_path = paths.root / "docs" / "specs" / "my-feature" / "spec.md"
+    spec_path.write_text("# Spec\n\n## Agent navigation\n\nplanning.rosetta\n", encoding="utf-8")
+    before = (paths.root / "AGENTS.md").read_text(encoding="utf-8")
+
+    report = complete_spec_creation(paths, "my-feature")
+
+    assert report.ok is False
+    assert any("User Scenarios" in item for item in report.missing)
+    assert any("Assumptions" in item for item in report.missing)
+    assert any("Success Criteria" in item for item in report.missing)
+    assert (paths.root / "AGENTS.md").read_text(encoding="utf-8") == before
+
+
+def test_spec_create_refuses_without_wiring_checklist(tmp_path: Path) -> None:
+    from hive_planner.spec_drift import SPEC_CREATION_SPEC_TAIL, complete_spec_creation
+
+    paths = RepoPaths(root=tmp_path)
+    (paths.root / "AGENTS.md").write_text(_minimal_agents("other-feature"), encoding="utf-8")
+    _write_full_handoff(paths, "my-feature")
+    tasks_path = paths.root / "docs" / "specs" / "my-feature" / "tasks.md"
+    tasks_path.write_text("# Tasks\n\n- [ ] T001 only\n", encoding="utf-8")
+    spec_path = paths.root / "docs" / "specs" / "my-feature" / "spec.md"
+    spec_path.write_text(spec_path.read_text(encoding="utf-8") + SPEC_CREATION_SPEC_TAIL, encoding="utf-8")
+    before = (paths.root / "AGENTS.md").read_text(encoding="utf-8")
+
+    report = complete_spec_creation(paths, "my-feature")
+
+    assert report.ok is False
+    assert any("wiring audit" in item for item in report.missing)
+    assert (paths.root / "AGENTS.md").read_text(encoding="utf-8") == before
+
+
+def test_spec_create_sets_active_feature(tmp_path: Path) -> None:
+    from hive_planner.spec_drift import complete_spec_creation, parse_active_feature
+
+    paths = RepoPaths(root=tmp_path)
+    (paths.root / "AGENTS.md").write_text(_minimal_agents("other-feature"), encoding="utf-8")
+    _write_full_handoff(paths, "my-feature")
+
+    report = complete_spec_creation(paths, "my-feature")
+
+    assert report.ok is True
+    assert report.missing == []
+    assert parse_active_feature(paths) == "my-feature"
+
+
+def test_spec_create_restores_agents_when_handoff_still_fails(tmp_path: Path) -> None:
+    from hive_planner.spec_drift import SPEC_CREATION_SPEC_TAIL, complete_spec_creation
+
+    paths = RepoPaths(root=tmp_path)
+    before = _minimal_agents("other-feature")
+    (paths.root / "AGENTS.md").write_text(before, encoding="utf-8")
+    _write_full_handoff(paths, "my-feature")
+    spec_path = paths.root / "docs" / "specs" / "my-feature" / "spec.md"
+    spec_path.write_text("# Spec\n" + SPEC_CREATION_SPEC_TAIL, encoding="utf-8")
+
+    report = complete_spec_creation(paths, "my-feature")
+
+    assert report.ok is False
+    assert any("Rosetta" in item for item in report.missing)
+    assert (paths.root / "AGENTS.md").read_text(encoding="utf-8") == before
+    assert parse_active_feature(paths) == "other-feature"
 
 
 def test_repair_agents_active_feature_preserves_custom_body_for_same_feature(tmp_path: Path) -> None:
