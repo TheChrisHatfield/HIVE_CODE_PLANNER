@@ -67,6 +67,8 @@ def load_mcp_document(root: Path) -> dict[str, Any]:
         data = json.loads(path.read_text(encoding="utf-8-sig"))
     except json.JSONDecodeError as exc:
         raise McpConfigError(".cursor/mcp.json is not valid JSON") from exc
+    except UnicodeDecodeError as exc:
+        raise McpConfigError(".cursor/mcp.json is not UTF-8 (save it without UTF-16 encoding)") from exc
     except OSError as exc:
         raise McpConfigError(str(exc)) from exc
     if not isinstance(data, dict):

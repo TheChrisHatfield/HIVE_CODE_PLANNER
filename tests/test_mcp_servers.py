@@ -13,6 +13,20 @@ from hive_planner.launcher.mcp_servers import (
 from hive_planner.launcher.service import peek_hive_planner_mcp, run_set_hive_planner_mcp
 
 
+def test_load_mcp_document_utf16_is_a_user_error(tmp_path: Path) -> None:
+    import pytest
+
+    from hive_planner.launcher.mcp_servers import McpConfigError
+
+    cursor = tmp_path / ".cursor"
+    cursor.mkdir()
+    (cursor / "mcp.json").write_text(
+        json.dumps({"mcpServers": {}}), encoding="utf-16"
+    )
+    with pytest.raises(McpConfigError):
+        load_mcp_document(tmp_path)
+
+
 def test_load_mcp_document_accepts_utf8_bom(tmp_path: Path) -> None:
     cursor = tmp_path / ".cursor"
     cursor.mkdir()
