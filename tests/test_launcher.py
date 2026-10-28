@@ -751,6 +751,47 @@ def test_find_cursor_executable_discovers_from_cursor_logs(tmp_path: Path, monke
     assert find_cursor_executable() == str(exe)
 
 
+def test_find_cursor_executable_survives_vanished_log_scan(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    logs_root = tmp_path / "Cursor" / "logs"
+    logs_root.mkdir(parents=True)
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    monkeypatch.setattr("hive_planner.launcher.service._cursor_from_path", lambda: None)
+    monkeypatch.setattr("hive_planner.launcher.service._cursor_from_well_known_paths", lambda: None)
+    monkeypatch.setattr("hive_planner.launcher.service._cursor_from_start_menu_shortcuts", lambda: None)
+
+    def _boom(self: Path, *_args, **_kwargs):
+        raise OSError("log folder vanished during scan")
+
+    monkeypatch.setattr(Path, "rglob", _boom)
+    assert find_cursor_executable() is None
+
+
+def test_find_cursor_executable_skips_pruned_log_mtime(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    app_root = tmp_path / "cursor" / "_"
+    app_root.mkdir(parents=True)
+    exe = app_root / "Cursor.exe"
+    exe.write_text("", encoding="utf-8")
+    logs_root = tmp_path / "Cursor" / "logs" / "session"
+    logs_root.mkdir(parents=True)
+    (logs_root / "main.log").write_text(
+        f"Require stack:\n- {app_root}\\resources\\app\\out\\main.js\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    monkeypatch.setattr("hive_planner.launcher.service._cursor_from_path", lambda: None)
+    monkeypatch.setattr("hive_planner.launcher.service._cursor_from_well_known_paths", lambda: None)
+    monkeypatch.setattr("hive_planner.launcher.service._cursor_from_start_menu_shortcuts", lambda: None)
+    real_stat = Path.stat
+
+    def _stat(self: Path, *args, **kwargs):
+        if self.suffix == ".log":
+            raise OSError("log pruned mid-scan")
+        return real_stat(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "stat", _stat)
+    assert find_cursor_executable() == str(exe)
+
+
 def test_find_cursor_executable_checks_updater_layout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     local = tmp_path / "LocalAppData"
     exe = local / "Programs" / "cursor" / "_" / "Cursor.exe"

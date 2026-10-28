@@ -2644,6 +2644,14 @@ def _cursor_from_well_known_paths() -> str | None:
     return None
 
 
+def _log_scan_mtime(path: Path) -> float:
+    """mtime for the log scan sort; a pruned or unreadable log sorts oldest instead of raising."""
+    try:
+        return path.stat().st_mtime
+    except OSError:
+        return 0.0
+
+
 def _cursor_from_logs() -> str | None:
     appdata = os.environ.get("APPDATA", "")
     if not appdata:
@@ -2651,11 +2659,14 @@ def _cursor_from_logs() -> str | None:
     logs_root = Path(appdata) / "Cursor" / "logs"
     if not logs_root.is_dir():
         return None
-    log_files = sorted(
-        logs_root.rglob("*.log"),
-        key=lambda path: path.stat().st_mtime,
-        reverse=True,
-    )
+    try:
+        log_files = sorted(
+            logs_root.rglob("*.log"),
+            key=_log_scan_mtime,
+            reverse=True,
+        )
+    except OSError:
+        return None
     for log_file in log_files[:30]:
         try:
             text = log_file.read_text(encoding="utf-8", errors="ignore")[:100_000]
