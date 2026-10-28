@@ -103,6 +103,32 @@ def test_lint_missing_section_errors(tmp_path: Path) -> None:
     assert any("Missing required section" in i.message for i in report.issues)
 
 
+def test_lint_ignores_bullets_inside_fenced_code(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    text = _minimal_agents().replace(
+        "- Existing durable fact one.",
+        "\n".join(
+            [
+                "- Existing durable fact one.",
+                "",
+                "```markdown",
+                "## Active feature",
+                "",
+                "- The launcher must refuse an unsigned spec before opening a project.",
+                "- Existing durable fact one.",
+                "```",
+                "",
+                "- The launcher must refuse an unsigned spec before opening a project.",
+            ]
+        ),
+    )
+    (paths.root / "AGENTS.md").write_text(text, encoding="utf-8")
+    report = lint_agents_md(paths)
+    assert any("Behavioral bullet" in issue.message for issue in report.issues)
+    assert not any("Duplicate bullet" in issue.message for issue in report.issues)
+    assert sum("Behavioral bullet" in issue.message for issue in report.issues) == 1
+
+
 def test_lint_duplicate_bullets_warns(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     text = _minimal_agents()

@@ -228,12 +228,19 @@ def _parse_active_feature_from_sections(sections: dict[str, str]) -> str | None:
 def _iter_section_bullets(text: str) -> list[tuple[str, int, str]]:
     current_section: str | None = None
     bullets: list[tuple[str, int, str]] = []
+    in_fence = False
     for line_no, line in enumerate(text.splitlines(), start=1):
+        stripped = line.strip()
+        if stripped.startswith("```"):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
         if line.startswith("## "):
             current_section = line[3:].strip()
             continue
-        if current_section and line.strip().startswith("- "):
-            bullets.append((current_section, line_no, line.strip()[2:].strip()))
+        if current_section and stripped.startswith("- "):
+            bullets.append((current_section, line_no, stripped[2:].strip()))
     return bullets
 
 
