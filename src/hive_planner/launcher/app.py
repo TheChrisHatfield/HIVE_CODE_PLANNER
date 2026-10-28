@@ -1343,6 +1343,8 @@ class HivePlannerApp:
         )
         frame.pack(fill="x", padx=4, pady=6)
         inst["frame"] = frame
+        if inst.get("collapsed") is None:
+            inst["collapsed"] = self._controls_collapsed_flag(False)
 
         header = tk.Frame(frame, bg=COLORS["card"])
         header.pack(fill="x", padx=8, pady=(8, 0))
@@ -1591,6 +1593,23 @@ class HivePlannerApp:
         except tk.TclError:
             return False
 
+    @staticmethod
+    def _controls_collapsed_flag(value: bool):
+        try:
+            return tk.BooleanVar(value=bool(value))
+        except (tk.TclError, RuntimeError):
+            class _Flag:
+                def __init__(self, current: bool) -> None:
+                    self._value = bool(current)
+
+                def get(self) -> bool:
+                    return self._value
+
+                def set(self, current: bool) -> None:
+                    self._value = bool(current)
+
+            return _Flag(value)
+
     def _apply_controls_collapse(self, inst: dict) -> None:
         collapsed = self.controls_instance_collapsed(inst)
         settings = inst.get("settings")
@@ -1601,20 +1620,24 @@ class HivePlannerApp:
                 button.configure(text="▸" if collapsed else "▾")
             except tk.TclError:
                 pass
-        if collapsed:
+        try:
+            if collapsed:
+                if settings is not None:
+                    settings.pack_forget()
+                return
+            if last_label is not None:
+                last_label.pack(anchor="w", fill="x", padx=12, pady=(4, 0))
             if settings is not None:
-                settings.pack_forget()
+                settings.pack(fill="x", padx=4, pady=(0, 8))
+        except tk.TclError:
             return
-        if last_label is not None:
-            last_label.pack(anchor="w", fill="x", padx=12, pady=(4, 0))
-        if settings is not None:
-            settings.pack(fill="x", padx=4, pady=(0, 8))
         self._apply_controls_instance_settings(inst)
 
     def _on_toggle_controls_collapse(self, inst: dict) -> None:
         var = inst.get("collapsed")
         if var is None:
-            inst["collapsed"] = tk.BooleanVar(value=True)
+            # Missing flag means the block is drawn expanded.
+            inst["collapsed"] = self._controls_collapsed_flag(False)
             var = inst["collapsed"]
         try:
             var.set(not bool(var.get()))
@@ -1625,7 +1648,7 @@ class HivePlannerApp:
     def _set_controls_instance_collapsed(self, inst: dict, collapsed: bool) -> None:
         var = inst.get("collapsed")
         if var is None:
-            inst["collapsed"] = tk.BooleanVar(value=collapsed)
+            inst["collapsed"] = self._controls_collapsed_flag(collapsed)
         else:
             try:
                 var.set(collapsed)
@@ -1638,7 +1661,11 @@ class HivePlannerApp:
         try:
             inst["collapsed"].set(self.added_controls_block_collapsed())
         except tk.TclError:
-            inst["collapsed"] = tk.BooleanVar(value=self.added_controls_block_collapsed())
+            inst["collapsed"] = self._controls_collapsed_flag(
+                self.added_controls_block_collapsed()
+            )
+        if getattr(self, "_controls_instances", None) is None:
+            self._controls_instances = []
         self._controls_instances.append(inst)
         self._mount_controls_instance(inst)
         self._bind_controls_instance_wheel(inst)
@@ -1799,11 +1826,11 @@ class HivePlannerApp:
         """Scroll Controls so the CodeSpec block is in view."""
         canvas = getattr(self, "_controls_canvas", None)
         inst = self._codespec_instance()
+        if inst is not None:
+            self._set_controls_instance_collapsed(inst, False)
         frame = None if inst is None else inst.get("frame")
         if canvas is None or frame is None:
             return
-        if inst is not None:
-            self._set_controls_instance_collapsed(inst, False)
         try:
             if not canvas.winfo_exists() or not frame.winfo_exists():
                 return

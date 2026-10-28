@@ -74,6 +74,39 @@ def test_expand_shows_settings_again() -> None:
     assert button.text == "▾"
 
 
+def test_first_collapse_click_works_when_flag_is_missing() -> None:
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    settings = _Widget()
+    inst = {
+        "settings": settings,
+        "last_label": _Widget(),
+        "collapse_btn": _Widget(),
+        "rows": {},
+        "loop": type("V", (), {"get": lambda self: "CodeSpec"})(),
+    }
+    app._on_toggle_controls_collapse(inst)
+    assert HivePlannerApp.controls_instance_collapsed(inst) is True
+    assert settings.forgotten == 1
+
+
+def test_reveal_codespec_expands_without_scroll_canvas() -> None:
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    inst = {
+        "loop": type("V", (), {"get": lambda self: "CodeSpec"})(),
+        "collapsed": _Bool(True),
+        "settings": _Widget(),
+        "last_label": _Widget(),
+        "collapse_btn": _Widget(),
+        "rows": {},
+        "frame": object(),
+    }
+    app._controls_instances = [inst]
+    app._controls_canvas = None
+    app._reveal_codespec_block()
+    assert HivePlannerApp.controls_instance_collapsed(inst) is False
+    assert inst["settings"].packed == 1
+
+
 def test_toggle_collapse_flips_hidden_fields() -> None:
     app = HivePlannerApp.__new__(HivePlannerApp)
     inst = {
