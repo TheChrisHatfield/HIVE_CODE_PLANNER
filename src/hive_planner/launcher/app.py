@@ -13,6 +13,14 @@ from hive_planner.launcher.bootstrap_state import (
     summarize_bootstrap_state,
 )
 from hive_planner.launcher.config import LauncherConfig, linked_project_exists, load_config, normalize_project_path, save_config
+from hive_planner.launcher.home_groups import (
+    HOME_ACTIONS,
+    default_home_groups,
+    move_home_action,
+    move_home_group,
+    normalize_home_groups,
+    rename_home_group,
+)
 from hive_planner.launcher.service import (
     CursorWorkspace,
     classify_workspace,
@@ -963,122 +971,7 @@ class HivePlannerApp:
             self._status_value_labels[title] = value_label
             tk.Label(cell, text=title, font=FONT_SUBTITLE, bg=COLORS["secondary"], fg=COLORS["muted"]).pack()
 
-        actions = tk.Frame(body, bg=COLORS["bg"])
-        actions.pack(fill="x", padx=16, pady=8)
-        primary_button(
-            actions,
-            "Run health check",
-            self._on_ci_check,
-            tooltip="Check that plans, specs, and code maps match before you hand work to an AI agent.",
-        )
-        secondary_button(
-            actions,
-            "Open in Cursor",
-            self._on_open_cursor,
-            tooltip="Open your active linked project in the Cursor editor.",
-        )
-        secondary_button(
-            actions,
-            "Sync impact maps",
-            self._on_map_sync,
-            tooltip="Refresh the lists that link source files to tests so you know what to re-test after edits.",
-        )
-        secondary_button(
-            actions,
-            "Deploy agent handoff",
-            self._on_deploy_agent_handoff,
-            tooltip="Copy planning and memory tools into your project so AI agents can follow your workflow.",
-        )
-        secondary_button(
-            actions,
-            "Load cartridge…",
-            self._on_load_cartridge,
-            tooltip="Open the dialog to add reference files, turn a research note into drafts, or import a cartridge folder.",
-        )
-        secondary_button(
-            actions,
-            "Open in Explorer",
-            self._on_explore,
-            tooltip="Open your active project folder in Windows File Explorer.",
-        )
-
-        loop_actions = tk.Frame(body, bg=COLORS["bg"])
-        loop_actions.pack(fill="x", padx=16, pady=(0, 8))
-        secondary_button(
-            loop_actions,
-            "Loop controls",
-            self._on_open_loop_controls,
-            tooltip="Open the Controls tab: CodeSpec, bug hunt, and agnostic loop on the active repo. Add more than one loop block.",
-        )
-        secondary_button(
-            loop_actions,
-            "CodeSpec",
-            self._on_open_codespec,
-            tooltip="Open Controls on a CodeSpec block. CodeSpec codes a finished spec through Enable, Start, Handoff, Check, Accept, and Commit. Loop controls still opens the same tab.",
-        )
-
-        source_actions = tk.Frame(body, bg=COLORS["bg"])
-        source_actions.pack(fill="x", padx=16, pady=(0, 8))
-        secondary_button(
-            source_actions,
-            "Load Sources…",
-            self._on_load_sources,
-            tooltip="Add PDF or text files (notes, papers, specs) for AI agents to reference while planning.",
-        )
-
-        handoff_actions = tk.Frame(body, bg=COLORS["bg"])
-        handoff_actions.pack(fill="x", padx=16, pady=(0, 8))
-        secondary_button(
-            handoff_actions,
-            "Check wiring audit",
-            self._on_wiring_audit_check,
-            tooltip="See whether required integration checks were completed before agent handoff.",
-        )
-        secondary_button(
-            handoff_actions,
-            "Record wiring audit…",
-            self._on_wiring_audit_record,
-            tooltip="Mark integration checks as done after you verify agents and tools are connected correctly.",
-        )
-        secondary_button(
-            handoff_actions,
-            "Promote memory…",
-            self._on_agents_propose,
-            tooltip="Autonomously route and apply candidates to AGENTS.md (auto-splits long bullets; no preview).",
-        )
-        secondary_button(
-            handoff_actions,
-            "Apply memory…",
-            self._on_agents_apply,
-            tooltip="Re-run autonomous apply on a candidates file (same routing as Promote memory).",
-        )
-
-        verify_actions = tk.Frame(body, bg=COLORS["bg"])
-        verify_actions.pack(fill="x", padx=16, pady=(0, 8))
-        secondary_button(
-            verify_actions,
-            "Verify vendor pins",
-            self._on_unified_verify,
-            tooltip="Confirm bundled planning tool versions match what this Hive release expects.",
-        )
-        secondary_button(
-            verify_actions,
-            "Scan legacy deployment",
-            self._on_legacy_deployment_scan,
-            tooltip="Find older project setups that may need upgrading to the current agent handoff format.",
-        )
-        secondary_button(
-            verify_actions,
-            "Set CL runtime…",
-            self._on_set_cl_runtime,
-            tooltip="Choose how AI memory runs: inside Cursor, or through a separate command-line tool.",
-        )
-        secondary_button(
-            verify_actions,
-            "Migrate marketplace CL…",
-            self._on_cl_migrate,
-            tooltip="Move learned facts from the Cursor plugin into your project's own memory file.",
-        )
+        self._build_home_action_groups(body)
 
         log_card = card(body)
         card_title(log_card, "Output")
@@ -1104,6 +997,190 @@ class HivePlannerApp:
         self._bind_page_wheel(body, canvas)
         self._restore_home_log_history()
         self._pending_home_log.clear()
+
+    def _home_action_command(self, action_id: str):
+        # Home still shows these labels via HOME_ACTIONS: "Loop controls", "CodeSpec".
+        return {
+            "ci_check": self._on_ci_check,
+            "open_cursor": self._on_open_cursor,
+            "map_sync": self._on_map_sync,
+            "deploy_handoff": self._on_deploy_agent_handoff,
+            "load_cartridge": self._on_load_cartridge,
+            "explore": self._on_explore,
+            "loop_controls": self._on_open_loop_controls,
+            "codespec": self._on_open_codespec,
+            "load_sources": self._on_load_sources,
+            "wiring_check": self._on_wiring_audit_check,
+            "wiring_record": self._on_wiring_audit_record,
+            "promote_memory": self._on_agents_propose,
+            "apply_memory": self._on_agents_apply,
+            "verify_pins": self._on_unified_verify,
+            "scan_legacy": self._on_legacy_deployment_scan,
+            "set_cl_runtime": self._on_set_cl_runtime,
+            "migrate_cl": self._on_cl_migrate,
+        }.get(action_id)
+
+    def _persist_home_groups(self) -> None:
+        self.config.home_action_groups = normalize_home_groups(self.config.home_action_groups)
+        save_config(self.config)
+
+    def _build_home_action_groups(self, parent: tk.Frame) -> None:
+        wrap = tk.Frame(parent, bg=COLORS["bg"])
+        wrap.pack(fill="x")
+        self._home_groups_wrap = wrap
+        self._fill_home_action_groups()
+
+    def _fill_home_action_groups(self) -> None:
+        wrap = getattr(self, "_home_groups_wrap", None)
+        if wrap is None:
+            return
+        try:
+            if not wrap.winfo_exists():
+                return
+            for child in wrap.winfo_children():
+                child.destroy()
+        except tk.TclError:
+            return
+        toolbar = tk.Frame(wrap, bg=COLORS["bg"])
+        toolbar.pack(fill="x", padx=16, pady=(8, 0))
+        self._home_arrange_btn = secondary_button(
+            toolbar,
+            "Done arranging" if self.config.home_arrange_enabled else "Arrange groups",
+            self._on_toggle_home_arrange,
+            tooltip="Show or hide move arrows and editable group titles on Home.",
+        )
+        if self.config.home_arrange_enabled:
+            secondary_button(
+                toolbar,
+                "Reset groups",
+                self._on_reset_home_groups,
+                tooltip="Restore the default Home group titles and button order.",
+            )
+        self._home_groups_host = tk.Frame(wrap, bg=COLORS["bg"])
+        self._home_groups_host.pack(fill="x")
+        self._render_home_action_groups()
+
+    def _render_home_action_groups(self) -> None:
+        host = getattr(self, "_home_groups_host", None)
+        if host is None:
+            return
+        try:
+            for child in host.winfo_children():
+                child.destroy()
+        except tk.TclError:
+            return
+        groups = normalize_home_groups(self.config.home_action_groups)
+        self.config.home_action_groups = groups
+        arrange = bool(self.config.home_arrange_enabled)
+        for index, group in enumerate(groups):
+            panel = card(host)
+            header = tk.Frame(panel, bg=COLORS["card"])
+            header.pack(fill="x", padx=4, pady=(4, 0))
+            if arrange:
+                title_var = tk.StringVar(value=str(group.get("title") or f"Group {index + 1}"))
+                entry = tk.Entry(
+                    header,
+                    textvariable=title_var,
+                    font=FONT_BOLD,
+                    bg=COLORS["card"],
+                    fg=COLORS["fg"],
+                    relief="flat",
+                    highlightthickness=1,
+                    highlightbackground=COLORS["border"],
+                )
+                entry.pack(side="left", fill="x", expand=True, padx=8, pady=8)
+                entry.bind("<Return>", lambda _e, i=index, var=title_var: self._on_rename_home_group(i, var.get()))
+                entry.bind("<FocusOut>", lambda _e, i=index, var=title_var: self._on_rename_home_group(i, var.get()))
+                self._home_chrome_button(header, "↑", lambda i=index: self._on_move_home_group(i, -1), "Move this group up.")
+                self._home_chrome_button(header, "↓", lambda i=index: self._on_move_home_group(i, 1), "Move this group down.")
+            else:
+                tk.Label(
+                    header,
+                    text=str(group.get("title") or f"Group {index + 1}"),
+                    font=FONT_BOLD,
+                    bg=COLORS["card"],
+                    fg=COLORS["fg"],
+                    anchor="w",
+                ).pack(side="left", fill="x", expand=True, padx=12, pady=(8, 0))
+            row = tk.Frame(panel, bg=COLORS["card"])
+            row.pack(fill="x", padx=8, pady=(0, 8))
+            for action_id in group.get("actions") or []:
+                spec = HOME_ACTIONS.get(action_id)
+                command = self._home_action_command(str(action_id))
+                if spec is None or command is None:
+                    continue
+                cell = tk.Frame(row, bg=COLORS["card"])
+                cell.pack(side="left", padx=(0, 4), pady=2)
+                factory = primary_button if spec.get("primary") else secondary_button
+                factory(
+                    cell,
+                    str(spec["label"]),
+                    command,
+                    tooltip=str(spec.get("tooltip") or ""),
+                )
+                if arrange:
+                    self._home_chrome_button(
+                        cell,
+                        "◀",
+                        lambda aid=str(action_id): self._on_move_home_action(aid, -1),
+                        "Move this button left.",
+                    )
+                    self._home_chrome_button(
+                        cell,
+                        "▶",
+                        lambda aid=str(action_id): self._on_move_home_action(aid, 1),
+                        "Move this button right.",
+                    )
+
+    @staticmethod
+    def _home_chrome_button(parent: tk.Misc, text: str, command, tooltip: str) -> tk.Button:
+        button = tk.Button(
+            parent,
+            text=text,
+            command=command,
+            font=FONT_SUBTITLE,
+            bg=COLORS["secondary"],
+            fg=COLORS["muted"],
+            activebackground=COLORS["border"],
+            relief="flat",
+            padx=6,
+            pady=2,
+            cursor="hand2",
+        )
+        button.pack(side="left", padx=(0, 4), pady=4)
+        attach_hover_tooltip(button, tooltip)
+        return button
+
+    def _on_toggle_home_arrange(self) -> None:
+        self.config.home_arrange_enabled = not bool(self.config.home_arrange_enabled)
+        self._persist_home_groups()
+        self._fill_home_action_groups()
+
+    def _on_reset_home_groups(self) -> None:
+        self.config.home_action_groups = default_home_groups()
+        self._persist_home_groups()
+        self._render_home_action_groups()
+
+    def _on_rename_home_group(self, index: int, title: str) -> None:
+        current = normalize_home_groups(self.config.home_action_groups)
+        renamed = rename_home_group(current, index, title)
+        if index < 0 or index >= len(current):
+            return
+        if renamed[index]["title"] == current[index]["title"]:
+            return
+        self.config.home_action_groups = renamed
+        self._persist_home_groups()
+        self._render_home_action_groups()
+
+    def _on_move_home_group(self, index: int, delta: int) -> None:
+        self.config.home_action_groups = move_home_group(self.config.home_action_groups, index, delta)
+        self._persist_home_groups()
+        self._render_home_action_groups()
+
+    def _on_move_home_action(self, action_id: str, delta: int) -> None:
+        self.config.home_action_groups = move_home_action(self.config.home_action_groups, action_id, delta)
+        self._persist_home_groups()
+        self._render_home_action_groups()
 
     LOOP_CONTROL_COMMANDS = {
         "Bug hunt": ("Enable", "Check install"),
@@ -2053,6 +2130,23 @@ class HivePlannerApp:
         attach_combobox_tooltip(
             handoff_combo,
             "Default agent tool setup for new projects and when bootstrapping a workspace.",
+        )
+        arrange_row = tk.Frame(form, bg=COLORS["card"])
+        arrange_row.pack(fill="x", padx=12, pady=(8, 0))
+        self.cfg_home_arrange = tk.BooleanVar(value=bool(self.config.home_arrange_enabled))
+        arrange_cb = tk.Checkbutton(
+            arrange_row,
+            text="Arrange Home groups (move buttons, edit titles)",
+            variable=self.cfg_home_arrange,
+            bg=COLORS["card"],
+            fg=COLORS["fg"],
+            activebackground=COLORS["card"],
+            font=FONT,
+        )
+        arrange_cb.pack(anchor="w")
+        attach_hover_tooltip(
+            arrange_cb,
+            "When on, Home shows arrows to move groups and buttons, and group titles can be edited.",
         )
         btn_row = tk.Frame(form, bg=COLORS["card"])
         btn_row.pack(fill="x", padx=12, pady=(8, 12))
@@ -6888,6 +6982,9 @@ class HivePlannerApp:
             self.cfg_agent_handoff.get(),
             default="unified",
         )
+        if hasattr(self, "cfg_home_arrange"):
+            self.config.home_arrange_enabled = bool(self.cfg_home_arrange.get())
+        self.config.home_action_groups = normalize_home_groups(self.config.home_action_groups)
         save_config(self.config)
         self.setup = get_setup_status(self.config)
         self._sync_new_project_defaults()

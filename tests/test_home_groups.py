@@ -73,6 +73,20 @@ def test_move_action_crosses_group_boundary() -> None:
     assert "codespec" not in groups[codespec_group]["actions"]
 
 
+def test_toggle_arrange_rebuilds_home_groups_chrome() -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+    from hive_planner.launcher.config import LauncherConfig
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.config = LauncherConfig(home_arrange_enabled=False)
+    filled: list[bool] = []
+    app._persist_home_groups = lambda: None  # type: ignore[method-assign]
+    app._fill_home_action_groups = lambda: filled.append(True)  # type: ignore[method-assign]
+    app._on_toggle_home_arrange()
+    assert app.config.home_arrange_enabled is True
+    assert filled == [True]
+
+
 def test_move_action_swaps_inside_group() -> None:
     groups = default_home_groups()
     groups = move_home_action(groups, "codespec", -1)
