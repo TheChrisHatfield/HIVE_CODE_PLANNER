@@ -13,6 +13,15 @@ from hive_planner.launcher.mcp_servers import (
 from hive_planner.launcher.service import peek_hive_planner_mcp, run_set_hive_planner_mcp
 
 
+def test_load_mcp_document_accepts_utf8_bom(tmp_path: Path) -> None:
+    cursor = tmp_path / ".cursor"
+    cursor.mkdir()
+    payload = json.dumps({"mcpServers": {"other": {"command": "npx"}}})
+    (cursor / "mcp.json").write_bytes(b"\xef\xbb\xbf" + payload.encode("utf-8"))
+    doc = load_mcp_document(tmp_path)
+    assert doc["mcpServers"]["other"]["command"] == "npx"
+
+
 def test_disable_clears_leftover_enabled_true() -> None:
     doc = {
         "mcpServers": {

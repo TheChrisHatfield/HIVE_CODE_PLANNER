@@ -64,7 +64,7 @@ def load_mcp_document(root: Path) -> dict[str, Any]:
     if not path.is_file():
         return {"mcpServers": {}}
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
+        data = json.loads(path.read_text(encoding="utf-8-sig"))
     except json.JSONDecodeError as exc:
         raise McpConfigError(".cursor/mcp.json is not valid JSON") from exc
     except OSError as exc:
