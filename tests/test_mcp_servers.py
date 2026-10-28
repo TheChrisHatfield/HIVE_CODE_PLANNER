@@ -4,8 +4,35 @@ import json
 from pathlib import Path
 
 from hive_planner.launcher.config import LauncherConfig
-from hive_planner.launcher.mcp_servers import HIVE_PLANNER_MCP_NAME, load_mcp_document
+from hive_planner.launcher.mcp_servers import (
+    HIVE_PLANNER_MCP_NAME,
+    hive_planner_mcp_enabled,
+    load_mcp_document,
+    set_hive_planner_mcp,
+)
 from hive_planner.launcher.service import peek_hive_planner_mcp, run_set_hive_planner_mcp
+
+
+def test_disable_clears_leftover_enabled_true() -> None:
+    doc = {
+        "mcpServers": {
+            HIVE_PLANNER_MCP_NAME: {
+                "command": "py",
+                "args": ["-m", "hive_planner", "mcp-serve"],
+                "enabled": True,
+            }
+        }
+    }
+    set_hive_planner_mcp(
+        doc,
+        enabled=False,
+        command="py",
+        args=["-m", "hive_planner", "mcp-serve"],
+    )
+    entry = doc["mcpServers"][HIVE_PLANNER_MCP_NAME]
+    assert entry.get("disabled") is True
+    assert entry.get("enabled") is False
+    assert hive_planner_mcp_enabled(doc) is False
 
 
 def test_peek_launch_snippet_matches_mcp_json_after_python_settings_change(tmp_path) -> None:

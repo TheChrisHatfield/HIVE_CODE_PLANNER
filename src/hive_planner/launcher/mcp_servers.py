@@ -152,6 +152,7 @@ def upsert_mcp_server(
             entry.pop("enabled", None)
     else:
         entry["disabled"] = True
+        entry["enabled"] = False
     servers[key] = entry
     return doc
 
