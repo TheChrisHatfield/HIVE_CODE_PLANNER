@@ -74,6 +74,23 @@ def test_unified_handoff_artifacts_runtime_aware(tmp_path: Path) -> None:
     assert requires_cursor_plugin(resolve_cl_runtime(project)) is False
 
 
+def test_unified_handoff_artifacts_follow_active_feature(tmp_path: Path) -> None:
+    project = tmp_path / "renamed"
+    project.mkdir()
+    (project / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    (project / "AGENTS.md").write_text(
+        "# AGENTS\n\n## Active feature\n\n**my-feature**\n",
+        encoding="utf-8",
+    )
+    write_project_profile(project, profile="minimal", project_name="renamed", agent_handoff_mode=AGENT_HANDOFF_UNIFIED)
+    artifacts = unified_handoff_artifacts(project)
+    assert "docs/specs/my-feature/spec.md" in artifacts
+    assert "docs/specs/example-feature/spec.md" not in artifacts
+    status = validate_unified_handoff(project)
+    assert "docs/specs/example-feature/spec.md" not in status.missing
+    assert "docs/specs/my-feature/spec.md" in status.missing
+
+
 def test_overlay_issues_as_missing_skips_cursor_cl_for_headless(tmp_path: Path) -> None:
     from hive_planner.vendor_sync import CL_OVERLAY_REL, overlay_issues_as_missing
 

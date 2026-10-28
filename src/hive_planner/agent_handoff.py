@@ -60,9 +60,11 @@ def resolve_agent_handoff_mode(project_root: Path) -> str:
 
 def unified_handoff_artifacts(project_root: Path) -> list[str]:
     from hive_planner.cl_runtime import continual_learning_artifact_paths, resolve_cl_runtime
+    from hive_planner.config import RepoPaths
+    from hive_planner.spec_drift import BOOTSTRAP_DEFAULT_FEATURE, parse_active_feature
 
     runtime = resolve_cl_runtime(project_root)
-    feature = "example-feature"
+    feature = parse_active_feature(RepoPaths(root=project_root.resolve())) or BOOTSTRAP_DEFAULT_FEATURE
     base = [
         f"docs/specs/{feature}/spec.md",
         f"docs/specs/{feature}/plan.md",
