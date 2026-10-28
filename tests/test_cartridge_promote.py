@@ -77,6 +77,9 @@ def test_promote_skips_stale_draft_layers_not_in_emit_outputs(tmp_path: Path) ->
     assert result.promotions["micro"] == "skipped (not emitted)"
     assert (project / "docs" / "delta" / "00_holistic.md").is_file()
     assert not (project / "docs" / "delta" / "20_micro" / f"{feature}.md").exists()
+    from hive_planner.spec_drift import parse_active_feature
+
+    assert parse_active_feature(paths) is None
 
 
 def test_promote_strips_draft_and_auto_sync_banners(tmp_path: Path) -> None:
@@ -136,7 +139,8 @@ def test_promote_micro_and_spec_scaffold_from_draft(tmp_path: Path) -> None:
     assert "Agent navigation (Rosetta Stone)" in spec_text
     assert "planning.rosetta" in spec_text
     assert result.handoff is not None
-    assert result.handoff["ok"] is True
+    assert result.handoff["ok"] is False
+    assert any("User Scenarios" in item for item in result.handoff["missing"])
 
 
 def test_promote_appends_wiring_audit_to_existing_tasks(tmp_path: Path) -> None:
@@ -508,3 +512,47 @@ def test_emit_cli_mark_draft_without_promote(tmp_path: Path, monkeypatch: pytest
     text = stdout.getvalue()
     payload = json.loads(text[text.index("{") :])
     assert payload["mark_draft"]["holistic"] == "marked draft"
+
+
+def test_promote_sets_active_feature_only_when_spec_gates_pass(tmp_path: Path) -> None:
+    from hive_planner.rosetta_nav import (
+        delta_micro_navigation_block,
+        inject_after_header,
+        plan_navigation_block,
+        spec_navigation_block,
+        tasks_navigation_block,
+    )
+    from hive_planner.spec_drift import (
+        SPEC_CREATION_SPEC_TAIL,
+        SPEC_CREATION_TASKS_TAIL,
+        parse_active_feature,
+    )
+
+    project = _unified_project(tmp_path / "proj")
+    feature = "my-feature"
+    paths = RepoPaths(root=project)
+    spec_dir = project / "docs" / "specs" / feature
+    spec_dir.mkdir(parents=True)
+    (spec_dir / "spec.md").write_text(
+        inject_after_header("# Spec\n\n", spec_navigation_block(feature)) + SPEC_CREATION_SPEC_TAIL,
+        encoding="utf-8",
+    )
+    (spec_dir / "plan.md").write_text(
+        inject_after_header("# Plan\n\n", plan_navigation_block(feature)),
+        encoding="utf-8",
+    )
+    (spec_dir / "tasks.md").write_text(
+        inject_after_header("# Tasks\n\n", tasks_navigation_block(feature)) + SPEC_CREATION_TASKS_TAIL,
+        encoding="utf-8",
+    )
+    micro = project / "docs" / "delta" / "20_micro"
+    micro.mkdir(parents=True)
+    (micro / f"{feature}.md").write_text(
+        inject_after_header("# Micro\n\n", delta_micro_navigation_block(feature)),
+        encoding="utf-8",
+    )
+
+    result = promote_cartridge_drafts(paths, feature, run_spec_drift=False)
+
+    assert result.agents_repair["feature"] == feature
+    assert parse_active_feature(paths) == feature

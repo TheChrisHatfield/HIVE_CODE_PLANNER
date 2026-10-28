@@ -21,7 +21,7 @@ from hive_planner.spec_drift import (
     check_memory_spec_drift,
     check_spec_handoff,
     classify_bullet,
-    repair_agents_active_feature,
+    complete_spec_creation,
     repair_agents_rosetta_section,
 )
 from hive_planner.rosetta_nav import (
@@ -444,9 +444,6 @@ def promote_cartridge_drafts(
     rosetta_details: list[str] = []
     patched_files: list[str] = []
     if repair_agents:
-        repair = repair_agents_active_feature(paths, feature)
-        if repair.repaired:
-            result.agents_repair = {"feature": repair.feature, "detail": repair.detail}
         rosetta = repair_agents_rosetta_section(paths)
         if rosetta.repaired:
             rosetta_details.append(rosetta.detail)
@@ -467,6 +464,11 @@ def promote_cartridge_drafts(
             "detail": "; ".join(rosetta_details) if rosetta_details else "navigation updated",
             "patched": patched_files,
         }
+
+    if repair_agents:
+        created = complete_spec_creation(paths, feature)
+        if created.ok:
+            result.agents_repair = {"feature": feature, "detail": f"set Active feature to {feature}"}
 
     if run_spec_drift:
         handoff = check_spec_handoff(paths, feature)
