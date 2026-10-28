@@ -780,35 +780,37 @@ def _cursor_state_db_path() -> Path | None:
     return db if db.is_file() else None
 
 
-def _open_cursor_state_db(db: Path) -> sqlite3.Connection:
-    """Read Cursor's state DB without waiting on the lock Cursor holds while running.
-
-    A normal connect waits, then raises OperationalError, and the Add link list
-    comes back empty. An immutable read does not take that lock.
-    """
-    uri = db.resolve().as_uri() + "?mode=ro&immutable=1"
-    try:
-        return sqlite3.connect(uri, uri=True)
-    except sqlite3.Error:
-        return sqlite3.connect(db, timeout=0.2)
+def _open_cursor_state_db(db: Path, *, immutable: bool) -> sqlite3.Connection:
+    """Open Cursor's state DB for a read that does not wait on a write lock."""
+    extra = "?mode=ro&immutable=1" if immutable else "?mode=ro"
+    return sqlite3.connect(db.resolve().as_uri() + extra, uri=True, timeout=0.2)
 
 
 def _read_cursor_recent_entries() -> list[dict]:
     db = _cursor_state_db_path()
     if not db:
         return []
-    conn: sqlite3.Connection | None = None
-    try:
-        conn = _open_cursor_state_db(db)
-        row = conn.execute(
-            "SELECT value FROM ItemTable WHERE key = ?",
-            ("history.recentlyOpenedPathsList",),
-        ).fetchone()
-    except sqlite3.Error:
+    row = None
+    # Read-only sees the write-ahead log, so a project opened in this session
+    # is listed. That query raises "database is locked" when Cursor holds an
+    # exclusive lock; the immutable read then returns the last checkpoint
+    # instead of an empty Add link list. Immutable alone skips the log.
+    for immutable in (False, True):
+        conn: sqlite3.Connection | None = None
+        try:
+            conn = _open_cursor_state_db(db, immutable=immutable)
+            row = conn.execute(
+                "SELECT value FROM ItemTable WHERE key = ?",
+                ("history.recentlyOpenedPathsList",),
+            ).fetchone()
+            break
+        except sqlite3.Error:
+            row = None
+        finally:
+            if conn is not None:
+                conn.close()
+    else:
         return []
-    finally:
-        if conn is not None:
-            conn.close()
     if not row:
         return []
     raw = row[0]

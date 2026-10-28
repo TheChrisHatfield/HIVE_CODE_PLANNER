@@ -34,3 +34,32 @@ def test_discover_cursor_workspaces_reads_while_state_db_is_locked(
         locked.close()
 
     assert [item.path for item in workspaces] == [str(repo.resolve())]
+
+
+def test_discover_cursor_workspaces_reads_uncheckpointed_wal(tmp_path: Path, monkeypatch) -> None:
+    old = tmp_path / "old-repo"
+    new = tmp_path / "new-repo"
+    old.mkdir()
+    new.mkdir()
+    db = tmp_path / "Cursor" / "User" / "globalStorage" / "state.vscdb"
+    db.parent.mkdir(parents=True)
+    conn = sqlite3.connect(db)
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("CREATE TABLE ItemTable (key TEXT UNIQUE ON CONFLICT REPLACE, value BLOB)")
+    conn.execute(
+        "INSERT INTO ItemTable (key, value) VALUES (?, ?)",
+        ("history.recentlyOpenedPathsList", json.dumps({"entries": [{"folderUri": old.as_uri()}]}).encode()),
+    )
+    conn.commit()
+    conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    conn.execute(
+        "INSERT OR REPLACE INTO ItemTable (key, value) VALUES (?, ?)",
+        ("history.recentlyOpenedPathsList", json.dumps({"entries": [{"folderUri": new.as_uri()}]}).encode()),
+    )
+    conn.commit()
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    try:
+        workspaces = discover_cursor_workspaces()
+    finally:
+        conn.close()
+    assert [item.path for item in workspaces] == [str(new.resolve())]
