@@ -534,10 +534,25 @@ def is_code_workspace_file(path: Path) -> bool:
     return path.suffix.lower() == ".code-workspace"
 
 
-def read_code_workspace_folders(workspace_file: Path) -> list[Path]:
+def _read_workspace_text(workspace_file: Path) -> str | None:
     try:
-        data = json.loads(workspace_file.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+        return workspace_file.read_text(encoding="utf-8-sig")
+    except UnicodeDecodeError:
+        try:
+            return workspace_file.read_text(encoding="utf-16")
+        except (OSError, UnicodeError):
+            return None
+    except OSError:
+        return None
+
+
+def read_code_workspace_folders(workspace_file: Path) -> list[Path]:
+    text = _read_workspace_text(workspace_file)
+    if text is None:
+        return []
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
         return []
     folders: list[Path] = []
     for entry in data.get("folders") or []:
