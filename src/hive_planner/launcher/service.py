@@ -743,9 +743,24 @@ def memory_candidates_picker_dir(project_root: Path, default: Path | None = None
     return str(root)
 
 
+def _repair_active_feature_if_spec_ready(paths):
+    """Set AGENTS.md Active feature only when the inferred spec passes creation gates."""
+    from hive_planner.spec_drift import (
+        AgentsRepairResult,
+        infer_repairable_active_feature,
+        repair_agents_active_feature,
+        spec_creation_gaps,
+    )
+
+    inferred = infer_repairable_active_feature(paths)
+    if not inferred or spec_creation_gaps(paths, inferred, include_active=False):
+        return AgentsRepairResult(False, detail="spec creation gates not met")
+    return repair_agents_active_feature(paths, inferred)
+
+
 def prepare_linked_project_root(path: Path, *, repair_agents: bool = True):
     from hive_planner.project_profile import resolve_project_integrations
-    from hive_planner.spec_drift import AgentsRepairResult, repair_agents_active_feature, repair_handoff_rosetta_navigation
+    from hive_planner.spec_drift import repair_handoff_rosetta_navigation
 
     root = resolve_linked_project_root(path)
     if not root:
@@ -758,7 +773,7 @@ def prepare_linked_project_root(path: Path, *, repair_agents: bool = True):
         return root, None
     paths = RepoPaths(root=root)
     repair_handoff_rosetta_navigation(paths)
-    repair = repair_agents_active_feature(paths)
+    repair = _repair_active_feature_if_spec_ready(paths)
     if repair.repaired:
         return root, repair
     return root, None
@@ -1446,7 +1461,7 @@ def run_project_ci_check(project_root: Path) -> dict:
     from hive_planner.spec_drift import repair_handoff_rosetta_navigation
 
     rosetta_repair = repair_handoff_rosetta_navigation(paths)
-    repair = repair_agents_active_feature(paths)
+    repair = _repair_active_feature_if_spec_ready(paths)
     portable = is_portable_runtime()
     report = run_ci_check(
         paths,
