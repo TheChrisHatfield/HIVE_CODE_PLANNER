@@ -73,6 +73,42 @@ def test_move_action_crosses_group_boundary() -> None:
     assert "codespec" not in groups[codespec_group]["actions"]
 
 
+def test_save_settings_rebuilds_home_groups_chrome(monkeypatch) -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+    from hive_planner.launcher.config import LauncherConfig
+    from hive_planner.launcher.service import SetupStatus
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.setup = SetupStatus(
+        python_ok=True,
+        python_version="3.11",
+        hive_root="C:/hive",
+        hive_root_ok=True,
+        hive_installed=True,
+        hive_version="1.0.0",
+        git_available=True,
+        onboarding_complete=True,
+        portable_mode=True,
+    )
+    app.config = LauncherConfig()
+    app.cfg_cursor = type("V", (), {"get": lambda self: ""})()
+    app.cfg_profile = type("V", (), {"get": lambda self: "full"})()
+    app.cfg_agent_handoff = type("V", (), {"get": lambda self: "unified"})()
+    app.cfg_home_arrange = type("V", (), {"get": lambda self: True})()
+    filled: list[bool] = []
+    app._sync_new_project_defaults = lambda: None  # type: ignore[method-assign]
+    app._refresh_home_dashboard = lambda **_k: None  # type: ignore[method-assign]
+    app._fill_home_action_groups = lambda: filled.append(True)  # type: ignore[method-assign]
+    import hive_planner.launcher.app as app_mod
+
+    monkeypatch.setattr(app_mod, "save_config", lambda _cfg: None)
+    monkeypatch.setattr(app_mod, "get_setup_status", lambda cfg: app.setup)
+    monkeypatch.setattr(app_mod.messagebox, "showinfo", lambda *a, **k: None)
+    app._on_save_settings()
+    assert app.config.home_arrange_enabled is True
+    assert filled == [True]
+
+
 def test_toggle_arrange_rebuilds_home_groups_chrome() -> None:
     from hive_planner.launcher.app import HivePlannerApp
     from hive_planner.launcher.config import LauncherConfig

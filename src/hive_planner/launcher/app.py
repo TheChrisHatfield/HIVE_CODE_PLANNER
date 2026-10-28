@@ -6989,6 +6989,7 @@ class HivePlannerApp:
         self.setup = get_setup_status(self.config)
         self._sync_new_project_defaults()
         self._refresh_home_dashboard()
+        self._fill_home_action_groups()
         messagebox.showinfo("Saved", "Settings updated.")
 
     def _on_reset_onboarding(self) -> None:
