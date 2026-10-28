@@ -780,19 +780,35 @@ def _cursor_state_db_path() -> Path | None:
     return db if db.is_file() else None
 
 
+def _open_cursor_state_db(db: Path) -> sqlite3.Connection:
+    """Read Cursor's state DB without waiting on the lock Cursor holds while running.
+
+    A normal connect waits, then raises OperationalError, and the Add link list
+    comes back empty. An immutable read does not take that lock.
+    """
+    uri = db.resolve().as_uri() + "?mode=ro&immutable=1"
+    try:
+        return sqlite3.connect(uri, uri=True)
+    except sqlite3.Error:
+        return sqlite3.connect(db, timeout=0.2)
+
+
 def _read_cursor_recent_entries() -> list[dict]:
     db = _cursor_state_db_path()
     if not db:
         return []
+    conn: sqlite3.Connection | None = None
     try:
-        conn = sqlite3.connect(db)
+        conn = _open_cursor_state_db(db)
         row = conn.execute(
             "SELECT value FROM ItemTable WHERE key = ?",
             ("history.recentlyOpenedPathsList",),
         ).fetchone()
-        conn.close()
     except sqlite3.Error:
         return []
+    finally:
+        if conn is not None:
+            conn.close()
     if not row:
         return []
     raw = row[0]
