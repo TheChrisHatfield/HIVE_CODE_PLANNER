@@ -57,6 +57,9 @@ _LOOP_FIX_BUGS = re.compile(
 _BUG_HUNT = re.compile(r"(?i)\bbu(?:g|ng|n)?\s*-?\s*hun(?:t(?:s|ing)?)?\b")
 _SLASH = re.compile(r"(?i)(?:^|\s)/bug-?hunt\b")
 _COMPOUND = re.compile(r"(?i)\bbughunt\b")
+_ENABLED_QUESTION = re.compile(
+    r"(?i)\b(?:is|whether)\b.{0,80}\b(?:enabled|installed)\b"
+)
 
 
 class BugHuntError(Exception):
@@ -110,6 +113,8 @@ def is_bug_hunt_request(text: str) -> bool:
     if not has_signal:
         return False
     if _COMMAND_QUESTION.search(raw) or _DOCS_QUESTION.search(raw):
+        return False
+    if _ENABLED_QUESTION.search(raw):
         return False
     return True
 
