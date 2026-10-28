@@ -403,26 +403,30 @@ def overlay_issues_as_missing(root: Path, manifest: dict | None) -> list[str]:
 
     runtime = resolve_cl_runtime(root)
     missing: list[str] = []
+
+    def add(rel: str) -> None:
+        if rel and rel not in missing:
+            missing.append(rel)
+
     for issue in _verify_spec_kit_overlay(root, manifest=manifest):
         if issue.startswith("spec-kit overlay missing: "):
-            rel = issue.split("spec-kit overlay missing: ", 1)[1]
-            if rel not in missing:
-                missing.append(rel)
+            add(issue.split("spec-kit overlay missing: ", 1)[1])
         elif "spec-kit overlay stale" in issue:
-            rel = f"{SPEC_KIT_OVERLAY_REL}/{OVERLAY_REV_FILE}"
-            if rel not in missing:
-                missing.append(rel)
+            add(f"{SPEC_KIT_OVERLAY_REL}/{OVERLAY_REV_FILE}")
     if not requires_cursor_plugin(runtime):
         return missing
     for issue in _verify_cl_overlay(root, manifest=manifest):
         if issue.startswith("continual-learning overlay missing: "):
-            rel = issue.split("continual-learning overlay missing: ", 1)[1]
-            if rel not in missing:
-                missing.append(rel)
+            add(issue.split("continual-learning overlay missing: ", 1)[1])
         elif "continual-learning overlay stale" in issue:
-            rel = f"{CL_OVERLAY_REL}/{OVERLAY_REV_FILE}"
-            if rel not in missing:
-                missing.append(rel)
+            add(f"{CL_OVERLAY_REL}/{OVERLAY_REV_FILE}")
+        elif "uses Bun" in issue or "must invoke continual-learning-stop.py" in issue:
+            add(f"{CL_OVERLAY_REL}/hooks/hooks.json")
+        elif issue.startswith("continual-learning registration missing: "):
+            rest = issue.split("continual-learning registration missing: ", 1)[1]
+            add(rest.split(" (", 1)[0].strip())
+        elif "in .cursor/hooks.json" in issue:
+            add(".cursor/hooks.json")
     return missing
 
 
