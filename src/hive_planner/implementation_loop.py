@@ -96,6 +96,9 @@ def is_implementation_loop_request(text: str) -> bool:
     ) or (
         "implementation loop" in lowered
         and re.search(r"\b(what|where|how|whether)\b", lowered)
+    ) or (
+        "implementation loop" in lowered
+        and re.search(r"\b(is|whether)\b.{0,80}\b(enabled|installed)\b", lowered)
     )
     if about_loop and not any(p in lowered for p in run_phrases):
         return False

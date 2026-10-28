@@ -60,6 +60,8 @@ def test_trigger_phrases() -> None:
     assert not is_implementation_loop_request("bug hunt")
     assert not is_implementation_loop_request("hunt for bugs")
     assert is_implementation_loop_request("please run the implementation loop")
+    assert not is_implementation_loop_request("is the implementation loop enabled")
+    assert not is_implementation_loop_request("whether the implementation loop is installed")
 
 
 def test_render_cursor_rule_mentions_command_and_questions() -> None:
