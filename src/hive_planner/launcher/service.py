@@ -914,6 +914,112 @@ def discover_cursor_workspaces() -> list[CursorWorkspace]:
     return workspaces
 
 
+def parse_cursor_window_title(title: str) -> tuple[str | None, str | None]:
+    """Split a Cursor title into (open tab hint, workspace name)."""
+    text = (title or "").strip()
+    if not text:
+        return None, None
+    if "cursor" not in text.lower():
+        return None, None
+    parts = [part.strip() for part in re.split(r"\s[-—]\s", text) if part.strip()]
+    while parts and parts[-1].lower() in {"cursor", "visual studio code", "code"}:
+        parts.pop()
+    if not parts:
+        return None, None
+    if len(parts) == 1:
+        return None, parts[0]
+    return parts[0], parts[-1]
+
+
+def match_cursor_workspace_from_title(
+    title: str,
+    workspaces: list[CursorWorkspace],
+) -> CursorWorkspace | None:
+    file_hint, workspace_name = parse_cursor_window_title(title)
+    if not file_hint and not workspace_name:
+        return None
+    name_key = (workspace_name or "").lower()
+    for workspace in workspaces:
+        path = Path(workspace.path)
+        labels = {workspace.name.lower(), path.name.lower(), path.stem.lower()}
+        if name_key and name_key in labels:
+            return workspace
+    if file_hint:
+        for workspace in workspaces:
+            root = Path(workspace.path)
+            if root.name.lower() == file_hint.lower():
+                return workspace
+            try:
+                if (root / file_hint).exists():
+                    return workspace
+            except OSError:
+                continue
+    return None
+
+
+def _cursor_window_titles() -> list[str]:
+    """Visible Cursor window titles, front-most first. Hive Planner is skipped."""
+    if sys.platform != "win32":
+        return []
+    import ctypes
+    from ctypes import wintypes
+
+    user32 = ctypes.windll.user32
+    titles: list[str] = []
+    EnumWindowsProc = ctypes.WINFUNCTYPE(ctypes.c_bool, wintypes.HWND, wintypes.LPARAM)
+
+    def _each(hwnd: int, _lparam: int) -> bool:
+        if not user32.IsWindowVisible(hwnd):
+            return True
+        length = user32.GetWindowTextLengthW(hwnd)
+        if length <= 0:
+            return True
+        buf = ctypes.create_unicode_buffer(length + 1)
+        user32.GetWindowTextW(hwnd, buf, length + 1)
+        title = buf.value.strip()
+        if not title:
+            return True
+        lowered = title.lower()
+        if "cursor" not in lowered:
+            return True
+        if "hive planner" in lowered:
+            return True
+        titles.append(title)
+        return True
+
+    callback = EnumWindowsProc(_each)
+    user32.EnumWindows(callback, 0)
+    return titles
+
+
+def detect_active_cursor_project(
+    *,
+    hive_active: str | None = None,
+    window_titles: list[str] | None = None,
+    workspaces: list[CursorWorkspace] | None = None,
+) -> CursorWorkspace | None:
+    """Workspace for the front-most Cursor window, else Cursor's most recent folder."""
+    if workspaces is None:
+        workspaces = discover_cursor_workspaces()
+    if window_titles is None:
+        window_titles = _cursor_window_titles()
+    for title in window_titles:
+        matched = match_cursor_workspace_from_title(title, workspaces)
+        if matched is not None:
+            return matched
+    existing = [item for item in workspaces if item.exists]
+    if existing:
+        return existing[0]
+    if hive_active:
+        path = Path(hive_active)
+        try:
+            if path.exists():
+                return classify_workspace(path)
+        except OSError:
+            return None
+    return None
+
+
 def is_hive_planner_source_repo(root: Path) -> bool:
     pyproject = root / "pyproject.toml"
     if not pyproject.is_file():

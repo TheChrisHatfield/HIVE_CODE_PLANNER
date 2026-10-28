@@ -522,6 +522,59 @@ def test_discover_cursor_workspaces_reads_state_db(tmp_path: Path, monkeypatch: 
     assert workspaces[1].path == str(repo.resolve())
 
 
+def test_detect_active_cursor_project_matches_window_title(tmp_path: Path) -> None:
+    from hive_planner.launcher.service import (
+        CursorWorkspace,
+        detect_active_cursor_project,
+        parse_cursor_window_title,
+    )
+
+    folder = tmp_path / "HIVE_CODE_PLANNER"
+    folder.mkdir()
+    other = tmp_path / "other-app"
+    other.mkdir()
+    workspaces = [
+        CursorWorkspace(
+            path=str(other.resolve()),
+            name="other-app",
+            location=str(other.parent),
+            exists=True,
+            hive_ready=False,
+            has_cursor_dir=False,
+            has_git=False,
+            entry_kind="folder",
+        ),
+        CursorWorkspace(
+            path=str(folder.resolve()),
+            name="HIVE_CODE_PLANNER",
+            location=str(folder.parent),
+            exists=True,
+            hive_ready=True,
+            has_cursor_dir=True,
+            has_git=True,
+            entry_kind="folder",
+        ),
+    ]
+    assert parse_cursor_window_title("app.py - HIVE_CODE_PLANNER - Cursor") == (
+        "app.py",
+        "HIVE_CODE_PLANNER",
+    )
+    found = detect_active_cursor_project(
+        hive_active=str(other),
+        window_titles=["app.py - HIVE_CODE_PLANNER - Cursor"],
+        workspaces=workspaces,
+    )
+    assert found is not None
+    assert found.path == str(folder.resolve())
+    recent = detect_active_cursor_project(
+        hive_active=str(folder),
+        window_titles=[],
+        workspaces=workspaces,
+    )
+    assert recent is not None
+    assert recent.path == str(other.resolve())
+
+
 def test_classify_workspace_detects_hive_and_cursor(tmp_path: Path) -> None:
     cursor_repo = tmp_path / "cursor-only"
     cursor_repo.mkdir()
@@ -1445,6 +1498,19 @@ def test_app_registers_controls_tab() -> None:
     open_fn = text.split("def _on_open_loop_controls", 1)[-1].split("    def ", 1)[0]
     assert '== "Controls"' in open_fn
     assert "notebook.select(1)" not in open_fn
+    assert "def _on_codespec_install_active_cursor" in text
+    assert '"Install CodeSpec"' in text
+
+
+def test_codespec_install_button_runs_enable_through_block_run() -> None:
+    source = Path(__file__).resolve().parents[1] / "src" / "hive_planner" / "launcher" / "app.py"
+    text = source.read_text(encoding="utf-8")
+    body = text.split("def _on_codespec_install_active_cursor", 1)[-1].split("    def ", 1)[0]
+    assert "_prepare_codespec_block_for_enable" in body
+    assert "_on_controls_instance_run" in body
+    assert "_on_implementation_loop_install" not in body
+    run_body = text.split("def _on_controls_run", 1)[-1].split("    def ", 1)[0]
+    assert '"Enable": lambda: self._on_implementation_loop_install(from_controls=True)' in run_body
 
 
 def test_loop_install_failures_update_controls_last() -> None:

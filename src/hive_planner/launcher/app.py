@@ -24,6 +24,7 @@ from hive_planner.launcher.home_groups import (
 from hive_planner.launcher.service import (
     CursorWorkspace,
     classify_workspace,
+    detect_active_cursor_project,
     discover_cursor_workspaces,
     discover_python_installations,
     format_python_scan_report,
@@ -1266,6 +1267,12 @@ class HivePlannerApp:
             "+",
             self._on_add_controls_instance,
             tooltip="Add another loop block with its own settings. New blocks start collapsed. The active repo above is shared.",
+        )
+        primary_button(
+            add_row,
+            "Install CodeSpec",
+            self._on_codespec_install_active_cursor,
+            tooltip="Installs CodeSpec on the Cursor window in front, using this pack. Folds settings, then Enable.",
         )
         self._controls_instances_host = tk.Frame(panel, bg=COLORS["card"])
         self._controls_instances_host.pack(fill="x", padx=8, pady=(0, 8))
@@ -3887,6 +3894,46 @@ class HivePlannerApp:
         self._queue_home_log(message)
         self._set_controls_last(message)
         self._refresh_home_dashboard()
+
+    def _prepare_codespec_block_for_enable(self, inst: dict) -> None:
+        """Select CodeSpec, keep the pack, fold settings, then Enable. Compact does not write."""
+        try:
+            inst["loop"].set("CodeSpec")
+        except (tk.TclError, KeyError, AttributeError):
+            return
+        self._on_controls_instance_loop_changed(inst)
+        try:
+            inst["command"].set("Enable")
+        except (tk.TclError, KeyError, AttributeError):
+            pass
+        self._set_controls_instance_collapsed(inst, True)
+
+    def _on_codespec_install_active_cursor(self) -> None:
+        found = detect_active_cursor_project(hive_active=self.config.active_project)
+        if found is None or not found.exists:
+            messagebox.showwarning(
+                "No Cursor project",
+                "Could not find a Cursor window or a recent workspace to install CodeSpec on.",
+            )
+            return
+        target = Path(found.path)
+        self.config.add_recent_project(target)
+        save_config(self.config)
+        prepare_linked_project_root(target, repair_agents=True)
+        self._sync_controls_for_active()
+        inst = self._codespec_instance()
+        if inst is None:
+            instances = getattr(self, "_controls_instances", None) or []
+            inst = instances[0] if instances else None
+        if inst is None:
+            inst = self._new_controls_instance_vars()
+            if getattr(self, "_controls_instances", None) is None:
+                self._controls_instances = []
+            self._controls_instances.append(inst)
+            if getattr(self, "_controls_instances_host", None) is not None:
+                self._mount_controls_instance(inst)
+        self._prepare_codespec_block_for_enable(inst)
+        self._on_controls_instance_run(inst)
 
     def _on_implementation_loop_install(self, *, from_controls: bool = False) -> None:
         if not self.config.active_project:
