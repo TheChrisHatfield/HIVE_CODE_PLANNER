@@ -63,6 +63,32 @@ def test_hitch_updates_only_kinds_that_ran() -> None:
     assert scheduler.posterior("canvas_redraw") == (1.0, 2.0)
 
 
+def test_fractional_budget_runs_each_unit_that_sums_to_the_budget() -> None:
+    scheduler = ResizeScheduler(budget_ms=0.3, unit_cost_ms=0.1, rng=random.Random(0))
+    kinds = ("split_reposition", "label_rewrap", "scrollbar_pack")
+    for kind in kinds:
+        scheduler.enqueue(kind, now_ms=0)
+    assert set(scheduler.plan_chunk(-1)) == set(kinds)
+
+
+def test_optional_unit_stops_when_its_cost_does_not_fit() -> None:
+    scheduler = ResizeScheduler(budget_ms=6, unit_cost_ms=4, rng=random.Random(0))
+    scheduler.enqueue("label_rewrap", now_ms=0)
+    scheduler.enqueue("scrollbar_pack", now_ms=0)
+    ran = scheduler.plan_chunk(-1)
+    assert len(ran) == 1
+    left = next(kind for kind in ("label_rewrap", "scrollbar_pack") if kind not in ran)
+    assert scheduler.deadline(left) is not None
+
+
+def test_due_unit_over_a_short_budget_blocks_optional_units() -> None:
+    scheduler = ResizeScheduler(budget_ms=0.05, unit_cost_ms=0.1)
+    scheduler.enqueue("canvas_redraw", now_ms=0)
+    scheduler.enqueue("scrollbar_pack", now_ms=0)
+    assert scheduler.plan_chunk(0) == ["canvas_redraw"]
+    assert scheduler.deadline("scrollbar_pack") is not None
+
+
 def test_clean_hitch_increments_alpha() -> None:
     scheduler = ResizeScheduler(budget_ms=8, unit_cost_ms=4, rng=random.Random(0))
     scheduler.enqueue("split_reposition", now_ms=0)

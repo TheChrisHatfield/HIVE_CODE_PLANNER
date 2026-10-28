@@ -7,6 +7,7 @@ rest of the chunk in Thompson order, using hitch observations as the reward.
 
 from __future__ import annotations
 
+import math
 import random
 from dataclasses import dataclass
 
@@ -101,9 +102,9 @@ class ResizeScheduler:
 
         ran: list[str] = [unit.kind for unit in due]
         remaining = self.budget_ms - self.unit_cost_ms * len(due)
-        if remaining >= self.unit_cost_ms:
+        if self._cost_fits(remaining):
             for _draw, unit in draws:
-                if self.unit_cost_ms > remaining:
+                if not self._cost_fits(remaining):
                     break
                 ran.append(unit.kind)
                 remaining -= self.unit_cost_ms
@@ -112,6 +113,17 @@ class ResizeScheduler:
             self._pending.pop(kind, None)
         self._last_ran = list(ran)
         return ran
+
+    def _cost_fits(self, remaining: float) -> bool:
+        """True when one more unit still fits in the leftover budget.
+
+        Repeated subtraction of values such as 0.1 leaves a remainder that
+        is a few ulps under the cost even though the sum still fits.
+        """
+        cost = self.unit_cost_ms
+        if remaining >= cost:
+            return True
+        return math.isclose(remaining, cost, rel_tol=1e-9, abs_tol=0.0)
 
     def observe(self, hitch_ms: float) -> None:
         """Update posteriors for the kinds the last plan actually ran."""
