@@ -128,7 +128,8 @@ def _module_role(module_path: Path) -> str:
         quote = text[0:3]
         end = text.find(quote, 3)
         if end != -1:
-            first = text[3:end].strip().splitlines()[0].strip()
+            lines = text[3:end].strip().splitlines()
+            first = lines[0].strip() if lines else ""
             if first:
                 return first[:80]
     return module_path.stem.replace("_", " ")

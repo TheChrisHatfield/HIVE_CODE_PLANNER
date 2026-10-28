@@ -259,3 +259,15 @@ def test_discover_test_mappings_in_subdirs(tmp_path: Path) -> None:
     )
     mapping = discover_test_mappings(paths)
     assert "tests/integration/test_nested.py" in mapping["src/hive_planner/config.py"]
+
+
+def test_sync_blank_docstring_uses_filename_and_keeps_real_role(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    _write_src_module(paths, "src/hive_planner/blank.py", '"""\n"""\n')
+    _write_src_module(paths, "src/hive_planner/noted.py", '"""Keeps the first line.\n"""\n')
+    report = sync_impact_maps(paths)
+    project_map = (paths.root / "docs" / "change-impact" / "project-map.md").read_text(encoding="utf-8")
+    assert "src/hive_planner/blank.py" in report.project_added
+    assert "src/hive_planner/noted.py" in report.project_added
+    assert "Keeps the first line." in project_map
+    assert "| `src/hive_planner/blank.py` | blank | (auto-sync) |" in project_map

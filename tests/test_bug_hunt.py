@@ -165,6 +165,7 @@ def test_prompt_keeps_the_loop_moving() -> None:
     assert "Before those 30 rows exist, there is no floor" in text
     assert ".hive/bug-hunt/rank-rows.jsonl" in text
     assert "Leave locations under that floor unopened" in text
+    assert "Logic-error rotation" in text
     assert "including when the harness is missing" in text
     assert "mark this run's opened set" in text
     assert "A hunt starts after `active` was written false for a stop condition" in text
