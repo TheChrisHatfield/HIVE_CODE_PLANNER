@@ -1731,6 +1731,14 @@ def coordinator_commit(root: Path) -> CoordinatorReport:
     if any(p == "AGENTS.md" or p.endswith("/AGENTS.md") for p in dirty):
         raise CoordinatorError("AGENTS.md is dirty — commit blocked", action="commit", feature=feature, task=current)
 
+    # Validate commands.json before checking off the task or committing: a parse
+    # failure after the git commit would report a false failure and leave the
+    # state pointing at an already-checked task.
+    try:
+        commands = _read_existing_json_object(_loop_dir(root) / "commands.json", "commands.json") or {}
+    except ValueError as exc:
+        raise CoordinatorError(str(exc), action="commit", feature=feature, task=current) from exc
+
     checked = _check_off_task(tasks_text, task_id, body)
     tasks_path.write_text(checked, encoding="utf-8")
 
@@ -1777,10 +1785,6 @@ def coordinator_commit(root: Path) -> CoordinatorReport:
     more = _has_open_task_text(checked)
     slice_open = _slice_has_open_after(checked, heading)
 
-    try:
-        commands = _read_existing_json_object(_loop_dir(root) / "commands.json", "commands.json") or {}
-    except ValueError as exc:
-        raise CoordinatorError(str(exc), action="commit", feature=feature, task=current) from exc
     if _push_enabled(commands) and _detect_push_default(root):
         pushed = _git(root, "push", "-u", "origin", state.branch or "HEAD")
         if pushed.returncode != 0:

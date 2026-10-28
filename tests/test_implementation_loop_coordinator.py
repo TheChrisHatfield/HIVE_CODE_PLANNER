@@ -590,6 +590,26 @@ def test_commit_restores_tasks_when_git_commit_fails(loop_root: Path, monkeypatc
     assert "- [ ] T001 do the thing" in tasks
 
 
+def test_commit_refuses_corrupt_commands_before_committing(loop_root: Path) -> None:
+    tasks = loop_root / "docs/specs/feature-x/tasks.md"
+    _install_ready(loop_root)
+    coordinator_start(loop_root, "feature-x")
+    (loop_root / "src").mkdir()
+    (loop_root / "src" / "ok.py").write_text("x = 1\n", encoding="utf-8")
+    _pass_roles_to_reviewer(loop_root)
+    _write_result(loop_root, "T001", "reviewer", "pass")
+    coordinator_accept(loop_root, "reviewer")
+    head_before = _git(loop_root, "rev-parse", "HEAD").stdout.strip()
+    (loop_root / ".hive/implementation-loop/commands.json").write_text("{not json", encoding="utf-8")
+    with pytest.raises(CoordinatorError, match="commands.json is not valid JSON"):
+        coordinator_commit(loop_root)
+    assert _git(loop_root, "rev-parse", "HEAD").stdout.strip() == head_before
+    assert "- [ ] T001 do the thing" in tasks.read_text(encoding="utf-8")
+    state = json.loads((loop_root / ".hive/implementation-loop/state.json").read_text(encoding="utf-8"))
+    assert state["status"] == "running"
+    assert state["current_task"] == "T001"
+
+
 def test_test_full_failure_does_not_advance_task(
     loop_root: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
