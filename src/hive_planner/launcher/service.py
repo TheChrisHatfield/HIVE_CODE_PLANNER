@@ -1609,6 +1609,9 @@ def run_project_agnostic_loop_choose(
     *,
     do_arm: bool = False,
     cycles: int = 1,
+    sims: int = 64,
+    horizon: int = 4,
+    seed: int | None = None,
 ) -> dict:
     from hive_planner.agnostic_loop import choose, parse_open, rewards
 
@@ -1626,7 +1629,16 @@ def run_project_agnostic_loop_choose(
                 "blocked_reason": "invalid --open",
                 "root": str(target),
             }
-        payload, _code = choose(target, opens, do_arm=do_arm, cycles=cycles, names=names)
+        payload, _code = choose(
+            target,
+            opens,
+            sims=sims,
+            horizon=horizon,
+            seed=seed,
+            do_arm=do_arm,
+            cycles=cycles,
+            names=names,
+        )
     except OSError as exc:
         return {"ok": False, "action": "choose", "error": str(exc), "blocked_reason": str(exc)}
     return _agnostic_gate_payload(payload, root=target)
@@ -1833,7 +1845,9 @@ def run_project_implementation_loop_commit(project_root: Path) -> dict:
 
 
 def run_project_map_sync(project_root: Path, *, dry_run: bool = False) -> dict:
-    target = project_root.resolve()
+    target, error = linked_install_directory(project_root)
+    if error:
+        return {"ok": False, "error": error}
     summary = summarize_project(target)
     if not summary.ok:
         return {"ok": False, "error": summary.detail}
