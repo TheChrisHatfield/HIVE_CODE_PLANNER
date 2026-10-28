@@ -212,7 +212,7 @@ def _read_json(path: Path) -> dict[str, Any] | None:
     if not path.is_file():
         return None
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
+        data = json.loads(path.read_text(encoding="utf-8-sig"))
     except Exception:
         return None
     return data if isinstance(data, dict) else None
@@ -223,7 +223,7 @@ def _read_existing_json_object(path: Path, label: str) -> dict[str, Any] | None:
     if not path.is_file():
         return None
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
+        data = json.loads(path.read_text(encoding="utf-8-sig"))
     except Exception as exc:
         raise ValueError(f"{label} is not valid JSON") from exc
     if not isinstance(data, dict):
@@ -368,7 +368,7 @@ def _without_wiring_audit_section(text: str) -> str:
 def _has_open_task(tasks_path: Path) -> bool:
     if not tasks_path.is_file():
         return False
-    text = tasks_path.read_text(encoding="utf-8", errors="replace")
+    text = tasks_path.read_text(encoding="utf-8-sig", errors="replace")
     return _has_open_task_text(text)
 
 
@@ -882,7 +882,7 @@ def _read_feature_tasks(root: Path, feature: str, action: str) -> str:
             feature=feature,
         )
     try:
-        return path.read_text(encoding="utf-8")
+        return path.read_text(encoding="utf-8-sig")
     except OSError as exc:
         raise CoordinatorError(
             f"cannot read tasks.md: {exc}",
