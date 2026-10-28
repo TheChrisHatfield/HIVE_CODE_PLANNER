@@ -186,6 +186,43 @@ class HivePlannerApp:
             return max(1, widget_height // line_height)
         return max(1, fallback)
 
+    @staticmethod
+    def _schedule_label_wrap(widget, labels, width: int, pending: dict, *, delay_ms: int = 80) -> None:
+        """Debounce wraplength. A too-narrow width cancels a wide wrap still waiting."""
+
+        def cancel() -> None:
+            token = pending.get("id")
+            if token is None:
+                return
+            try:
+                widget.after_cancel(token)
+            except tk.TclError:
+                pass
+            pending["id"] = None
+
+        if width <= 40:
+            cancel()
+            pending["width"] = width
+            return
+        if width == pending.get("width"):
+            return
+        pending["width"] = width
+        cancel()
+
+        def apply(width=width) -> None:
+            pending["id"] = None
+            for label in labels:
+                try:
+                    if width != int(label.cget("wraplength")):
+                        label.configure(wraplength=width)
+                except tk.TclError:
+                    return
+
+        try:
+            pending["id"] = widget.after(delay_ms, apply)
+        except tk.TclError:
+            pending["id"] = None
+
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
         install_popup_memory(root)
@@ -2153,10 +2190,8 @@ class HivePlannerApp:
         )
         hub_blurb.pack(anchor="w", padx=12, pady=(0, 8))
 
-        def _fit_hub_blurb(event, label=hub_blurb) -> None:
-            width = int(event.width) - 28
-            if width > 40 and width != int(label.cget("wraplength")):
-                label.configure(wraplength=width)
+        def _fit_hub_blurb(event, label=hub_blurb, pending={"id": None, "width": 0}) -> None:
+            self._schedule_label_wrap(hub, (label,), int(event.width) - 28, pending)
 
         hub.bind("<Configure>", _fit_hub_blurb)
         hub_actions = tk.Frame(hub, bg=COLORS["card"])
@@ -2251,13 +2286,8 @@ class HivePlannerApp:
         )
         cl_hint.pack(anchor="w", padx=12, pady=(0, 4))
 
-        def _fit_form_hints(event, hints=(handoff_hint, cl_hint)) -> None:
-            width = int(event.width) - 28
-            if width <= 40:
-                return
-            for hint in hints:
-                if width != int(hint.cget("wraplength")):
-                    hint.configure(wraplength=width)
+        def _fit_form_hints(event, hints=(handoff_hint, cl_hint), pending={"id": None, "width": 0}) -> None:
+            self._schedule_label_wrap(form, hints, int(event.width) - 28, pending)
 
         form.bind("<Configure>", _fit_form_hints)
         git_row = tk.Frame(form, bg=COLORS["card"])
