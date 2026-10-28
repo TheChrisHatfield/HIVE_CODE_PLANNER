@@ -1265,7 +1265,7 @@ class HivePlannerApp:
             add_row,
             "+",
             self._on_add_controls_instance,
-            tooltip="Add another loop block with its own settings. The active repo above is shared.",
+            tooltip="Add another loop block with its own settings. New blocks start collapsed. The active repo above is shared.",
         )
         self._controls_instances_host = tk.Frame(panel, bg=COLORS["card"])
         self._controls_instances_host.pack(fill="x", padx=8, pady=(0, 8))
@@ -1302,6 +1302,7 @@ class HivePlannerApp:
             "agn_horizon": tk.StringVar(value="4"),
             "agn_seed": tk.StringVar(value=""),
             "agn_arm_choose": tk.BooleanVar(value=False),
+            "collapsed": tk.BooleanVar(value=False),
         }
 
     def _alias_primary_controls_instance(self, inst: dict | None = None) -> None:
@@ -1345,6 +1346,12 @@ class HivePlannerApp:
 
         header = tk.Frame(frame, bg=COLORS["card"])
         header.pack(fill="x", padx=8, pady=(8, 0))
+        inst["collapse_btn"] = secondary_button(
+            header,
+            "▾",
+            lambda current=inst: self._on_toggle_controls_collapse(current),
+            tooltip="Hide or show this block's fields. Loop, Command, and Run stay visible.",
+        )
         tk.Label(header, text="Loop", width=10, anchor="w", bg=COLORS["card"], fg=COLORS["fg"], font=FONT).pack(side="left")
         loop_box = ttk.Combobox(
             header,
@@ -1394,9 +1401,11 @@ class HivePlannerApp:
             font=FONT,
         )
         last_label.pack(anchor="w", fill="x", padx=12, pady=(4, 0))
+        inst["last_label"] = last_label
 
         settings = tk.Frame(frame, bg=COLORS["card"])
         settings.pack(fill="x", padx=4, pady=(0, 8))
+        inst["settings"] = settings
         inst["rows"] = {
             "fix_ceiling": self._controls_labeled_entry(
                 settings,
@@ -1487,6 +1496,7 @@ class HivePlannerApp:
         }
         self._sync_controls_command_choices(inst)
         self._apply_controls_instance_settings(inst)
+        self._apply_controls_collapse(inst)
 
     def _controls_labeled_entry(self, parent, label: str, variable: tk.StringVar, tooltip: str) -> tk.Frame:
         row = tk.Frame(parent, bg=COLORS["card"])
@@ -1534,6 +1544,11 @@ class HivePlannerApp:
         return row
 
     def _apply_controls_instance_settings(self, inst: dict) -> None:
+        if self.controls_instance_collapsed(inst):
+            for row in (inst.get("rows") or {}).values():
+                if row is not None:
+                    row.pack_forget()
+            return
         visible = set(self.controls_settings_for_loop(str(inst["loop"].get())))
         order = (
             "fix_ceiling",
@@ -1561,8 +1576,69 @@ class HivePlannerApp:
             else:
                 row.pack_forget()
 
+    @staticmethod
+    def added_controls_block_collapsed() -> bool:
+        """Blocks created with + start collapsed so extra loops do not fill the tab."""
+        return True
+
+    @staticmethod
+    def controls_instance_collapsed(inst: dict) -> bool:
+        var = inst.get("collapsed")
+        if var is None:
+            return False
+        try:
+            return bool(var.get())
+        except tk.TclError:
+            return False
+
+    def _apply_controls_collapse(self, inst: dict) -> None:
+        collapsed = self.controls_instance_collapsed(inst)
+        settings = inst.get("settings")
+        last_label = inst.get("last_label")
+        button = inst.get("collapse_btn")
+        if button is not None:
+            try:
+                button.configure(text="▸" if collapsed else "▾")
+            except tk.TclError:
+                pass
+        if collapsed:
+            if settings is not None:
+                settings.pack_forget()
+            return
+        if last_label is not None:
+            last_label.pack(anchor="w", fill="x", padx=12, pady=(4, 0))
+        if settings is not None:
+            settings.pack(fill="x", padx=4, pady=(0, 8))
+        self._apply_controls_instance_settings(inst)
+
+    def _on_toggle_controls_collapse(self, inst: dict) -> None:
+        var = inst.get("collapsed")
+        if var is None:
+            inst["collapsed"] = tk.BooleanVar(value=True)
+            var = inst["collapsed"]
+        try:
+            var.set(not bool(var.get()))
+        except tk.TclError:
+            return
+        self._apply_controls_collapse(inst)
+
+    def _set_controls_instance_collapsed(self, inst: dict, collapsed: bool) -> None:
+        var = inst.get("collapsed")
+        if var is None:
+            inst["collapsed"] = tk.BooleanVar(value=collapsed)
+        else:
+            try:
+                var.set(collapsed)
+            except tk.TclError:
+                return
+        self._apply_controls_collapse(inst)
+
     def _on_add_controls_instance(self) -> None:
         inst = self._new_controls_instance_vars()
+        try:
+            inst["collapsed"].set(self.added_controls_block_collapsed())
+        except tk.TclError:
+            inst["collapsed"] = tk.BooleanVar(value=self.added_controls_block_collapsed())
         self._controls_instances.append(inst)
         self._mount_controls_instance(inst)
         self._bind_controls_instance_wheel(inst)
@@ -1726,6 +1802,8 @@ class HivePlannerApp:
         frame = None if inst is None else inst.get("frame")
         if canvas is None or frame is None:
             return
+        if inst is not None:
+            self._set_controls_instance_collapsed(inst, False)
         try:
             if not canvas.winfo_exists() or not frame.winfo_exists():
                 return
