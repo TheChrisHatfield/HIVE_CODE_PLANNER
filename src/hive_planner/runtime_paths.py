@@ -97,7 +97,7 @@ def frozen_cli_prefix() -> list[str]:
 
 def hive_cli_argv(config, *cli_args: str) -> list[str]:
     """Build argv for a hive_planner CLI subprocess (or in-process dispatch when frozen)."""
-    if is_portable_runtime():
+    if is_frozen():
         return frozen_cli_prefix() + list(cli_args)
     from hive_planner.launcher.service import _python_command
 
