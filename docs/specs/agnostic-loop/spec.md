@@ -82,7 +82,7 @@ Exit `0` success, `2` cycle cap, `3` refuse. JSON stdout includes `ok` and `acti
 
 `is_agnostic_loop_request(text)` is true for “agnostic loop”, “hive loop kit”, “run the agnostic loop”, “start the agnostic loop”, `/agnostic-loop`. Questions about the loop are not a start signal. Implementation-loop and bug-hunt phrases are not a start signal.
 
-Home **Enable agnostic loop** calls the same install as the CLI on the linked project. Chat remains valid.
+Home **Loop controls** opens the Controls tab. Controls **Agnostic loop → Run** calls the same install and gates as the CLI on the linked project. Chat remains valid.
 
 ## Out of scope
 

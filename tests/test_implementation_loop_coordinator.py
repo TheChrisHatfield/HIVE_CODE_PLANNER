@@ -30,6 +30,9 @@ from hive_planner.implementation_loop import (
     coordinator_accept,
     coordinator_check,
     coordinator_commit,
+    codespec_progress_text,
+    codespec_role_for,
+    codespec_step_states,
     coordinator_handoff,
     coordinator_start,
     install_implementation_loop,
@@ -324,20 +327,50 @@ def test_commit_checks_off_task_and_leaves_hive_unstaged(loop_root: Path) -> Non
     assert "src/ok.py" in names
 
 
-def test_4pack_accept_rejects_coordinator_role(loop_root: Path) -> None:
+def test_4pack_accept_does_not_reject_coordinator_for_pack(loop_root: Path) -> None:
     _install_ready(loop_root)
     coordinator_start(loop_root, "feature-x")
-    with pytest.raises(CoordinatorError, match="not valid for 4-pack"):
+    with pytest.raises(CoordinatorError, match="missing result"):
         coordinator_accept(loop_root, "coordinator")
 
 
-def test_1pack_rejects_coder_handoff(loop_root: Path) -> None:
+def test_1pack_handoff_allows_any_role_name(loop_root: Path) -> None:
     _install_ready(loop_root, PACK_1)
     coordinator_start(loop_root, "feature-x")
-    with pytest.raises(CoordinatorError, match="not valid for 1-pack"):
-        coordinator_handoff(loop_root, "coder")
-    handed = coordinator_handoff(loop_root, "coordinator")
+    handed = coordinator_handoff(loop_root, "coder")
     assert handed.ok is True
+    assert handed.role == "coder"
+
+
+def test_codespec_steps_follow_the_pack_and_mark_a_stop(loop_root: Path) -> None:
+    idle = codespec_step_states(PACK_1)
+    assert [step["state"] for step in idle] == ["waiting", "waiting", "waiting", "waiting"]
+    assert "Coordinator implements" in codespec_progress_text(None, PACK_1)
+    assert "Coordinator commits" in codespec_progress_text(None, PACK_4)
+
+    _install_ready(loop_root)
+    coordinator_start(loop_root, "feature-x")
+    running = codespec_progress_text(loop_root, PACK_1)
+    assert running.startswith("Four-pack steps")
+    assert "1. Coder — now" in running
+    assert codespec_role_for(loop_root, PACK_1, "handoff") == "coder"
+
+    _write_result(loop_root, "T001", "coder", "pass")
+    _write_result(loop_root, "T001", "checker", "fail")
+    stopped = codespec_progress_text(loop_root, PACK_4)
+    assert "1. Coder — now" in stopped
+    assert "2. Check — stopped" in stopped
+    assert codespec_role_for(loop_root, PACK_4, "handoff") == "coder"
+
+
+def test_1pack_steps_name_the_coordinator_pass(loop_root: Path) -> None:
+    _install_ready(loop_root, PACK_1)
+    coordinator_start(loop_root, "feature-x")
+    one = codespec_progress_text(loop_root, PACK_4)
+    assert one.startswith("One-pack steps")
+    assert "1. Coordinator implements — now" in one
+    assert "2. Check runs tests — waiting" in one
+    assert codespec_role_for(loop_root, PACK_4, "handoff") == "coordinator"
 
 
 def test_1pack_commit_does_not_require_coder_result(loop_root: Path) -> None:

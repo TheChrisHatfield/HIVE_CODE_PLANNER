@@ -97,6 +97,19 @@ def test_init_creates_detectable_repo_root(tmp_path: Path) -> None:
     assert (target / "docs" / "proposals" / "candidates-template.md").exists()
 
 
+def test_force_init_installs_bug_hunt_after_replacing_broken_hooks_json(tmp_path: Path) -> None:
+    source = _hive_source(tmp_path)
+    target = tmp_path / "broken-hooks"
+    init_project(source, target, name="Broken Hooks")
+    hooks = target / ".cursor" / "hooks.json"
+    hooks.write_text("{", encoding="utf-8")
+    result = init_project(source, target, force=True)
+    data = json.loads(hooks.read_text(encoding="utf-8"))
+    stop = data["hooks"]["stop"]
+    assert any("bug_hunt_continue.py" in str(item.get("command", "")) for item in stop)
+    assert not any("Bug-hunt install skipped" in item for item in result.warnings)
+
+
 def test_deploy_agent_handoff_scaffold_includes_rosetta_navigation(tmp_path: Path) -> None:
     from hive_planner.bootstrap import deploy_agent_handoff_scaffold
 

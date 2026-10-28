@@ -1541,6 +1541,7 @@ def run_project_bug_hunt_install(
     project_root: Path,
     *,
     iterations: int = 50,
+    pause_seconds: int = 10,
 ) -> dict:
     """Install the chat-triggered bug-hunt script into a linked project."""
     from hive_planner.bug_hunt import BugHuntError, install_bug_hunt, missing_bug_hunt_artifacts
@@ -1556,7 +1557,12 @@ def run_project_bug_hunt_install(
     if not target.is_dir():
         return {"ok": False, "error": "Path is not a project directory"}
     try:
-        installed = install_bug_hunt(target, iterations=iterations, force=True)
+        installed = install_bug_hunt(
+            target,
+            iterations=iterations,
+            pause_seconds=pause_seconds,
+            force=True,
+        )
     except (BugHuntError, OSError) as exc:
         return {"ok": False, "error": str(exc)}
     payload = installed.to_dict()

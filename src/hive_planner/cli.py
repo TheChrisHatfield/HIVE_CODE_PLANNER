@@ -23,6 +23,24 @@ from hive_planner.pipeline import ingest, status_summary
 from hive_planner.translator import TranslatorError, translate_document, write_translator_status
 
 
+def _pause_seconds_arg(value: str) -> int:
+    from hive_planner.bug_hunt import BugHuntError, parse_pause_seconds
+
+    try:
+        return parse_pause_seconds(value)
+    except BugHuntError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
+
+
+def _iterations_arg(value: str) -> int:
+    from hive_planner.bug_hunt import BugHuntError, parse_iterations
+
+    try:
+        return parse_iterations(value)
+    except BugHuntError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="hive-planner",
@@ -284,7 +302,7 @@ def main(argv: list[str] | None = None) -> int:
         "notify",
         help="Show an IDE-agnostic desktop notice (no chat prompt)",
     )
-    notify_parser.add_argument("--title", default="Hive Planner")
+    notify_parser.add_argument("--title", default="HIVE Planner")
     notify_parser.add_argument("--body", required=True)
     notify_parser.add_argument("--seconds", type=int, default=12)
 
@@ -487,9 +505,15 @@ def main(argv: list[str] | None = None) -> int:
     )
     bug_hunt.add_argument(
         "--iterations",
-        type=int,
+        type=_iterations_arg,
         default=50,
         help="How many reviewed local commits the script aims for (1-200, default 50)",
+    )
+    bug_hunt.add_argument(
+        "--pause-seconds",
+        type=_pause_seconds_arg,
+        default=10,
+        help="Seconds between inference passes (0 skips the wait and the next pass still starts, default 10)",
     )
     bug_hunt.add_argument(
         "--print",
@@ -1244,9 +1268,16 @@ def main(argv: list[str] | None = None) -> int:
 
         try:
             if args.print_only:
-                print(preview_agent_prompt(root, args.iterations), end="")
+                print(
+                    preview_agent_prompt(root, args.iterations, pause_seconds=args.pause_seconds),
+                    end="",
+                )
                 return 0
-            installed = install_bug_hunt(root, iterations=args.iterations)
+            installed = install_bug_hunt(
+                root,
+                iterations=args.iterations,
+                pause_seconds=args.pause_seconds,
+            )
         except (BugHuntError, OSError) as exc:
             print(f"Error: {exc}", file=sys.stderr)
             return 1

@@ -45,9 +45,13 @@ def _show_startup_error(message: str, detail: str = "") -> None:
         import tkinter as tk
         from tkinter import messagebox
 
+        from hive_planner.launcher.theme import apply_app_icon
+        from hive_planner.runtime_paths import APP_DISPLAY_NAME
+
         root = tk.Tk()
         root.withdraw()
-        messagebox.showerror("Hive Planner", text)
+        apply_app_icon(root)
+        messagebox.showerror(APP_DISPLAY_NAME, text)
         root.destroy()
     except Exception:
         pass

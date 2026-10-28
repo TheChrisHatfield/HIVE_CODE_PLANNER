@@ -45,12 +45,12 @@ VSVersionInfo(
       StringTable(
         '040904B0',
         [StringStruct('CompanyName', 'Hive Code Planner'),
-        StringStruct('FileDescription', 'Hive Planner desktop and CLI'),
+        StringStruct('FileDescription', 'HIVE Planner desktop and CLI'),
         StringStruct('FileVersion', '{version}'),
         StringStruct('InternalName', 'HivePlanner'),
         StringStruct('LegalCopyright', 'Copyright (c) 2026 Hive Code Planner'),
         StringStruct('OriginalFilename', 'HivePlanner.exe'),
-        StringStruct('ProductName', 'Hive Planner'),
+        StringStruct('ProductName', 'HIVE Planner'),
         StringStruct('ProductVersion', '{version}')])
       ]
     ),

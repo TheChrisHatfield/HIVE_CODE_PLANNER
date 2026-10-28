@@ -15,7 +15,7 @@ Load [`docs/planning-rosetta-stone.md`](../../planning-rosetta-stone.md) (`plann
 
 ## Approach
 
-Keep the script text and chat-trigger matcher in `bug_hunt.py`. The CLI, project bootstrap, handoff deploy, and Home **Enable bug hunt** all call `install_bug_hunt` so the Cursor command + always-on rule land in the project. The rule matches derivative "perform a bug hunt" phrasing; `is_bug_hunt_request` is the testable contract.
+Keep the script text and chat-trigger matcher in `bug_hunt.py`. The CLI, project bootstrap, handoff deploy, and Controls **Bug hunt → Enable** all call `install_bug_hunt` so the Cursor command + always-on rule land in the project. The rule matches derivative "perform a bug hunt" phrasing; `is_bug_hunt_request` is the testable contract.
 
 ## Validation
 

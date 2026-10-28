@@ -61,6 +61,48 @@ def test_ping_tool_reports_root(tmp_path: Path, monkeypatch) -> None:
     assert Path(payload["root"]) == tmp_path.resolve()
 
 
+def test_bug_hunt_enable_keeps_a_zero_pause_when_omitted(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".cursor" / "commands").mkdir(parents=True)
+    (tmp_path / ".cursor" / "commands" / "bug-hunt.md").write_text(
+        "This run's pause is 0 seconds, so do not wait between passes.\n",
+        encoding="utf-8",
+    )
+    reply = handle_rpc(
+        {
+            "jsonrpc": "2.0",
+            "id": 9,
+            "method": "tools/call",
+            "params": {"name": "hive_bug_hunt_enable", "arguments": {"root": str(tmp_path)}},
+        }
+    )
+    assert reply is not None
+    payload = json.loads(reply["result"]["content"][0]["text"])
+    assert payload["ok"] is True
+    assert payload["pause_seconds"] == 0
+    text = (tmp_path / ".cursor" / "commands" / "bug-hunt.md").read_text(encoding="utf-8")
+    assert "pause is 0 seconds" in text
+    assert "do not wait between passes" in text
+
+
+def test_bug_hunt_enable_accepts_a_whole_decimal_ceiling(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    reply = handle_rpc(
+        {
+            "jsonrpc": "2.0",
+            "id": 10,
+            "method": "tools/call",
+            "params": {
+                "name": "hive_bug_hunt_enable",
+                "arguments": {"root": str(tmp_path), "iterations": 50.0},
+            },
+        }
+    )
+    payload = json.loads(reply["result"]["content"][0]["text"])
+    assert payload["ok"] is True
+    assert payload["iterations"] == 50
+
+
 def test_unknown_tool_is_error() -> None:
     reply = handle_rpc(
         {

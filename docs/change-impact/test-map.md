@@ -20,7 +20,7 @@ Maps source modules to tests (v1 manual + Stage 5B import merge via `impact-sync
 | `src/hive_planner/ci_handoff.py` | `tests/test_ci_handoff.py`, `tests/test_security_validation.py`, `tests/test_spec_drift.py`, `tests/test_unified_handoff.py`, `tests/test_wiring_audit.py` |
 | `src/hive_planner/cl_migration.py` | `tests/test_cl_migration.py`, `tests/test_cl_runtime.py` |
 | `src/hive_planner/cl_runtime.py` | `tests/test_agent_handoff.py`, `tests/test_cl_migration.py`, `tests/test_cl_runtime.py`, `tests/test_unified_handoff.py` |
-| `src/hive_planner/cli.py` | `tests/test_agents_memory.py`, `tests/test_bootstrap.py`, `tests/test_cartridge_promote.py`, `tests/test_cli_handoff.py`, `tests/test_delta_emit.py`, `tests/test_embeddings.py`, `tests/test_format_deps.py`, `tests/test_impact.py`, `tests/test_ocr_runtime.py`, `tests/test_rosetta_eject.py`, `tests/test_source4s.py`, `tests/test_translator.py` |
+| `src/hive_planner/cli.py` | `tests/test_agents_memory.py`, `tests/test_bootstrap.py`, `tests/test_cartridge_promote.py`, `tests/test_cli_handoff.py`, `tests/test_delta_emit.py`, `tests/test_embeddings.py`, `tests/test_format_deps.py`, `tests/test_impact.py`, `tests/test_mcp_server.py`, `tests/test_ocr_runtime.py`, `tests/test_rosetta_eject.py`, `tests/test_source4s.py`, `tests/test_translator.py` |
 | `src/hive_planner/config.py` | `tests/test_agent_handoff.py`, `tests/test_agents_memory.py`, `tests/test_bootstrap.py`, `tests/test_cartridge_adapt.py`, `tests/test_cartridge_pack.py`, `tests/test_cartridge_promote.py`, `tests/test_ci_handoff.py`, `tests/test_cl_migration.py`, `tests/test_cl_runtime.py`, `tests/test_cli_handoff.py`, `tests/test_compiler.py`, `tests/test_delta_emit.py`, `tests/test_embeddings.py`, `tests/test_format_deps.py`, `tests/test_formats.py`, `tests/test_formats_v3.py`, `tests/test_impact.py`, `tests/test_map_sync.py`, `tests/test_memory_routing.py`, `tests/test_ocr_runtime.py`, `tests/test_roadmap_status.py`, `tests/test_rosetta_nav.py`, `tests/test_security_validation.py`, `tests/test_source4s.py`, `tests/test_spec_drift.py`, `tests/test_translator.py`, `tests/test_unified_handoff.py`, `tests/test_wiring_audit.py` |
 | `src/hive_planner/delta_emit.py` | `tests/test_cartridge_pack.py`, `tests/test_cartridge_promote.py`, `tests/test_delta_emit.py` |
 | `src/hive_planner/discovery.py` | `tests/test_compiler.py`, `tests/test_embeddings.py`, `tests/test_formats.py`, `tests/test_source4s.py` |
@@ -30,11 +30,15 @@ Maps source modules to tests (v1 manual + Stage 5B import merge via `impact-sync
 | `src/hive_planner/frozen_entry.py` | `tests/test_runtime_paths.py` |
 | `src/hive_planner/impact.py` | `tests/test_impact.py`, `tests/test_security_validation.py` |
 | `src/hive_planner/indexer.py` | `tests/test_compiler.py`, `tests/test_embeddings.py`, `tests/test_formats.py`, `tests/test_formats_v3.py` |
-| `src/hive_planner/launcher/app.py` | `tests/test_launcher.py`, `tests/test_runtime_paths.py` |
+| `src/hive_planner/launcher/app.py` | `tests/test_launcher.py`, `tests/test_runtime_paths.py`, `tests/test_home_groups.py`, `tests/test_controls_collapse.py`, `tests/test_popup_placement.py` |
+| `src/hive_planner/launcher/popup_placement.py` | `tests/test_popup_placement.py` |
+| `src/hive_planner/launcher/home_groups.py` | `tests/test_home_groups.py` |
 | `src/hive_planner/launcher/user_guide.py` | `tests/test_launcher.py` |
 | `src/hive_planner/launcher/config.py` | `tests/test_runtime_paths.py` |
-| `src/hive_planner/launcher/service.py` | `tests/test_cartridge_adapt.py`, `tests/test_cl_migration.py`, `tests/test_launcher.py`, `tests/test_portable_runtime.py`, `tests/test_runtime_paths.py` |
+| `src/hive_planner/launcher/mcp_servers.py` | `tests/test_mcp_server.py` |
+| `src/hive_planner/launcher/service.py` | `tests/test_cartridge_adapt.py`, `tests/test_cl_migration.py`, `tests/test_launcher.py`, `tests/test_mcp_server.py`, `tests/test_portable_runtime.py`, `tests/test_runtime_paths.py` |
 | `src/hive_planner/map_sync.py` | `tests/test_ci_handoff.py`, `tests/test_map_sync.py`, `tests/test_security_validation.py` |
+| `src/hive_planner/mcp_server.py` | `tests/test_mcp_server.py` |
 | `src/hive_planner/memory_routing.py` | `tests/test_agents_memory.py`, `tests/test_memory_routing.py` |
 | `src/hive_planner/models.py` | `tests/test_compiler.py`, `tests/test_delta_emit.py`, `tests/test_embeddings.py`, `tests/test_format_deps.py`, `tests/test_formats.py` |
 | `src/hive_planner/normalizer.py` | `tests/test_compiler.py`, `tests/test_formats.py`, `tests/test_formats_v3.py` |

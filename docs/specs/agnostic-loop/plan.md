@@ -32,7 +32,7 @@ Mirror bug hunt for chat install and Home Enable. Do not auto-install on `init` 
 | `src/hive_planner/cli.py` | `agnostic-loop` subcommands |
 | `src/hive_planner/bootstrap.py` | Optional `--agnostic-loop` |
 | `src/hive_planner/launcher/service.py` | Home install wrapper |
-| `src/hive_planner/launcher/app.py` | Enable agnostic loop |
+| `src/hive_planner/launcher/app.py` | Home **Loop controls**; Controls Agnostic loop **Run** |
 | `tests/test_agnostic_loop.py` | Catalog, cycle, choose, install, CLI |
 
 ## Validation

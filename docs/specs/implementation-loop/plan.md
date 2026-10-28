@@ -42,7 +42,7 @@ State and command files are created once. Later installs must not reset round tr
 | `src/hive_planner/cli.py` | `implementation-loop install`, `status`, `start`, `handoff`, `check`, `accept`, `commit` |
 | `src/hive_planner/bootstrap.py` | Optional `--implementation-loop-pack` |
 | `src/hive_planner/launcher/service.py` | Home wrappers for install plus status/start/handoff/check/accept/commit |
-| `src/hive_planner/launcher/app.py` | Home **Enable implementation loop** plus Loop status/start/handoff/check/accept/commit |
+| `src/hive_planner/launcher/app.py` | Home **Loop controls**; Controls **Run** for install plus status/start/handoff/check/accept/commit |
 | `src/hive_planner/launcher/agent_prompt_templates.py` | **Start the implementation loop** copy-prompt |
 | `tests/test_implementation_loop.py` | Install, status, trigger, preservation |
 | `tests/test_launcher.py` | Home install peek and coordinator wrappers |
@@ -53,7 +53,7 @@ State and command files are created once. Later installs must not reset round tr
 ## Wiring
 
 ```text
-Chat phrase or Home Enable / Loop buttons
+Chat phrase ("implementation loop" / "code spec") or Home Enable / Install CodeSpec / Loop buttons
   -> install_implementation_loop (once)
   -> .cursor/rules + command
   -> agent reads command, or Home calls the same Python gates

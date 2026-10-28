@@ -24,12 +24,14 @@ Bug hunt — install the continuous find / fix / self-review / local-commit scri
 | Chat start on "bug hunt" and derivative hunt phrases | Inventing bugs to fill the budget |
 | Bootstrap + Home install into the active project | |
 | Iteration count 1–200, default 50 | |
+| Pause seconds: blank or omitted is 10, `0` skips the wait, any positive whole number is the wait | |
+| Stop hook consumes `.hive/bug-hunt/continue.json`, waits, and starts the next pass | |
 
 **Files:** `src/hive_planner/bug_hunt.py`, `src/hive_planner/cli.py`, `src/hive_planner/bootstrap.py`, `src/hive_planner/launcher/app.py`, `src/hive_planner/launcher/service.py`, `tests/test_bug_hunt.py`, `.cursor/rules/bug-hunt.mdc`
 
 ## Acceptance Criteria
 
-- [x] Default script is a 50-iteration loop that continues after internal review
+- [x] Default script is a 50-iteration ceiling that ranks locations, then continues after internal review
 - [x] Install writes the Cursor command and the packet
 - [x] `--print` does not write files
 - [x] Tests cover install, range, and CLI

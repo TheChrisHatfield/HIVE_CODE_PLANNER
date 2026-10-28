@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import json
 from pathlib import Path
 from unittest.mock import patch
@@ -1534,24 +1535,17 @@ def test_app_registers_controls_tab() -> None:
     assert "def _build_controls_tab" in text
     assert "def _on_open_loop_controls" in text
     assert "def _on_controls_run" in text
-    assert '"Loop controls"' in text
+    assert '"Loop controls"' in text or '"loop_controls"' in text
+    assert '"CodeSpec"' in text or '"codespec"' in text
+    assert "def _on_open_codespec" in text
+    assert "def _on_codespec_install_active_cursor" in text
+    assert '"Install CodeSpec"' in text
+    assert "def _build_home_action_groups" in text
+    assert "Arrange groups" in text
     assert '"Loop status"' not in text.split("def _build_home_tab", 1)[-1].split("def _build_controls_tab", 1)[0]
     open_fn = text.split("def _on_open_loop_controls", 1)[-1].split("    def ", 1)[0]
     assert '== "Controls"' in open_fn
     assert "notebook.select(1)" not in open_fn
-    assert "def _on_codespec_install_active_cursor" in text
-    assert '"Install CodeSpec"' in text
-
-
-def test_codespec_install_button_runs_enable_through_block_run() -> None:
-    source = Path(__file__).resolve().parents[1] / "src" / "hive_planner" / "launcher" / "app.py"
-    text = source.read_text(encoding="utf-8")
-    body = text.split("def _on_codespec_install_active_cursor", 1)[-1].split("    def ", 1)[0]
-    assert "_prepare_codespec_block_for_enable" in body
-    assert "_on_controls_instance_run" in body
-    assert "_on_implementation_loop_install" not in body
-    run_body = text.split("def _on_controls_run", 1)[-1].split("    def ", 1)[0]
-    assert '"Enable": lambda: self._on_implementation_loop_install(from_controls=True)' in run_body
 
 
 def test_loop_install_failures_update_controls_last() -> None:
@@ -1578,14 +1572,118 @@ def test_resolved_loop_command_rejects_pairs_from_another_loop() -> None:
     )
     assert HivePlannerApp.resolved_loop_command("Bug hunt", "Status") is None
     assert HivePlannerApp.resolved_loop_command("Agnostic loop", "Commit") is None
-    assert HivePlannerApp.resolved_loop_command("Implementation loop", "Choose") is None
-    assert HivePlannerApp.resolved_loop_command("Implementation loop", "Check") == (
-        "Implementation loop",
+    assert HivePlannerApp.resolved_loop_command("CodeSpec", "Choose") is None
+    assert HivePlannerApp.resolved_loop_command("Implementation loop", "Check") is None
+    assert HivePlannerApp.resolved_loop_command("CodeSpec", "Check") == (
+        "CodeSpec",
         "Check",
     )
+    assert HivePlannerApp.controls_settings_for_loop("Bug hunt") == ("fix_ceiling", "pause_seconds")
+    assert "reward" not in HivePlannerApp.controls_settings_for_loop("CodeSpec")
+    assert "role" not in HivePlannerApp.controls_settings_for_loop("CodeSpec")
+    assert "pack" in HivePlannerApp.controls_settings_for_loop("CodeSpec")
+    assert "fix_ceiling" not in HivePlannerApp.controls_settings_for_loop("Agnostic loop")
+    assert "sims" in HivePlannerApp.controls_settings_for_loop("Agnostic loop")
+    assert HivePlannerApp.can_remove_controls_instance(1) is False
+    assert HivePlannerApp.can_remove_controls_instance(2) is True
+    assert HivePlannerApp.codespec_block_needed([]) is False
+    assert HivePlannerApp.codespec_block_needed(["CodeSpec"]) is False
+    assert HivePlannerApp.codespec_block_needed(["Bug hunt"]) is True
     for loop, commands in HivePlannerApp.LOOP_CONTROL_COMMANDS.items():
         for command in commands:
             assert HivePlannerApp.resolved_loop_command(loop, command) == (loop, command)
+    assert HivePlannerApp.normalize_controls_loop("code spec") == "CodeSpec"
+    assert HivePlannerApp.normalize_controls_loop("CODESPEC") == "CodeSpec"
+    assert HivePlannerApp.normalize_controls_loop("CodeSpec") == "CodeSpec"
+    assert HivePlannerApp.normalize_controls_loop("bug hunt") == "Bug hunt"
+
+
+def test_codespec_install_button_runs_enable_through_block_run() -> None:
+    source = Path(__file__).resolve().parents[1] / "src" / "hive_planner" / "launcher" / "app.py"
+    text = source.read_text(encoding="utf-8")
+    body = text.split("def _on_codespec_install_active_cursor", 1)[-1].split("    def ", 1)[0]
+    assert "_prepare_codespec_block_for_enable" in body
+    assert "_on_controls_instance_run" in body
+    assert "_on_implementation_loop_install" not in body
+    run_body = text.split("def _on_controls_run", 1)[-1].split("    def ", 1)[0]
+    assert '"Enable": lambda: self._on_implementation_loop_install(from_controls=True)' in run_body
+
+
+def test_codespec_step_list_reads_the_workspace_folder(tmp_path: Path) -> None:
+    """A linked .code-workspace file must not hide the loop state that Run writes in the folder."""
+    from hive_planner.implementation_loop import codespec_progress_text
+    from hive_planner.launcher.app import HivePlannerApp
+
+    folder = tmp_path / "proj"
+    loop = folder / ".hive" / "implementation-loop"
+    loop.mkdir(parents=True)
+    (loop / "state.json").write_text(
+        '{"feature":"demo","pack":"1-pack","branch":"topic","current_task":"T001","round_trips":0,"status":"running","pr_url":"","slice_signoff":"continue","baseline_dirty":[],"last_retrospective_n":0}',
+        encoding="utf-8",
+    )
+    workspace = tmp_path / "demo.code-workspace"
+    workspace.write_text('{"folders":[{"path":"proj"}]}', encoding="utf-8")
+
+    class _Config:
+        active_project = str(workspace)
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.config = _Config()
+    root = app._codespec_project_root()
+    assert root == folder.resolve()
+    text = codespec_progress_text(root, "4-pack")
+    assert text.startswith("One-pack steps")
+    assert "1. Coordinator implements — now" in text
+    assert "waiting" in codespec_progress_text(workspace, "4-pack")
+
+
+def test_controls_caption_summarizes_each_loop() -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    class _Config:
+        active_project = r"D:\proj"
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.config = _Config()
+    text = app._controls_active_caption()
+    assert text.index("Bug hunt —") < text.index("CodeSpec —") < text.index("Agnostic loop —")
+    assert "Looks through the project for bugs and fixes them one at a time." in text
+    assert "Turns a finished spec and its task list into code, checking each step." in text
+    assert "Chooses the next small job from a list of job types, then waits for your result." in text
+    assert text.index("Agnostic loop —") < text.index("Each block is one loop")
+    assert text.endswith(r"D:\proj")
+    for name in HivePlannerApp.LOOP_CONTROL_COMMANDS:
+        assert f"{name} —" in text
+
+
+def test_controls_tooltips_say_what_each_command_does() -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    jargon = ("catalog", "rollout", "lookahead", "coordinator", "round trip", "slice", "repo")
+    for loop, commands in HivePlannerApp.LOOP_CONTROL_COMMANDS.items():
+        tip = HivePlannerApp.controls_loop_tip(loop)
+        assert tip.endswith(".")
+        assert len(tip) < 140
+        for command in commands:
+            text = HivePlannerApp.controls_command_tip(loop, command)
+            assert text.endswith(".")
+            assert len(text) < 160
+            lowered = text.lower()
+            for word in jargon:
+                assert word not in lowered
+    for keys in HivePlannerApp.CONTROLS_LOOP_SETTINGS.values():
+        for key in keys:
+            text = HivePlannerApp.CONTROLS_SETTING_TIPS[key]
+            assert text.endswith(".")
+            assert not text.startswith(("CodeSpec", "Agnostic", "Bug hunt Enable"))
+
+    class _Tip:
+        def __init__(self) -> None:
+            self.text = "old"
+
+    tip = _Tip()
+    HivePlannerApp._set_tooltip_text([tip], "Shows whether bug hunt is already turned on in this project.")
+    assert tip.text.startswith("Shows whether")
 
 
 def test_controls_follow_active_repo_on_soft_refresh() -> None:
@@ -1618,6 +1716,8 @@ def test_sync_controls_clears_last_line_when_active_repo_changes() -> None:
     app.controls_active_label = _Var()
     app.controls_last = _Var("Starting implementation loop…")
     app.controls_impl_feature = _Var("oldfeat")
+    block_last = _Var("CodeSpec: ready=True")
+    app._controls_instances = [{"impl_feature": _Var("kept"), "last": block_last}]
     app._controls_link_key = "old"
     app._active_link_key = lambda: "new"  # type: ignore[method-assign]
     app._active_feature_label = lambda: "newfeat"  # type: ignore[method-assign]
@@ -1625,6 +1725,8 @@ def test_sync_controls_clears_last_line_when_active_repo_changes() -> None:
     app._sync_controls_for_active()
     assert app.controls_last.get() == "Pick the active project on Projects, then use these controls."
     assert app.controls_impl_feature.get() == "newfeat"
+    assert app._controls_instances[0]["impl_feature"].get() == "newfeat"
+    assert block_last.get() == ""
     app.controls_last.set("Running…")
     app._sync_controls_for_active()
     assert app.controls_last.get() == "Running…"
@@ -1691,7 +1793,7 @@ def test_run_project_bug_hunt_install_fails_when_trigger_missing(
     project = tmp_path / "app"
     project.mkdir()
 
-    def _install(root, iterations=50, *, force=True):
+    def _install(root, iterations=50, *, pause_seconds=10, force=True):
         return bug_hunt_mod.BugHuntInstall(
             root=root.resolve(),
             iterations=iterations,
@@ -1741,13 +1843,19 @@ def test_bug_hunt_install_done_logs_chat_trigger() -> None:
     lines: list[str] = []
     refreshed: list[bool] = []
     app._queue_home_log = lambda msg: lines.append(str(msg))  # type: ignore[method-assign]
+    app._set_controls_last = lambda msg: None  # type: ignore[method-assign]
     app._refresh_home_dashboard = lambda **_k: refreshed.append(True)  # type: ignore[method-assign]
     app._bug_hunt_install_done(
         {"ok": True, "files_written": ["a", "b"], "iterations": 50}
     )
     assert refreshed == [True]
     assert any("Bug hunt enabled" in line for line in lines)
-    assert any("bug hunt" in line for line in lines)
+    assert any("2 file(s)" in line for line in lines)
+    app._bug_hunt_install_done(
+        {"ok": True, "files_written": [], "iterations": 50, "pause_seconds": 10}
+    )
+    assert any("already current" in line for line in lines)
+    assert not any("0 file(s)" in line for line in lines)
 
 
 def test_on_bug_hunt_install_sends_workspace_link_to_service(
@@ -1856,6 +1964,46 @@ def test_on_bug_hunt_install_rejects_out_of_range_iterations(monkeypatch: pytest
     assert started == []
     assert shown
     assert "1" in shown[0][1] and "200" in shown[0][1]
+
+
+def test_controls_iterations_accept_a_whole_decimal(monkeypatch: pytest.MonkeyPatch) -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.controls_bug_iterations = type("Var", (), {"get": lambda self: "50.0"})()
+    assert app._controls_bug_hunt_iterations() == 50
+    app.controls_bug_iterations = type("Var", (), {"get": lambda self: ""})()
+    assert app._controls_bug_hunt_iterations() == 50
+    shown: list[tuple] = []
+    monkeypatch.setattr(
+        "hive_planner.launcher.app.messagebox.showwarning",
+        lambda *a, **k: shown.append(a),
+    )
+    app.controls_bug_iterations = type("Var", (), {"get": lambda self: "1.5"})()
+    assert app._controls_bug_hunt_iterations() is None
+    assert shown and "whole number" in shown[0][1]
+
+
+def test_controls_pause_blank_is_ten_zero_skips_and_garbage_warns(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.controls_bug_pause = type("Var", (), {"get": lambda self: ""})()
+    assert app._controls_bug_hunt_pause() == 10
+    app.controls_bug_pause = type("Var", (), {"get": lambda self: "0"})()
+    assert app._controls_bug_hunt_pause() == 0
+    app.controls_bug_pause = type("Var", (), {"get": lambda self: "12"})()
+    assert app._controls_bug_hunt_pause() == 12
+    shown: list[tuple] = []
+    monkeypatch.setattr(
+        "hive_planner.launcher.app.messagebox.showwarning",
+        lambda *a, **k: shown.append(a),
+    )
+    app.controls_bug_pause = type("Var", (), {"get": lambda self: "-3"})()
+    assert app._controls_bug_hunt_pause() is None
+    assert shown and "Pause seconds" in shown[0][0]
 
 
 def test_on_bug_hunt_install_warns_when_no_project(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -2320,6 +2468,7 @@ def test_load_user_guide_fallback_does_not_duplicate_unified_section(tmp_path: P
 
 def test_load_user_guide_appends_unified_vendor_section_when_readme_stale(tmp_path: Path) -> None:
     from hive_planner.launcher.user_guide import (
+        AGENT_MCP_SECTION_MARKER,
         AGNOSTIC_LOOP_SECTION_MARKER,
         IMPLEMENTATION_LOOP_SECTION_MARKER,
         UNIFIED_VENDOR_SECTION_MARKER,
@@ -2344,6 +2493,8 @@ def test_load_user_guide_appends_unified_vendor_section_when_readme_stale(tmp_pa
     assert "Loop controls" in text
     assert AGNOSTIC_LOOP_SECTION_MARKER in text
     assert "Agnostic loop" in text
+    assert AGENT_MCP_SECTION_MARKER in text
+    assert "mcp-serve" in text
 
 
 def test_load_user_guide_does_not_duplicate_unified_section(tmp_path: Path) -> None:
@@ -2397,6 +2548,38 @@ def test_load_user_guide_does_not_duplicate_agnostic_loop_section(tmp_path: Path
     assert text.count("## Agnostic loop") == 1
 
 
+def test_load_user_guide_does_not_duplicate_agent_mcp_section(tmp_path: Path) -> None:
+    from hive_planner.launcher.user_guide import load_user_guide
+
+    hive = tmp_path / "hive"
+    scripts = hive / "scripts"
+    scripts.mkdir(parents=True)
+    scripts.joinpath("README.md").write_text(
+        "# Guide\n\nAgent MCP already documented.\n",
+        encoding="utf-8",
+    )
+    cfg = LauncherConfig(hive_planner_root=str(hive))
+
+    text = load_user_guide(cfg)
+
+    assert text.count("Agent MCP") == 1
+
+
+def test_load_user_guide_appends_agent_mcp_when_readme_stale(tmp_path: Path) -> None:
+    from hive_planner.launcher.user_guide import load_user_guide
+
+    hive = tmp_path / "hive"
+    scripts = hive / "scripts"
+    scripts.mkdir(parents=True)
+    scripts.joinpath("README.md").write_text("# Guide\n\nNo MCP mention.\n", encoding="utf-8")
+    cfg = LauncherConfig(hive_planner_root=str(hive))
+
+    text = load_user_guide(cfg)
+
+    assert "Agent MCP" in text
+    assert "mcp-serve" in text
+
+
 def test_default_agent_prompt_templates_are_non_empty_and_unique() -> None:
     from hive_planner.launcher.agent_prompt_templates import default_agent_prompt_templates
 
@@ -2420,8 +2603,11 @@ def test_bug_hunt_prompt_template_keeps_the_loop_moving() -> None:
     found = get_agent_prompt_template("change.bug_hunt")
     assert found is not None
     assert found.prompt.lstrip().startswith("bug hunt")
-    assert "without asking whether to continue" in found.prompt
+    assert "Do not ask whether to continue" in found.prompt
+    assert "The stop hook waits the script's pause" in found.prompt
+    assert "Enter 0 to skip the wait" in found.prompt
     assert "@.cursor/commands/bug-hunt.md" in found.prompt
+    assert "Pause seconds live on a Controls block" in found.prompt
 
 
 def test_format_loop_gate_includes_dirty_paths() -> None:
@@ -2478,6 +2664,36 @@ def test_start_done_dirty_retry_without_ctx_does_not_throw(monkeypatch: pytest.M
     assert logged[0].get("ran") is not True
 
 
+def test_start_done_retry_uses_the_ctx_from_that_run(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pathlib import Path
+
+    from hive_planner.launcher.app import HivePlannerApp
+
+    calls: list[tuple] = []
+    monkeypatch.setattr(
+        "hive_planner.launcher.app.messagebox.askyesno",
+        lambda *a, **k: True,
+    )
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.root = object()
+    app._loop_start_ctx = {
+        "link": Path("later"),
+        "feature": "later",
+        "allow_dirty": True,
+        "force_feature": True,
+    }
+    app._run_loop_start = lambda *args, **kwargs: calls.append((args, kwargs))  # type: ignore[method-assign]
+    app._implementation_loop_start_done(
+        {"ok": False, "error": "unrelated dirty paths block start"},
+        {"link": Path("mine"), "feature": "mine", "allow_dirty": False, "force_feature": False},
+    )
+    assert calls
+    assert calls[0][0][0] == Path("mine")
+    assert calls[0][0][1] == "mine"
+    assert calls[0][1]["allow_dirty"] is True
+    assert calls[0][1]["force_feature"] is False
+
+
 def test_handoff_done_cap_retry_without_ctx_does_not_throw(monkeypatch: pytest.MonkeyPatch) -> None:
     from hive_planner.launcher.app import HivePlannerApp
 
@@ -2506,8 +2722,21 @@ def test_implementation_loop_prompt_template_keeps_chat_and_home() -> None:
     assert found.prompt.lstrip().startswith("implementation loop")
     assert "@.cursor/commands/implementation-loop.md" in found.prompt
     assert "Loop controls" in found.prompt
-    assert "check" in found.prompt
-    assert "commit" in found.prompt
+    assert "CodeSpec" in found.prompt
+    assert "Each block has its own Run, including Enable and Check pack" in found.prompt
+    assert "one Run command" not in found.prompt
+    assert "Check" in found.prompt
+    assert "Commit" in found.prompt
+
+
+def test_agnostic_loop_prompt_template_names_codespec_and_block_enable() -> None:
+    from hive_planner.launcher.agent_prompt_templates import get_agent_prompt_template
+
+    found = get_agent_prompt_template("change.agnostic_loop")
+    assert found is not None
+    assert found.prompt.lstrip().startswith("agnostic loop")
+    assert "not CodeSpec and not a bug hunt" in found.prompt
+    assert "Enable is Run on an Agnostic loop block" in found.prompt
 
 
 def test_get_agent_prompt_template_by_id() -> None:
@@ -4359,6 +4588,69 @@ def test_update_recent_scrollbar_hides_when_list_is_short() -> None:
     app._update_recent_scrollbar()
     assert packed == [True]
     assert app.recent_list._height == HivePlannerApp.RECENT_LIST_MAX_ROWS
+
+
+def test_projects_split_sash_gives_the_workspace_list_a_draggable_pane() -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    assert HivePlannerApp.projects_split_sash_y(40) == 0
+    assert HivePlannerApp.projects_split_sash_y(600) == 600 - HivePlannerApp.PROJECTS_SPLIT_MIN_BOTTOM
+    assert HivePlannerApp.projects_split_sash_y(1200) == 1200 - HivePlannerApp.PROJECTS_SPLIT_MAX_BOTTOM
+    assert HivePlannerApp.recent_list_visible_rows(0, 18, 4) == 4
+    assert HivePlannerApp.recent_list_visible_rows(180, 18, 4) == 10
+    source = inspect.getsource(HivePlannerApp._build_projects_tab)
+    assert "tk.PanedWindow" in source
+    assert "sashwidth=8" in source
+    assert '"Add link…"' in source
+    assert '"Set as active"' in source
+    hub_block = source.split("hub = card(hub_host)", 1)[1].split(
+        'card_title(form, "New project")', 1
+    )[0]
+    assert 'hub.pack(fill="both", expand=True)' in source
+    assert 'hub_set_active.pack(side="bottom"' in hub_block
+    assert hub_block.index('"Set as active"') < hub_block.index('"Open in Cursor"')
+    assert "_fit_hub_blurb" in hub_block
+    assert "_on_link_workspace" in source
+    assert "_on_select_recent" in source
+    assert "_projects_split_place_queued = False" in source
+    assert "_sync_projects_top_scroll" in source
+
+
+def test_recent_list_scroll_follows_the_visible_span() -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+
+    class Tall:
+        def size(self) -> int:
+            return 10
+
+        def winfo_height(self) -> int:
+            return 200
+
+        def yview(self):
+            return (0.0, 1.0)
+
+        def cget(self, key: str) -> int:
+            return 4
+
+    class Short:
+        def size(self) -> int:
+            return 10
+
+        def winfo_height(self) -> int:
+            return 80
+
+        def yview(self):
+            return (0.0, 0.4)
+
+        def cget(self, key: str) -> int:
+            return 4
+
+    app.recent_list = Tall()
+    assert app._recent_list_needs_scroll() is False
+    app.recent_list = Short()
+    assert app._recent_list_needs_scroll() is True
 
 
 def test_bind_mousewheel_scrolls_on_enter_and_unbinds_on_destroy() -> None:

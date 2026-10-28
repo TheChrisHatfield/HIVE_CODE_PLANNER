@@ -60,7 +60,14 @@ def test_trigger_phrases() -> None:
     assert not is_implementation_loop_request("bug hunt")
     assert not is_implementation_loop_request("hunt for bugs")
     assert is_implementation_loop_request("please run the implementation loop")
+    assert is_implementation_loop_request("code spec")
+    assert is_implementation_loop_request("CodeSpec")
+    assert is_implementation_loop_request("CODE SPEC")
+    assert is_implementation_loop_request("please code spec")
+    assert not is_implementation_loop_request("what is code spec")
+    assert not is_implementation_loop_request("where is CodeSpec installed")
     assert not is_implementation_loop_request("is the implementation loop enabled")
+    assert not is_implementation_loop_request("is CodeSpec enabled")
     assert not is_implementation_loop_request("whether the implementation loop is installed")
 
 
@@ -72,6 +79,8 @@ def test_render_cursor_rule_mentions_command_and_questions() -> None:
     assert "several features" in text.lower()
     assert "exactly one feature" in text.lower()
     assert "none are ready" in text.lower()
+    assert "code spec" in text.lower()
+    assert "codespec" in text.lower()
 
 
 def test_install_4pack_writes_all_files(project_root: Path) -> None:

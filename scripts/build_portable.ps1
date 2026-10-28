@@ -28,6 +28,54 @@ function Run-Py {
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
 
+function Clear-PortableDist {
+    # PyInstaller COLLECT deletes dist\HivePlannerPortable in place. On Windows that
+    # fails with Access Denied when HivePlanner.exe (or another process) still holds
+    # a DLL under _internal. Rename-aside clears the path name so COLLECT can proceed.
+    param([Parameter(Mandatory = $true)][string]$DistPath)
+
+    if (-not (Test-Path -LiteralPath $DistPath)) {
+        return
+    }
+
+    $exePath = Join-Path $DistPath "HivePlanner.exe"
+    Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
+        Where-Object {
+            $_.Name -eq "HivePlanner.exe" -and
+            $_.ExecutablePath -and
+            ($_.ExecutablePath -ieq $exePath)
+        } |
+        ForEach-Object {
+            Write-Host "Stopping running portable HivePlanner.exe (PID $($_.ProcessId))..."
+            Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
+        }
+    Start-Sleep -Milliseconds 400
+
+    try {
+        Remove-Item -LiteralPath $DistPath -Recurse -Force -ErrorAction Stop
+        Write-Host "Cleared previous dist: $DistPath"
+        return
+    } catch {
+        Write-Host "Could not delete previous dist (file in use). Renaming aside..."
+    }
+
+    $parent = Split-Path -Parent $DistPath
+    $staleName = "HivePlannerPortable_stale_{0}" -f (Get-Date -Format "yyyyMMddHHmmss")
+    $stalePath = Join-Path $parent $staleName
+    try {
+        Rename-Item -LiteralPath $DistPath -NewName $staleName -ErrorAction Stop
+    } catch {
+        throw @"
+Cannot clear '$DistPath' for rebuild (Access Denied).
+Close HivePlanner.exe if it is running, close Explorer windows on that folder, then retry.
+If Cursor Computer Use is active, end that session or retry after it releases DLLs under _internal.
+Original error: $($_.Exception.Message)
+"@
+    }
+    Write-Host "Moved locked dist aside: $stalePath"
+    Write-Host "(Delete that folder later when nothing is using it.)"
+}
+
 Write-Host "Installing build dependencies..."
 Run-Py @("-m", "pip", "install", "-q", "-e", ".[dev,portable,pdf]")
 
@@ -39,10 +87,12 @@ Run-Py @("packaging/gen_version_info.py")
 Remove-Item Env:TCL_LIBRARY -ErrorAction SilentlyContinue
 Remove-Item Env:TK_LIBRARY -ErrorAction SilentlyContinue
 
+$Dist = Join-Path $RepoRoot "dist\HivePlannerPortable"
+Write-Host "Preparing dist folder..."
+Clear-PortableDist -DistPath $Dist
+
 Write-Host "Running PyInstaller (UPX off, Defender-friendly)..."
 Run-Py @("-m", "PyInstaller", "packaging/hive_planner_portable.spec", "--noconfirm", "--clean")
-
-$Dist = Join-Path $RepoRoot "dist\HivePlannerPortable"
 if (-not (Test-Path $Dist)) {
     throw "Build output not found: $Dist"
 }

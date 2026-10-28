@@ -52,7 +52,16 @@ TOOLS: list[dict[str, Any]] = [
     {
         "name": "hive_bug_hunt_enable",
         "description": "Install or refresh the bug-hunt chat command in the project.",
-        "inputSchema": _schema({"iterations": {"type": "integer", "minimum": 1, "maximum": 200}}),
+        "inputSchema": _schema(
+            {
+                "iterations": {"type": "integer", "minimum": 1, "maximum": 200},
+                "pause_seconds": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "Seconds between passes. Omit to keep the pause already installed. 0 skips the wait.",
+                },
+            }
+        ),
     },
     {
         "name": "hive_implementation_loop_enable",
@@ -240,15 +249,25 @@ def _tool_hive_bug_hunt_status(arguments: dict[str, Any]) -> dict[str, Any]:
 
 
 def _tool_hive_bug_hunt_enable(arguments: dict[str, Any]) -> dict[str, Any]:
-    from hive_planner.bug_hunt import validate_iterations
+    from hive_planner.bug_hunt import BugHuntError, parse_iterations, parse_pause_seconds
+    from hive_planner.bug_hunt_continue import pause_from_script
     from hive_planner.launcher.service import run_project_bug_hunt_install
 
-    iterations = arguments.get("iterations", 50)
     try:
-        count = validate_iterations(iterations)
-    except Exception as exc:
+        count = parse_iterations(str(arguments.get("iterations", 50)))
+    except BugHuntError as exc:
         return {"ok": False, "error": str(exc)}
-    return run_project_bug_hunt_install(_workspace_root(arguments), iterations=count)
+    root = _workspace_root(arguments)
+    if "pause_seconds" in arguments and arguments.get("pause_seconds") is not None:
+        try:
+            pause = parse_pause_seconds(str(arguments.get("pause_seconds")))
+        except BugHuntError as exc:
+            return {"ok": False, "error": str(exc)}
+    else:
+        pause = pause_from_script(root)
+        if pause is None:
+            pause = 10
+    return run_project_bug_hunt_install(root, iterations=count, pause_seconds=pause)
 
 
 def _tool_hive_implementation_loop_enable(arguments: dict[str, Any]) -> dict[str, Any]:

@@ -119,6 +119,12 @@ def _tk_popup(title: str, body: str, seconds: int) -> None:
 
     root = tk.Tk()
     root.title(title)
+    try:
+        from hive_planner.launcher.theme import apply_app_icon
+
+        apply_app_icon(root)
+    except Exception:
+        pass
     root.attributes("-topmost", True)
     root.resizable(False, False)
     frame = tk.Frame(root, padx=16, pady=12)
@@ -155,7 +161,7 @@ def _fallback(title: str, body: str) -> bool:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="hive_notify")
-    parser.add_argument("--title", default="Hive Planner")
+    parser.add_argument("--title", default="HIVE Planner")
     parser.add_argument("--body", required=True)
     parser.add_argument("--seconds", type=int, default=12)
     args = parser.parse_args(argv)

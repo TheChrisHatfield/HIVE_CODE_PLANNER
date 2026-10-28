@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -21,7 +22,7 @@ TRIAL_DEFAULT_MIN_TURNS = 3
 TRIAL_DEFAULT_MIN_MINUTES = 15
 TRIAL_DEFAULT_DURATION_MINUTES = 24 * 60
 
-NOTICE_TITLE = "Hive Planner"
+NOTICE_TITLE = "HIVE Planner"
 NOTICE_BODY = (
     "Automatic memory check. You did not type this. "
     "Hive left your chat on the task you were doing."
@@ -102,6 +103,62 @@ def _transcript_mtime_ms(transcript_path: str | None) -> float | None:
 
 def _should_count_turn(payload: dict) -> bool:
     return payload.get("status") == "completed" and payload.get("loop_count") == 0
+
+
+_USER_QUERY = re.compile(r"<user_query>\s*(.*?)\s*</user_query>", re.DOTALL)
+
+
+def _user_started_bug_hunt(text: str) -> bool:
+    """True when the user message is a hunt start, not a sentence that mentions one."""
+    try:
+        from hive_planner.bug_hunt import TRIGGER_PHRASES, is_bug_hunt_request
+    except Exception:
+        return False
+    raw = " ".join(str(text).split()).strip().strip(".,!?:;\"'")
+    if not raw or not is_bug_hunt_request(raw):
+        return False
+    lowered = raw.lower()
+    for phrase in sorted(TRIGGER_PHRASES, key=len, reverse=True):
+        if lowered == phrase or lowered.startswith(phrase + " ") or lowered.startswith("please " + phrase):
+            return True
+    return False
+
+
+def _user_message_texts(line: str) -> list[str]:
+    try:
+        obj = json.loads(line)
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(obj, dict) or obj.get("role") != "user":
+        return []
+    message = obj.get("message")
+    content = message.get("content") if isinstance(message, dict) else obj.get("content")
+    texts: list[str] = []
+    if isinstance(content, str):
+        texts.append(content)
+    elif isinstance(content, list):
+        for part in content:
+            if isinstance(part, str):
+                texts.append(part)
+            elif isinstance(part, dict) and isinstance(part.get("text"), str):
+                texts.append(part["text"])
+    return texts
+
+
+def _bug_hunt_in_transcript(transcript_path: str | None) -> bool:
+    """True when this chat asked to run a bug hunt. The notice must stay off screen."""
+    if not isinstance(transcript_path, str) or not transcript_path:
+        return False
+    try:
+        lines = Path(transcript_path).read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return False
+    for line in lines:
+        for text in _user_message_texts(line):
+            queries = _USER_QUERY.findall(text) or [text]
+            if any(_user_started_bug_hunt(query) for query in queries):
+                return True
+    return False
 
 
 def _notice_stayed_open(proc: subprocess.Popen[bytes]) -> bool:
@@ -236,6 +293,13 @@ def main() -> int:
             and minutes_since_last_run >= effective_min_minutes
             and has_transcript_advanced
         )
+
+        if should_trigger and _bug_hunt_in_transcript(payload.get("transcript_path")):
+            print("[continual-learning-stop] memory check quiet during bug hunt", file=sys.stderr)
+            state["turnsSinceLastRun"] = turns_since_last_run
+            _save_state(state)
+            print(json.dumps({}))
+            return 0
 
         if should_trigger:
             if _show_user_notice():

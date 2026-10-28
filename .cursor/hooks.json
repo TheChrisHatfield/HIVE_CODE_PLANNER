@@ -14,6 +14,11 @@
     "stop": [
       {
         "command": "py -3.11 .cursor/hooks/hive_session_stop.py"
+      },
+      {
+        "command": "py -3.11 .cursor/hooks/bug_hunt_continue.py",
+        "timeout": 86400,
+        "loop_limit": 210
       }
     ],
     "afterFileEdit": [

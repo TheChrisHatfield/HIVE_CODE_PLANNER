@@ -39,10 +39,13 @@ Manual v1 map of modules → dependencies. Use `impact-sync-maps` to merge new s
 | `src/hive_planner/launcher/bootstrap_state.py` | Bootstrap detection for linked Cursor workspaces. | (auto-sync) |
 | `src/hive_planner/launcher/config.py` | config | (auto-sync) |
 | `src/hive_planner/launcher/console_win.py` | console win | (auto-sync) |
+| `src/hive_planner/launcher/mcp_servers.py` | Cursor `.cursor/mcp.json` hive-planner enable. | `workflow.tools` |
+| `src/hive_planner/launcher/popup_placement.py` | Dialog windows reopen at their last screen position. | `workflow.tools` |
 | `src/hive_planner/launcher/service.py` | service | (auto-sync) |
 | `src/hive_planner/launcher/theme.py` | theme | (auto-sync) |
 | `src/hive_planner/launcher/user_guide.py` | user guide | (auto-sync) |
 | `src/hive_planner/map_sync.py` | map sync | (auto-sync) |
+| `src/hive_planner/mcp_server.py` | Stdio MCP so a Cursor agent can call Hive Planner. | `workflow.tools` |
 | `src/hive_planner/memory_routing.py` | Autonomous memory candidate routing — split, route, Thompson-sample arms. | (auto-sync) |
 | `src/hive_planner/models.py` | models | (auto-sync) |
 | `src/hive_planner/normalizer.py` | Format dispatch | `context.document_sourcing` |

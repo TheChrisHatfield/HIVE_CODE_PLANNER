@@ -199,12 +199,13 @@ def attach_hover_tooltip(widget: tk.Misc, text: str, *, delay_ms: int = 450) -> 
     return HoverTooltip(widget, text, delay_ms=delay_ms)
 
 
-def attach_combobox_tooltip(combobox: ttk.Combobox, text: str, *, delay_ms: int = 450) -> None:
+def attach_combobox_tooltip(combobox: ttk.Combobox, text: str, *, delay_ms: int = 450) -> list[HoverTooltip]:
     """Bind tooltip text to a combobox and its inner entry (Windows/clam often misses the outer widget)."""
-    attach_hover_tooltip(combobox, text, delay_ms=delay_ms)
+    tips = [attach_hover_tooltip(combobox, text, delay_ms=delay_ms)]
     combobox.update_idletasks()
     for child in combobox.winfo_children():
-        attach_hover_tooltip(child, text, delay_ms=delay_ms)
+        tips.append(attach_hover_tooltip(child, text, delay_ms=delay_ms))
+    return tips
 
 
 def apply_ttk_style(root: tk.Misc) -> None:

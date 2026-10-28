@@ -71,10 +71,13 @@ def test_expand_shows_settings_again() -> None:
         "loop": type("V", (), {"get": lambda self: "Bug hunt"})(),
         "rows": {},
     }
+    refreshed: list[str] = []
+    app._refresh_codespec_steps = lambda current, **k: refreshed.append(str(id(current)))
     app._apply_controls_collapse(inst)
     assert last.packed == 1
     assert settings.packed == 1
     assert button.text == "▾"
+    assert refreshed == [str(id(inst))]
 
 
 def test_first_collapse_click_works_when_flag_is_missing() -> None:
@@ -90,6 +93,34 @@ def test_first_collapse_click_works_when_flag_is_missing() -> None:
     app._on_toggle_controls_collapse(inst)
     assert HivePlannerApp.controls_instance_collapsed(inst) is True
     assert settings.forgotten == 1
+
+
+def test_collapse_hides_result_and_steps_lines() -> None:
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    settings = _Widget()
+    last = _Widget()
+    steps = _Widget()
+    button = _Widget()
+    inst = {
+        "collapsed": _Bool(False),
+        "settings": settings,
+        "last_label": last,
+        "steps_label": steps,
+        "collapse_btn": button,
+        "rows": {},
+        "loop": type("V", (), {"get": lambda self: "CodeSpec"})(),
+    }
+    app._refresh_codespec_steps = lambda current, **k: None
+    app._on_toggle_controls_collapse(inst)
+    assert HivePlannerApp.controls_instance_collapsed(inst) is True
+    assert settings.forgotten == 1
+    assert last.forgotten == 1
+    assert steps.forgotten == 1
+    assert button.text == "▸"
+    app._on_toggle_controls_collapse(inst)
+    assert HivePlannerApp.controls_instance_collapsed(inst) is False
+    assert settings.packed == 1
+    assert last.packed == 1
 
 
 def test_reveal_codespec_expands_without_scroll_canvas() -> None:
@@ -121,6 +152,7 @@ def test_toggle_collapse_flips_hidden_fields() -> None:
         "rows": {},
         "loop": type("V", (), {"get": lambda self: "CodeSpec"})(),
     }
+    app._refresh_codespec_steps = lambda current, **k: None
     app._on_toggle_controls_collapse(inst)
     assert HivePlannerApp.controls_instance_collapsed(inst) is True
     assert inst["settings"].forgotten == 1

@@ -39,10 +39,11 @@ Load [`docs/planning-rosetta-stone.md`](../../planning-rosetta-stone.md) (`plann
 ## Phase 6 — Entry points (US5)
 
 - [x] T012 `is_implementation_loop_request` and always-on `.cursor/rules/implementation-loop.mdc` start phrases; questions and bug-hunt phrases do not match
+- [x] T029 Chat **code spec** / **CodeSpec** starts the loop; Controls Loop typing maps to CodeSpec; **Install CodeSpec** detects the Cursor window in front and runs Enable after Compact fold
 - [x] T013 `init_project` installs only when `--implementation-loop-pack` is set
-- [x] T014 Home **Enable implementation loop** asks for a pack and calls the install function
-- [x] T027 Home **Loop status / start / handoff / check / accept / commit** call the same Python coordinator gates as the CLI; Agent prompt template **Start the implementation loop** keeps chat as the other half of the duality
-- [x] T028 Python `implementation-loop check` (Home **Loop check**) runs `build` / `test:quick` / wiring audit and appends the checker `result.md` entry; bug hunt stays separate
+- [x] T014 Home **Loop controls** → Implementation loop **Enable** uses the pack field and calls the install function
+- [x] T027 Controls **Run** (status / start / handoff / check / accept / commit) calls the same Python coordinator gates as the CLI; Agent prompt template **Start the implementation loop** keeps chat as the other half of the duality
+- [x] T028 Python `implementation-loop check` (Controls **Check**) runs `build` / `test:quick` / wiring audit and appends the checker `result.md` entry; bug hunt stays separate
 
 ## Phase 7 — Maps and audit
 
@@ -64,7 +65,7 @@ Load [`docs/planning-rosetta-stone.md`](../../planning-rosetta-stone.md) (`plann
 
 ## Active task
 
-**None** — T028 Python checker infrastructure checked.
+**None** — T029 CodeSpec chat phrase and Controls Install CodeSpec.
 
 ## Validation log
 

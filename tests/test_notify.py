@@ -24,9 +24,9 @@ def test_notify_dry_run_records_without_a_window(tmp_path: Path, monkeypatch) ->
     log = tmp_path / "notice.json"
     monkeypatch.setenv("HIVE_NOTIFY_DRY_RUN", "1")
     monkeypatch.setenv("HIVE_NOTIFY_LOG", str(log))
-    assert notify("Hive Planner", "Hello from any IDE.")
+    assert notify(NOTICE_TITLE, "Hello from any IDE.")
     payload = json.loads(log.read_text(encoding="utf-8"))
-    assert payload == {"ok": True, "title": "Hive Planner", "body": "Hello from any IDE."}
+    assert payload == {"ok": True, "title": NOTICE_TITLE, "body": "Hello from any IDE."}
 
 
 def test_notify_returns_false_when_the_process_exits(tmp_path: Path) -> None:

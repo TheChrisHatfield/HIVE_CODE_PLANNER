@@ -181,12 +181,127 @@ def test_continual_learning_stop_pops_notice_instead_of_chat_prompt(tmp_path: Pa
     assert json.loads(result.stdout.strip()) == {}
     assert "followup_message" not in result.stdout
     notice = json.loads(log.read_text(encoding="utf-8"))
-    assert notice["title"] == "Hive Planner"
+    assert notice["title"] == "HIVE Planner"
     assert "You did not type this" in notice["body"]
     assert "left your chat" in notice["body"]
     saved = json.loads((tmp_path / ".cursor" / "hooks" / "state" / "continual-learning.json").read_text(encoding="utf-8"))
     assert saved["lastRunAtMs"] > 0
     assert saved["turnsSinceLastRun"] == 0
+
+
+def test_continual_learning_stop_stays_quiet_during_bug_hunt(tmp_path: Path) -> None:
+    """A due memory check must not open a window while this chat is a bug hunt."""
+    transcript = tmp_path / "transcript.jsonl"
+    transcript.write_text(
+        json.dumps(
+            {
+                "role": "user",
+                "message": {
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "<user_query>\nstart a bug hunt\n</user_query>",
+                        }
+                    ]
+                },
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    log = tmp_path / "notice.json"
+    script = (
+        ROOT
+        / ".cursor"
+        / "plugins"
+        / "hive-continual-learning"
+        / "hooks"
+        / "continual-learning-stop.py"
+    )
+    env = os.environ.copy()
+    env["CONTINUAL_LEARNING_MIN_TURNS"] = "1"
+    env["HIVE_NOTIFY_DRY_RUN"] = "1"
+    env["HIVE_NOTIFY_LOG"] = str(log)
+    result = subprocess.run(
+        [sys.executable, str(script)],
+        input=json.dumps(
+            {
+                "status": "completed",
+                "loop_count": 0,
+                "generation_id": "gen-bug-hunt",
+                "transcript_path": str(transcript),
+            }
+        ),
+        text=True,
+        capture_output=True,
+        cwd=str(tmp_path),
+        env=env,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout.strip()) == {}
+    assert "followup_message" not in result.stdout
+    assert not log.exists()
+    assert "quiet during bug hunt" in result.stderr
+    saved = json.loads(
+        (tmp_path / ".cursor" / "hooks" / "state" / "continual-learning.json").read_text(encoding="utf-8")
+    )
+    assert saved["lastRunAtMs"] == 0
+    assert saved["turnsSinceLastRun"] == 1
+
+
+def test_continual_learning_stop_still_notifies_when_chat_only_mentions_a_hunt(tmp_path: Path) -> None:
+    """Mentioning a bug hunt is not a hunt, so the memory notice still opens."""
+    transcript = tmp_path / "transcript.jsonl"
+    transcript.write_text(
+        json.dumps(
+            {
+                "role": "user",
+                "message": {
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "<user_query>\nFix the notice that the bug hunt's stop hook opens.\n</user_query>",
+                        }
+                    ]
+                },
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    log = tmp_path / "notice.json"
+    script = (
+        ROOT
+        / ".cursor"
+        / "plugins"
+        / "hive-continual-learning"
+        / "hooks"
+        / "continual-learning-stop.py"
+    )
+    env = os.environ.copy()
+    env["CONTINUAL_LEARNING_MIN_TURNS"] = "1"
+    env["HIVE_NOTIFY_DRY_RUN"] = "1"
+    env["HIVE_NOTIFY_LOG"] = str(log)
+    result = subprocess.run(
+        [sys.executable, str(script)],
+        input=json.dumps(
+            {
+                "status": "completed",
+                "loop_count": 0,
+                "generation_id": "gen-mention-hunt",
+                "transcript_path": str(transcript),
+            }
+        ),
+        text=True,
+        capture_output=True,
+        cwd=str(tmp_path),
+        env=env,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert log.is_file()
+    assert "quiet during bug hunt" not in result.stderr
 
 
 def test_continual_learning_stop_does_not_consume_check_when_notice_missing(tmp_path: Path) -> None:

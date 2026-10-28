@@ -1010,7 +1010,6 @@ def _write_bootstrap_tree(
         spec_kit=spec_kit,
         continual_learning=continual_learning,
     )
-    _install_bug_hunt_artifacts(target, force=force, written=written, warnings=warnings)
     if implementation_loop_pack is not None:
         _install_implementation_loop_artifacts(target, implementation_loop_pack, force=force, written=written, warnings=warnings)
     if agnostic_loop:
@@ -1075,6 +1074,8 @@ def _write_bootstrap_tree(
         except ValueError:
             pass
 
+    _install_bug_hunt_artifacts(target, force=force, written=written, warnings=warnings)
+
 
 def deploy_agent_handoff_scaffold(
     source_paths: RepoPaths,
@@ -1126,7 +1127,6 @@ def deploy_agent_handoff_scaffold(
         spec_kit=True,
         continual_learning=True,
     )
-    _install_bug_hunt_artifacts(target, force=force, written=written, warnings=warnings)
     from hive_planner.cartridge_promote import _append_tasks_wiring_audit_if_missing
 
     example_tasks = target / "docs" / "specs" / "example-feature" / "tasks.md"
@@ -1170,4 +1170,5 @@ def deploy_agent_handoff_scaffold(
             written=written,
             warnings=warnings,
         )
+    _install_bug_hunt_artifacts(target, force=force, written=written, warnings=warnings)
     return sorted(set(written)), warnings

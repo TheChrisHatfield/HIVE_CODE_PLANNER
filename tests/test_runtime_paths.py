@@ -6,13 +6,27 @@ from pathlib import Path
 import pytest
 
 from hive_planner.runtime_paths import (
+    APP_DISPLAY_NAME,
+    APP_ICON_FILENAME,
     FROZEN_CLI_FLAG,
+    app_icon_path,
     default_config_dir,
     default_hive_root,
     is_cli_invocation,
     is_portable_runtime,
     strip_cli_dispatch_argv,
 )
+
+
+def test_app_display_name_capitalizes_hive() -> None:
+    assert APP_DISPLAY_NAME == "HIVE Planner"
+
+
+def test_app_icon_path_resolves_repo_asset() -> None:
+    icon = app_icon_path()
+    assert icon is not None
+    assert icon.name == APP_ICON_FILENAME
+    assert icon.is_file()
 
 
 def test_is_portable_runtime_env_flag(monkeypatch: pytest.MonkeyPatch) -> None:

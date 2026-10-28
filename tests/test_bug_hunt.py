@@ -43,6 +43,15 @@ from hive_planner.cli import main
         "run another loop to fix bugs",
         "loop to fix bugs",
         "please run another loop to fix bugs",
+        "end to end bug hunt",
+        "run an end to end bug hunt",
+        "don't wait, start a bug hunt",
+        "stop explaining and run a bug hunt",
+        "cancel that and start a bug hunt",
+        "read the bug hunt command and start a bug hunt",
+        "look at the script and then run a bug hunt",
+        "this bug hunt",
+        "please start this bug hunt",
     ],
 )
 def test_is_bug_hunt_request_starts_the_loop(text: str) -> None:
@@ -63,6 +72,33 @@ def test_is_bug_hunt_request_starts_the_loop(text: str) -> None:
         "please tell me how does bug hunt work",
         "how to run a bug hunt",
         "Can you tell me where is the bug-hunt command",
+        "review the bug hunt script for bugs",
+        "check the bug hunt script for errors",
+        "look at the bug hunt script",
+        "summarize the bug hunt script",
+        "audit the bug hunt script",
+        "describe the bug hunt flow",
+        "explain bug hunting",
+        "tell me about bug hunts",
+        "walk me through the bug hunt",
+        "do not run the bug hunt",
+        "don't start the bug hunt",
+        "do not start a bug hunt",
+        "never run the bug hunt",
+        "stop the bug hunt",
+        "cancel the bug hunt",
+        "wait for the bug hunt to finish",
+        "the bug hunts of yesterday",
+        "skip the bug hunt",
+        "disable the bug hunt",
+        "turn off the bug hunt",
+        "kill the bug hunt",
+        "never bug hunt",
+        "please never bug hunt",
+        "I do not want a bug hunt",
+        "without running a bug hunt",
+        "do not loop to fix bugs",
+        "don't loop to fix bugs",
     ],
 )
 def test_is_bug_hunt_request_rejects_docs_and_noise(text: str) -> None:
@@ -77,13 +113,21 @@ def test_cursor_rule_matches_derivative_phrases() -> None:
     assert "Match intent" in rule
     assert "how to install" in rule
     assert "Do not stop after one bug" in rule
+    assert "A request to stop, cancel, pause, skip, disable, or wait for the hunt is not a start signal" in rule
+    assert "end to end bug hunt" in rule
 
 
 def test_prompt_keeps_the_loop_moving() -> None:
     text = render_agent_prompt(50)
     assert "50-iteration" in text
-    assert "without waiting for the user" in text
-    assert "repeat the process autonomously" in text
+    assert "Do not ask the user whether to continue" in text
+    assert "not skippable" in text
+    assert "10 seconds" in text
+    assert "continue.json" in text
+    assert "not a wait between passes" in text
+    assert "Pause on this step" not in text
+    assert "Do not end the hunt here" not in text
+    assert "repeat across separate inference passes" in text
     assert "Do not ask the user whether to continue" in text
     assert "Do not push" in text
     assert "Wiring audit" in text
@@ -91,6 +135,304 @@ def test_prompt_keeps_the_loop_moving() -> None:
     assert "two readers of the same fact" in text
     assert "neither a confirmed bug nor a potential bug" in text
     assert "I did not reproduce it this session" in text
+    assert "Where to look" in text
+    assert "0.35" in text
+    assert "logistic regression" in text
+    assert "recorded and skipped" in text
+    assert "not a quota" in text
+    assert "reverted commit" in text
+    assert "record-and-skip" in text
+    assert "Fit a classifier only after at least 30 completed rows" in text
+    assert "do not invent a probability" in text
+    assert "keep the weighted sum and treat any signal as qualifying" in text
+    assert "when the regression cannot be fit, qualifying means any weighted-sum signal" in text
+    assert "when the regression is fit" in text
+    assert "once the location model exists" not in text
+    assert "Rank which tests to run" in text
+    assert "The weighted sum is not a probability" in text
+    assert "An unopened location is not an empty search" in text
+    assert "do not run the self-review" in text
+    assert "A confirmed bug that meets the step 1 bar is **fix**" in text
+    assert "0.65" in text
+    assert "at least 30 completed rows" in text
+    assert "restore only this iteration's uncommitted edits" in text
+    assert "A failed review is not an empty search" in text
+    assert "If that commit fails, restore only this iteration's uncommitted edits and use `review-failed` instead." in text
+    assert "review-failed" in text
+    assert "written once, after the outcome is known" in text
+    assert "Do not append a second row for the same location in this run" in text
+    assert "Do not end the hunt here" not in text
+    assert "Before those 30 rows exist, there is no floor" in text
+    assert ".hive/bug-hunt/rank-rows.jsonl" in text
+    assert "Leave locations under that floor unopened" in text
+    assert "including when the harness is missing" in text
+    assert "mark this run's opened set" in text
+    assert "A hunt starts after `active` was written false for a stop condition" in text
+
+
+def test_pause_zero_skips_the_wait() -> None:
+    text = render_agent_prompt(50, pause_seconds=0)
+    assert "pause is 0 seconds" in text
+    assert "do not wait between passes" in text
+    assert "The hook waits, then" not in text
+    assert "The hook sets active to false, then starts the next inference pass." in text
+    assert "not skippable" not in text
+    assert "Do not ask the user whether to continue" in text
+    assert "two consecutive empty searches" in text
+
+
+def test_pause_blank_is_ten_and_a_positive_number_is_the_wait() -> None:
+    from hive_planner.bug_hunt import parse_pause_seconds, validate_pause_seconds
+
+    assert validate_pause_seconds(None) == 10
+    assert parse_pause_seconds("") == 10
+    assert parse_pause_seconds("  ") == 10
+    assert parse_pause_seconds("0") == 0
+    assert parse_pause_seconds("0.0") == 0
+    assert parse_pause_seconds("15") == 15
+    assert parse_pause_seconds("10.0") == 10
+    with pytest.raises(BugHuntError):
+        parse_pause_seconds("-1")
+    with pytest.raises(BugHuntError):
+        parse_pause_seconds("soon")
+    with pytest.raises(BugHuntError):
+        parse_pause_seconds("9223372037")
+    text = render_agent_prompt(4, pause_seconds=15)
+    assert "15 seconds" in text
+    assert "not skippable" in text
+
+
+def test_cli_pause_accepts_a_whole_decimal(tmp_path: Path) -> None:
+    stdout = io.StringIO()
+    with redirect_stdout(stdout):
+        code = main(["--root", str(tmp_path), "bug-hunt", "--print", "--pause-seconds", "10.0"])
+    assert code == 0
+    assert "pause is 10 seconds" in stdout.getvalue()
+    assert not (tmp_path / ".cursor" / "commands" / "bug-hunt.md").exists()
+
+
+def test_cli_iterations_accepts_a_whole_decimal(tmp_path: Path) -> None:
+    stdout = io.StringIO()
+    with redirect_stdout(stdout):
+        code = main(["--root", str(tmp_path), "bug-hunt", "--print", "--iterations", "50.0"])
+    assert code == 0
+    assert "50 committed fixes is the ceiling" in stdout.getvalue()
+
+
+def test_install_writes_the_pause_into_the_script(tmp_path: Path) -> None:
+    result = install_bug_hunt(tmp_path, iterations=4, pause_seconds=0)
+    command = (tmp_path / ".cursor" / "commands" / "bug-hunt.md").read_text(encoding="utf-8")
+    assert result.pause_seconds == 0
+    assert "pause is 0 seconds" in command
+    assert "do not wait between passes" in command
+    assert result.to_dict()["pause_seconds"] == 0
+
+
+def test_continue_hook_waits_then_starts_the_next_pass(tmp_path: Path) -> None:
+    import json
+    import time
+
+    from hive_planner.bug_hunt_continue import apply_continue, plan_continue
+
+    waited: list[int] = []
+    state_path = tmp_path / ".hive" / "bug-hunt" / "continue.json"
+    state_path.parent.mkdir(parents=True)
+    state_path.write_text(json.dumps({"active": True, "pause_seconds": 10}), encoding="utf-8")
+    payload = apply_continue(tmp_path, sleep=lambda seconds: waited.append(seconds))
+    assert waited == [10]
+    assert "followup_message" in payload
+    assert "next inference pass" in payload["followup_message"]
+    assert "consecutive-empty count named in that script" in payload["followup_message"]
+    assert "pause_seconds\": 0" not in payload["followup_message"]
+    assert json.loads(state_path.read_text(encoding="utf-8"))["active"] is False
+    assert apply_continue(tmp_path, sleep=lambda seconds: waited.append(seconds)) == {}
+    assert plan_continue({"active": 1, "pause_seconds": "10.0"})[0] == 10
+    assert plan_continue({"active": "true", "pause_seconds": "0"})[1]["followup_message"]
+    assert plan_continue({"active": True, "pause_seconds": 0})[0] == 0
+    assert plan_continue({"active": True, "pause_seconds": "10"})[0] == 10
+    assert plan_continue({"active": True, "pause_seconds": 10.0})[0] == 10
+    assert plan_continue({"active": False, "pause_seconds": 10})[1] == {}
+    state_path.write_text(
+        json.dumps({"active": True, "pause_seconds": "soon"}),
+        encoding="utf-8",
+    )
+    assert apply_continue(tmp_path, sleep=lambda seconds: waited.append(seconds)) == {}
+    assert waited == [10]
+    assert json.loads(state_path.read_text(encoding="utf-8"))["active"] is False
+    assert not (state_path.with_name(state_path.name + ".tmp")).exists()
+
+
+def test_continue_hook_zero_does_not_wait_and_abort_consumes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import json
+
+    from hive_planner.bug_hunt_continue import main
+
+    state_path = tmp_path / ".hive" / "bug-hunt" / "continue.json"
+    state_path.parent.mkdir(parents=True)
+    state_path.write_text(json.dumps({"active": True, "pause_seconds": 0}), encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("sys.stdin.read", lambda: '{"status":"completed"}')
+    monkeypatch.setattr("sys.stdin.isatty", lambda: False)
+    assert main() == 0
+    assert json.loads(state_path.read_text(encoding="utf-8"))["active"] is False
+
+    state_path.write_text(json.dumps({"active": True, "pause_seconds": 10}), encoding="utf-8")
+    slept: list[int] = []
+    monkeypatch.setattr("hive_planner.bug_hunt_continue.time.sleep", lambda seconds: slept.append(seconds))
+    monkeypatch.setattr("sys.stdin.read", lambda: '{"status":"aborted"}')
+    assert main() == 0
+    assert slept == []
+    assert json.loads(state_path.read_text(encoding="utf-8"))["active"] is False
+
+
+def test_pause_beyond_the_sleep_limit_falls_back_to_the_script(tmp_path: Path) -> None:
+    import json
+
+    from hive_planner.bug_hunt_continue import apply_continue
+
+    command = tmp_path / ".cursor" / "commands" / "bug-hunt.md"
+    command.parent.mkdir(parents=True)
+    command.write_text("This run's pause is 10 seconds.\n", encoding="utf-8")
+    state_path = tmp_path / ".hive" / "bug-hunt" / "continue.json"
+    state_path.parent.mkdir(parents=True)
+    state_path.write_text('{"active": true, "pause_seconds": 100000000000000000000}', encoding="utf-8")
+    slept: list[int] = []
+    payload = apply_continue(tmp_path, sleep=lambda seconds: slept.append(seconds))
+    assert slept == [10]
+    assert "followup_message" in payload
+    assert json.loads(state_path.read_text(encoding="utf-8"))["active"] is False
+
+
+def test_missing_pause_uses_the_script_not_the_ten_second_default(tmp_path: Path) -> None:
+    import json
+
+    from hive_planner.bug_hunt_continue import apply_continue
+
+    command = tmp_path / ".cursor" / "commands" / "bug-hunt.md"
+    command.parent.mkdir(parents=True)
+    command.write_text("This run's pause is 0 seconds.\n", encoding="utf-8")
+    state_path = tmp_path / ".hive" / "bug-hunt" / "continue.json"
+    state_path.parent.mkdir(parents=True)
+    state_path.write_text('{"active": true}', encoding="utf-8")
+    slept: list[int] = []
+    payload = apply_continue(tmp_path, sleep=lambda seconds: slept.append(seconds))
+    assert slept == []
+    assert "followup_message" in payload
+    assert json.loads(state_path.read_text(encoding="utf-8"))["active"] is False
+
+
+def test_continue_hook_finds_the_file_above_the_working_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import json
+
+    from hive_planner.bug_hunt_continue import main
+
+    repo = tmp_path / "repo"
+    sub = repo / "src"
+    sub.mkdir(parents=True)
+    state_path = repo / ".hive" / "bug-hunt" / "continue.json"
+    state_path.parent.mkdir(parents=True)
+    state_path.write_text(json.dumps({"active": True, "pause_seconds": 0}), encoding="utf-8")
+    monkeypatch.chdir(sub)
+    monkeypatch.setattr("sys.stdin.read", lambda: '{"status":"completed"}')
+    monkeypatch.setattr("sys.stdin.isatty", lambda: False)
+    assert main() == 0
+    assert json.loads(state_path.read_text(encoding="utf-8"))["active"] is False
+
+
+def test_continue_hook_honors_state_counters_when_active_was_left_true(tmp_path: Path) -> None:
+    import json
+
+    from hive_planner.bug_hunt_continue import apply_continue
+
+    state_path = tmp_path / ".hive" / "bug-hunt" / "continue.json"
+    state_path.parent.mkdir(parents=True)
+    state_path.write_text(
+        '{"active": true, "pause_seconds": 0, "ceiling": 50, "committed": 50, "consecutive_empty": 0}',
+        encoding="utf-8",
+    )
+    slept: list[int] = []
+    payload = apply_continue(tmp_path, sleep=lambda seconds: slept.append(seconds))
+    assert payload == {}
+    assert slept == []
+    assert json.loads(state_path.read_text(encoding="utf-8"))["active"] is False
+
+    state_path.write_text(
+        '{"active": true, "pause_seconds": 0, "ceiling": 50, "committed": 3, "consecutive_empty": 2}',
+        encoding="utf-8",
+    )
+    payload = apply_continue(tmp_path, sleep=lambda seconds: slept.append(seconds))
+    assert payload == {}
+    assert slept == []
+    assert json.loads(state_path.read_text(encoding="utf-8"))["active"] is False
+
+    state_path.write_text(
+        '{"active": true, "pause_seconds": 0, "stop": 1}',
+        encoding="utf-8",
+    )
+    payload = apply_continue(tmp_path, sleep=lambda seconds: slept.append(seconds))
+    assert payload == {}
+    assert slept == []
+    assert json.loads(state_path.read_text(encoding="utf-8"))["active"] is False
+
+
+def test_continue_hook_does_not_use_a_parent_projects_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import json
+
+    from hive_planner.bug_hunt_continue import main
+
+    outer = tmp_path / "outer"
+    child = outer / "child"
+    (child / "src").mkdir(parents=True)
+    (child / ".git").mkdir()
+    state_path = outer / ".hive" / "bug-hunt" / "continue.json"
+    state_path.parent.mkdir(parents=True)
+    state_path.write_text(json.dumps({"active": True, "pause_seconds": 0}), encoding="utf-8")
+    monkeypatch.chdir(child / "src")
+    monkeypatch.setattr("sys.stdin.read", lambda: '{"status":"completed"}')
+    monkeypatch.setattr("sys.stdin.isatty", lambda: False)
+    assert main() == 0
+    assert json.loads(state_path.read_text(encoding="utf-8"))["active"] is True
+
+
+def test_install_registers_continue_hook_and_keeps_other_events(tmp_path: Path) -> None:
+    import json
+
+    hooks = tmp_path / ".cursor" / "hooks.json"
+    hooks.parent.mkdir(parents=True)
+    hooks.write_text(
+        json.dumps({"version": 1, "hooks": {"workspaceOpen": [{"command": "py -3.11 keep.py"}]}}),
+        encoding="utf-8",
+    )
+    install_bug_hunt(tmp_path, iterations=50, pause_seconds=10)
+    command = (tmp_path / ".cursor" / "commands" / "bug-hunt.md").read_text(encoding="utf-8")
+    assert "50 committed fixes is the ceiling" in command
+    assert "50-iteration ceiling" in command
+    data = json.loads(hooks.read_text(encoding="utf-8"))
+    assert data["hooks"]["workspaceOpen"][0]["command"] == "py -3.11 keep.py"
+    stop = data["hooks"]["stop"]
+    assert any(item["command"] == "py -3.11 .cursor/hooks/bug_hunt_continue.py" for item in stop)
+    assert stop[-1]["timeout"] == 86400
+    assert (tmp_path / ".cursor" / "hooks" / "bug_hunt_continue.py").is_file()
+    assert missing_bug_hunt_artifacts(tmp_path) == []
+    install_bug_hunt(tmp_path, iterations=50, pause_seconds=100000)
+    data = json.loads(hooks.read_text(encoding="utf-8"))
+    assert data["hooks"]["workspaceOpen"][0]["command"] == "py -3.11 keep.py"
+    assert data["hooks"]["stop"][-1]["timeout"] == 100030
+
+
+def test_install_does_not_replace_broken_hooks_json(tmp_path: Path) -> None:
+    hooks = tmp_path / ".cursor" / "hooks.json"
+    hooks.parent.mkdir(parents=True)
+    original = '{"version": 1, "hooks": {"workspaceOpen": [}'
+    hooks.write_text(original, encoding="utf-8")
+    with pytest.raises(BugHuntError, match="not valid JSON"):
+        install_bug_hunt(tmp_path, iterations=50)
+    assert hooks.read_text(encoding="utf-8") == original
+    assert not (tmp_path / ".cursor" / "commands" / "bug-hunt.md").exists()
 
 
 def test_install_leaves_no_tmp_bug_hunt_files(tmp_path: Path) -> None:
@@ -163,6 +505,13 @@ def test_install_skips_existing_when_not_forced(tmp_path: Path) -> None:
     assert command.read_text(encoding="utf-8") == "custom\n"
 
 
+def test_install_force_does_not_report_unchanged_files(tmp_path: Path) -> None:
+    first = install_bug_hunt(tmp_path, iterations=10, pause_seconds=10)
+    assert ".cursor/commands/bug-hunt.md" in first.files_written
+    second = install_bug_hunt(tmp_path, iterations=10, pause_seconds=10)
+    assert second.files_written == []
+
+
 def test_install_appends_dual_lane_when_rule_present(tmp_path: Path) -> None:
     dual = tmp_path / ".cursor" / "rules" / "bug-hunt-dual-lane.mdc"
     dual.parent.mkdir(parents=True)
@@ -172,6 +521,8 @@ def test_install_appends_dual_lane_when_rule_present(tmp_path: Path) -> None:
     assert "10-iteration" in command
     assert "dual-lane" in command
     assert "bug-hunt-dual-lane.mdc" in command
+    assert "One location per iteration still holds" in command
+    assert "Batch related findings" not in command
 
 
 def test_install_resolves_code_workspace_to_folder(tmp_path: Path) -> None:
@@ -227,6 +578,8 @@ def test_missing_bug_hunt_artifacts_lists_absent_files(tmp_path: Path) -> None:
         ".cursor/rules/bug-hunt.mdc",
         ".hive/bug-hunt/AGENT_PROMPT.md",
         "scripts/bug-hunt.md",
+        ".cursor/hooks/bug_hunt_continue.py",
+        ".cursor/hooks.json#stop:py -3.11 .cursor/hooks/bug_hunt_continue.py",
     ]
     install_bug_hunt(tmp_path, iterations=4)
     assert missing_bug_hunt_artifacts(tmp_path) == []

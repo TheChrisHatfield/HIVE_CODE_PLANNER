@@ -16,7 +16,7 @@ Load [`docs/planning-rosetta-stone.md`](../../planning-rosetta-stone.md) (`plann
 - [x] `tests/test_bug_hunt.py`
 - [x] R4 chat-trigger matcher for derivative hunt phrases
 - [x] R3 bootstrap + handoff deploy install
-- [x] R3 Home Enable bug hunt → `run_project_bug_hunt_install`
+- [x] R3 Home **Loop controls** → Bug hunt Enable → `run_project_bug_hunt_install`
 
 ## Active task
 

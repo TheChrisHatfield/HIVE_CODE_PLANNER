@@ -51,11 +51,15 @@ To **upload to Perplexity / Gemini / ChatGPT** at the start of a planning sessio
 
 ## Agnostic loop
 
-Opt-in pause-cycle chooser: `py -3.11 -m hive_planner agnostic-loop install` copies the hive-loop-kit, or Home **Enable agnostic loop**. Then `arm` / `begin` / `review` / `choose` (CLI or `scripts/agnostic_loop.py`). Replace `.hive/agnostic-loop/catalog.json` for another tool. Not bug hunt and not the implementation loop. Spec: [`docs/specs/agnostic-loop/spec.md`](docs/specs/agnostic-loop/spec.md).
+Opt-in pause-cycle chooser: `py -3.11 -m hive_planner agnostic-loop install` copies the hive-loop-kit, or Home **Loop controls** → Agnostic loop **Enable**. Then `arm` / `begin` / `review` / `choose` (CLI or `scripts/agnostic_loop.py`). Replace `.hive/agnostic-loop/catalog.json` for another tool. Not bug hunt and not the implementation loop. Spec: [`docs/specs/agnostic-loop/spec.md`](docs/specs/agnostic-loop/spec.md).
 
 ## Implementation loop
 
-After `spec.md`, `plan.md`, and `tasks.md` exist, install the opt-in coding loop with `py -3.11 -m hive_planner implementation-loop install --pack 4-pack` (or `1-pack`), or Home **Enable implementation loop**. Run gates from chat (**implementation loop**) or Home **Loop status / start / handoff / check / accept / commit**. Spec: [`docs/specs/implementation-loop/spec.md`](docs/specs/implementation-loop/spec.md).
+After `spec.md`, `plan.md`, and `tasks.md` exist, install the opt-in coding loop with `py -3.11 -m hive_planner implementation-loop install --pack 4-pack` (or `1-pack`), or Home **Loop controls** → CodeSpec **Enable**, or Controls **Install CodeSpec**. Run gates from chat (**implementation loop** or **code spec**) or Controls **Run**. Spec: [`docs/specs/implementation-loop/spec.md`](docs/specs/implementation-loop/spec.md).
+
+## Agent MCP
+
+Settings **Agent MCP → Enable** writes `hive-planner` into the active project's `.cursor/mcp.json`. The server is `py -3.11 -m hive_planner mcp-serve` (stdlib stdio JSON-RPC). An agent in that Cursor workspace can then call Hive Planner (health check, loops, map sync). Reload MCP in Cursor after Enable.
 
 ## Execution rule
 

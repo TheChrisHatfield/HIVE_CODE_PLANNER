@@ -88,6 +88,7 @@ from hive_planner.launcher.service import (
 )
 from hive_planner.config import validate_feature_id
 from hive_planner.agent_handoff import validate_unified_handoff
+from hive_planner.launcher.popup_placement import install_popup_memory, remember_popup
 from hive_planner.launcher.theme import (
     COLORS,
     FONT,
@@ -187,6 +188,7 @@ class HivePlannerApp:
 
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
+        install_popup_memory(root)
         self.config = load_config()
         self.setup = get_setup_status(self.config)
         self._wizard_step = 0
@@ -252,6 +254,7 @@ class HivePlannerApp:
     def _dialog(self) -> tk.Toplevel:
         dialog = tk.Toplevel(self.root)
         apply_app_icon(dialog)
+        remember_popup(dialog)
         return dialog
 
     def _portable_bootstrap_done(self, result: dict) -> None:
@@ -1219,12 +1222,85 @@ class HivePlannerApp:
         ),
     }
 
+    # One sentence per command, shown when the pointer rests on Command.
+    CONTROLS_COMMAND_TIPS = {
+        "Bug hunt": {
+            "Enable": "Turns bug hunt on for this project. In Cursor chat, say bug hunt to find and fix bugs.",
+            "Check install": "Shows whether bug hunt is already turned on in this project.",
+        },
+        "CodeSpec": {
+            "Enable": "Turns CodeSpec on so this project can be coded from a finished spec.",
+            "Check pack": "Shows whether CodeSpec is turned on, and which pack it is using.",
+            "Status": "Shows whether this feature has a spec, a plan, and a task list, and is ready to code.",
+            "Start": "Starts coding the next task for the feature named below.",
+            "Handoff": "Writes the next instructions for the step this block is on.",
+            "Check": "Runs this project's build and tests, and records the result.",
+            "Accept": "Marks the latest result for the step this block is on.",
+            "Commit": "Saves the accepted work as a local git commit on this computer.",
+        },
+        "Agnostic loop": {
+            "Enable": "Turns the job picker on in this project.",
+            "Check install": "Shows whether the job picker is already turned on.",
+            "Rewards": "Lists the kinds of jobs this project can pick.",
+            "Status": "Shows which job is in progress and how far along it is.",
+            "Arm": "Sets the job type and how many times to repeat it.",
+            "Begin": "Starts the next repeat of the job you set.",
+            "Review": "Pauses the current job and saves the note below.",
+            "Observe hit": "Records that this job type worked, so it gets picked more often.",
+            "Observe miss": "Records that this job type did not work, so it gets picked less often.",
+            "Choose": "Picks the next job type from the open counts below.",
+        },
+    }
+
+    # One sentence per setting row.
+    CONTROLS_SETTING_TIPS = {
+        "fix_ceiling": "How many bug fixes to make before stopping. Enter a number from 1 to 200.",
+        "pause_seconds": "Seconds to wait between passes. Leave blank for 10. Enter 0 to skip the wait. The next pass still starts. A number above 0 cannot be skipped.",
+        "pack": "1-pack does the task in a single pass. 4-pack splits it into coding, checking, and review.",
+        "feature": "Which feature to code. Leave blank to use the feature already set for this project.",
+        "dirty": "Start even when other files in the project have uncommitted changes.",
+        "force": "Start anyway if the loop is stuck, or switch to this feature while another one is running.",
+        "cap": "Allows another handoff after this loop has already handed off 10 times.",
+        "reward": "The job type to set or score, such as inspect or fill.",
+        "cycles": "How many times to repeat that job.",
+        "note": "A short note saved when you pause the current job.",
+        "open": "How many of each job are still open, such as inspect=4, fill=1. Blank means one of each.",
+        "sims": "How many trial picks to compare. 64 is usual.",
+        "horizon": "How many steps ahead to look when picking. 4 is usual.",
+        "seed": "A number that repeats the same pick. Leave blank for a new pick each time.",
+        "arm": "After a job is picked, set it to repeat for the number of cycles above.",
+    }
+
+    # One plain line per loop, shown under the Controls heading.
+    LOOP_SUMMARIES = (
+        ("Bug hunt", "Looks through the project for bugs and fixes them one at a time."),
+        ("CodeSpec", "Turns a finished spec and its task list into code, checking each step."),
+        ("Agnostic loop", "Chooses the next small job from a list of job types, then waits for your result."),
+    )
+
     # Settings each Controls block shows. Keys match row ids built in _mount_controls_instance.
     CONTROLS_LOOP_SETTINGS = {
-        "Bug hunt": ("fix_ceiling",),
-        "CodeSpec": ("pack", "feature", "role", "dirty", "force", "cap"),
+        "Bug hunt": ("fix_ceiling", "pause_seconds"),
+        "CodeSpec": ("pack", "feature", "dirty", "force", "cap"),
         "Agnostic loop": ("reward", "cycles", "note", "open", "sims", "horizon", "seed", "arm"),
     }
+
+    @classmethod
+    def normalize_controls_loop(cls, raw: str) -> str | None:
+        """Map typed labels such as 'code spec' onto a Controls loop name."""
+        text = str(raw or "").strip()
+        if text in cls.LOOP_CONTROL_COMMANDS:
+            return text
+        key = "".join(ch for ch in text.lower() if ch.isalnum())
+        aliases = {
+            "codespec": "CodeSpec",
+            "implementationloop": "CodeSpec",
+            "implloop": "CodeSpec",
+            "bughunt": "Bug hunt",
+            "agnosticloop": "Agnostic loop",
+            "hivelookit": "Agnostic loop",
+        }
+        return aliases.get(key)
 
     @classmethod
     def controls_settings_for_loop(cls, loop: str) -> tuple[str, ...]:
@@ -1266,7 +1342,7 @@ class HivePlannerApp:
             add_row,
             "+",
             self._on_add_controls_instance,
-            tooltip="Add another loop block with its own settings. New blocks start collapsed. The active repo above is shared.",
+            tooltip="Add another loop for this same project. It starts folded.",
         )
         primary_button(
             add_row,
@@ -1295,9 +1371,9 @@ class HivePlannerApp:
             "loop": tk.StringVar(value="CodeSpec"),
             "command": tk.StringVar(value="Status"),
             "bug_iterations": tk.StringVar(value=str(DEFAULT_ITERATIONS)),
+            "bug_pause": tk.StringVar(value=""),
             "impl_pack": tk.StringVar(value=PACK_1),
             "impl_feature": tk.StringVar(value="" if feature in ("", "—") else feature),
-            "impl_role": tk.StringVar(value="coder"),
             "impl_allow_dirty": tk.BooleanVar(value=False),
             "impl_force_feature": tk.BooleanVar(value=False),
             "impl_continue_cap": tk.BooleanVar(value=False),
@@ -1323,9 +1399,9 @@ class HivePlannerApp:
         self.controls_command = inst["command"]
         self.controls_command_box = inst.get("command_box")
         self.controls_bug_iterations = inst["bug_iterations"]
+        self.controls_bug_pause = inst["bug_pause"]
         self.controls_impl_pack = inst["impl_pack"]
         self.controls_impl_feature = inst["impl_feature"]
-        self.controls_impl_role = inst["impl_role"]
         self.controls_impl_allow_dirty = inst["impl_allow_dirty"]
         self.controls_impl_force_feature = inst["impl_force_feature"]
         self.controls_impl_continue_cap = inst["impl_continue_cap"]
@@ -1359,19 +1435,29 @@ class HivePlannerApp:
             header,
             "▾",
             lambda current=inst: self._on_toggle_controls_collapse(current),
-            tooltip="Hide or show this block's fields. Loop, Command, and Run stay visible.",
+            tooltip="Fold or unfold the settings. Loop, Command, and Run stay visible.",
         )
         tk.Label(header, text="Loop", width=10, anchor="w", bg=COLORS["card"], fg=COLORS["fg"], font=FONT).pack(side="left")
         loop_box = ttk.Combobox(
             header,
             textvariable=inst["loop"],
             values=tuple(self.LOOP_CONTROL_COMMANDS),
-            state="readonly",
+            state="normal",
             width=18,
         )
         loop_box.pack(side="left", padx=(0, 8))
+        inst["loop_tips"] = attach_combobox_tooltip(loop_box, self.controls_loop_tip(inst["loop"].get()))
+        inst["_loop_last"] = self.normalize_controls_loop(str(inst["loop"].get())) or "CodeSpec"
         loop_box.bind(
             "<<ComboboxSelected>>",
+            lambda _event, current=inst: self._on_controls_instance_loop_changed(current),
+        )
+        loop_box.bind(
+            "<Return>",
+            lambda _event, current=inst: self._on_controls_instance_loop_changed(current),
+        )
+        loop_box.bind(
+            "<FocusOut>",
             lambda _event, current=inst: self._on_controls_instance_loop_changed(current),
         )
         tk.Label(header, text="Command", width=10, anchor="w", bg=COLORS["card"], fg=COLORS["fg"], font=FONT).pack(side="left")
@@ -1384,19 +1470,27 @@ class HivePlannerApp:
         )
         command_box.pack(side="left", fill="x", expand=True, padx=(0, 8))
         inst["command_box"] = command_box
+        inst["command_tips"] = attach_combobox_tooltip(
+            command_box,
+            self.controls_command_tip(inst["loop"].get(), inst["command"].get()),
+        )
+        command_box.bind(
+            "<<ComboboxSelected>>",
+            lambda _event, current=inst: self._refresh_controls_choice_tips(current),
+        )
         actions = tk.Frame(frame, bg=COLORS["card"])
         actions.pack(fill="x", padx=8, pady=(4, 0))
         inst["remove_btn"] = secondary_button(
             actions,
             "−",
             lambda current=inst: self._on_remove_controls_instance(current),
-            tooltip="Remove this loop block. The last block stays.",
+            tooltip="Remove this loop. One loop always stays.",
         )
         primary_button(
             actions,
             "Run",
             lambda current=inst: self._on_controls_instance_run(current),
-            tooltip="Run this block's command on the active repo.",
+            tooltip="Run the command selected above on the project at the top.",
         )
         if "last" not in inst:
             inst["last"] = tk.StringVar(value="")
@@ -1411,6 +1505,17 @@ class HivePlannerApp:
         )
         last_label.pack(anchor="w", fill="x", padx=12, pady=(4, 0))
         inst["last_label"] = last_label
+        inst["steps"] = tk.StringVar(value="")
+        steps_label = tk.Label(
+            frame,
+            textvariable=inst["steps"],
+            justify="left",
+            anchor="w",
+            bg=COLORS["card"],
+            fg=COLORS["fg"],
+            font=FONT,
+        )
+        inst["steps_label"] = steps_label
 
         settings = tk.Frame(frame, bg=COLORS["card"])
         settings.pack(fill="x", padx=4, pady=(0, 8))
@@ -1420,92 +1525,96 @@ class HivePlannerApp:
                 settings,
                 "Fix ceiling",
                 inst["bug_iterations"],
-                "Bug hunt Enable: ceiling on committed fixes written into the script (1–200).",
+                self.CONTROLS_SETTING_TIPS["fix_ceiling"],
+            ),
+            "pause_seconds": self._controls_labeled_entry(
+                settings,
+                "Pause seconds",
+                inst["bug_pause"],
+                self.CONTROLS_SETTING_TIPS["pause_seconds"],
             ),
             "pack": self._controls_pack_row(settings, inst["impl_pack"], [PACK_1, PACK_4]),
             "feature": self._controls_labeled_entry(
                 settings,
                 "Feature id",
                 inst["impl_feature"],
-                "CodeSpec Status and Start. Blank uses the active feature in AGENTS.md.",
-            ),
-            "role": self._controls_choice_row(
-                settings,
-                "Role",
-                inst["impl_role"],
-                ["coder", "checker", "reviewer", "coordinator"],
-                "CodeSpec Handoff and Accept.",
+                self.CONTROLS_SETTING_TIPS["feature"],
             ),
             "dirty": self._controls_check_row(
                 settings,
                 "Allow dirty start",
                 inst["impl_allow_dirty"],
-                "CodeSpec Start: continue when unrelated files are dirty.",
+                self.CONTROLS_SETTING_TIPS["dirty"],
             ),
             "force": self._controls_check_row(
                 settings,
                 "Force feature",
                 inst["impl_force_feature"],
-                "CodeSpec Start: switch feature, or continue when the loop is blocked.",
+                self.CONTROLS_SETTING_TIPS["force"],
             ),
             "cap": self._controls_check_row(
                 settings,
                 "Continue after cap",
                 inst["impl_continue_cap"],
-                "CodeSpec Handoff: allow another pass after 10 round trips.",
+                self.CONTROLS_SETTING_TIPS["cap"],
             ),
             "reward": self._controls_labeled_entry(
                 settings,
                 "Reward",
                 inst["agn_reward"],
-                "Agnostic Arm and Observe: catalog work kind, such as inspect or fill.",
+                self.CONTROLS_SETTING_TIPS["reward"],
             ),
             "cycles": self._controls_labeled_entry(
                 settings,
                 "Cycles",
                 inst["agn_cycles"],
-                "Agnostic Arm, and Choose when Arm after choose is on.",
+                self.CONTROLS_SETTING_TIPS["cycles"],
             ),
             "note": self._controls_labeled_entry(
                 settings,
                 "Review note",
                 inst["agn_note"],
-                "Agnostic Review: note recorded when the open slice pauses.",
+                self.CONTROLS_SETTING_TIPS["note"],
             ),
             "open": self._controls_labeled_entry(
                 settings,
                 "Open counts",
                 inst["agn_open"],
-                "Agnostic Choose: reward=count pairs, for example inspect=4,fill=1. Blank uses one of each.",
+                self.CONTROLS_SETTING_TIPS["open"],
             ),
             "sims": self._controls_labeled_entry(
                 settings,
                 "Sims",
                 inst["agn_sims"],
-                "Agnostic Choose: rollout count. Default 64.",
+                self.CONTROLS_SETTING_TIPS["sims"],
             ),
             "horizon": self._controls_labeled_entry(
                 settings,
                 "Horizon",
                 inst["agn_horizon"],
-                "Agnostic Choose: lookahead depth. Default 4.",
+                self.CONTROLS_SETTING_TIPS["horizon"],
             ),
             "seed": self._controls_labeled_entry(
                 settings,
                 "Seed",
                 inst["agn_seed"],
-                "Agnostic Choose: optional whole-number seed. Blank stays random.",
+                self.CONTROLS_SETTING_TIPS["seed"],
             ),
             "arm": self._controls_check_row(
                 settings,
                 "Arm after choose",
                 inst["agn_arm_choose"],
-                "Agnostic Choose: arm the reward it picks, for the cycle count above.",
+                self.CONTROLS_SETTING_TIPS["arm"],
             ),
         }
         self._sync_controls_command_choices(inst)
         self._apply_controls_instance_settings(inst)
         self._apply_controls_collapse(inst)
+        try:
+            inst["impl_pack"].trace_add("write", lambda *_args, current=inst: self._refresh_codespec_steps(current))
+        except (tk.TclError, AttributeError):
+            pass
+        self._refresh_codespec_steps(inst)
 
     def _controls_labeled_entry(self, parent, label: str, variable: tk.StringVar, tooltip: str) -> tk.Frame:
         row = tk.Frame(parent, bg=COLORS["card"])
@@ -1533,7 +1642,7 @@ class HivePlannerApp:
             "Pack",
             variable,
             values,
-            "CodeSpec Enable: 1-pack is one coordinator pass. 4-pack splits coder, checker, and reviewer.",
+            self.CONTROLS_SETTING_TIPS["pack"],
         )
 
     def _controls_check_row(self, parent, text: str, variable: tk.BooleanVar, tooltip: str) -> tk.Frame:
@@ -1561,9 +1670,9 @@ class HivePlannerApp:
         visible = set(self.controls_settings_for_loop(str(inst["loop"].get())))
         order = (
             "fix_ceiling",
+            "pause_seconds",
             "pack",
             "feature",
-            "role",
             "dirty",
             "force",
             "cap",
@@ -1644,6 +1753,7 @@ class HivePlannerApp:
         except tk.TclError:
             return
         self._apply_controls_instance_settings(inst)
+        self._refresh_codespec_steps(inst)
 
     def _on_toggle_controls_collapse(self, inst: dict) -> None:
         var = inst.get("collapsed")
@@ -1724,8 +1834,23 @@ class HivePlannerApp:
             return
 
     def _on_controls_instance_loop_changed(self, inst: dict) -> None:
+        raw = ""
+        try:
+            raw = str(inst["loop"].get())
+        except (tk.TclError, KeyError, AttributeError):
+            raw = ""
+        name = self.normalize_controls_loop(raw)
+        previous = str(inst.get("_loop_last") or "CodeSpec")
+        chosen = name or previous
+        if chosen != raw:
+            try:
+                inst["loop"].set(chosen)
+            except (tk.TclError, KeyError, AttributeError):
+                pass
+        inst["_loop_last"] = chosen
         self._sync_controls_command_choices(inst)
         self._apply_controls_instance_settings(inst)
+        self._refresh_codespec_steps(inst)
 
     def _on_controls_instance_run(self, inst: dict) -> None:
         self._alias_primary_controls_instance(inst)
@@ -1739,9 +1864,33 @@ class HivePlannerApp:
             self._controls_result_target = previous_target
             self._alias_primary_controls_instance()
 
+    @classmethod
+    def controls_loop_summary(cls) -> str:
+        return "\n".join(f"{name} — {line}" for name, line in cls.LOOP_SUMMARIES)
+
+    @classmethod
+    def controls_loop_tip(cls, loop: str) -> str:
+        for name, line in cls.LOOP_SUMMARIES:
+            if name == loop:
+                return line
+        return "Which loop this block runs."
+
+    @classmethod
+    def controls_command_tip(cls, loop: str, command: str) -> str:
+        return cls.CONTROLS_COMMAND_TIPS.get(str(loop), {}).get(
+            str(command),
+            "Runs the command selected in this block.",
+        )
+
+    @staticmethod
+    def _set_tooltip_text(tips: list | None, text: str) -> None:
+        for tip in tips or []:
+            tip.text = text
+
     def _controls_active_caption(self) -> str:
         active = self.config.active_project or "No project linked. Open Projects and set an active folder."
         return (
+            f"{self.controls_loop_summary()}\n\n"
             "Each block is one loop with its own settings. "
             "Use + to keep another loop beside it. "
             "Every block runs on:\n"
@@ -1752,6 +1901,7 @@ class HivePlannerApp:
         """Keep Controls pointed at the live active repo after a project switch."""
         if hasattr(self, "controls_active_label"):
             self.controls_active_label.set(self._controls_active_caption())
+        self._refresh_all_codespec_steps()
         key = self._active_link_key()
         last = getattr(self, "_controls_link_key", None)
         if last == key:
@@ -1791,6 +1941,17 @@ class HivePlannerApp:
                 pass
         if command is not None and str(command.get()) not in choices:
             command.set(choices[0])
+        if inst is not None:
+            self._refresh_controls_choice_tips(inst)
+
+    def _refresh_controls_choice_tips(self, inst: dict) -> None:
+        try:
+            loop = str(inst["loop"].get())
+            command = str(inst["command"].get())
+        except (tk.TclError, KeyError, AttributeError):
+            return
+        self._set_tooltip_text(inst.get("loop_tips"), self.controls_loop_tip(loop))
+        self._set_tooltip_text(inst.get("command_tips"), self.controls_command_tip(loop, command))
 
     def _on_controls_loop_changed(self, _event=None) -> None:
         self._sync_controls_command_choices()
@@ -1970,17 +2131,34 @@ class HivePlannerApp:
         form_host.grid(row=0, column=1, sticky="nsew")
 
         hub = card(hub_host)
+        hub.pack(fill="both", expand=True)
+        hub_set_active = tk.Frame(hub, bg=COLORS["card"])
+        hub_set_active.pack(side="bottom", fill="x", padx=12, pady=(0, 12))
+        secondary_button(
+            hub_set_active,
+            "Set as active",
+            self._on_select_recent,
+            tooltip="Make the selected folder the project Home uses for health checks and actions.",
+        )
         card_title(hub, "Cursor workspace hub")
-        tk.Label(
+        hub_blurb = tk.Label(
             hub,
             text="Link a Cursor workspace to Hive Planner, then use Open in Cursor to launch it. "
             "Health checks run when Hive planning files are present.",
-            wraplength=360,
+            wraplength=200,
             justify="left",
             bg=COLORS["card"],
             fg=COLORS["muted"],
             font=FONT,
-        ).pack(anchor="w", padx=12, pady=(0, 8))
+        )
+        hub_blurb.pack(anchor="w", padx=12, pady=(0, 8))
+
+        def _fit_hub_blurb(event, label=hub_blurb) -> None:
+            width = int(event.width) - 28
+            if width > 40 and width != int(label.cget("wraplength")):
+                label.configure(wraplength=width)
+
+        hub.bind("<Configure>", _fit_hub_blurb)
         hub_actions = tk.Frame(hub, bg=COLORS["card"])
         hub_actions.pack(fill="x", padx=12, pady=(0, 12))
         primary_button(
@@ -2014,7 +2192,7 @@ class HivePlannerApp:
             textvariable=self.new_profile,
             values=["full", "minimal"],
             state="readonly",
-            width=28,
+            width=8,
         ).pack(side="left", fill="x", expand=True)
         handoff_row = tk.Frame(form, bg=COLORS["card"])
         handoff_row.pack(fill="x", padx=12, pady=(4, 4))
@@ -2032,15 +2210,18 @@ class HivePlannerApp:
             textvariable=self.new_agent_handoff,
             values=["unified", "off"],
             state="readonly",
-            width=28,
+            width=8,
         ).pack(side="left", fill="x", expand=True)
-        tk.Label(
-            handoff_row,
+        handoff_hint = tk.Label(
+            form,
             text="Unified = Spec Kit + Continual Learning together",
+            wraplength=200,
+            justify="left",
             bg=COLORS["card"],
             fg=COLORS["muted"],
             font=FONT_SUBTITLE,
-        ).pack(anchor="w", padx=(14, 0), pady=(2, 0))
+        )
+        handoff_hint.pack(anchor="w", padx=12, pady=(0, 4))
         cl_runtime_row = tk.Frame(form, bg=COLORS["card"])
         cl_runtime_row.pack(fill="x", padx=12, pady=(4, 4))
         tk.Label(
@@ -2057,15 +2238,28 @@ class HivePlannerApp:
             textvariable=self.new_cl_runtime,
             values=["cursor", "headless"],
             state="readonly",
-            width=28,
+            width=8,
         ).pack(side="left", fill="x", expand=True)
-        tk.Label(
-            cl_runtime_row,
+        cl_hint = tk.Label(
+            form,
             text="cursor = vendored plugin; headless = CLI agents-propose path (other IDEs)",
+            wraplength=200,
+            justify="left",
             bg=COLORS["card"],
             fg=COLORS["muted"],
             font=FONT_SUBTITLE,
-        ).pack(anchor="w", padx=(14, 0), pady=(2, 0))
+        )
+        cl_hint.pack(anchor="w", padx=12, pady=(0, 4))
+
+        def _fit_form_hints(event, hints=(handoff_hint, cl_hint)) -> None:
+            width = int(event.width) - 28
+            if width <= 40:
+                return
+            for hint in hints:
+                if width != int(hint.cget("wraplength")):
+                    hint.configure(wraplength=width)
+
+        form.bind("<Configure>", _fit_form_hints)
         git_row = tk.Frame(form, bg=COLORS["card"])
         git_row.pack(fill="x", padx=12, pady=(4, 12))
         tk.Checkbutton(
@@ -2223,7 +2417,7 @@ class HivePlannerApp:
             textvariable=self.cfg_profile,
             values=["full", "minimal"],
             state="readonly",
-            width=28,
+            width=8,
         )
         profile_combo.pack(side="left", fill="x", expand=True)
         attach_combobox_tooltip(
@@ -2251,7 +2445,7 @@ class HivePlannerApp:
             textvariable=self.cfg_agent_handoff,
             values=["unified", "off"],
             state="readonly",
-            width=28,
+            width=8,
         )
         handoff_combo.pack(side="left", fill="x", expand=True)
         attach_combobox_tooltip(
@@ -3824,27 +4018,32 @@ class HivePlannerApp:
 
     def _controls_bug_hunt_iterations(self) -> int | None:
         from hive_planner.bug_hunt import (
-            DEFAULT_ITERATIONS,
             MAX_ITERATIONS,
             MIN_ITERATIONS,
             BugHuntError,
-            validate_iterations,
+            parse_iterations,
         )
 
         raw = str(self.controls_bug_iterations.get() if hasattr(self, "controls_bug_iterations") else "").strip()
-        if not raw:
-            return DEFAULT_ITERATIONS
         try:
-            value = int(raw)
-        except ValueError:
-            messagebox.showwarning("Iterations", "Iterations must be a whole number.")
-            return None
-        try:
-            return validate_iterations(value)
+            return parse_iterations(raw)
         except BugHuntError:
             messagebox.showwarning(
                 "Iterations",
-                f"Iterations must be between {MIN_ITERATIONS} and {MAX_ITERATIONS}.",
+                f"Iterations must be a whole number between {MIN_ITERATIONS} and {MAX_ITERATIONS}.",
+            )
+            return None
+
+    def _controls_bug_hunt_pause(self) -> int | None:
+        from hive_planner.bug_hunt import BugHuntError, parse_pause_seconds
+
+        raw = str(self.controls_bug_pause.get() if hasattr(self, "controls_bug_pause") else "").strip()
+        try:
+            return parse_pause_seconds(raw)
+        except BugHuntError:
+            messagebox.showwarning(
+                "Pause seconds",
+                "Pause seconds must be a whole number. Leave it blank for 10, or enter 0 to skip the wait.",
             )
             return None
 
@@ -3856,9 +4055,14 @@ class HivePlannerApp:
         iterations = self._controls_bug_hunt_iterations()
         if iterations is None:
             return
+        pause = self._controls_bug_hunt_pause()
+        if pause is None:
+            return
         self._start_home_action("Installing bug-hunt chat trigger…")
         self._run_bg(
-            lambda r=link, n=iterations: run_project_bug_hunt_install(r, iterations=n),
+            lambda r=link, n=iterations, p=pause: run_project_bug_hunt_install(
+                r, iterations=n, pause_seconds=p
+            ),
             self._project_done_callback("Bug-hunt install", self._bug_hunt_install_done),
         )
 
@@ -3868,8 +4072,11 @@ class HivePlannerApp:
             return
         count = len(result.get("files_written") or [])
         iterations = result.get("iterations", 50)
+        pause = result.get("pause_seconds", 10)
+        pause_note = "no wait" if pause == 0 else f"{pause}s pause"
+        files_note = f"{count} file(s)" if count else "already current"
         message = (
-            f"Bug hunt enabled ({count} file(s), {iterations} iterations). "
+            f"Bug hunt enabled ({files_note}, {iterations} iterations, {pause_note}). "
             "In any Cursor chat on this project, say bug hunt — or hunt for bugs / start a bug hunt."
         )
         self._queue_home_log(message)
@@ -3900,17 +4107,30 @@ class HivePlannerApp:
         self._set_controls_last(message)
         self._refresh_home_dashboard()
 
+    def _codespec_controls_instance(self) -> dict | None:
+        for inst in getattr(self, "_controls_instances", None) or []:
+            try:
+                name = self.normalize_controls_loop(str(inst["loop"].get()))
+            except (tk.TclError, KeyError, AttributeError):
+                continue
+            if name == "CodeSpec":
+                return inst
+        instances = getattr(self, "_controls_instances", None) or []
+        return instances[0] if instances else None
+
     def _prepare_codespec_block_for_enable(self, inst: dict) -> None:
         """Select CodeSpec, keep the pack, fold settings, then Enable. Compact does not write."""
         try:
             inst["loop"].set("CodeSpec")
         except (tk.TclError, KeyError, AttributeError):
             return
+        inst["_loop_last"] = "CodeSpec"
         self._on_controls_instance_loop_changed(inst)
         try:
             inst["command"].set("Enable")
         except (tk.TclError, KeyError, AttributeError):
             pass
+        self._refresh_controls_choice_tips(inst)
         self._set_controls_instance_collapsed(inst, True)
 
     def _on_codespec_install_active_cursor(self) -> None:
@@ -3926,10 +4146,7 @@ class HivePlannerApp:
         save_config(self.config)
         prepare_linked_project_root(target, repair_agents=True)
         self._sync_controls_for_active()
-        inst = self._codespec_instance()
-        if inst is None:
-            instances = getattr(self, "_controls_instances", None) or []
-            inst = instances[0] if instances else None
+        inst = self._codespec_controls_instance()
         if inst is None:
             inst = self._new_controls_instance_vars()
             if getattr(self, "_controls_instances", None) is None:
@@ -3989,11 +4206,96 @@ class HivePlannerApp:
         pack = result.get("pack", "")
         message = (
             f"CodeSpec enabled ({pack}, {count} file(s)). "
-            "Use Controls → CodeSpec, or say implementation loop in Cursor chat."
+            "Use Controls → CodeSpec, or say code spec in Cursor chat."
         )
         self._queue_home_log(message)
         self._set_controls_last(message)
         self._refresh_home_dashboard()
+        self._refresh_all_codespec_steps()
+
+    def _codespec_project_root(self) -> Path | None:
+        """Folder the step list reads. Same folder Run uses when the link is a workspace file."""
+        raw = getattr(getattr(self, "config", None), "active_project", None)
+        if not raw:
+            return None
+        from hive_planner.launcher.service import linked_install_directory
+
+        target, error = linked_install_directory(Path(raw))
+        if error or target is None:
+            return None
+        return target
+
+    def _refresh_all_codespec_steps(self, failed_step: str | None = None) -> None:
+        for inst in getattr(self, "_controls_instances", None) or []:
+            self._refresh_codespec_steps(inst, failed_step=failed_step)
+
+    def _refresh_codespec_steps(self, inst: dict, failed_step: str | None = None) -> None:
+        """Show this pack's step order, and mark the step that is running or stopped."""
+        from hive_planner.implementation_loop import codespec_progress_text
+
+        label = inst.get("steps_label")
+        variable = inst.get("steps")
+        if label is None or variable is None:
+            return
+        try:
+            loop_name = str(inst["loop"].get())
+        except (tk.TclError, KeyError, AttributeError):
+            return
+        try:
+            if loop_name != "CodeSpec":
+                label.pack_forget()
+                return
+        except tk.TclError:
+            return
+        try:
+            pack_hint = str(inst["impl_pack"].get() or "")
+        except (tk.TclError, KeyError, AttributeError):
+            pack_hint = ""
+        variable.set(
+            codespec_progress_text(
+                self._codespec_project_root(),
+                pack_hint,
+                failed_step=failed_step,
+            )
+        )
+        try:
+            if label.winfo_ismapped():
+                return
+            settings = inst.get("settings")
+            if settings is not None and int(settings.winfo_ismapped()):
+                label.pack(anchor="w", fill="x", padx=12, pady=(4, 4), before=settings)
+            else:
+                label.pack(anchor="w", fill="x", padx=12, pady=(4, 4))
+        except tk.TclError:
+            return
+
+    def _codespec_failed_step(self, result: dict) -> str | None:
+        from hive_planner.implementation_loop import codespec_active_pack, codespec_gate_step
+
+        if result.get("ok") is True and not result.get("error") and str(result.get("blocked_reason") or "") not in {
+            "fail",
+            "needs-sign-off",
+        }:
+            return None
+        pack_hint = ""
+        if hasattr(self, "controls_impl_pack"):
+            try:
+                pack_hint = str(self.controls_impl_pack.get() or "")
+            except tk.TclError:
+                pack_hint = ""
+        pack = codespec_active_pack(self._codespec_project_root(), pack_hint)
+        return codespec_gate_step(pack, str(result.get("action") or ""), str(result.get("role") or ""))
+
+    def _codespec_inferred_role(self, action: str) -> str:
+        from hive_planner.implementation_loop import codespec_role_for
+
+        pack_hint = ""
+        if hasattr(self, "controls_impl_pack"):
+            try:
+                pack_hint = str(self.controls_impl_pack.get() or "")
+            except tk.TclError:
+                pack_hint = ""
+        return codespec_role_for(self._codespec_project_root(), pack_hint, action)
 
     def _require_active_link(self) -> Path | None:
         if not self.config.active_project:
@@ -4014,20 +4316,6 @@ class HivePlannerApp:
         if value is None:
             return None
         return value.strip()
-
-    def _ask_loop_role(self) -> str | None:
-        value = simpledialog.askstring(
-            "Implementation loop role",
-            "Role: coder, checker, reviewer (4-pack) or coordinator (1-pack):",
-            parent=self.root,
-        )
-        if value is None:
-            return None
-        role = value.strip()
-        if not role:
-            messagebox.showwarning("Role required", "Enter a role.")
-            return None
-        return role
 
     def _format_loop_gate(self, result: dict) -> str:
         parts: list[str] = []
@@ -4085,15 +4373,12 @@ class HivePlannerApp:
         self._queue_home_log(line)
         self._set_controls_last(line)
         self._refresh_home_dashboard()
+        failed = self._codespec_failed_step(result) if isinstance(result, dict) else None
+        self._refresh_all_codespec_steps(failed_step=failed)
 
     def _controls_feature_value(self) -> str:
         if hasattr(self, "controls_impl_feature"):
             return str(self.controls_impl_feature.get() or "").strip()
-        return ""
-
-    def _controls_role_value(self) -> str:
-        if hasattr(self, "controls_impl_role"):
-            return str(self.controls_impl_role.get() or "").strip()
         return ""
 
     def _on_implementation_loop_status(self, *, from_controls: bool = False) -> None:
@@ -4208,17 +4493,13 @@ class HivePlannerApp:
         link = self._require_active_link()
         if link is None:
             return
-        if from_controls:
-            role = self._controls_role_value()
-            if not role:
-                messagebox.showwarning("Role required", "Pick a role on the Controls tab.")
-                return
-            continue_after_cap = bool(self.controls_impl_continue_cap.get()) if hasattr(self, "controls_impl_continue_cap") else False
-        else:
-            role = self._ask_loop_role()
-            if role is None:
-                return
-            continue_after_cap = False
+        role = self._codespec_inferred_role("handoff")
+        continue_after_cap = False
+        if from_controls and hasattr(self, "controls_impl_continue_cap"):
+            try:
+                continue_after_cap = bool(self.controls_impl_continue_cap.get())
+            except tk.TclError:
+                continue_after_cap = False
         self._run_loop_handoff(link, role, continue_after_cap=continue_after_cap)
 
     def _run_loop_handoff(self, link: Path, role: str, *, continue_after_cap: bool) -> None:
@@ -4268,18 +4549,11 @@ class HivePlannerApp:
         )
 
     def _on_implementation_loop_accept(self, *, from_controls: bool = False) -> None:
+        del from_controls
         link = self._require_active_link()
         if link is None:
             return
-        if from_controls:
-            role = self._controls_role_value()
-            if not role:
-                messagebox.showwarning("Role required", "Pick a role on the Controls tab.")
-                return
-        else:
-            role = self._ask_loop_role()
-            if role is None:
-                return
+        role = self._codespec_inferred_role("accept")
         self._start_home_action(f"Accepting CodeSpec result ({role})…")
         self._run_bg(
             lambda r=link, n=role: run_project_implementation_loop_accept(r, n),

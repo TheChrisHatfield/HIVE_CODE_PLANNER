@@ -27,7 +27,7 @@ function New-HiveShortcut {
     $shortcut.WorkingDirectory = $repo
     $shortcut.IconLocation = "$icon,0"
     $shortcut.WindowStyle = 7
-    $shortcut.Description = "Hive Planner - local planning control for Cursor"
+    $shortcut.Description = "HIVE Planner - local planning control for Cursor"
     $shortcut.Save()
     Write-Host "Created: $LinkPath"
 }
@@ -37,5 +37,5 @@ New-HiveShortcut -LinkPath $localLink
 
 if ($Desktop) {
     $desktop = [Environment]::GetFolderPath("Desktop")
-    New-HiveShortcut -LinkPath (Join-Path $desktop "Hive Planner.lnk")
+    New-HiveShortcut -LinkPath (Join-Path $desktop "HIVE Planner.lnk")
 }

@@ -25,6 +25,7 @@ datas = [
     (str(pkg / "bootstrap_templates"), "hive_planner/bootstrap_templates"),
     (str(pkg / "vendor_templates"), "hive_planner/vendor_templates"),
     (str(root / "scripts" / "README.md"), "scripts"),
+    (str(root / "scripts" / "assets" / "HivePlanner.ico"), "scripts/assets"),
 ] + pymupdf_datas + fitz_datas
 
 # Explicit Tcl/Tk data dirs (PyInstaller runtime hook expects these names).
@@ -52,6 +53,8 @@ a = Analysis(
         "hive_planner.launcher.console_win",
         "hive_planner.launcher.theme",
         "hive_planner.launcher.user_guide",
+        "hive_planner.launcher.mcp_servers",
+        "hive_planner.mcp_server",
         "hive_planner.format_deps",
         "importlib.metadata",
         "tkinter",

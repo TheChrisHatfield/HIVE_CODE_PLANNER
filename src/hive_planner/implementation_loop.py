@@ -52,8 +52,6 @@ SOFTWARE.
 
 RETROSPECTIVE_HEADER = "# implementation-loop retrospective log — count only date lines\n"
 ROUND_TRIP_CAP = 10
-HANDOFF_ROLES_4 = frozenset({"coder", "checker", "reviewer"})
-HANDOFF_ROLES_1 = frozenset({"coordinator"})
 COMMIT_ROLES = ("checker", "reviewer")
 GIT_IDENTITY = {
     "GIT_AUTHOR_NAME": "Hive implementation-loop",
@@ -90,14 +88,17 @@ def is_implementation_loop_request(text: str) -> bool:
         "implement the spec",
         "/implementation-loop",
     )
+    has_codespec = bool(
+        re.search(r"\bcodespec\b", lowered) or re.search(r"\bcode[\s_-]+spec\b", lowered)
+    )
     about_loop = re.search(
         r"\b(what is|what's|what are|where is|how do|how does|is it|does it|can i)\b",
         lowered,
     ) or (
-        "implementation loop" in lowered
+        ("implementation loop" in lowered or has_codespec)
         and re.search(r"\b(what|where|how|whether)\b", lowered)
     ) or (
-        "implementation loop" in lowered
+        ("implementation loop" in lowered or has_codespec)
         and re.search(r"\b(is|whether)\b.{0,80}\b(enabled|installed)\b", lowered)
     )
     if about_loop and not any(p in lowered for p in run_phrases):
@@ -108,8 +109,13 @@ def is_implementation_loop_request(text: str) -> bool:
         "run the implementation loop",
         "start the implementation loop",
         "/implementation-loop",
+        "code spec",
+        "code-spec",
+        "codespec",
     ]
     if any(p in lowered for p in phrases):
+        return True
+    if has_codespec:
         return True
     if re.search(r"\bimplement\b", lowered) and re.search(r"\bspec\b", lowered):
         return True
@@ -415,6 +421,9 @@ def render_cursor_rule() -> str:
         "run the implementation loop",
         "start the implementation loop",
         "/implementation-loop",
+        "code spec",
+        "CodeSpec",
+        "code-spec",
     ]
     listed = ", ".join(f'"{p}"' for p in phrases)
     return f"""---
@@ -1292,6 +1301,296 @@ def _write_handoff(root: Path, state: LoopState, role: str, heading: str, body: 
         ) from exc
 
 
+# Desktop CodeSpec block. The pack fixes the order. The block shows these steps.
+CODESPEC_SEQUENCE = {
+    PACK_1: (
+        ("implement", "Coordinator implements"),
+        ("check", "Check runs tests"),
+        ("review", "Review"),
+        ("commit", "Commit"),
+    ),
+    PACK_4: (
+        ("coder", "Coder"),
+        ("check", "Check"),
+        ("reviewer", "Reviewer"),
+        ("commit", "Coordinator commits"),
+    ),
+}
+
+
+def codespec_sequence(pack: str) -> tuple[tuple[str, str], ...]:
+    """Step id and label for this pack, in run order."""
+    if pack == PACK_1:
+        return CODESPEC_SEQUENCE[PACK_1]
+    return CODESPEC_SEQUENCE[PACK_4]
+
+
+def codespec_active_pack(root: Path | None, pack_hint: str) -> str:
+    """Installed pack when the loop is on disk, otherwise the pack chosen on the block."""
+    hint = pack_hint if pack_hint in VALID_PACKS else PACK_4
+    if root is None:
+        return hint
+    installed = read_installed_pack(root)
+    return installed if installed in VALID_PACKS else hint
+
+
+def _codespec_snapshot(
+    root: Path | None,
+    pack_hint: str,
+) -> tuple[str, str, str, int, list[dict[str, str]]]:
+    pack = codespec_active_pack(root, pack_hint)
+    if root is None:
+        return pack, "idle", "", 0, []
+    try:
+        state = _load_state(root)
+    except CoordinatorError:
+        return pack, "idle", "", 0, []
+    if state.pack in VALID_PACKS:
+        pack = state.pack
+    try:
+        text = _read_result_text(root, "status")
+    except CoordinatorError:
+        text = ""
+    return pack, state.status or "idle", state.current_task, int(state.round_trips or 0), parse_result_entries(text)
+
+
+def _codespec_cursor(
+    pack: str,
+    *,
+    status: str,
+    task: str,
+    round_trips: int,
+    entries: list[dict[str, str]],
+) -> tuple[str | None, str | None, set[str]]:
+    """Return the current step, the stopped step, and steps already finished."""
+    if status == "complete":
+        return None, None, {step_id for step_id, _label in codespec_sequence(pack)}
+    if pack == PACK_1:
+        return _codespec_cursor_one_pack(status, task, round_trips, entries)
+    return _codespec_cursor_four_pack(status, task, entries)
+
+
+def _codespec_cursor_one_pack(
+    status: str,
+    task: str,
+    round_trips: int,
+    entries: list[dict[str, str]],
+) -> tuple[str | None, str | None, set[str]]:
+    checker_entry = _last_entry(entries, task, "checker")
+    reviewer_entry = _last_entry(entries, task, "reviewer")
+    checker = checker_entry.get("outcome") if checker_entry else None
+    reviewer = reviewer_entry.get("outcome") if reviewer_entry else None
+    checker_q = str(checker_entry.get("question") or "").strip() if checker_entry else ""
+    reviewer_q = str(reviewer_entry.get("question") or "").strip() if reviewer_entry else ""
+    started = status in {"running", "blocked"} or round_trips > 0 or checker is not None or reviewer is not None
+    if not started:
+        return None, None, set()
+    done: set[str] = set()
+    current: str | None = "implement"
+    stopped: str | None = None
+    if checker == "pass":
+        done.update({"implement", "check"})
+        current = "review"
+    elif checker == "fail":
+        done.add("implement")
+        stopped = "check"
+        current = None if checker_q else "implement"
+    if reviewer == "pass" and checker == "pass":
+        done.update({"implement", "check", "review"})
+        current = "commit"
+        stopped = None
+    elif reviewer == "fail" and checker == "pass":
+        done.update({"implement", "check"})
+        stopped = "review"
+        current = None if reviewer_q else "implement"
+    elif reviewer == "needs-sign-off" and checker == "pass":
+        done.update({"implement", "check"})
+        stopped = "review"
+        current = None
+    if status == "blocked" and current == "commit":
+        stopped = "commit"
+        current = None
+    return current, stopped, done
+
+
+def _codespec_cursor_four_pack(
+    status: str,
+    task: str,
+    entries: list[dict[str, str]],
+) -> tuple[str | None, str | None, set[str]]:
+    coder_entry = _last_entry(entries, task, "coder")
+    checker_entry = _last_entry(entries, task, "checker")
+    reviewer_entry = _last_entry(entries, task, "reviewer")
+    coder = coder_entry.get("outcome") if coder_entry else None
+    checker = checker_entry.get("outcome") if checker_entry else None
+    reviewer = reviewer_entry.get("outcome") if reviewer_entry else None
+    checker_q = str(checker_entry.get("question") or "").strip() if checker_entry else ""
+    reviewer_q = str(reviewer_entry.get("question") or "").strip() if reviewer_entry else ""
+    started = status in {"running", "blocked"} or coder is not None or checker is not None or reviewer is not None
+    if not started:
+        return None, None, set()
+    back_checker = _force_coder_after_fail(entries, task, "checker")
+    back_reviewer = _force_coder_after_fail(entries, task, "reviewer")
+    coder_pass = coder == "pass" and not back_checker and not back_reviewer
+    checker_pass = _checker_pass_after_coder(entries, task) and not back_checker and not back_reviewer
+    reviewer_pass = (
+        reviewer == "pass"
+        and checker_pass
+        and _role_pass_after(entries, task, "reviewer", "checker")
+    )
+    done: set[str] = set()
+    current: str | None = "coder"
+    stopped: str | None = None
+    if reviewer_pass:
+        done.update({"coder", "check", "reviewer"})
+        current = "commit"
+    elif checker_pass:
+        done.update({"coder", "check"})
+        current = "reviewer"
+        if reviewer in {"fail", "needs-sign-off"}:
+            stopped = "reviewer"
+            current = None if reviewer == "needs-sign-off" or reviewer_q else "reviewer"
+            if reviewer == "fail" and not reviewer_q:
+                current = None
+    elif coder_pass:
+        done.add("coder")
+        current = "check"
+        if checker == "fail" and checker_q:
+            stopped = "check"
+            current = None
+    elif back_checker:
+        stopped = "check"
+        current = "coder"
+    elif back_reviewer:
+        stopped = "reviewer"
+        current = "coder"
+    elif coder == "fail":
+        stopped = "coder"
+        current = None
+    if status == "blocked" and current == "commit":
+        stopped = "commit"
+        current = None
+    return current, stopped, done
+
+
+def codespec_step_states(
+    pack: str,
+    *,
+    status: str = "idle",
+    task: str = "",
+    round_trips: int = 0,
+    entries: list[dict[str, str]] | None = None,
+    failed_step: str | None = None,
+) -> list[dict[str, str]]:
+    """One row per step: id, label, and state (waiting, now, done, or stopped)."""
+    sequence = codespec_sequence(pack)
+    current, stopped, done = _codespec_cursor(
+        pack,
+        status=status,
+        task=task,
+        round_trips=round_trips,
+        entries=list(entries or []),
+    )
+    rows: list[dict[str, str]] = []
+    for step_id, label in sequence:
+        if step_id in done:
+            state = "done"
+        elif step_id == stopped:
+            state = "stopped"
+        elif step_id == current:
+            state = "now"
+        else:
+            state = "waiting"
+        rows.append({"id": step_id, "label": label, "state": state})
+    if failed_step:
+        for row in rows:
+            if row["id"] == failed_step and row["state"] != "done":
+                row["state"] = "stopped"
+    return rows
+
+
+def format_codespec_steps(pack: str, steps: list[dict[str, str]]) -> str:
+    title = "One-pack steps" if pack == PACK_1 else "Four-pack steps"
+    lines = [title]
+    for index, step in enumerate(steps, start=1):
+        lines.append(f"{index}. {step['label']} — {step['state']}")
+    return "\n".join(lines)
+
+
+def codespec_progress_text(
+    root: Path | None,
+    pack_hint: str,
+    *,
+    failed_step: str | None = None,
+) -> str:
+    """Plain step list for the CodeSpec block."""
+    pack, status, task, round_trips, entries = _codespec_snapshot(root, pack_hint)
+    steps = codespec_step_states(
+        pack,
+        status=status,
+        task=task,
+        round_trips=round_trips,
+        entries=entries,
+        failed_step=failed_step,
+    )
+    return format_codespec_steps(pack, steps)
+
+
+def codespec_gate_step(pack: str, action: str, role: str = "") -> str | None:
+    """Step a Handoff, Check, Accept, Start, or Commit command belongs to."""
+    action_name = (action or "").strip().lower()
+    role_name = (role or "").strip().lower()
+    if action_name == "check":
+        return "check"
+    if action_name == "commit":
+        return "commit"
+    if action_name == "start":
+        return codespec_sequence(pack)[0][0]
+    if action_name not in {"handoff", "accept"}:
+        return None
+    if pack == PACK_1:
+        if role_name == "reviewer":
+            return "review"
+        if role_name == "checker":
+            return "check"
+        return "implement"
+    if role_name == "reviewer":
+        return "reviewer"
+    if role_name == "checker":
+        return "check"
+    if role_name == "coordinator":
+        return "commit"
+    return "coder"
+
+
+def codespec_role_for(root: Path | None, pack_hint: str, action: str) -> str:
+    """Role Handoff or Accept uses when the block has no role picker."""
+    pack, status, task, round_trips, entries = _codespec_snapshot(root, pack_hint)
+    action_name = (action or "").strip().lower()
+    if action_name == "accept":
+        last: dict[str, str] | None = None
+        for entry in entries:
+            if _entry_task_matches(entry, task):
+                last = entry
+        if last and str(last.get("role") or "").strip():
+            return str(last["role"]).strip().lower()
+        return "checker" if pack == PACK_1 else "coder"
+    current, stopped, _done = _codespec_cursor(
+        pack,
+        status=status,
+        task=task,
+        round_trips=round_trips,
+        entries=entries,
+    )
+    if pack == PACK_1:
+        return "coordinator"
+    if current == "coder":
+        return "coder"
+    if current == "reviewer" or stopped == "reviewer":
+        return "reviewer"
+    return "coder"
+
+
 def coordinator_start(
     root: Path,
     feature: str,
@@ -1395,14 +1694,6 @@ def coordinator_handoff(
         raise CoordinatorError("loop is not running — start first", action="handoff", role=role)
     _require_loop_branch(root, state, "handoff")
     pack = state.pack if state.pack in VALID_PACKS else PACK_4
-    allowed = HANDOFF_ROLES_1 if pack == PACK_1 else HANDOFF_ROLES_4
-    if role not in allowed:
-        raise CoordinatorError(
-            f"role '{role}' is not valid for {pack}",
-            action="handoff",
-            feature=state.feature,
-            role=role,
-        )
     if state.round_trips >= ROUND_TRIP_CAP and not continue_after_cap:
         raise CoordinatorError(
             f"round_trips is {state.round_trips} — pass --continue-after-cap after the human agrees",
@@ -1568,15 +1859,6 @@ def coordinator_accept(root: Path, role: str) -> CoordinatorReport:
     role = (role or "").strip().lower()
     if state.status != "running" or not state.feature:
         raise CoordinatorError("loop is not running — start first", action="accept", role=role)
-    pack = state.pack if state.pack in VALID_PACKS else PACK_4
-    allowed = {"coordinator", "checker", "reviewer"} if pack == PACK_1 else HANDOFF_ROLES_4
-    if role not in allowed:
-        raise CoordinatorError(
-            f"role '{role}' is not valid for {pack}",
-            action="accept",
-            feature=state.feature,
-            role=role,
-        )
     text = _read_result_text(root, "accept")
     if not text.strip():
         raise CoordinatorError("result.md is missing", action="accept", feature=state.feature, role=role)

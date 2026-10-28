@@ -37,8 +37,8 @@ Implementation loop — code a finished Hive spec in separate passes.
 - [x] 4-pack commits only after checker and reviewer result files pass
 - [x] 1-pack keeps a single coordinator and still forbids merge and deploy
 - [x] Retrospective proposals split operational and behavioral, and coding passes leave `AGENTS.md` alone
-- [x] Chat phrase and Home install use the same installer; plain init does not
-- [x] Home Loop status/start/handoff/check/accept/commit call the same Python gates as the CLI; chat remains valid
+- [x] Chat phrase ("implementation loop", "code spec") and Home install use the same installer; plain init does not
+- [x] Home **Loop controls** + Controls **Run** call the same Python gates as the CLI; **Install CodeSpec** targets the Cursor window in front then Enable; Compact only folds; the CodeSpec block shows the pack's steps and does not ask for a role; chat remains valid
 - [x] Python `check` runs build / test:quick / wiring audit and appends the checker result; bug hunt stays separate
 
 ## Validation

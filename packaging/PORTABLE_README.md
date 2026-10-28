@@ -56,7 +56,7 @@ If blocked: see **DEFENDER.md** in this folder (allow on device, folder exclusio
 
 ## Build (developers)
 
-From the Hive Code Planner source checkout:
+From the Hive Code Planner source checkout, double-click `scripts\RebuildPortable.bat`, or:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\build_portable.ps1

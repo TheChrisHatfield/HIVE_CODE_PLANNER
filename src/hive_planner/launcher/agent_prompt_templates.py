@@ -207,19 +207,19 @@ Question: <what to mine, or leave blank for the active feature's open unknowns>"
             description="Trigger the installed find / fix / self-review / local-commit loop from chat.",
             prompt="""bug hunt
 
-Start the project's continuous bug-hunt loop now. Read @.cursor/commands/bug-hunt.md (or @scripts/bug-hunt.md if the command is missing) and execute it in this turn.
+Start the project's continuous bug-hunt loop now. Read @.cursor/commands/bug-hunt.md (or @scripts/bug-hunt.md if the command is missing) and do the first iteration in this turn, then end the turn.
 
-You do not do one bug and then wait. Pause only for your own internal review, commit locally when that review passes, then continue the next iteration without asking whether to continue. Do not explain how to invoke the command.""",
+One iteration is one inference pass. After the outcome row, write the continue file named in the script and end the turn. The stop hook waits the script's pause: a positive number of seconds is not skippable, and 0 means it does not wait. Then the hook starts the next inference pass. Do not ask whether to continue. Enable, the fix ceiling, and Pause seconds live on a Controls block (Home → Loop controls, Bug hunt). Leave Pause seconds blank for 10. Enter 0 to skip the wait. The fix ceiling field defaults to 50. Do not explain how to invoke the command.""",
         ),
         AgentPromptTemplate(
             id="change.implementation_loop",
             title="Start the implementation loop",
-            description="Trigger the installed post-spec coding loop from chat, or use Home → Loop controls (Controls tab Run) instead of typing.",
+            description="Trigger the installed post-spec coding loop from chat (implementation loop or code spec), or use Controls Install CodeSpec / Run instead of typing.",
             prompt="""implementation loop
 
 Start this project's implementation loop now. Read @.cursor/commands/implementation-loop.md (or @scripts/implementation-loop.md if the command is missing) and execute it in this turn.
 
-Hive Planner Home → Loop controls opens the Controls tab; one Run command is status / start / handoff / check / accept / commit. Chat and Controls are both valid. Do not explain how to invoke the command.""",
+Hive Planner calls this loop CodeSpec on the Controls tab. Home has a CodeSpec button and Loop controls. Each block has its own Run, including Enable and Check pack, then Status, Start, Handoff, Check, Accept, and Commit. Saying code spec in chat is the same start. Controls Install CodeSpec installs on the Cursor window in front. Chat and Controls are both valid. Do not explain how to invoke the command.""",
         ),
         AgentPromptTemplate(
             id="change.agnostic_loop",
@@ -229,7 +229,7 @@ Hive Planner Home → Loop controls opens the Controls tab; one Run command is s
 
 Start this project's agnostic loop now. Read @.cursor/commands/agnostic-loop.md (or @scripts/agnostic-loop.md if the command is missing) and execute it in this turn.
 
-This is not the implementation loop and not a bug hunt. Home → Loop controls (Agnostic loop Enable) installs the same files. Do not explain how to invoke the command.""",
+This is not CodeSpec and not a bug hunt. Enable is Run on an Agnostic loop block. Home → Loop controls (Agnostic loop Enable) installs the same files. Do not explain how to invoke the command.""",
         ),
         AgentPromptTemplate(
             id="planning.external_rosetta",

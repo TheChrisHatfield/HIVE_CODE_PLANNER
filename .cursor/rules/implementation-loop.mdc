@@ -5,7 +5,7 @@ alwaysApply: true
 
 # Implementation loop trigger
 
-When the user asks to run the implementation loop in any chat on this repo — the message is or clearly requests it, including "implementation loop", "implement the spec", "run the implementation loop", "start the implementation loop", "/implementation-loop" — read `.cursor/commands/implementation-loop.md` and execute that script in this turn. If that file is missing, report that the loop is not installed and stop.
+When the user asks to run the implementation loop in any chat on this repo — the message is or clearly requests it, including "implementation loop", "implement the spec", "run the implementation loop", "start the implementation loop", "/implementation-loop", "code spec", "CodeSpec", "code-spec" — read `.cursor/commands/implementation-loop.md` and execute that script in this turn. If that file is missing, report that the loop is not installed and stop.
 
 Match intent, not only an exact string. A question about the loop itself (what it is, where it is installed, whether it is enabled) is not a start signal. A bug-hunt phrase is not a start signal.
 
