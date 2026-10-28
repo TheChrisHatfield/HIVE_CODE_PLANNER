@@ -1621,6 +1621,7 @@ class HivePlannerApp:
         collapsed = self.controls_instance_collapsed(inst)
         settings = inst.get("settings")
         last_label = inst.get("last_label")
+        steps_label = inst.get("steps_label")
         button = inst.get("collapse_btn")
         if button is not None:
             try:
@@ -1631,6 +1632,10 @@ class HivePlannerApp:
             if collapsed:
                 if settings is not None:
                     settings.pack_forget()
+                if last_label is not None:
+                    last_label.pack_forget()
+                if steps_label is not None:
+                    steps_label.pack_forget()
                 return
             if last_label is not None:
                 last_label.pack(anchor="w", fill="x", padx=12, pady=(4, 0))
