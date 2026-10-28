@@ -6,7 +6,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-NOTICE_TITLE = "Hive Planner"
+from hive_planner.runtime_paths import APP_DISPLAY_NAME
+
+NOTICE_TITLE = APP_DISPLAY_NAME
 MEMORY_CHECK_BODY = (
     "Automatic memory check. You did not type this. "
     "Hive left your chat on the task you were doing."
