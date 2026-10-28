@@ -2464,11 +2464,15 @@ def open_path_in_explorer(path: Path) -> dict:
     if not target.exists():
         return {"ok": False, "error": "Path does not exist"}
     if sys.platform == "win32":
-        subprocess.Popen(["explorer", str(target)], shell=False)
+        argv = ["explorer", str(target)]
     elif sys.platform == "darwin":
-        subprocess.Popen(["open", str(target)])
+        argv = ["open", str(target)]
     else:
-        subprocess.Popen(["xdg-open", str(target)])
+        argv = ["xdg-open", str(target)]
+    try:
+        subprocess.Popen(argv, shell=False)
+    except OSError as exc:
+        return {"ok": False, "error": str(exc)}
     return {"ok": True, "path": str(target)}
 
 
