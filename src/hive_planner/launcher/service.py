@@ -1359,7 +1359,9 @@ def run_deploy_agent_handoff(
     from hive_planner.rosetta_nav import DEPLOY_HANDOFF_NAV_LAYERS, ensure_handoff_rosetta_navigation
     from hive_planner.spec_drift import BOOTSTRAP_DEFAULT_FEATURE, repair_agents_active_feature, repair_agents_rosetta_section
 
-    target = project_root.resolve()
+    target, error = linked_install_directory(project_root)
+    if error:
+        return {"ok": False, "error": error}
     summary = summarize_project(target)
     if not summary.ok:
         return {"ok": False, "error": summary.detail}
@@ -2054,7 +2056,9 @@ def run_cartridge_load_sources(
     force_promote: bool = False,
     mark_emitted_draft: bool = False,
 ) -> dict:
-    target = project_root.resolve()
+    target, error = linked_install_directory(project_root)
+    if error:
+        return {"ok": False, "error": error}
     summary = summarize_project(target)
     if not summary.ok:
         return {"ok": False, "error": summary.detail}
@@ -2161,7 +2165,9 @@ def run_cartridge_translate(
 ) -> dict:
     from hive_planner.translator import TranslatorError, translate_document, write_translator_status
 
-    target = project_root.resolve()
+    target, error = linked_install_directory(project_root)
+    if error:
+        return {"ok": False, "error": error}
     summary = summarize_project(target)
     if not summary.ok:
         return {"ok": False, "error": summary.detail}
@@ -2200,7 +2206,9 @@ def run_cartridge_import_folder(
     promote: bool = True,
     force_promote: bool = False,
 ) -> dict:
-    target = project_root.resolve()
+    target, error = linked_install_directory(project_root)
+    if error:
+        return {"ok": False, "error": error}
     summary = summarize_project(target)
     if not summary.ok:
         return {"ok": False, "error": summary.detail}
@@ -2309,7 +2317,9 @@ def run_source4s_upload(
     """Upload txt/pdf reference files and link them to the active cartridge."""
     from hive_planner.source4s import list_source4s_files, run_source4s
 
-    target = project_root.resolve()
+    target, error = linked_install_directory(project_root)
+    if error:
+        return {"ok": False, "error": error}
     summary = summarize_project(target)
     if not summary.ok:
         return {"ok": False, "error": summary.detail}
@@ -2333,7 +2343,9 @@ def cl_runtime_status_label(project_root: Path) -> str:
     from hive_planner.agent_handoff import resolve_agent_handoff_mode, AGENT_HANDOFF_UNIFIED
     from hive_planner.cl_runtime import requires_cursor_plugin, resolve_cl_runtime
 
-    root = project_root.resolve()
+    root, error = linked_install_directory(project_root)
+    if error or root is None:
+        return "\u2014"
     if resolve_agent_handoff_mode(root) != AGENT_HANDOFF_UNIFIED:
         return "\u2014"
     runtime = resolve_cl_runtime(root)
@@ -2348,7 +2360,9 @@ def run_set_cl_runtime(project_root: Path, runtime: str) -> dict:
     from hive_planner.agent_handoff import AGENT_HANDOFF_UNIFIED, resolve_agent_handoff_mode
     from hive_planner.cl_runtime import normalize_cl_runtime, set_project_cl_runtime
 
-    target = project_root.resolve()
+    target, error = linked_install_directory(project_root)
+    if error:
+        return {"ok": False, "error": error}
     summary = summarize_project(target)
     if not summary.ok:
         return {"ok": False, "error": summary.detail}
