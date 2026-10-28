@@ -626,6 +626,17 @@ def main(argv: list[str] | None = None) -> int:
 
         return serve()
     root, auto_detected = resolve_root(args.root)
+    if root.suffix.lower() == ".code-workspace" and not root.is_dir():
+        if not root.is_file():
+            print(f"Error: Workspace file not found: {root}", file=sys.stderr)
+            return 1
+        from hive_planner.launcher.service import workspace_primary_folder
+
+        folder = workspace_primary_folder(root)
+        if folder is None:
+            print(f"Error: Could not resolve a project folder from {root}", file=sys.stderr)
+            return 1
+        root = folder
     paths = RepoPaths(root=root)
 
     if args.root is None and not auto_detected and not is_repo_root(root):
