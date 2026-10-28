@@ -123,6 +123,30 @@ def test_toggle_arrange_rebuilds_home_groups_chrome() -> None:
     assert filled == [True]
 
 
+def test_toggle_arrange_keeps_settings_checkbox_in_sync() -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+    from hive_planner.launcher.config import LauncherConfig
+
+    class _Bool:
+        def __init__(self, value: bool) -> None:
+            self.value = value
+
+        def set(self, value: bool) -> None:
+            self.value = bool(value)
+
+        def get(self) -> bool:
+            return self.value
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.config = LauncherConfig(home_arrange_enabled=False)
+    app.cfg_home_arrange = _Bool(False)
+    app._persist_home_groups = lambda: None  # type: ignore[method-assign]
+    app._fill_home_action_groups = lambda: None  # type: ignore[method-assign]
+    app._on_toggle_home_arrange()
+    assert app.config.home_arrange_enabled is True
+    assert app.cfg_home_arrange.get() is True
+
+
 def test_move_action_swaps_inside_group() -> None:
     groups = default_home_groups()
     groups = move_home_action(groups, "codespec", -1)

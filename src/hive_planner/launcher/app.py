@@ -1151,9 +1151,19 @@ class HivePlannerApp:
         attach_hover_tooltip(button, tooltip)
         return button
 
+    def _sync_home_arrange_checkbox(self) -> None:
+        var = getattr(self, "cfg_home_arrange", None)
+        if var is None:
+            return
+        try:
+            var.set(bool(self.config.home_arrange_enabled))
+        except tk.TclError:
+            return
+
     def _on_toggle_home_arrange(self) -> None:
         self.config.home_arrange_enabled = not bool(self.config.home_arrange_enabled)
         self._persist_home_groups()
+        self._sync_home_arrange_checkbox()
         self._fill_home_action_groups()
 
     def _on_reset_home_groups(self) -> None:
