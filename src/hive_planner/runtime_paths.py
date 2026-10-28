@@ -7,6 +7,8 @@ import sys
 from pathlib import Path
 
 FROZEN_CLI_FLAG = "--hive-cli"
+APP_DISPLAY_NAME = "HIVE Planner"
+APP_ICON_FILENAME = "HivePlanner.ico"
 
 _GUI_ONLY_ARGS = frozenset({"--console"})
 _CLI_DISPATCH_FLAGS = frozenset({"-h", "--help", "--root"})
@@ -55,6 +57,29 @@ def default_config_dir() -> Path:
     if appdata:
         return Path(appdata) / "HivePlanner"
     return Path.home() / ".hive-planner"
+
+
+def app_icon_path() -> Path | None:
+    """Hive hex icon used for the window, shortcuts, and portable exe."""
+    candidates: list[Path] = []
+    bundled = bundled_resource("scripts", "assets", APP_ICON_FILENAME)
+    if bundled is not None:
+        candidates.append(bundled)
+    app_root = portable_app_root()
+    candidates.append(app_root / APP_ICON_FILENAME)
+    candidates.append(app_root / "scripts" / "assets" / APP_ICON_FILENAME)
+    seen: set[Path] = set()
+    for candidate in candidates:
+        try:
+            resolved = candidate.resolve()
+        except OSError:
+            continue
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        if resolved.is_file():
+            return resolved
+    return None
 
 
 def bundled_resource(*parts: str) -> Path | None:

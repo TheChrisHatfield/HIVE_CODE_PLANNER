@@ -85,6 +85,7 @@ from hive_planner.launcher.theme import (
     FONT_BOLD,
     FONT_SUBTITLE,
     FONT_TITLE,
+    apply_app_icon,
     apply_ttk_style,
     attach_hover_tooltip,
     attach_combobox_tooltip,
@@ -94,6 +95,7 @@ from hive_planner.launcher.theme import (
     secondary_button,
     bind_mousewheel,
 )
+from hive_planner.runtime_paths import APP_DISPLAY_NAME
 from hive_planner.launcher import console_win
 from hive_planner.launcher.agent_prompt_templates import (
     default_agent_prompt_templates,
@@ -152,6 +154,27 @@ def _linked_display_name(path: str) -> str:
 class HivePlannerApp:
     RECENT_LIST_MIN_ROWS = 2
     RECENT_LIST_MAX_ROWS = 4
+    PROJECTS_SPLIT_MIN_BOTTOM = 200
+    PROJECTS_SPLIT_MAX_BOTTOM = 320
+
+    @staticmethod
+    def projects_split_sash_y(
+        total_height: int,
+        *,
+        min_bottom: int = PROJECTS_SPLIT_MIN_BOTTOM,
+        max_bottom: int = PROJECTS_SPLIT_MAX_BOTTOM,
+    ) -> int:
+        """Y for the Projects sash so the linked-workspace pane starts tall enough to drag."""
+        if total_height < 80:
+            return 0
+        bottom = min(max_bottom, max(min_bottom, total_height // 3))
+        return max(80, total_height - bottom)
+
+    @staticmethod
+    def recent_list_visible_rows(widget_height: int, line_height: int, fallback: int) -> int:
+        if widget_height > 1 and line_height > 0:
+            return max(1, widget_height // line_height)
+        return max(1, fallback)
 
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
@@ -195,10 +218,11 @@ class HivePlannerApp:
         self._status_value_labels: dict[str, tk.Label] = {}
         self._home_canvas: tk.Canvas | None = None
 
-        root.title("Hive Planner")
+        root.title(APP_DISPLAY_NAME)
         root.geometry("920x680")
         root.minsize(780, 580)
         root.configure(bg=COLORS["bg"])
+        apply_app_icon(root)
         apply_ttk_style(root)
 
         self.container = tk.Frame(root, bg=COLORS["bg"])
@@ -215,6 +239,11 @@ class HivePlannerApp:
         from hive_planner.runtime_paths import is_portable_runtime
 
         return is_portable_runtime()
+
+    def _dialog(self) -> tk.Toplevel:
+        dialog = tk.Toplevel(self.root)
+        apply_app_icon(dialog)
+        return dialog
 
     def _portable_bootstrap_done(self, result: dict) -> None:
         self.config = load_config()
@@ -234,6 +263,7 @@ class HivePlannerApp:
 
     def _run_bg(self, work, on_done) -> None:
         generation = self._bg_generation
+        result_target = getattr(self, "_controls_result_target", None)
 
         def runner() -> None:
             try:
@@ -252,10 +282,14 @@ class HivePlannerApp:
                     else:
                         self._note_stale_bg_result(result)
                     return
+                previous = getattr(self, "_controls_result_target", None)
+                self._controls_result_target = result_target
                 try:
                     on_done(result)
                 except tk.TclError:
                     return
+                finally:
+                    self._controls_result_target = previous
 
             self.root.after(0, finish)
 
@@ -288,7 +322,7 @@ class HivePlannerApp:
 
         tk.Label(
             wrapper,
-            text="Hive Planner",
+            text=APP_DISPLAY_NAME,
             font=FONT_TITLE,
             bg=COLORS["bg"],
             fg=COLORS["fg"],
@@ -356,7 +390,7 @@ class HivePlannerApp:
             if self._is_portable_mode():
                 status_rows = [
                     ("Runtime", self.setup.python_ok, self.setup.python_version),
-                    ("Hive Planner", self.setup.hive_installed, self.setup.hive_version or "bundled"),
+                    (APP_DISPLAY_NAME, self.setup.hive_installed, self.setup.hive_version or "bundled"),
                     (
                         "Spec Kit + CL",
                         self.setup.unified_handoff_ready,
@@ -653,7 +687,7 @@ class HivePlannerApp:
 
         header = tk.Frame(self.container, bg=COLORS["bg"])
         header.pack(fill="x", padx=16, pady=(16, 8))
-        tk.Label(header, text="Hive Planner", font=FONT_TITLE, bg=COLORS["bg"], fg=COLORS["fg"]).pack(side="left")
+        tk.Label(header, text=APP_DISPLAY_NAME, font=FONT_TITLE, bg=COLORS["bg"], fg=COLORS["fg"]).pack(side="left")
         self._header_detail_label = tk.Label(
             header,
             text=self._header_detail_text(),
@@ -957,12 +991,6 @@ class HivePlannerApp:
         )
         secondary_button(
             actions,
-            "Loop controls",
-            self._on_open_loop_controls,
-            tooltip="Open the Controls tab: one Run command for bug hunt, implementation loop, and agnostic loop on the active repo.",
-        )
-        secondary_button(
-            actions,
             "Load cartridge…",
             self._on_load_cartridge,
             tooltip="Open the dialog to add reference files, turn a research note into drafts, or import a cartridge folder.",
@@ -972,6 +1000,21 @@ class HivePlannerApp:
             "Open in Explorer",
             self._on_explore,
             tooltip="Open your active project folder in Windows File Explorer.",
+        )
+
+        loop_actions = tk.Frame(body, bg=COLORS["bg"])
+        loop_actions.pack(fill="x", padx=16, pady=(0, 8))
+        secondary_button(
+            loop_actions,
+            "Loop controls",
+            self._on_open_loop_controls,
+            tooltip="Open the Controls tab: CodeSpec, bug hunt, and agnostic loop on the active repo. Add more than one loop block.",
+        )
+        secondary_button(
+            loop_actions,
+            "CodeSpec",
+            self._on_open_codespec,
+            tooltip="Open Controls on a CodeSpec block. CodeSpec codes a finished spec through Enable, Start, Handoff, Check, Accept, and Commit. Loop controls still opens the same tab.",
         )
 
         source_actions = tk.Frame(body, bg=COLORS["bg"])
@@ -1064,7 +1107,7 @@ class HivePlannerApp:
 
     LOOP_CONTROL_COMMANDS = {
         "Bug hunt": ("Enable", "Check install"),
-        "Implementation loop": (
+        "CodeSpec": (
             "Enable",
             "Check pack",
             "Status",
@@ -1088,11 +1131,26 @@ class HivePlannerApp:
         ),
     }
 
-    def _build_controls_tab(self, parent: tk.Frame) -> None:
-        from hive_planner.bug_hunt import DEFAULT_ITERATIONS
-        from hive_planner.implementation_loop import PACK_1, PACK_4
+    # Settings each Controls block shows. Keys match row ids built in _mount_controls_instance.
+    CONTROLS_LOOP_SETTINGS = {
+        "Bug hunt": ("fix_ceiling",),
+        "CodeSpec": ("pack", "feature", "role", "dirty", "force", "cap"),
+        "Agnostic loop": ("reward", "cycles", "note", "open", "sims", "horizon", "seed", "arm"),
+    }
 
+    @classmethod
+    def controls_settings_for_loop(cls, loop: str) -> tuple[str, ...]:
+        """Settings that belong to this loop. Derived from the gates that loop already runs."""
+        return cls.CONTROLS_LOOP_SETTINGS.get(str(loop or ""), ())
+
+    @staticmethod
+    def can_remove_controls_instance(count: int) -> bool:
+        """The last loop block stays."""
+        return count > 1
+
+    def _build_controls_tab(self, parent: tk.Frame) -> None:
         body, canvas = self._scrollable_tab(parent)
+        self._controls_canvas = canvas
         panel = card(body)
         card_title(panel, "Loop command — active repo")
         tk.Label(
@@ -1114,151 +1172,379 @@ class HivePlannerApp:
             font=FONT,
         ).pack(anchor="w", padx=12, pady=(0, 8))
 
-        if not hasattr(self, "controls_loop"):
-            self.controls_loop = tk.StringVar(value="Implementation loop")
-        if not hasattr(self, "controls_command"):
-            self.controls_command = tk.StringVar(value="Status")
-        if not hasattr(self, "controls_bug_iterations"):
-            self.controls_bug_iterations = tk.StringVar(value=str(DEFAULT_ITERATIONS))
-        if not hasattr(self, "controls_impl_pack"):
-            self.controls_impl_pack = tk.StringVar(value=PACK_1)
-        if not hasattr(self, "controls_impl_feature"):
-            feature = self._active_feature_label()
-            self.controls_impl_feature = tk.StringVar(value="" if feature == "—" else feature)
-        if not hasattr(self, "controls_impl_role"):
-            self.controls_impl_role = tk.StringVar(value="coder")
-        if not hasattr(self, "controls_impl_allow_dirty"):
-            self.controls_impl_allow_dirty = tk.BooleanVar(value=False)
-        if not hasattr(self, "controls_impl_force_feature"):
-            self.controls_impl_force_feature = tk.BooleanVar(value=False)
-        if not hasattr(self, "controls_impl_continue_cap"):
-            self.controls_impl_continue_cap = tk.BooleanVar(value=False)
-        if not hasattr(self, "controls_agn_reward"):
-            self.controls_agn_reward = tk.StringVar(value="inspect")
-        if not hasattr(self, "controls_agn_cycles"):
-            self.controls_agn_cycles = tk.StringVar(value="1")
-        if not hasattr(self, "controls_agn_note"):
-            self.controls_agn_note = tk.StringVar(value="")
-        if not hasattr(self, "controls_agn_open"):
-            self.controls_agn_open = tk.StringVar(value="")
-        if not hasattr(self, "controls_agn_arm_choose"):
-            self.controls_agn_arm_choose = tk.BooleanVar(value=False)
-
-        loop_row = tk.Frame(panel, bg=COLORS["card"])
-        loop_row.pack(fill="x", padx=12, pady=4)
-        tk.Label(loop_row, text="Loop", width=14, anchor="w", bg=COLORS["card"], fg=COLORS["fg"], font=FONT).pack(side="left")
-        loop_box = ttk.Combobox(
-            loop_row,
-            textvariable=self.controls_loop,
-            values=tuple(self.LOOP_CONTROL_COMMANDS),
-            state="readonly",
-            width=28,
+        add_row = tk.Frame(panel, bg=COLORS["card"])
+        add_row.pack(fill="x", padx=12, pady=(0, 4))
+        secondary_button(
+            add_row,
+            "+",
+            self._on_add_controls_instance,
+            tooltip="Add another loop block with its own settings. The active repo above is shared.",
         )
-        loop_box.pack(side="left", fill="x", expand=True)
-        loop_box.bind("<<ComboboxSelected>>", self._on_controls_loop_changed)
-
-        cmd_row = tk.Frame(panel, bg=COLORS["card"])
-        cmd_row.pack(fill="x", padx=12, pady=4)
-        tk.Label(cmd_row, text="Command", width=14, anchor="w", bg=COLORS["card"], fg=COLORS["fg"], font=FONT).pack(side="left")
-        self.controls_command_box = ttk.Combobox(
-            cmd_row,
-            textvariable=self.controls_command,
-            values=self.LOOP_CONTROL_COMMANDS[self.controls_loop.get()],
-            state="readonly",
-            width=28,
-        )
-        self.controls_command_box.pack(side="left", fill="x", expand=True)
-        self._sync_controls_command_choices()
-
-        self._field(
-            panel,
-            "Iterations",
-            self.controls_bug_iterations,
-            tooltip="Bug hunt: find/fix cycles written into the installed command (1–200).",
-        )
-        pack_row = tk.Frame(panel, bg=COLORS["card"])
-        pack_row.pack(fill="x", padx=12, pady=4)
-        tk.Label(pack_row, text="Pack", width=14, anchor="w", bg=COLORS["card"], fg=COLORS["fg"], font=FONT).pack(side="left")
-        ttk.Combobox(
-            pack_row,
-            textvariable=self.controls_impl_pack,
-            values=[PACK_1, PACK_4],
-            state="readonly",
-            width=28,
-        ).pack(side="left", fill="x", expand=True)
-        self._field(panel, "Feature id", self.controls_impl_feature, tooltip="Implementation loop. Blank uses AGENTS.md Active feature.")
-        role_row = tk.Frame(panel, bg=COLORS["card"])
-        role_row.pack(fill="x", padx=12, pady=4)
-        tk.Label(role_row, text="Role", width=14, anchor="w", bg=COLORS["card"], fg=COLORS["fg"], font=FONT).pack(side="left")
-        ttk.Combobox(
-            role_row,
-            textvariable=self.controls_impl_role,
-            values=["coder", "checker", "reviewer", "coordinator"],
-            state="readonly",
-            width=28,
-        ).pack(side="left", fill="x", expand=True)
-        self._field(panel, "Reward", self.controls_agn_reward, tooltip="Agnostic loop catalog reward.")
-        self._field(panel, "Cycles", self.controls_agn_cycles, tooltip="Agnostic loop arm / choose cycles.")
-        self._field(panel, "Review note", self.controls_agn_note, tooltip="Agnostic loop review note.")
-        self._field(panel, "Choose open", self.controls_agn_open, tooltip="Agnostic choose, e.g. inspect=4,fill=1.")
-        flags = tk.Frame(panel, bg=COLORS["card"])
-        flags.pack(fill="x", padx=12, pady=4)
-        tk.Checkbutton(
-            flags,
-            text="Allow dirty start",
-            variable=self.controls_impl_allow_dirty,
-            bg=COLORS["card"],
-            fg=COLORS["fg"],
-            selectcolor=COLORS["card"],
-            activebackground=COLORS["card"],
-            font=FONT,
-        ).pack(side="left", padx=(0, 12))
-        tk.Checkbutton(
-            flags,
-            text="Force feature",
-            variable=self.controls_impl_force_feature,
-            bg=COLORS["card"],
-            fg=COLORS["fg"],
-            selectcolor=COLORS["card"],
-            activebackground=COLORS["card"],
-            font=FONT,
-        ).pack(side="left", padx=(0, 12))
-        tk.Checkbutton(
-            flags,
-            text="Continue after cap",
-            variable=self.controls_impl_continue_cap,
-            bg=COLORS["card"],
-            fg=COLORS["fg"],
-            selectcolor=COLORS["card"],
-            activebackground=COLORS["card"],
-            font=FONT,
-        ).pack(side="left", padx=(0, 12))
-        tk.Checkbutton(
-            flags,
-            text="Arm after choose",
-            variable=self.controls_agn_arm_choose,
-            bg=COLORS["card"],
-            fg=COLORS["fg"],
-            selectcolor=COLORS["card"],
-            activebackground=COLORS["card"],
-            font=FONT,
-        ).pack(side="left")
-
-        run_row = tk.Frame(panel, bg=COLORS["card"])
-        run_row.pack(fill="x", padx=12, pady=(8, 12))
-        primary_button(
-            run_row,
-            "Run",
-            self._on_controls_run,
-            tooltip="Run the selected loop command on the active repo.",
-        )
+        self._controls_instances_host = tk.Frame(panel, bg=COLORS["card"])
+        self._controls_instances_host.pack(fill="x", padx=8, pady=(0, 8))
+        if not getattr(self, "_controls_instances", None):
+            self._controls_instances = [self._new_controls_instance_vars()]
+        for inst in self._controls_instances:
+            self._mount_controls_instance(inst)
+        self._alias_primary_controls_instance()
+        self._refresh_controls_remove_buttons()
 
         self._sync_controls_for_active()
         self._bind_page_wheel(body, canvas)
 
+    def _new_controls_instance_vars(self) -> dict:
+        from hive_planner.bug_hunt import DEFAULT_ITERATIONS
+        from hive_planner.implementation_loop import PACK_1
+
+        feature = self._active_feature_label() if hasattr(self, "_active_feature_label") else ""
+        return {
+            "loop": tk.StringVar(value="CodeSpec"),
+            "command": tk.StringVar(value="Status"),
+            "bug_iterations": tk.StringVar(value=str(DEFAULT_ITERATIONS)),
+            "impl_pack": tk.StringVar(value=PACK_1),
+            "impl_feature": tk.StringVar(value="" if feature in ("", "—") else feature),
+            "impl_role": tk.StringVar(value="coder"),
+            "impl_allow_dirty": tk.BooleanVar(value=False),
+            "impl_force_feature": tk.BooleanVar(value=False),
+            "impl_continue_cap": tk.BooleanVar(value=False),
+            "agn_reward": tk.StringVar(value="inspect"),
+            "agn_cycles": tk.StringVar(value="1"),
+            "agn_note": tk.StringVar(value=""),
+            "agn_open": tk.StringVar(value=""),
+            "agn_sims": tk.StringVar(value="64"),
+            "agn_horizon": tk.StringVar(value="4"),
+            "agn_seed": tk.StringVar(value=""),
+            "agn_arm_choose": tk.BooleanVar(value=False),
+        }
+
+    def _alias_primary_controls_instance(self, inst: dict | None = None) -> None:
+        """Point the single-loop handlers at one block. Defaults to the first block."""
+        if inst is None:
+            instances = getattr(self, "_controls_instances", None) or []
+            if not instances:
+                return
+            inst = instances[0]
+        self.controls_loop = inst["loop"]
+        self.controls_command = inst["command"]
+        self.controls_command_box = inst.get("command_box")
+        self.controls_bug_iterations = inst["bug_iterations"]
+        self.controls_impl_pack = inst["impl_pack"]
+        self.controls_impl_feature = inst["impl_feature"]
+        self.controls_impl_role = inst["impl_role"]
+        self.controls_impl_allow_dirty = inst["impl_allow_dirty"]
+        self.controls_impl_force_feature = inst["impl_force_feature"]
+        self.controls_impl_continue_cap = inst["impl_continue_cap"]
+        self.controls_agn_reward = inst["agn_reward"]
+        self.controls_agn_cycles = inst["agn_cycles"]
+        self.controls_agn_note = inst["agn_note"]
+        self.controls_agn_open = inst["agn_open"]
+        self.controls_agn_sims = inst["agn_sims"]
+        self.controls_agn_horizon = inst["agn_horizon"]
+        self.controls_agn_seed = inst["agn_seed"]
+        self.controls_agn_arm_choose = inst["agn_arm_choose"]
+
+    def _mount_controls_instance(self, inst: dict) -> None:
+        from hive_planner.implementation_loop import PACK_1, PACK_4
+
+        host = self._controls_instances_host
+        frame = tk.Frame(
+            host,
+            bg=COLORS["card"],
+            highlightbackground=COLORS["border"],
+            highlightthickness=1,
+        )
+        frame.pack(fill="x", padx=4, pady=6)
+        inst["frame"] = frame
+
+        header = tk.Frame(frame, bg=COLORS["card"])
+        header.pack(fill="x", padx=8, pady=(8, 0))
+        tk.Label(header, text="Loop", width=10, anchor="w", bg=COLORS["card"], fg=COLORS["fg"], font=FONT).pack(side="left")
+        loop_box = ttk.Combobox(
+            header,
+            textvariable=inst["loop"],
+            values=tuple(self.LOOP_CONTROL_COMMANDS),
+            state="readonly",
+            width=18,
+        )
+        loop_box.pack(side="left", padx=(0, 8))
+        loop_box.bind(
+            "<<ComboboxSelected>>",
+            lambda _event, current=inst: self._on_controls_instance_loop_changed(current),
+        )
+        tk.Label(header, text="Command", width=10, anchor="w", bg=COLORS["card"], fg=COLORS["fg"], font=FONT).pack(side="left")
+        command_box = ttk.Combobox(
+            header,
+            textvariable=inst["command"],
+            values=self.LOOP_CONTROL_COMMANDS.get(inst["loop"].get(), self.LOOP_CONTROL_COMMANDS["CodeSpec"]),
+            state="readonly",
+            width=18,
+        )
+        command_box.pack(side="left", fill="x", expand=True, padx=(0, 8))
+        inst["command_box"] = command_box
+        actions = tk.Frame(frame, bg=COLORS["card"])
+        actions.pack(fill="x", padx=8, pady=(4, 0))
+        inst["remove_btn"] = secondary_button(
+            actions,
+            "−",
+            lambda current=inst: self._on_remove_controls_instance(current),
+            tooltip="Remove this loop block. The last block stays.",
+        )
+        primary_button(
+            actions,
+            "Run",
+            lambda current=inst: self._on_controls_instance_run(current),
+            tooltip="Run this block's command on the active repo.",
+        )
+        if "last" not in inst:
+            inst["last"] = tk.StringVar(value="")
+        last_label = tk.Label(
+            frame,
+            textvariable=inst["last"],
+            wraplength=720,
+            justify="left",
+            bg=COLORS["card"],
+            fg=COLORS["muted"],
+            font=FONT,
+        )
+        last_label.pack(anchor="w", fill="x", padx=12, pady=(4, 0))
+
+        settings = tk.Frame(frame, bg=COLORS["card"])
+        settings.pack(fill="x", padx=4, pady=(0, 8))
+        inst["rows"] = {
+            "fix_ceiling": self._controls_labeled_entry(
+                settings,
+                "Fix ceiling",
+                inst["bug_iterations"],
+                "Bug hunt Enable: ceiling on committed fixes written into the script (1–200).",
+            ),
+            "pack": self._controls_pack_row(settings, inst["impl_pack"], [PACK_1, PACK_4]),
+            "feature": self._controls_labeled_entry(
+                settings,
+                "Feature id",
+                inst["impl_feature"],
+                "CodeSpec Status and Start. Blank uses the active feature in AGENTS.md.",
+            ),
+            "role": self._controls_choice_row(
+                settings,
+                "Role",
+                inst["impl_role"],
+                ["coder", "checker", "reviewer", "coordinator"],
+                "CodeSpec Handoff and Accept.",
+            ),
+            "dirty": self._controls_check_row(
+                settings,
+                "Allow dirty start",
+                inst["impl_allow_dirty"],
+                "CodeSpec Start: continue when unrelated files are dirty.",
+            ),
+            "force": self._controls_check_row(
+                settings,
+                "Force feature",
+                inst["impl_force_feature"],
+                "CodeSpec Start: switch feature, or continue when the loop is blocked.",
+            ),
+            "cap": self._controls_check_row(
+                settings,
+                "Continue after cap",
+                inst["impl_continue_cap"],
+                "CodeSpec Handoff: allow another pass after 10 round trips.",
+            ),
+            "reward": self._controls_labeled_entry(
+                settings,
+                "Reward",
+                inst["agn_reward"],
+                "Agnostic Arm and Observe: catalog work kind, such as inspect or fill.",
+            ),
+            "cycles": self._controls_labeled_entry(
+                settings,
+                "Cycles",
+                inst["agn_cycles"],
+                "Agnostic Arm, and Choose when Arm after choose is on.",
+            ),
+            "note": self._controls_labeled_entry(
+                settings,
+                "Review note",
+                inst["agn_note"],
+                "Agnostic Review: note recorded when the open slice pauses.",
+            ),
+            "open": self._controls_labeled_entry(
+                settings,
+                "Open counts",
+                inst["agn_open"],
+                "Agnostic Choose: reward=count pairs, for example inspect=4,fill=1. Blank uses one of each.",
+            ),
+            "sims": self._controls_labeled_entry(
+                settings,
+                "Sims",
+                inst["agn_sims"],
+                "Agnostic Choose: rollout count. Default 64.",
+            ),
+            "horizon": self._controls_labeled_entry(
+                settings,
+                "Horizon",
+                inst["agn_horizon"],
+                "Agnostic Choose: lookahead depth. Default 4.",
+            ),
+            "seed": self._controls_labeled_entry(
+                settings,
+                "Seed",
+                inst["agn_seed"],
+                "Agnostic Choose: optional whole-number seed. Blank stays random.",
+            ),
+            "arm": self._controls_check_row(
+                settings,
+                "Arm after choose",
+                inst["agn_arm_choose"],
+                "Agnostic Choose: arm the reward it picks, for the cycle count above.",
+            ),
+        }
+        self._sync_controls_command_choices(inst)
+        self._apply_controls_instance_settings(inst)
+
+    def _controls_labeled_entry(self, parent, label: str, variable: tk.StringVar, tooltip: str) -> tk.Frame:
+        row = tk.Frame(parent, bg=COLORS["card"])
+        label_widget = tk.Label(row, text=label, width=16, anchor="w", bg=COLORS["card"], fg=COLORS["fg"], font=FONT)
+        label_widget.pack(side="left")
+        attach_hover_tooltip(label_widget, tooltip)
+        entry = tk.Entry(row, textvariable=variable, font=FONT, bg=COLORS["card"], fg=COLORS["fg"], relief="solid", bd=1)
+        entry.pack(side="left", fill="x", expand=True, padx=(0, 8))
+        attach_hover_tooltip(entry, tooltip)
+        return row
+
+    def _controls_choice_row(self, parent, label: str, variable: tk.StringVar, values: list[str], tooltip: str) -> tk.Frame:
+        row = tk.Frame(parent, bg=COLORS["card"])
+        label_widget = tk.Label(row, text=label, width=16, anchor="w", bg=COLORS["card"], fg=COLORS["fg"], font=FONT)
+        label_widget.pack(side="left")
+        attach_hover_tooltip(label_widget, tooltip)
+        box = ttk.Combobox(row, textvariable=variable, values=values, state="readonly", width=28)
+        box.pack(side="left", fill="x", expand=True, padx=(0, 8))
+        attach_hover_tooltip(box, tooltip)
+        return row
+
+    def _controls_pack_row(self, parent, variable: tk.StringVar, values: list[str]) -> tk.Frame:
+        return self._controls_choice_row(
+            parent,
+            "Pack",
+            variable,
+            values,
+            "CodeSpec Enable: 1-pack is one coordinator pass. 4-pack splits coder, checker, and reviewer.",
+        )
+
+    def _controls_check_row(self, parent, text: str, variable: tk.BooleanVar, tooltip: str) -> tk.Frame:
+        row = tk.Frame(parent, bg=COLORS["card"])
+        box = tk.Checkbutton(
+            row,
+            text=text,
+            variable=variable,
+            bg=COLORS["card"],
+            fg=COLORS["fg"],
+            selectcolor=COLORS["card"],
+            activebackground=COLORS["card"],
+            font=FONT,
+        )
+        box.pack(side="left", padx=(0, 8))
+        attach_hover_tooltip(box, tooltip)
+        return row
+
+    def _apply_controls_instance_settings(self, inst: dict) -> None:
+        visible = set(self.controls_settings_for_loop(str(inst["loop"].get())))
+        order = (
+            "fix_ceiling",
+            "pack",
+            "feature",
+            "role",
+            "dirty",
+            "force",
+            "cap",
+            "reward",
+            "cycles",
+            "note",
+            "open",
+            "sims",
+            "horizon",
+            "seed",
+            "arm",
+        )
+        for key in order:
+            row = inst["rows"].get(key)
+            if row is None:
+                continue
+            if key in visible:
+                row.pack(fill="x", padx=8, pady=3)
+            else:
+                row.pack_forget()
+
+    def _on_add_controls_instance(self) -> None:
+        inst = self._new_controls_instance_vars()
+        self._controls_instances.append(inst)
+        self._mount_controls_instance(inst)
+        self._bind_controls_instance_wheel(inst)
+        self._refresh_controls_remove_buttons()
+
+    def _on_remove_controls_instance(self, inst: dict) -> None:
+        instances = getattr(self, "_controls_instances", None) or []
+        if not self.can_remove_controls_instance(len(instances)):
+            return
+        if inst not in instances:
+            return
+        instances.remove(inst)
+        frame = inst.get("frame")
+        if frame is not None:
+            try:
+                frame.destroy()
+            except tk.TclError:
+                pass
+        self._alias_primary_controls_instance()
+        self._refresh_controls_remove_buttons()
+
+    def _refresh_controls_remove_buttons(self) -> None:
+        instances = getattr(self, "_controls_instances", None) or []
+        allow = self.can_remove_controls_instance(len(instances))
+        for inst in instances:
+            button = inst.get("remove_btn")
+            if button is None:
+                continue
+            try:
+                button.configure(state="normal" if allow else "disabled")
+            except tk.TclError:
+                pass
+
+    def _bind_controls_instance_wheel(self, inst: dict) -> None:
+        """Added blocks are created after the page wheel bind, so bind them too."""
+        canvas = getattr(self, "_controls_canvas", None)
+        frame = inst.get("frame")
+        if canvas is None or frame is None:
+            return
+        try:
+            bind_mousewheel(frame, target=canvas)
+            self._bind_page_wheel_children(frame, canvas)
+        except tk.TclError:
+            return
+
+    def _on_controls_instance_loop_changed(self, inst: dict) -> None:
+        self._sync_controls_command_choices(inst)
+        self._apply_controls_instance_settings(inst)
+
+    def _on_controls_instance_run(self, inst: dict) -> None:
+        self._alias_primary_controls_instance(inst)
+        if "last" not in inst:
+            inst["last"] = tk.StringVar(value="")
+        previous_target = getattr(self, "_controls_result_target", None)
+        self._controls_result_target = inst["last"]
+        try:
+            self._on_controls_run()
+        finally:
+            self._controls_result_target = previous_target
+            self._alias_primary_controls_instance()
+
     def _controls_active_caption(self) -> str:
         active = self.config.active_project or "No project linked. Open Projects and set an active folder."
-        return f"Pick a loop and one command, then Run. Same functions as the CLI on:\n{active}"
+        return (
+            "Each block is one loop with its own settings. "
+            "Use + to keep another loop beside it. "
+            "Every block runs on:\n"
+            f"{active}"
+        )
 
     def _sync_controls_for_active(self) -> None:
         """Keep Controls pointed at the live active repo after a project switch."""
@@ -1273,26 +1559,102 @@ class HivePlannerApp:
             self.controls_last.set(
                 "Pick the active project on Projects, then use these controls."
             )
-        if not hasattr(self, "controls_impl_feature"):
-            return
         feature = self._active_feature_label() if key else ""
-        self.controls_impl_feature.set("" if feature == "—" else feature)
+        value = "" if feature == "—" else feature
+        if hasattr(self, "controls_impl_feature"):
+            self.controls_impl_feature.set(value)
+        for inst in getattr(self, "_controls_instances", None) or []:
+            var = inst.get("impl_feature")
+            if var is not None and var is not getattr(self, "controls_impl_feature", None):
+                var.set(value)
+            last = inst.get("last")
+            if last is not None:
+                last.set("")
 
-    def _sync_controls_command_choices(self) -> None:
-        loop = str(self.controls_loop.get() if hasattr(self, "controls_loop") else "Implementation loop")
-        choices = self.LOOP_CONTROL_COMMANDS.get(loop) or self.LOOP_CONTROL_COMMANDS["Implementation loop"]
-        box = getattr(self, "controls_command_box", None)
+    def _sync_controls_command_choices(self, inst: dict | None = None) -> None:
+        if inst is None:
+            loop = str(self.controls_loop.get() if hasattr(self, "controls_loop") else "CodeSpec")
+            choices = self.LOOP_CONTROL_COMMANDS.get(loop) or self.LOOP_CONTROL_COMMANDS["CodeSpec"]
+            box = getattr(self, "controls_command_box", None)
+            command = getattr(self, "controls_command", None)
+        else:
+            loop = str(inst["loop"].get())
+            choices = self.LOOP_CONTROL_COMMANDS.get(loop) or self.LOOP_CONTROL_COMMANDS["CodeSpec"]
+            box = inst.get("command_box")
+            command = inst.get("command")
         if box is not None:
             try:
                 box.configure(values=choices)
             except tk.TclError:
                 pass
-        current = str(self.controls_command.get() if hasattr(self, "controls_command") else "")
-        if current not in choices and hasattr(self, "controls_command"):
-            self.controls_command.set(choices[0])
+        if command is not None and str(command.get()) not in choices:
+            command.set(choices[0])
 
     def _on_controls_loop_changed(self, _event=None) -> None:
         self._sync_controls_command_choices()
+
+    @staticmethod
+    def codespec_block_needed(loop_names: list[str]) -> bool:
+        """Add a CodeSpec block only when other loops are already on the tab."""
+        names = [str(name) for name in loop_names]
+        return bool(names) and "CodeSpec" not in names
+
+    def _codespec_instance(self) -> dict | None:
+        for inst in getattr(self, "_controls_instances", None) or []:
+            try:
+                if str(inst["loop"].get()) == "CodeSpec":
+                    return inst
+            except (tk.TclError, KeyError, AttributeError):
+                continue
+        return None
+
+    def _on_open_codespec(self) -> None:
+        """Home shortcut to CodeSpec. Loop controls still opens the same tab."""
+        host = getattr(self, "_controls_instances_host", None)
+        names: list[str] = []
+        for inst in getattr(self, "_controls_instances", None) or []:
+            try:
+                names.append(str(inst["loop"].get()))
+            except (tk.TclError, KeyError, AttributeError):
+                continue
+        if host is not None and self.codespec_block_needed(names):
+            try:
+                if host.winfo_exists():
+                    self._on_add_controls_instance()
+            except tk.TclError:
+                pass
+        self._on_open_loop_controls()
+        root = getattr(self, "root", None)
+        if root is None:
+            return
+        try:
+            root.after_idle(self._reveal_codespec_block)
+        except tk.TclError:
+            return
+
+    def _reveal_codespec_block(self) -> None:
+        """Scroll Controls so the CodeSpec block is in view."""
+        canvas = getattr(self, "_controls_canvas", None)
+        inst = self._codespec_instance()
+        frame = None if inst is None else inst.get("frame")
+        if canvas is None or frame is None:
+            return
+        try:
+            if not canvas.winfo_exists() or not frame.winfo_exists():
+                return
+            canvas.update_idletasks()
+            y = 0
+            widget = frame
+            while widget is not None and widget is not canvas:
+                y += widget.winfo_y()
+                widget = widget.master
+            bounds = canvas.bbox("all")
+            if not bounds:
+                return
+            height = max(bounds[3] - bounds[1], 1)
+            canvas.yview_moveto(min(1.0, max(0.0, y / height)))
+        except tk.TclError:
+            return
 
     def _on_open_loop_controls(self) -> None:
         notebook = self.notebook
@@ -1334,7 +1696,7 @@ class HivePlannerApp:
             else:
                 self._on_bug_hunt_status()
             return
-        if loop == "Implementation loop":
+        if loop == "CodeSpec":
             actions = {
                 "Enable": lambda: self._on_implementation_loop_install(from_controls=True),
                 "Check pack": self._on_implementation_loop_peek_pack,
@@ -1367,7 +1729,33 @@ class HivePlannerApp:
                 handler()
 
     def _build_projects_tab(self, parent: tk.Frame) -> None:
-        top_row = tk.Frame(parent, bg=COLORS["bg"])
+        split = tk.PanedWindow(
+            parent,
+            orient=tk.VERTICAL,
+            sashwidth=8,
+            sashrelief=tk.RAISED,
+            bg=COLORS["border"],
+            bd=0,
+            opaqueresize=True,
+        )
+        split.pack(fill="both", expand=True)
+        self.projects_split = split
+        self._projects_split_place_queued = False
+        top_pane = tk.Frame(split, bg=COLORS["bg"])
+        bottom_pane = tk.Frame(split, bg=COLORS["bg"])
+        split.add(top_pane, minsize=120, stretch="always")
+        split.add(bottom_pane, minsize=self.PROJECTS_SPLIT_MIN_BOTTOM, stretch="always")
+        split.bind("<Configure>", self._place_projects_split_once)
+        top_body, projects_top_canvas = self._scrollable_tab(top_pane)
+        self._projects_top_canvas = projects_top_canvas
+        self._projects_top_scroll = next(
+            child for child in top_pane.winfo_children() if isinstance(child, ttk.Scrollbar)
+        )
+        self._projects_top_scroll_busy = False
+        projects_top_canvas.bind("<Configure>", self._sync_projects_top_scroll, add="+")
+        top_body.bind("<Configure>", self._sync_projects_top_scroll, add="+")
+
+        top_row = tk.Frame(top_body, bg=COLORS["bg"])
         top_row.pack(fill="x")
         top_row.columnconfigure(0, weight=1)
         top_row.columnconfigure(1, weight=1)
@@ -1493,8 +1881,11 @@ class HivePlannerApp:
             self._on_create_project,
             tooltip="Create a new project folder with Hive planning templates and optional Git setup.",
         )
+        self._bind_page_wheel(top_body, self._projects_top_canvas)
+        self._sync_projects_top_scroll()
 
-        recent_card = card(parent)
+        recent_card = card(bottom_pane)
+        recent_card.pack(fill="both", expand=True)
         card_title(recent_card, "Linked workspaces")
         tk.Label(
             recent_card,
@@ -1505,8 +1896,10 @@ class HivePlannerApp:
             fg=COLORS["muted"],
             font=FONT_SUBTITLE,
         ).pack(anchor="w", padx=12, pady=(0, 8))
+        btn_row2 = tk.Frame(recent_card, bg=COLORS["card"])
+        btn_row2.pack(side="bottom", fill="x", padx=12, pady=(0, 12))
         recent_list_frame = tk.Frame(recent_card, bg=COLORS["card"])
-        recent_list_frame.pack(fill="x", padx=12, pady=(0, 8))
+        recent_list_frame.pack(fill="both", expand=True, padx=12, pady=(0, 8))
         self.recent_scroll = ttk.Scrollbar(recent_list_frame, orient="vertical")
         self.recent_list = tk.Listbox(
             recent_list_frame,
@@ -1522,16 +1915,15 @@ class HivePlannerApp:
             highlightbackground=COLORS["border"],
             highlightcolor=COLORS["primary"],
         )
-        self.recent_list.pack(side="left", fill="x", expand=True)
+        self.recent_list.pack(side="left", fill="both", expand=True)
         self.recent_scroll.config(command=self.recent_list.yview)
         self.recent_list.bind("<Double-Button-1>", self._on_recent_double_click)
+        self.recent_list.bind("<Configure>", lambda _event: self._sync_recent_scrollbar(), add="+")
         bind_mousewheel(self.recent_scroll, target=self.recent_list)
         bind_mousewheel(recent_list_frame, target=self.recent_list)
         bind_mousewheel(self.recent_list)
         self._recent_project_paths: list[str] = []
         self._populate_recent_list()
-        btn_row2 = tk.Frame(recent_card, bg=COLORS["card"])
-        btn_row2.pack(fill="x", padx=12, pady=(0, 12))
         primary_button(
             btn_row2,
             "Add link…",
@@ -1713,9 +2105,10 @@ class HivePlannerApp:
         tk.Label(
             mcp,
             text=(
-                "Let a Cursor agent in the active project call this Hive Planner "
-                "(health check, loops, map sync). Writes a hive-planner server into "
-                "that project's .cursor/mcp.json. Reload MCP in Cursor after Enable."
+                "Any MCP agent can call this Hive Planner "
+                "(health check, loops, map sync). Enable writes a hive-planner server into "
+                "the active project's .cursor/mcp.json. Copy launch command for any other agent. "
+                "Reload MCP in that agent after you add it."
             ),
             wraplength=760,
             justify="left",
@@ -1739,7 +2132,7 @@ class HivePlannerApp:
             mcp_row,
             "Enable",
             self._on_enable_hive_mcp,
-            tooltip="Allow a Cursor agent in the active project to control this Hive Planner over MCP.",
+            tooltip="Let an MCP agent call this Hive Planner. Enable writes hive-planner into the active project's .cursor/mcp.json.",
         )
         secondary_button(
             mcp_row,
@@ -1751,7 +2144,7 @@ class HivePlannerApp:
             mcp_row,
             "Copy launch command",
             self._on_copy_hive_mcp_command,
-            tooltip="Copy the stdio command Cursor uses to start Hive Planner as an MCP server.",
+            tooltip="Copy the stdio command any MCP agent uses to start Hive Planner.",
         )
         self._sync_mcp_status_for_active()
 
@@ -1774,7 +2167,7 @@ class HivePlannerApp:
         try:
             if not self.config.active_project:
                 self.mcp_status_label.config(
-                    text="Link a project first. Enable writes hive-planner into that repo's .cursor/mcp.json."
+                    text="Link a project first. Enable writes hive-planner into that repo's .cursor/mcp.json. Copy launch command for any other agent."
                 )
                 return
             result = peek_hive_planner_mcp(Path(self.config.active_project), self.config)
@@ -1801,7 +2194,7 @@ class HivePlannerApp:
             return
         messagebox.showinfo(
             "Agent MCP",
-            "Enabled. Reload MCP in Cursor (or reopen the project) so an agent can call Hive Planner.",
+            "Enabled. Reload MCP in Cursor, or paste the launch command into another agent's MCP settings.",
         )
 
     def _on_disable_hive_mcp(self) -> None:
@@ -1930,6 +2323,74 @@ class HivePlannerApp:
             self.recent_list.selection_set(select_index)
             self.recent_list.see(select_index)
 
+    def _sync_projects_top_scroll(self, _event=None) -> None:
+        """Hide the form scrollbar until that pane is actually shorter than the form."""
+        if getattr(self, "_projects_top_scroll_busy", False):
+            return
+        canvas = getattr(self, "_projects_top_canvas", None)
+        bar = getattr(self, "_projects_top_scroll", None)
+        if canvas is None or bar is None:
+            return
+        self._projects_top_scroll_busy = True
+        try:
+            top, bottom = canvas.yview()
+            needs = float(bottom) - float(top) < 0.999
+            mapped = bool(bar.winfo_ismapped())
+            if needs and not mapped:
+                bar.pack(side="right", fill="y", before=canvas)
+            elif not needs and mapped:
+                bar.pack_forget()
+        except tk.TclError:
+            return
+        finally:
+            self._projects_top_scroll_busy = False
+
+    def _place_projects_split_once(self, _event=None) -> None:
+        """Queue the sash move. Placing it inside Configure is overwritten by layout."""
+        split = getattr(self, "projects_split", None)
+        if split is None or getattr(self, "_projects_split_place_queued", False):
+            return
+        self._projects_split_place_queued = True
+        try:
+            split.after_idle(self._apply_projects_split_sash)
+        except tk.TclError:
+            self._projects_split_place_queued = False
+
+    def _apply_projects_split_sash(self) -> None:
+        self._projects_split_place_queued = False
+        split = getattr(self, "projects_split", None)
+        if split is None:
+            return
+        try:
+            total = int(split.winfo_height())
+        except tk.TclError:
+            return
+        sash_y = self.projects_split_sash_y(total)
+        if sash_y <= 0:
+            return
+        try:
+            split.unbind("<Configure>")
+            split.sash_place(0, 0, sash_y)
+        except tk.TclError:
+            return
+
+    def _recent_list_needs_scroll(self) -> bool:
+        """True when the list is taller than the pane, not merely past the 4-row request."""
+        count = self.recent_list.size()
+        if count <= 0:
+            return False
+        try:
+            height = int(self.recent_list.winfo_height())
+        except (AttributeError, tk.TclError, TypeError, ValueError):
+            height = 0
+        if height > 1:
+            try:
+                top, bottom = self.recent_list.yview()
+                return float(bottom) - float(top) < 0.999
+            except (AttributeError, tk.TclError, TypeError, ValueError):
+                pass
+        return count > max(1, int(self.recent_list.cget("height")))
+
     def _update_recent_scrollbar(self) -> None:
         count = self.recent_list.size()
         display_height = min(
@@ -1937,7 +2398,10 @@ class HivePlannerApp:
             self.RECENT_LIST_MAX_ROWS,
         )
         self.recent_list.configure(height=display_height)
-        if count > display_height:
+        self._sync_recent_scrollbar()
+
+    def _sync_recent_scrollbar(self) -> None:
+        if self._recent_list_needs_scroll():
             if not self.recent_scroll.winfo_ismapped():
                 self.recent_scroll.pack(side="right", fill="y")
             self.recent_list.configure(yscrollcommand=self.recent_scroll.set)
@@ -2007,7 +2471,7 @@ class HivePlannerApp:
         from hive_planner.cl_runtime import CL_RUNTIME_CURSOR, CL_RUNTIME_HEADLESS, cl_runtime_launcher_choice
 
         dialog_default = cl_runtime_launcher_choice(current)
-        dialog = tk.Toplevel(self.root)
+        dialog = self._dialog()
         dialog.title(title)
         dialog.configure(bg=COLORS["bg"])
         dialog.transient(self.root)
@@ -2131,7 +2595,7 @@ class HivePlannerApp:
 
     def _show_python_scan_progress(self) -> None:
         self._hide_python_scan_progress()
-        dialog = tk.Toplevel(self.root)
+        dialog = self._dialog()
         dialog.title("Scanning for Python")
         dialog.configure(bg=COLORS["bg"])
         dialog.transient(self.root)
@@ -2213,7 +2677,7 @@ class HivePlannerApp:
             messagebox.showwarning("Python scan", format_python_scan_report([]))
             return
 
-        dialog = tk.Toplevel(self.root)
+        dialog = self._dialog()
         dialog.title("Python installations")
         dialog.configure(bg=COLORS["bg"])
         dialog.transient(self.root)
@@ -2478,7 +2942,7 @@ class HivePlannerApp:
         if not root:
             messagebox.showwarning("No project", "Link a workspace first (Projects tab).")
             return
-        dialog = tk.Toplevel(self.root)
+        dialog = self._dialog()
         dialog.title("Record wiring audit")
         dialog.configure(bg=COLORS["bg"])
         dialog.transient(self.root)
@@ -2756,7 +3220,7 @@ class HivePlannerApp:
         if not accepted:
             return False
 
-        dialog = tk.Toplevel(self.root)
+        dialog = self._dialog()
         dialog.title("Memory proposal preview" if allow_apply else "Apply failed — review proposal")
         dialog.configure(bg=COLORS["bg"])
         dialog.transient(self.root)
@@ -2840,7 +3304,7 @@ class HivePlannerApp:
 
     def _show_memory_rejection_preview(self, result: dict, *, root: Path) -> None:
         """Show why every candidate was rejected (no apply path)."""
-        dialog = tk.Toplevel(self.root)
+        dialog = self._dialog()
         dialog.title("Memory promotion rejected")
         dialog.configure(bg=COLORS["bg"])
         dialog.transient(self.root)
@@ -3250,7 +3714,7 @@ class HivePlannerApp:
             ):
                 return
             force_pack = True
-        self._start_home_action(f"Installing implementation loop ({pack})…")
+        self._start_home_action(f"Installing CodeSpec ({pack})…")
         self._run_bg(
             lambda r=link, p=pack, f=force_pack: run_project_implementation_loop_install(r, p, force_pack=f),
             self._project_done_callback("Implementation loop install", self._implementation_loop_install_done),
@@ -3263,8 +3727,8 @@ class HivePlannerApp:
         count = len(result.get("files_written") or [])
         pack = result.get("pack", "")
         message = (
-            f"Implementation loop enabled ({pack}, {count} file(s)). "
-            "Use Controls → Implementation loop, or say implementation loop in Cursor chat."
+            f"CodeSpec enabled ({pack}, {count} file(s)). "
+            "Use Controls → CodeSpec, or say implementation loop in Cursor chat."
         )
         self._queue_home_log(message)
         self._set_controls_last(message)
@@ -3336,12 +3800,18 @@ class HivePlannerApp:
         if err and result.get("blocked_reason") != err:
             parts.append(str(err))
         if parts:
-            return "Implementation loop: " + "; ".join(parts)
-        return "Implementation loop: " + str(result)
+            return "CodeSpec: " + "; ".join(parts)
+        return "CodeSpec: " + str(result)
 
     def _set_controls_last(self, text: str) -> None:
         if hasattr(self, "controls_last"):
             self.controls_last.set(text)
+        target = getattr(self, "_controls_result_target", None)
+        if target is not None:
+            try:
+                target.set(text)
+            except tk.TclError:
+                pass
 
     def _controls_action_failed(self, result) -> None:
         line = self._result_detail(result)
@@ -3375,7 +3845,7 @@ class HivePlannerApp:
             feature = self._ask_loop_feature()
             if feature is None:
                 return
-        self._start_home_action("Checking implementation-loop status…")
+        self._start_home_action("Checking CodeSpec status…")
         self._run_bg(
             lambda r=link, f=feature: run_project_implementation_loop_status(r, f or None),
             self._project_done_callback("Implementation loop status", self._log_loop_gate),
@@ -3405,13 +3875,14 @@ class HivePlannerApp:
         allow_dirty: bool,
         force_feature: bool,
     ) -> None:
-        self._loop_start_ctx = {
+        ctx = {
             "link": link,
             "feature": feature,
             "allow_dirty": allow_dirty,
             "force_feature": force_feature,
         }
-        self._start_home_action("Starting implementation loop…")
+        self._loop_start_ctx = ctx
+        self._start_home_action("Starting CodeSpec…")
         self._run_bg(
             lambda r=link, f=feature, d=allow_dirty, ff=force_feature: run_project_implementation_loop_start(
                 r,
@@ -3419,13 +3890,17 @@ class HivePlannerApp:
                 allow_dirty=d,
                 force_feature=ff,
             ),
-            self._project_done_callback("Implementation loop start", self._implementation_loop_start_done),
+            self._project_done_callback(
+                "Implementation loop start",
+                lambda result, bound=ctx: self._implementation_loop_start_done(result, bound),
+            ),
         )
 
-    def _implementation_loop_start_done(self, result: dict) -> None:
+    def _implementation_loop_start_done(self, result: dict, ctx: dict | None = None) -> None:
         if self._is_bg_error(result) or result.get("ok") is not True:
             err = str(result.get("error") or result.get("blocked_reason") or "")
-            ctx = getattr(self, "_loop_start_ctx", None) or {}
+            if ctx is None:
+                ctx = getattr(self, "_loop_start_ctx", None) or {}
             if "unrelated dirty" in err and not ctx.get("allow_dirty"):
                 dirty = result.get("dirty") or []
                 extra = ""
@@ -3486,21 +3961,26 @@ class HivePlannerApp:
         self._run_loop_handoff(link, role, continue_after_cap=continue_after_cap)
 
     def _run_loop_handoff(self, link: Path, role: str, *, continue_after_cap: bool) -> None:
-        self._loop_handoff_ctx = {"link": link, "role": role, "continue_after_cap": continue_after_cap}
-        self._start_home_action(f"Writing implementation-loop handoff ({role})…")
+        ctx = {"link": link, "role": role, "continue_after_cap": continue_after_cap}
+        self._loop_handoff_ctx = ctx
+        self._start_home_action(f"Writing CodeSpec handoff ({role})…")
         self._run_bg(
             lambda r=link, n=role, c=continue_after_cap: run_project_implementation_loop_handoff(
                 r,
                 n,
                 continue_after_cap=c,
             ),
-            self._project_done_callback("Implementation loop handoff", self._implementation_loop_handoff_done),
+            self._project_done_callback(
+                "Implementation loop handoff",
+                lambda result, bound=ctx: self._implementation_loop_handoff_done(result, bound),
+            ),
         )
 
-    def _implementation_loop_handoff_done(self, result: dict) -> None:
+    def _implementation_loop_handoff_done(self, result: dict, ctx: dict | None = None) -> None:
         if self._is_bg_error(result) or result.get("ok") is not True:
             err = str(result.get("error") or result.get("blocked_reason") or "")
-            ctx = getattr(self, "_loop_handoff_ctx", None) or {}
+            if ctx is None:
+                ctx = getattr(self, "_loop_handoff_ctx", None) or {}
             if "continue-after-cap" in err and not ctx.get("continue_after_cap"):
                 if messagebox.askyesno(
                     "Round-trip cap",
@@ -3520,7 +4000,7 @@ class HivePlannerApp:
         link = self._require_active_link()
         if link is None:
             return
-        self._start_home_action("Running implementation-loop check…")
+        self._start_home_action("Running CodeSpec check…")
         self._run_bg(
             lambda r=link: run_project_implementation_loop_check(r),
             self._project_done_callback("Implementation loop check", self._log_loop_gate),
@@ -3539,7 +4019,7 @@ class HivePlannerApp:
             role = self._ask_loop_role()
             if role is None:
                 return
-        self._start_home_action(f"Accepting implementation-loop result ({role})…")
+        self._start_home_action(f"Accepting CodeSpec result ({role})…")
         self._run_bg(
             lambda r=link, n=role: run_project_implementation_loop_accept(r, n),
             self._project_done_callback("Implementation loop accept", self._log_loop_gate),
@@ -3549,7 +4029,7 @@ class HivePlannerApp:
         link = self._require_active_link()
         if link is None:
             return
-        self._start_home_action("Running implementation-loop commit…")
+        self._start_home_action("Running CodeSpec commit…")
         self._run_bg(
             lambda r=link: run_project_implementation_loop_commit(r),
             self._project_done_callback("Implementation loop commit", self._log_loop_gate),
@@ -3569,7 +4049,7 @@ class HivePlannerApp:
         link = self._require_active_link()
         if link is None:
             return
-        self._start_home_action("Checking implementation-loop pack…")
+        self._start_home_action("Checking CodeSpec pack…")
         self._run_bg(
             lambda r=link: peek_implementation_loop_pack(r),
             self._project_done_callback("Implementation loop pack", self._log_controls_result),
@@ -3604,6 +4084,20 @@ class HivePlannerApp:
             lambda r=link: run_project_agnostic_loop_status(r),
             self._project_done_callback("Agnostic-loop status", self._log_agnostic_gate),
         )
+
+    def _controls_positive_int(self, raw: str, label: str, default: int) -> int | None:
+        text = str(raw or "").strip()
+        if not text:
+            return default
+        try:
+            value = int(text)
+        except ValueError:
+            messagebox.showwarning(label, f"{label} must be a whole number.")
+            return None
+        if value < 1:
+            messagebox.showwarning(label, f"{label} must be at least 1.")
+            return None
+        return value
 
     def _controls_agn_cycles(self) -> int | None:
         raw = str(self.controls_agn_cycles.get() if hasattr(self, "controls_agn_cycles") else "1").strip() or "1"
@@ -3684,10 +4178,32 @@ class HivePlannerApp:
             if parsed is None:
                 return
             cycles = parsed
+        sims = self._controls_positive_int(
+            self.controls_agn_sims.get() if hasattr(self, "controls_agn_sims") else "64",
+            "Sims",
+            64,
+        )
+        if sims is None:
+            return
+        horizon = self._controls_positive_int(
+            self.controls_agn_horizon.get() if hasattr(self, "controls_agn_horizon") else "4",
+            "Horizon",
+            4,
+        )
+        if horizon is None:
+            return
+        seed_raw = str(self.controls_agn_seed.get() if hasattr(self, "controls_agn_seed") else "").strip()
+        seed: int | None = None
+        if seed_raw:
+            try:
+                seed = int(seed_raw)
+            except ValueError:
+                messagebox.showwarning("Seed", "Seed must be a whole number, or blank.")
+                return
         self._start_home_action("Choosing agnostic-loop reward…")
         self._run_bg(
-            lambda r=link, o=open_text, a=do_arm, n=cycles: run_project_agnostic_loop_choose(
-                r, o, do_arm=a, cycles=n
+            lambda r=link, o=open_text, a=do_arm, n=cycles, s=sims, h=horizon, sd=seed: run_project_agnostic_loop_choose(
+                r, o, do_arm=a, cycles=n, sims=s, horizon=h, seed=sd
             ),
             self._project_done_callback("Agnostic-loop choose", self._log_agnostic_gate),
         )
@@ -3745,9 +4261,9 @@ class HivePlannerApp:
             else:
                 line = "Agnostic loop: " + (result.get("error") or ("missing " + ", ".join(str(item) for item in missing) if missing else self._result_detail(result)))
         elif isinstance(result, dict) and "pack" in result:
-            line = f"Implementation loop pack: {result.get('pack') or 'not installed'}"
+            line = f"CodeSpec pack: {result.get('pack') or 'not installed'}"
             if result.get("error"):
-                line = f"Implementation loop pack: {result.get('error')}"
+                line = f"CodeSpec pack: {result.get('error')}"
         else:
             line = self._result_detail(result)
         self._queue_home_log(line)
@@ -3798,7 +4314,7 @@ class HivePlannerApp:
             else "No reference sources staged yet in this project."
         )
 
-        dialog = tk.Toplevel(self.root)
+        dialog = self._dialog()
         dialog.title("Load Sources")
         dialog.configure(bg=COLORS["bg"])
         dialog.transient(self.root)
@@ -4253,7 +4769,7 @@ class HivePlannerApp:
         summary = summarize_linked_project(Path(self.config.active_project))
         default_feature = summary.active_feature or "example-feature"
 
-        dialog = tk.Toplevel(self.root)
+        dialog = self._dialog()
         dialog.title("Bring documents into your project")
         dialog.configure(bg=COLORS["bg"])
         dialog.transient(self.root)
@@ -5011,7 +5527,7 @@ class HivePlannerApp:
             self._home_guide_body.pack(fill="x", padx=0, pady=0)
             self._home_guide_toggle_btn.configure(text="▼")
             self._home_guide_summary.configure(
-                text="Plain-English guide — what this tool is and how to use it. Scroll to read.",
+                text="What HIVE is (context for agents) and how to use this app. Scroll to read.",
             )
         else:
             self._home_guide_body.pack_forget()
@@ -5058,7 +5574,7 @@ class HivePlannerApp:
         self._home_guide_summary = tk.Label(
             title_block,
             text=(
-                "Plain-English guide — what this tool is and how to use it. Scroll to read."
+                "What HIVE is (context for agents) and how to use this app. Scroll to read."
                 if self._home_guide_expanded
                 else "Collapsed — expand to read the Hive Planner guide."
             ),
@@ -5625,7 +6141,7 @@ class HivePlannerApp:
             normalize_project_path(entry) for entry in self.config.recent_projects if entry
         }
         workspaces = discover_cursor_workspaces()
-        dialog = tk.Toplevel(self.root)
+        dialog = self._dialog()
         dialog.title("Add workspace link")
         dialog.transient(self.root)
         dialog.grab_set()
@@ -5823,7 +6339,7 @@ class HivePlannerApp:
         from hive_planner.cl_runtime import resolve_cl_runtime
 
         cfg = load_config()
-        dialog = tk.Toplevel(self.root)
+        dialog = self._dialog()
         if state.hive_ready and state.needs_handoff_repair:
             dialog.title("Repair Hive handoff")
         elif state.hive_ready:

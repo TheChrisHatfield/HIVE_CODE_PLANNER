@@ -229,6 +229,27 @@ def card(parent, *, padx=16, pady=8):
     return frame
 
 
+def apply_app_icon(window: tk.Misc) -> None:
+    """Set the Hive hex icon on this window and as the default for child dialogs."""
+    from hive_planner.runtime_paths import app_icon_path
+
+    icon = app_icon_path()
+    if icon is None:
+        return
+    setter = getattr(window, "iconbitmap", None)
+    if setter is None:
+        return
+    path = str(icon)
+    try:
+        setter(path)
+    except tk.TclError:
+        pass
+    try:
+        setter(default=path)
+    except (tk.TclError, TypeError):
+        pass
+
+
 def card_title(parent, text: str) -> None:
     tk.Label(
         parent,
