@@ -120,6 +120,8 @@ class LauncherConfig:
     active_project: str = ""
     recent_projects: list[str] = field(default_factory=list)
     project_profiles: dict[str, str] = field(default_factory=dict)
+    home_action_groups: list[dict] = field(default_factory=list)
+    home_arrange_enabled: bool = False
 
     def normalized_hive_root(self) -> Path:
         from hive_planner.runtime_paths import is_portable_runtime, portable_app_root
@@ -226,18 +228,25 @@ def _sync_portable_config_fields(cfg: LauncherConfig) -> bool:
 
 def load_config() -> LauncherConfig:
     from hive_planner.agent_handoff import normalize_agent_handoff_mode
+    from hive_planner.launcher.home_groups import normalize_home_groups
     from hive_planner.launcher.service import auto_complete_onboarding_if_ready
 
     path = config_path()
     if not path.is_file():
-        cfg = LauncherConfig(hive_planner_root=str(default_hive_root().resolve()))
+        cfg = LauncherConfig(
+            hive_planner_root=str(default_hive_root().resolve()),
+            home_action_groups=normalize_home_groups(None),
+        )
         auto_complete_onboarding_if_ready(cfg)
         save_config(cfg)
         return cfg
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        cfg = LauncherConfig(hive_planner_root=str(default_hive_root().resolve()))
+        cfg = LauncherConfig(
+            hive_planner_root=str(default_hive_root().resolve()),
+            home_action_groups=normalize_home_groups(None),
+        )
         auto_complete_onboarding_if_ready(cfg)
         save_config(cfg)
         return cfg
@@ -267,6 +276,8 @@ def load_config() -> LauncherConfig:
         active_project=active,
         recent_projects=recent,
         project_profiles=profiles,
+        home_action_groups=normalize_home_groups(data.get("home_action_groups")),
+        home_arrange_enabled=_read_config_bool(data.get("home_arrange_enabled"), default=False),
     )
     changed = prune_stale_projects(cfg)
     if _sync_portable_config_fields(cfg):
