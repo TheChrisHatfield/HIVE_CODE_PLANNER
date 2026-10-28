@@ -13,6 +13,7 @@ def test_dialog_applies_hive_icon(monkeypatch) -> None:
 
     monkeypatch.setattr("hive_planner.launcher.app.tk.Toplevel", _Top)
     monkeypatch.setattr("hive_planner.launcher.app.apply_app_icon", lambda window: seen.append(window))
+    monkeypatch.setattr("hive_planner.launcher.app.remember_popup", lambda _window: None)
     app = HivePlannerApp.__new__(HivePlannerApp)
     app.root = object()
     dialog = app._dialog()
