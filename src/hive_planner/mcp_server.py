@@ -173,9 +173,11 @@ def _version() -> str:
 
 def _workspace_root(arguments: dict[str, Any] | None) -> Path:
     raw = str((arguments or {}).get("root") or "").strip()
-    if raw:
-        return Path(raw).expanduser().resolve()
-    return Path.cwd().resolve()
+    path = Path(raw).expanduser().resolve() if raw else Path.cwd().resolve()
+    from hive_planner.launcher.service import linked_install_directory
+
+    target, _error = linked_install_directory(path)
+    return target if target is not None else path
 
 
 def _bool(value: object, default: bool = False) -> bool:

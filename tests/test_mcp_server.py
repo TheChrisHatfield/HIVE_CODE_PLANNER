@@ -180,3 +180,16 @@ def test_call_tool_ping_explicit_root(tmp_path: Path) -> None:
     payload = call_tool("hive_ping", {"root": str(tmp_path)})
     assert payload["ok"] is True
     assert Path(payload["root"]) == tmp_path.resolve()
+
+
+def test_call_tool_ping_resolves_code_workspace_file(tmp_path: Path) -> None:
+    folder = tmp_path / "project"
+    folder.mkdir()
+    workspace = tmp_path / "hive.code-workspace"
+    workspace.write_text(
+        json.dumps({"folders": [{"path": str(folder)}]}),
+        encoding="utf-8",
+    )
+    payload = call_tool("hive_ping", {"root": str(workspace)})
+    assert payload["ok"] is True
+    assert Path(payload["root"]) == folder.resolve()
