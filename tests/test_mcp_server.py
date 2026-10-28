@@ -200,6 +200,47 @@ def test_enable_writes_hive_planner_and_keeps_other_servers(tmp_path: Path) -> N
     assert hive_planner_mcp_enabled(again) is False
 
 
+def test_disable_keeps_an_existing_url_server(tmp_path: Path) -> None:
+    cursor = tmp_path / ".cursor"
+    cursor.mkdir()
+    (cursor / "mcp.json").write_text(
+        json.dumps(
+            {"mcpServers": {HIVE_PLANNER_MCP_NAME: {"url": "https://example.test/mcp"}}},
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_set_hive_planner_mcp(tmp_path, LauncherConfig(python_executable="py -3.11"), enabled=False)
+
+    assert result["ok"] is True
+    assert result["enabled"] is False
+    entry = load_mcp_document(tmp_path)["mcpServers"][HIVE_PLANNER_MCP_NAME]
+    assert entry["url"] == "https://example.test/mcp"
+    assert "command" not in entry
+    assert entry["disabled"] is True
+
+
+def test_disable_keeps_custom_args(tmp_path: Path) -> None:
+    cursor = tmp_path / ".cursor"
+    cursor.mkdir()
+    (cursor / "mcp.json").write_text(
+        json.dumps(
+            {"mcpServers": {HIVE_PLANNER_MCP_NAME: {"command": "python", "args": ["keep-me"]}}},
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_set_hive_planner_mcp(tmp_path, LauncherConfig(python_executable="py -3.11"), enabled=False)
+
+    assert result["ok"] is True
+    entry = load_mcp_document(tmp_path)["mcpServers"][HIVE_PLANNER_MCP_NAME]
+    assert entry["command"] == "python"
+    assert entry["args"] == ["keep-me"]
+    assert entry["disabled"] is True
+
+
 def test_peek_without_config_is_disabled(tmp_path: Path) -> None:
     result = peek_hive_planner_mcp(tmp_path, LauncherConfig(python_executable="py -3.11"))
     assert result["ok"] is True

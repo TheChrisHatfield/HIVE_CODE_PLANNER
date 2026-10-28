@@ -188,6 +188,18 @@ def set_hive_planner_mcp(
     command: str,
     args: list[str] | None = None,
 ) -> dict[str, Any]:
+    if not enabled:
+        servers = doc.setdefault("mcpServers", {})
+        if not isinstance(servers, dict):
+            servers = {}
+            doc["mcpServers"] = servers
+        existing = servers.get(HIVE_PLANNER_MCP_NAME)
+        if isinstance(existing, dict) and (
+            str(existing.get("command") or "").strip() or str(existing.get("url") or "").strip()
+        ):
+            existing["disabled"] = True
+            existing["enabled"] = False
+            return doc
     return upsert_mcp_server(
         doc,
         HIVE_PLANNER_MCP_NAME,
