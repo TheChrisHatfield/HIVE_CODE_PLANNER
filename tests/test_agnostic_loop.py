@@ -181,6 +181,9 @@ def test_trigger_phrases() -> None:
     assert is_agnostic_loop_request("hive loop kit")
     assert is_agnostic_loop_request("/agnostic-loop")
     assert not is_agnostic_loop_request("what is the agnostic loop")
+    assert not is_agnostic_loop_request("is the agnostic loop enabled")
+    assert not is_agnostic_loop_request("whether the hive loop kit is installed")
+    assert is_agnostic_loop_request("start the agnostic loop")
     assert not is_agnostic_loop_request("implementation loop")
     assert not is_agnostic_loop_request("run a bug hunt")
 

@@ -815,10 +815,20 @@ def is_agnostic_loop_request(text: str) -> bool:
         return False
     if is_bug_or_impl_phrase(lowered):
         return False
+    loop_named = (
+        "agnostic loop" in lowered
+        or "hive loop kit" in lowered
+        or "/agnostic-loop" in lowered
+    )
     about = re.search(
         r"\b(what is|what's|what are|where is|how do|how does|is it|does it|can i)\b",
         lowered,
-    ) or ("agnostic loop" in lowered and re.search(r"\b(what|where|how|whether)\b", lowered))
+    ) or (
+        loop_named and re.search(r"\b(what|where|how|whether)\b", lowered)
+    ) or (
+        loop_named
+        and re.search(r"\b(is|whether)\b.{0,80}\b(enabled|installed)\b", lowered)
+    )
     run_phrases = (
         "run the agnostic loop",
         "start the agnostic loop",
