@@ -216,13 +216,12 @@ def _existing_durable_bullets(sections: dict[str, str]) -> set[str]:
 def _parse_active_feature_from_sections(sections: dict[str, str]) -> str | None:
     from hive_planner.spec_drift import parse_feature_from_active_body
 
-    active_body = ""
-    for title, body in sections.items():
-        if title.startswith("Active feature"):
-            active_body = body
-            break
+    active_body = sections.get("Active feature", "")
     if not active_body:
-        active_body = sections.get("Active feature", "")
+        for title, body in sections.items():
+            if title.startswith("Active feature"):
+                active_body = body
+                break
     return parse_feature_from_active_body(active_body)
 
 

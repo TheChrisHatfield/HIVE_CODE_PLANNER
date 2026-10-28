@@ -13,6 +13,7 @@ from hive_planner.agents_memory import (
     parse_sections,
     propose_agents_memory,
     run_agents_memory,
+    _parse_active_feature_from_sections,
 )
 from hive_planner.config import RepoPaths
 
@@ -993,3 +994,23 @@ def test_agents_apply_cli_prints_noop_when_already_present(
     assert code == 0
     assert "no-op" in captured.out
     assert "Applied accepted bullets" not in captured.out
+
+
+def test_active_feature_reader_prefers_exact_section_over_earlier_notes(tmp_path: Path) -> None:
+    from hive_planner.spec_drift import parse_active_feature
+
+    text = """# AGENTS.md
+
+## Active feature notes
+
+See **old-feature** for history.
+
+## Active feature
+
+**my-feature**
+"""
+    (tmp_path / "AGENTS.md").write_text(text, encoding="utf-8")
+    sections = parse_sections(text)
+    assert _parse_active_feature_from_sections(sections) == "my-feature"
+    assert parse_active_feature(RepoPaths(root=tmp_path)) == "my-feature"
+
