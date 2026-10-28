@@ -437,3 +437,17 @@ def test_repair_agents_active_feature_preserves_custom_body_for_same_feature(tmp
     result = repair_agents_active_feature(paths, "my-feature")
     assert result.repaired is False
     assert "implementing shipping flow" in (paths.root / "AGENTS.md").read_text(encoding="utf-8")
+
+
+def test_bootstrap_example_spec_passes_creation_gates(tmp_path: Path) -> None:
+    from hive_planner.bootstrap import _example_spec, _example_tasks
+    from hive_planner.spec_drift import spec_creation_gaps
+
+    paths = RepoPaths(root=tmp_path)
+    (paths.root / "AGENTS.md").write_text(_minimal_agents("example-feature"), encoding="utf-8")
+    spec_dir = paths.root / "docs" / "specs" / "example-feature"
+    spec_dir.mkdir(parents=True)
+    (spec_dir / "spec.md").write_text(_example_spec(), encoding="utf-8")
+    (spec_dir / "tasks.md").write_text(_example_tasks(), encoding="utf-8")
+
+    assert spec_creation_gaps(paths, "example-feature") == []

@@ -523,6 +523,24 @@ Define acceptance criteria here.
 ## Out of scope
 
 Production implementation until spec is reviewed.
+
+## User Scenarios & Testing
+
+### User Story 1 - Replace the scaffold (Priority: P1)
+
+The operator replaces example-feature with the first real feature.
+
+**Acceptance Scenarios**:
+
+1. **Given** this scaffold, **When** the operator runs spec-drift-check, **Then** the handoff is not blocked for missing template sections.
+
+## Success Criteria
+
+- **SC-001**: spec-drift-check reports handoff ok for example-feature while this scaffold is in place.
+
+## Assumptions
+
+- The scaffold feature id stays example-feature until the operator renames it.
 """
 
 
