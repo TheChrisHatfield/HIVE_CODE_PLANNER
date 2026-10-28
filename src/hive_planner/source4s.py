@@ -74,28 +74,29 @@ def discover_source4s_files_in_folder(folder: Path, *, recursive: bool = True) -
 
 
 def merge_source4s_selection(existing: list[Path], added: list[Path]) -> list[Path]:
-    """Append source paths while deduplicating by resolved path."""
+    """Append source paths while deduplicating by resolved path.
+
+    A file already selected under a newly added folder is dropped only when
+    that folder's scan would find it again. Scanned trees skip directories
+    such as tests, so an explicit file there must stay in the selection.
+    """
     merged = _unique_source_files([*existing, *added])
-    added_dirs = [path.resolve() for path in added if path.is_dir()]
+    added_dirs = [path for path in added if path.is_dir()]
     if not added_dirs:
         return merged
+    covered: set[Path] = set()
+    for root in added_dirs:
+        for found in discover_source4s_files_in_folder(root):
+            covered.add(found.resolve())
     trimmed: list[Path] = []
     for path in merged:
         if path.is_dir():
             trimmed.append(path)
             continue
-        resolved = path.resolve()
-        if any(_path_is_under(resolved, root) for root in added_dirs):
+        if path.resolve() in covered:
             continue
         trimmed.append(path)
     return _unique_source_files(trimmed)
-
-
-def _path_is_under(path: Path, root: Path) -> bool:
-    try:
-        return path.is_relative_to(root)
-    except ValueError:
-        return False
 
 
 def expand_source4s_inputs(source_files: list[Path]) -> list[Path]:

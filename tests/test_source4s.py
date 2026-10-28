@@ -239,6 +239,18 @@ def test_merge_source4s_selection_dedupes_paths(tmp_path: Path) -> None:
     assert merged == [first, second]
 
 
+def test_merge_source4s_selection_keeps_explicit_file_in_skipped_dir(tmp_path: Path) -> None:
+    folder = tmp_path / "refs"
+    paper = folder / "tests" / "paper.pdf"
+    paper.parent.mkdir(parents=True)
+    paper.write_bytes(b"%PDF")
+    (folder / "brief.txt").write_text("hi", encoding="utf-8")
+
+    merged = merge_source4s_selection([paper], [folder])
+    assert folder in merged
+    assert paper.resolve() in {path.resolve() for path in merged}
+
+
 def test_merge_source4s_selection_drops_files_covered_by_added_folder(tmp_path: Path) -> None:
     folder = tmp_path / "refs"
     folder.mkdir()
