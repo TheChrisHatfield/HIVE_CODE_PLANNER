@@ -61,8 +61,8 @@ def import_module_to_src_path(import_module: str, repo_root: Path | None = None)
 
 def _imports_in_test_file(test_path: Path, repo_root: Path) -> set[str]:
     try:
-        tree = ast.parse(test_path.read_text(encoding="utf-8"))
-    except (SyntaxError, OSError):
+        tree = ast.parse(test_path.read_text(encoding="utf-8-sig"))
+    except (SyntaxError, OSError, UnicodeError):
         return set()
     modules: set[str] = set()
     for node in ast.walk(tree):

@@ -271,3 +271,37 @@ def test_sync_blank_docstring_uses_filename_and_keeps_real_role(tmp_path: Path) 
     assert "src/hive_planner/noted.py" in report.project_added
     assert "Keeps the first line." in project_map
     assert "| `src/hive_planner/blank.py` | blank | (auto-sync) |" in project_map
+
+
+def test_bom_test_file_still_maps_its_import(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    _write_src_module(paths, "src/hive_planner/emitter.py", "def select_chunks(): pass\n")
+    test_file = paths.root / "tests" / "test_bom.py"
+    test_file.parent.mkdir(parents=True)
+    test_file.write_bytes(b"\xef\xbb\xbf" + b"from hive_planner.emitter import select_chunks\n")
+
+    mapping = discover_test_mappings(paths)
+
+    assert "tests/test_bom.py" in mapping["src/hive_planner/emitter.py"]
+
+
+def test_undecodable_test_file_does_not_abort_sync(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    _write_src_module(paths, "src/hive_planner/emitter.py", "def select_chunks(): pass\n")
+    _write_test(paths, "test_ok.py", "from hive_planner.emitter import select_chunks\n")
+    bad = paths.root / "tests" / "test_bad.py"
+    bad.write_bytes(b"from hive_planner.emitter import select_chunks\n\xff\n")
+    _write_project_map(
+        paths,
+        "# Project Map\n\n| Module | Role | Spec / Delta deps |\n|--------|------|-------------------|\n",
+    )
+    _write_test_map(
+        paths,
+        "# Test Map\n\n| Source module | Tests |\n|---------------|-------|\n",
+    )
+
+    report = sync_impact_maps(paths)
+
+    assert "src/hive_planner/emitter.py" in report.test_added
+    test_map = (paths.root / "docs" / "change-impact" / "test-map.md").read_text(encoding="utf-8")
+    assert "tests/test_ok.py" in test_map
