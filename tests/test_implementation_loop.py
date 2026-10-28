@@ -11,7 +11,11 @@ from hive_planner.implementation_loop import (
     PACK_1,
     PACK_4,
     CoordinatorError,
+    _check_off_task,
+    _first_open_task,
+    _has_open_task_text,
     _normalize_git_branch,
+    _slice_has_open_after,
     assess_implementation_readiness,
     coordinator_start,
     install_implementation_loop,
@@ -30,10 +34,17 @@ def project_root(tmp_path: Path) -> Path:
     (root / "docs" / "specs" / "feature-x").mkdir(parents=True)
     (root / "docs" / "delta" / "20_micro").mkdir(parents=True)
     (root / "docs" / "delta" / "20_micro" / "feature-x.md").write_text("# micro\n", encoding="utf-8")
-    (root / "docs" / "specs" / "feature-x" / "spec.md").write_text("# spec\n", encoding="utf-8")
+    from hive_planner.spec_drift import SPEC_CREATION_SPEC_TAIL, SPEC_CREATION_TASKS_TAIL
+
+    (root / "docs" / "specs" / "feature-x" / "spec.md").write_text(
+        "# spec\n" + SPEC_CREATION_SPEC_TAIL, encoding="utf-8"
+    )
     (root / "docs" / "specs" / "feature-x" / "plan.md").write_text("# plan\n", encoding="utf-8")
     (root / "docs" / "specs" / "feature-x" / "tasks.md").write_text(
-        "# tasks\n\n- [ ] T001 do the thing\n", encoding="utf-8"
+        "# tasks\n\n- [ ] T001 do the thing\n" + SPEC_CREATION_TASKS_TAIL, encoding="utf-8"
+    )
+    (root / "AGENTS.md").write_text(
+        "# AGENTS\n\n## Active feature\n\n**feature-x**\n", encoding="utf-8"
     )
     (root / "pyproject.toml").write_text(
         '[project]\nname = "proj"\n\n[tool.pytest.ini_options]\ntestpaths = ["tests"]\n',
@@ -323,7 +334,11 @@ def test_readiness_complete_without_state_flag(project_root: Path, monkeypatch: 
     commands["build"] = "echo build"
     commands["test:full"] = "echo test-full"
     commands_path.write_text(json.dumps(commands), encoding="utf-8")
-    (project_root / "docs/specs/feature-x/tasks.md").write_text("# tasks\n\n- [x] T001 done\n", encoding="utf-8")
+    from hive_planner.spec_drift import SPEC_CREATION_TASKS_TAIL
+
+    (project_root / "docs/specs/feature-x/tasks.md").write_text(
+        "# tasks\n\n- [x] T001 done\n" + SPEC_CREATION_TASKS_TAIL, encoding="utf-8"
+    )
     report = assess_implementation_readiness(project_root, "feature-x")
     assert report.ready is True
     assert report.blocked_reason == "complete"
@@ -341,7 +356,11 @@ def test_readiness_complete_is_exit_ready(project_root: Path, monkeypatch: pytes
     commands["build"] = "echo build"
     commands["test:full"] = "echo test-full"
     commands_path.write_text(json.dumps(commands), encoding="utf-8")
-    (project_root / "docs/specs/feature-x/tasks.md").write_text("# tasks\n\n- [x] T001 done\n", encoding="utf-8")
+    from hive_planner.spec_drift import SPEC_CREATION_TASKS_TAIL
+
+    (project_root / "docs/specs/feature-x/tasks.md").write_text(
+        "# tasks\n\n- [x] T001 done\n" + SPEC_CREATION_TASKS_TAIL, encoding="utf-8"
+    )
     state_path = project_root / ".hive/implementation-loop/state.json"
     state = json.loads(state_path.read_text(encoding="utf-8"))
     state["feature"] = "feature-x"
@@ -473,3 +492,24 @@ def test_init_with_pack_installs_loop(tmp_path: Path) -> None:
     assert (target / ".cursor" / "commands" / "implementation-loop.md").is_file()
     assert (target / ".hive" / "implementation-loop" / "roles" / "coordinator.md").is_file()
     assert not (target / ".hive" / "implementation-loop" / "roles" / "coder.md").exists()
+
+
+def test_wiring_checklist_boxes_are_not_tasks_but_task_ids_still_are() -> None:
+    text = """## Slice
+
+- [x] T001 done
+
+## After each implementation task — Integration wiring audit (required)
+
+- [ ] Traced caller → handler → core (no layer break)
+- [ ] T010 write the audit log
+"""
+    assert _has_open_task_text(text) is True
+    task_id, _heading, body = _first_open_task(text)
+    assert task_id == "T010"
+    assert body.startswith("T010")
+    assert _slice_has_open_after(text, "Slice") is False
+    checked = _check_off_task(text, "T010", body)
+    assert "- [x] T010 write the audit log" in checked
+    assert "- [ ] Traced caller → handler → core (no layer break)" in checked
+    assert _has_open_task_text(checked) is False

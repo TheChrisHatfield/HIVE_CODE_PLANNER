@@ -334,11 +334,42 @@ def _current_branch(root: Path) -> str:
     return ""
 
 
+def _checkbox_body(stripped: str) -> str | None:
+    match = re.match(r"^[ \t]{0,3}- \[ \] (.+)$", stripped)
+    if not match:
+        return None
+    return match.group(1).strip()
+
+
+def _is_wiring_checklist_line(stripped: str) -> bool:
+    body = _checkbox_body(stripped)
+    if body is None:
+        return False
+    return re.match(r"T\d+\b", body, re.IGNORECASE) is None
+
+
+def _without_wiring_audit_section(text: str) -> str:
+    """Drop checklist boxes. Keep task-id boxes under that heading."""
+    lines = text.splitlines(keepends=True)
+    out: list[str] = []
+    in_audit = False
+    for line in lines:
+        stripped = line.lstrip("\ufeff").rstrip("\r\n")
+        if re.match(r"^## .*Integration wiring audit.*$", stripped):
+            in_audit = True
+        elif in_audit and stripped.startswith("## "):
+            in_audit = False
+        if in_audit and _is_wiring_checklist_line(stripped):
+            continue
+        out.append(line)
+    return "".join(out)
+
+
 def _has_open_task(tasks_path: Path) -> bool:
     if not tasks_path.is_file():
         return False
     text = tasks_path.read_text(encoding="utf-8", errors="replace")
-    return re.search(r"^[ \t]{0,3}- \[ \]", text, re.MULTILINE) is not None
+    return _has_open_task_text(text)
 
 
 def _discover_commands(root: Path) -> dict[str, str]:
@@ -728,6 +759,12 @@ def assess_implementation_readiness(root: Path, feature: str) -> ReadinessReport
     tasks_path = root / f"docs/specs/{feature}/tasks.md"
     all_checked = tasks_path.is_file() and not _has_open_task(tasks_path)
 
+    from hive_planner.spec_drift import spec_creation_gaps
+    from hive_planner.config import RepoPaths
+
+    if (root / f"docs/specs/{feature}/spec.md").is_file() or tasks_path.is_file():
+        missing.extend(spec_creation_gaps(RepoPaths(root=root), feature, include_active=True))
+
     commands_path = root / LOOP_DIR / "commands.json"
     try:
         commands = _read_existing_json_object(commands_path, "commands.json")
@@ -939,7 +976,7 @@ def _parse_open_task_line(line: str, heading: str) -> tuple[str, str, str] | Non
 
 def _first_open_task(text: str) -> tuple[str, str, str]:
     heading = ""
-    for line in text.splitlines():
+    for line in _without_wiring_audit_section(text).splitlines():
         if line.startswith("## "):
             heading = line[3:].strip()
         parsed = _parse_open_task_line(line, heading)
@@ -951,7 +988,7 @@ def _first_open_task(text: str) -> tuple[str, str, str]:
 def _open_task_for_current(text: str, current: str, *, action: str) -> tuple[str, str, str]:
     heading = ""
     if current:
-        for line in text.splitlines():
+        for line in _without_wiring_audit_section(text).splitlines():
             if line.startswith("## "):
                 heading = line[3:].strip()
             parsed = _parse_open_task_line(line, heading)
@@ -986,9 +1023,15 @@ def _task_token_matches(rest: str, task_id: str, body: str) -> bool:
 def _check_off_task(text: str, task_id: str, body: str) -> str:
     lines = text.splitlines(keepends=True)
     done = False
+    in_audit = False
     out: list[str] = []
     for line in lines:
-        if not done:
+        stripped = line.lstrip("\ufeff").rstrip("\r\n")
+        if re.match(r"^## .*Integration wiring audit.*$", stripped):
+            in_audit = True
+        elif in_audit and stripped.startswith("## "):
+            in_audit = False
+        if not done and not (in_audit and _is_wiring_checklist_line(stripped)):
             match = re.match(r"^([ \t]{0,3}- \[ \] )(.+?)(\r?\n)?$", line)
             if match:
                 rest = match.group(2).strip()
@@ -1015,6 +1058,7 @@ def _task_line_unresolved(text: str, task_id: str, body: str) -> bool:
 
 
 def _slice_has_open_after(text: str, heading: str) -> bool:
+    text = _without_wiring_audit_section(text)
     if not heading:
         return _has_open_task_text(text)
     in_slice = False
@@ -1028,7 +1072,7 @@ def _slice_has_open_after(text: str, heading: str) -> bool:
 
 
 def _has_open_task_text(text: str) -> bool:
-    return re.search(r"^[ \t]{0,3}- \[ \]", text, re.MULTILINE) is not None
+    return re.search(r"^[ \t]{0,3}- \[ \]", _without_wiring_audit_section(text), re.MULTILINE) is not None
 
 
 def parse_result_entries(text: str) -> list[dict[str, str]]:
