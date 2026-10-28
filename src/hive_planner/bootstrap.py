@@ -143,7 +143,7 @@ def _ensure_workspace_open_hooks_json(
         _copy_file(template_path, target, rel, force=True, written=written)
         return
     try:
-        data = json.loads(dest.read_text(encoding="utf-8"))
+        data = json.loads(dest.read_text(encoding="utf-8-sig"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         if force:
             _copy_file(template_path, target, rel, force=True, written=written)
