@@ -25,6 +25,7 @@ Implementation loop — code a finished Hive spec in separate passes.
 | One task per cycle: implement, check, review, then coordinator commit | Merge, deploy, force-push |
 | Readiness command that blocks when the spec stack or commands are missing | Running coder or reviewer inside Python |
 | Python coordinator gates: start, handoff, check, accept, commit | Agent-owned git commit or hand-edited round trips |
+| File-overlap block on start/switch from each feature's plan File targets; Controls **Allow overlap** | Treating Force feature or Allow dirty start as an overlap override |
 | Retrospective every five completed features, human-approved | Editing `AGENTS.md` during a coding task |
 | Chat start phrase, Home enable, and Home coordinator buttons | Install on every `init` without a pack |
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -444,8 +445,17 @@ def missing_bug_hunt_artifacts(root: Path) -> list[str]:
 
 def render_continue_hook() -> str:
     """Standalone stop-hook source. Same file the package runs."""
-    source = Path(__file__).with_name("bug_hunt_continue.py")
-    return source.read_text(encoding="utf-8")
+    candidates = [Path(__file__).with_name("bug_hunt_continue.py")]
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        candidates.append(Path(meipass) / "hive_planner" / "bug_hunt_continue.py")
+    for source in candidates:
+        if source.is_file():
+            return source.read_text(encoding="utf-8")
+    raise BugHuntError(
+        "Bug hunt continue hook is not in this Hive Planner build "
+        f"({candidates[0]}). Rebuild the portable app so that file is packaged."
+    )
 
 
 def _continue_hook_registered(root: Path) -> bool:

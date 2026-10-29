@@ -20,10 +20,12 @@ from hive_planner.rosetta_nav import (
 
 
 def _write_handoff_bundle(project: Path, feature: str) -> None:
+    from hive_planner.spec_drift import SPEC_CREATION_SPEC_TAIL, SPEC_CREATION_TASKS_TAIL
+
     spec_dir = project / "docs" / "specs" / feature
     spec_dir.mkdir(parents=True, exist_ok=True)
     (spec_dir / "spec.md").write_text(
-        inject_after_header("# Spec\n\n", spec_navigation_block(feature)),
+        inject_after_header("# Spec\n\n", spec_navigation_block(feature)) + SPEC_CREATION_SPEC_TAIL,
         encoding="utf-8",
     )
     (spec_dir / "plan.md").write_text(
@@ -31,7 +33,7 @@ def _write_handoff_bundle(project: Path, feature: str) -> None:
         encoding="utf-8",
     )
     (spec_dir / "tasks.md").write_text(
-        inject_after_header("# Tasks\n\n", tasks_navigation_block(feature)),
+        inject_after_header("# Tasks\n\n", tasks_navigation_block(feature)) + SPEC_CREATION_TASKS_TAIL,
         encoding="utf-8",
     )
     micro = project / "docs" / "delta" / "20_micro"
@@ -956,9 +958,11 @@ def test_run_project_ci_check_patches_legacy_handoff_navigation(tmp_path: Path) 
     )
     spec_dir = project / "docs" / "specs" / feature
     spec_dir.mkdir(parents=True)
-    (spec_dir / "spec.md").write_text("# Spec\n", encoding="utf-8")
+    from hive_planner.spec_drift import SPEC_CREATION_SPEC_TAIL, SPEC_CREATION_TASKS_TAIL
+
+    (spec_dir / "spec.md").write_text("# Spec\n" + SPEC_CREATION_SPEC_TAIL, encoding="utf-8")
     (spec_dir / "plan.md").write_text("# Plan\n", encoding="utf-8")
-    (spec_dir / "tasks.md").write_text("# Tasks\n", encoding="utf-8")
+    (spec_dir / "tasks.md").write_text("# Tasks\n" + SPEC_CREATION_TASKS_TAIL, encoding="utf-8")
     micro = project / "docs" / "delta" / "20_micro"
     micro.mkdir(parents=True)
     (micro / f"{feature}.md").write_text("# Micro\n", encoding="utf-8")
@@ -4689,11 +4693,32 @@ def test_bind_mousewheel_scrolls_on_enter_and_unbinds_on_destroy() -> None:
     bind_mousewheel(widget, target=widget)
 
     handlers["<Enter>"](None)
-    _dispatch_wheel(type("E", (), {"delta": 120})())
+    assert _dispatch_wheel(type("E", (), {"delta": 120})()) == "break"
     assert scrolled == [-1]
+    assert _dispatch_wheel(type("E", (), {"delta": 0})()) is None
+    assert scrolled == [-1]
+    assert _dispatch_wheel(type("E", (), {"delta": 40})()) is None
+    assert _dispatch_wheel(type("E", (), {"delta": 40})()) is None
+    assert _dispatch_wheel(type("E", (), {"delta": 40})()) == "break"
+    assert scrolled == [-1, -1]
+
+    other_scrolled: list[int] = []
+
+    class Other(FakeWidget):
+        def yview_scroll(self, amount, _what) -> None:
+            other_scrolled.append(amount)
+
+        def winfo_containing(self, _x, _y):
+            return self
+
+    other = Other()
+    bind_mousewheel(other, target=other)
+    _dispatch_wheel(type("E", (), {"delta": 120, "widget": other, "x_root": 1, "y_root": 1})())
+    assert other_scrolled == [-1]
+    assert scrolled == [-1, -1]
 
     handlers["<Leave>"](None)
-    assert scrolled == [-1]
+    assert scrolled == [-1, -1]
 
     handlers["<Enter>"](None)
     handlers["<Destroy>"](None)

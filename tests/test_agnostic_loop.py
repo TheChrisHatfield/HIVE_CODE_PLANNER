@@ -17,6 +17,7 @@ from hive_planner.agnostic_loop import (
     missing_agnostic_loop_artifacts,
     observe,
     parse_open,
+    render_kit_entry,
     review,
     reward_tables,
     rewards,
@@ -186,6 +187,15 @@ def test_trigger_phrases() -> None:
     assert is_agnostic_loop_request("start the agnostic loop")
     assert not is_agnostic_loop_request("implementation loop")
     assert not is_agnostic_loop_request("run a bug hunt")
+
+
+def test_render_kit_entry_reads_packaged_source(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    packaged = tmp_path / "hive_planner" / "agnostic_loop.py"
+    packaged.parent.mkdir(parents=True)
+    packaged.write_text("# packaged kit\n", encoding="utf-8")
+    monkeypatch.setattr("hive_planner.agnostic_loop.__file__", str(tmp_path / "missing" / "agnostic_loop.py"))
+    monkeypatch.setattr("hive_planner.agnostic_loop.sys._MEIPASS", str(tmp_path), raising=False)
+    assert render_kit_entry() == "# packaged kit\n"
 
 
 def test_install_repairs_unusable_catalog(tmp_path: Path) -> None:

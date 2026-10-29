@@ -5,7 +5,7 @@
 
 ## After `/tasks` — before checking off work
 
-1. **Review generated `tasks.md`** — confirm feature id matches `.hive/project.json`, Delta micro, and `docs/specs/<feature-id>/`.
+1. **Accept the spec** — `py -3.11 -m hive_planner spec-create --feature <id>` exits 1 until `spec.md` has User Scenarios, Assumptions, and measurable Success Criteria, and `tasks.md` includes the Integration wiring audit checklist. Exit 0 sets `AGENTS.md` **Active feature**. Do not treat the spec as done on a non-zero exit.
 2. **Integration wiring audit (each task)** — before marking any task complete:
    - [ ] Traced caller → handler → core (no layer break)
    - [ ] No false success when a sub-step failed or was skipped

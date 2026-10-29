@@ -1,9 +1,9 @@
 {
   "version": 1,
-  "feature": "implementation-loop",
-  "recorded_at": "2026-10-25T21:53:37.384907+00:00",
-  "evidence": "py -3.11 -m hive_planner spec-drift-check --feature implementation-loop: ok",
-  "summary": "CLI, bootstrap, and Home all call install_implementation_loop; status exits 2 on blocked fixture",
+  "feature": "lavd-resize-scheduler",
+  "recorded_at": "2026-10-28T15:30:05.533567+00:00",
+  "evidence": "py -3.11 -m pytest tests/test_lavd_resize.py -v \u2014 7 passed",
+  "summary": "enqueue -> plan_chunk -> observe; due units first; Thompson fills leftover budget; hitch updates only kinds that ran",
   "max_age_hours": 168,
   "checks": {
     "trace_verified": true,

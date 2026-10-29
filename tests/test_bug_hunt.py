@@ -399,6 +399,17 @@ def test_continue_hook_does_not_use_a_parent_projects_file(
     assert json.loads(state_path.read_text(encoding="utf-8"))["active"] is True
 
 
+def test_render_continue_hook_reads_packaged_source(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from hive_planner.bug_hunt import render_continue_hook
+
+    packaged = tmp_path / "hive_planner" / "bug_hunt_continue.py"
+    packaged.parent.mkdir(parents=True)
+    packaged.write_text("# packaged hook\n", encoding="utf-8")
+    monkeypatch.setattr("hive_planner.bug_hunt.__file__", str(tmp_path / "missing" / "bug_hunt.py"))
+    monkeypatch.setattr("hive_planner.bug_hunt.sys._MEIPASS", str(tmp_path), raising=False)
+    assert render_continue_hook() == "# packaged hook\n"
+
+
 def test_install_registers_continue_hook_and_keeps_other_events(tmp_path: Path) -> None:
     import json
 

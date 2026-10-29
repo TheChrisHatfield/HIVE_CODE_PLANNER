@@ -26,8 +26,10 @@ def _write_handoff_artifacts(paths: RepoPaths, feature: str) -> None:
 
     spec_dir = paths.root / "docs" / "specs" / feature
     spec_dir.mkdir(parents=True, exist_ok=True)
+    from hive_planner.spec_drift import SPEC_CREATION_SPEC_TAIL, SPEC_CREATION_TASKS_TAIL
+
     (spec_dir / "spec.md").write_text(
-        inject_after_header("# Spec\n\n", spec_navigation_block(feature)),
+        inject_after_header("# Spec\n\n", spec_navigation_block(feature)) + SPEC_CREATION_SPEC_TAIL,
         encoding="utf-8",
     )
     (spec_dir / "plan.md").write_text(
@@ -35,7 +37,7 @@ def _write_handoff_artifacts(paths: RepoPaths, feature: str) -> None:
         encoding="utf-8",
     )
     (spec_dir / "tasks.md").write_text(
-        inject_after_header("# Tasks\n\n", tasks_navigation_block(feature)),
+        inject_after_header("# Tasks\n\n", tasks_navigation_block(feature)) + SPEC_CREATION_TASKS_TAIL,
         encoding="utf-8",
     )
     micro_dir = paths.root / "docs" / "delta" / "20_micro"

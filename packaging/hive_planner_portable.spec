@@ -24,6 +24,8 @@ fitz_datas, fitz_binaries, fitz_hidden = collect_all("fitz")
 datas = [
     (str(pkg / "bootstrap_templates"), "hive_planner/bootstrap_templates"),
     (str(pkg / "vendor_templates"), "hive_planner/vendor_templates"),
+    (str(pkg / "bug_hunt_continue.py"), "hive_planner"),
+    (str(pkg / "agnostic_loop.py"), "hive_planner"),
     (str(root / "scripts" / "README.md"), "scripts"),
     (str(root / "scripts" / "assets" / "HivePlanner.ico"), "scripts/assets"),
 ] + pymupdf_datas + fitz_datas

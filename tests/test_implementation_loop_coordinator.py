@@ -64,12 +64,17 @@ def loop_root(tmp_path: Path) -> Path:
     (root / "docs" / "specs" / "feature-x").mkdir(parents=True)
     (root / "docs" / "delta" / "20_micro").mkdir(parents=True)
     (root / "docs" / "delta" / "20_micro" / "feature-x.md").write_text("# micro\n", encoding="utf-8")
-    (root / "docs" / "specs" / "feature-x" / "spec.md").write_text("# spec\n", encoding="utf-8")
+    from hive_planner.spec_drift import SPEC_CREATION_SPEC_TAIL, SPEC_CREATION_TASKS_TAIL
+
+    (root / "docs" / "specs" / "feature-x" / "spec.md").write_text(
+        "# spec\n" + SPEC_CREATION_SPEC_TAIL, encoding="utf-8"
+    )
     (root / "docs" / "specs" / "feature-x" / "plan.md").write_text("# plan\n", encoding="utf-8")
     (root / "docs" / "specs" / "feature-x" / "tasks.md").write_text(
-        "# tasks\n\n## Slice\n\n- [ ] T001 do the thing\n",
+        "# tasks\n\n## Slice\n\n- [ ] T001 do the thing\n" + SPEC_CREATION_TASKS_TAIL,
         encoding="utf-8",
     )
+    (root / "AGENTS.md").write_text("# AGENTS\n\n## Active feature\n\n**feature-x**\n", encoding="utf-8")
     (root / "pyproject.toml").write_text(
         '[project]\nname = "proj"\n\n[tool.pytest.ini_options]\ntestpaths = ["tests"]\n',
         encoding="utf-8",
@@ -165,9 +170,15 @@ def test_start_force_feature_resets_result_when_task_id_matches(loop_root: Path)
     _write_result(loop_root, "T001", "coder", "pass")
     spec = loop_root / "docs" / "specs" / "feature-y"
     spec.mkdir(parents=True)
-    (spec / "spec.md").write_text("# spec\n", encoding="utf-8")
+    from hive_planner.spec_drift import SPEC_CREATION_SPEC_TAIL, SPEC_CREATION_TASKS_TAIL
+
+    (spec / "spec.md").write_text("# spec\n" + SPEC_CREATION_SPEC_TAIL, encoding="utf-8")
     (spec / "plan.md").write_text("# plan\n", encoding="utf-8")
-    (spec / "tasks.md").write_text("# tasks\n\n## Slice\n\n- [ ] T001 other work\n", encoding="utf-8")
+    (spec / "tasks.md").write_text(
+        "# tasks\n\n## Slice\n\n- [ ] T001 other work\n" + SPEC_CREATION_TASKS_TAIL,
+        encoding="utf-8",
+    )
+    (loop_root / "AGENTS.md").write_text("# AGENTS\n\n## Active feature\n\n**feature-y**\n", encoding="utf-8")
     (loop_root / "docs" / "delta" / "20_micro" / "feature-y.md").write_text("# micro\n", encoding="utf-8")
     started = coordinator_start(loop_root, "feature-y", allow_dirty=True, force_feature=True)
     assert started.ok is True
@@ -213,11 +224,17 @@ def test_commit_refuses_when_current_task_already_checked(loop_root: Path) -> No
 
 def test_commit_checks_off_current_task_not_first_open(loop_root: Path) -> None:
     tasks = loop_root / "docs/specs/feature-x/tasks.md"
-    tasks.write_text("# tasks\n\n## Slice\n\n- [ ] T001 do the thing\n- [ ] T002 later\n", encoding="utf-8")
+    from hive_planner.spec_drift import SPEC_CREATION_TASKS_TAIL
+
+    tasks.write_text(
+        "# tasks\n\n## Slice\n\n- [ ] T001 do the thing\n- [ ] T002 later\n" + SPEC_CREATION_TASKS_TAIL,
+        encoding="utf-8",
+    )
     _install_ready(loop_root)
     coordinator_start(loop_root, "feature-x")
     tasks.write_text(
-        "# tasks\n\n## Slice\n\n- [ ] T000 inserted first\n- [ ] T001 do the thing\n- [ ] T002 later\n",
+        "# tasks\n\n## Slice\n\n- [ ] T000 inserted first\n- [ ] T001 do the thing\n- [ ] T002 later\n"
+        + SPEC_CREATION_TASKS_TAIL,
         encoding="utf-8",
     )
     (loop_root / "src").mkdir()
@@ -500,11 +517,17 @@ def test_commit_refuses_trunk_branch(loop_root: Path, monkeypatch: pytest.Monkey
 
 def test_handoff_describes_current_task_not_first_open(loop_root: Path) -> None:
     tasks = loop_root / "docs/specs/feature-x/tasks.md"
-    tasks.write_text("# tasks\n\n## Slice\n\n- [ ] T001 do the thing\n- [ ] T002 later\n", encoding="utf-8")
+    from hive_planner.spec_drift import SPEC_CREATION_TASKS_TAIL
+
+    tasks.write_text(
+        "# tasks\n\n## Slice\n\n- [ ] T001 do the thing\n- [ ] T002 later\n" + SPEC_CREATION_TASKS_TAIL,
+        encoding="utf-8",
+    )
     _install_ready(loop_root)
     coordinator_start(loop_root, "feature-x")
     tasks.write_text(
-        "# tasks\n\n## Slice\n\n- [ ] T000 inserted first\n- [ ] T001 do the thing\n- [ ] T002 later\n",
+        "# tasks\n\n## Slice\n\n- [ ] T000 inserted first\n- [ ] T001 do the thing\n- [ ] T002 later\n"
+        + SPEC_CREATION_TASKS_TAIL,
         encoding="utf-8",
     )
     coordinator_handoff(loop_root, "coder")
@@ -649,8 +672,11 @@ def test_test_full_failure_does_not_advance_task(
     import hive_planner.implementation_loop as mod
 
     tasks = loop_root / "docs/specs/feature-x/tasks.md"
+    from hive_planner.spec_drift import SPEC_CREATION_TASKS_TAIL
+
     tasks.write_text(
-        "# tasks\n\n## Slice A\n\n- [ ] T001 do the thing\n\n## Slice B\n\n- [ ] T002 later\n",
+        "# tasks\n\n## Slice A\n\n- [ ] T001 do the thing\n\n## Slice B\n\n- [ ] T002 later\n"
+        + SPEC_CREATION_TASKS_TAIL,
         encoding="utf-8",
     )
     _install_ready(loop_root)
@@ -715,8 +741,11 @@ def test_checker_needs_sign_off_blocks_coder(loop_root: Path) -> None:
 
 def test_missing_test_full_binary_blocks_without_crash(loop_root: Path) -> None:
     tasks = loop_root / "docs/specs/feature-x/tasks.md"
+    from hive_planner.spec_drift import SPEC_CREATION_TASKS_TAIL
+
     tasks.write_text(
-        "# tasks\n\n## Slice A\n\n- [ ] T001 do the thing\n\n## Slice B\n\n- [ ] T002 later\n",
+        "# tasks\n\n## Slice A\n\n- [ ] T001 do the thing\n\n## Slice B\n\n- [ ] T002 later\n"
+        + SPEC_CREATION_TASKS_TAIL,
         encoding="utf-8",
     )
     _install_ready(loop_root)

@@ -20,7 +20,7 @@ Keep these three identifiers in sync:
 
 1. Use kebab-case feature ids (same validation as `hive_planner` cartridge promote).
 2. After `/specify`, confirm the spec folder name matches the Delta micro brief filename (without `.md`).
-3. Set `AGENTS.md` **Active feature** to the same id before implementation.
+3. Run `py -3.11 -m hive_planner spec-create --feature <id>`. It refuses to accept the spec until `spec.md` has User Scenarios, Assumptions, and measurable Success Criteria, and `tasks.md` has the wiring-audit checklist. On success it sets `AGENTS.md` **Active feature** to that id.
 4. Run `py -3.11 -m hive_planner spec-drift-check` before Continual Learning promotion.
 
 ## Template overrides

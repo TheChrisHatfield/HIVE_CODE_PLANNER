@@ -26,6 +26,10 @@ Behavioral candidates (tags or heuristics) rejected before merge to `AGENTS.md`.
 
 `ci-check` includes `spec-drift` step using handoff + drift report.
 
+### R5 — spec creation gates
+
+`hive_planner spec-create --feature <id>` refuses to accept a spec unless `spec.md` has a filled User Scenarios section, a filled Assumptions section, and a measurable Success Criteria section, and `tasks.md` contains the Integration wiring audit checklist. When those gates pass, the command sets `AGENTS.md` **Active feature** to that id. `spec-drift-check` and implementation-loop readiness fail while any gate is open.
+
 ## Out of scope
 
 Auto-editing spec.md, cloud CL sync, non-markdown candidate formats.

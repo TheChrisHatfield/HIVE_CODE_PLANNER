@@ -11,6 +11,7 @@ import json
 import math
 import random
 import re
+import sys
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -887,7 +888,17 @@ After the rest of a reply, follow `skills/lay-footnote/SKILL.md`.
 
 def render_kit_entry() -> str:
     """Install the same engine as a portable scripts/agnostic_loop.py."""
-    return Path(__file__).read_text(encoding="utf-8")
+    candidates = [Path(__file__)]
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        candidates.append(Path(meipass) / "hive_planner" / "agnostic_loop.py")
+    for source in candidates:
+        if source.is_file():
+            return source.read_text(encoding="utf-8")
+    raise OSError(
+        "Agnostic loop script is not in this Hive Planner build "
+        f"({candidates[0]}). Rebuild the portable app so that file is packaged."
+    )
 
 
 def render_kit_remap() -> str:

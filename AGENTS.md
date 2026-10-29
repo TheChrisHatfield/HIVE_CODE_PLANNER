@@ -60,7 +60,7 @@ Primary truth drives the immediate task. Secondary governs behavior. Tertiary is
 
 ## Active feature
 
-**implementation-loop** — post-spec Cursor coding loop; Python coordinator gates (`start` / `handoff` / `accept` / `commit`).
+**controls-execute** — unified Spec Kit + Continual Learning scaffold; replace when real work begins.
 ## Planning source archive
 
 Full thread export (reference only): `docs/HIVE_PLANNING_DEV.md`

@@ -15,7 +15,7 @@ from hive_planner.agents_memory import (
 from hive_planner.ci_handoff import run_ci_check
 from hive_planner.config import RepoPaths, resolve_repo_file_path, is_repo_root, resolve_root
 from hive_planner.roadmap_status import validate_roadmap
-from hive_planner.spec_drift import check_memory_spec_drift
+from hive_planner.spec_drift import check_memory_spec_drift, complete_spec_creation
 from hive_planner.emitter import emit_cartridge
 from hive_planner.impact import ImpactError, build_impact_packet, impact_warnings, write_impact_packet
 from hive_planner.map_sync import sync_impact_maps
@@ -403,6 +403,12 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Do not scan existing Durable Workspace Facts in AGENTS.md",
     )
+
+    spec_create = sub.add_parser(
+        "spec-create",
+        help="Accept a spec only when template sections and the wiring-audit checklist are present, then set AGENTS.md Active feature",
+    )
+    spec_create.add_argument("--feature", required=True, help="Feature id to accept and set as the active handoff feature")
 
     rosetta_eject_parser = sub.add_parser(
         "rosetta-eject",
@@ -1169,6 +1175,16 @@ def main(argv: list[str] | None = None) -> int:
             for action in report.spec_actions:
                 print(f"  - {action}", file=sys.stderr)
         return 0 if report.ok else 1
+
+    if args.command == "spec-create":
+        created = complete_spec_creation(paths, args.feature)
+        print(f"Root: {root}")
+        print(json.dumps(created.to_dict(), indent=2))
+        if created.missing:
+            print("Spec create blocked:", file=sys.stderr)
+            for item in created.missing:
+                print(f"  - {item}", file=sys.stderr)
+        return 0 if created.ok else 1
 
     if args.command == "wiring-audit":
         from hive_planner.wiring_audit import WiringAuditError, check_wiring_audit, record_wiring_audit

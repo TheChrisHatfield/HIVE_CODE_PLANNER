@@ -63,9 +63,13 @@ Load [`docs/planning-rosetta-stone.md`](../../planning-rosetta-stone.md) (`plann
 - [x] T025 Thirty-cycle spec/code gap loop: commit after recode, result case, questions, discovery, blocked start, feature id, 1-pack commit, atomic state write
 - [x] T026 Follow-up gap loop: case-insensitive roles, `result.md`/`test:full` OSError and bad quotes, `state.json` write errors
 
+## Phase 9 — File overlap
+
+- [ ] T030 Before `start` or a feature switch, block when the incoming feature and `state.feature` declare the same plan file target. `--allow-overlap` is the only override. Controls CodeSpec gains **Allow overlap**, unchecked, and Force feature does not set it
+
 ## Active task
 
-**None** — T029 CodeSpec chat phrase and Controls Install CodeSpec.
+**T030** — file-overlap gate on start and switch.
 
 ## Validation log
 
@@ -153,5 +157,12 @@ Load [`docs/planning-rosetta-stone.md`](../../planning-rosetta-stone.md) (`plann
 - appends checker result.md; bug hunt unchanged
 - spec-drift-check --feature implementation-loop: ok
 ```
+
+## After each implementation task — Integration wiring audit (required)
+
+- [x] Traced caller → handler → core (no layer break)
+- [x] No false success when a sub-step failed or was skipped
+- [x] Integration-level validation evidence attached
+- [x] See `.cursor/rules/integration-wiring-audit.mdc`
 
 

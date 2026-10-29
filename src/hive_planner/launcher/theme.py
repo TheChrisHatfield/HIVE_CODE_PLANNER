@@ -28,9 +28,62 @@ FONT_SUBTITLE = ("Segoe UI", 9)
 _wheel_bindings: dict[int, tk.Misc] = {}
 _wheel_stack: list[int] = []
 _wheel_handlers_installed = False
+_wheel_remainder = 0
 
 
-def _resolve_wheel_target() -> tk.Misc | None:
+def _target_for_widget(widget: tk.Misc | None) -> tk.Misc | None:
+    """Registered scroll target for *widget* or the nearest ancestor that has one."""
+    current = widget
+    while current is not None:
+        try:
+            widget_id = current.winfo_id()
+        except (tk.TclError, AttributeError):
+            return None
+        target = _wheel_bindings.get(widget_id)
+        if target is not None:
+            try:
+                if target.winfo_exists():
+                    return target
+            except tk.TclError:
+                pass
+        parent = getattr(current, "master", None)
+        if parent is current:
+            break
+        current = parent
+    return None
+
+
+def _widget_under_pointer(event) -> tk.Misc | None:
+    widget = getattr(event, "widget", None)
+    containing = getattr(widget, "winfo_containing", None) if widget is not None else None
+    x_root = getattr(event, "x_root", None)
+    y_root = getattr(event, "y_root", None)
+    if containing is None or x_root is None or y_root is None:
+        return None
+    try:
+        return containing(int(x_root), int(y_root))
+    except (tk.TclError, TypeError, ValueError):
+        return None
+
+
+def _wheel_steps(delta: int) -> int:
+    """Turn a Windows wheel delta into list lines. Small notches add up to one line."""
+    global _wheel_remainder
+    _wheel_remainder += delta
+    steps = 0
+    while _wheel_remainder >= 120:
+        _wheel_remainder -= 120
+        steps -= 1
+    while _wheel_remainder <= -120:
+        _wheel_remainder += 120
+        steps += 1
+    return steps
+
+
+def _resolve_wheel_target(event=None) -> tk.Misc | None:
+    hovered = _target_for_widget(_widget_under_pointer(event)) if event is not None else None
+    if hovered is not None:
+        return hovered
     while _wheel_stack:
         widget_id = _wheel_stack[-1]
         target = _wheel_bindings.get(widget_id)
@@ -48,21 +101,23 @@ def _resolve_wheel_target() -> tk.Misc | None:
 
 
 def _dispatch_wheel(event) -> str | None:
-    target = _resolve_wheel_target()
-    if target is not None and hasattr(target, "yview_scroll"):
-        target.yview_scroll(int(-1 * (event.delta / 120)), "units")
+    target = _resolve_wheel_target(event)
+    steps = _wheel_steps(int(getattr(event, "delta", 0) or 0))
+    if target is not None and steps and hasattr(target, "yview_scroll"):
+        target.yview_scroll(steps, "units")
+        return "break"
     return None
 
 
-def _dispatch_wheel_up(_event) -> str | None:
-    target = _resolve_wheel_target()
+def _dispatch_wheel_up(event) -> str | None:
+    target = _resolve_wheel_target(event)
     if target is not None and hasattr(target, "yview_scroll"):
         target.yview_scroll(-1, "units")
     return None
 
 
-def _dispatch_wheel_down(_event) -> str | None:
-    target = _resolve_wheel_target()
+def _dispatch_wheel_down(event) -> str | None:
+    target = _resolve_wheel_target(event)
     if target is not None and hasattr(target, "yview_scroll"):
         target.yview_scroll(1, "units")
     return None
@@ -81,10 +136,11 @@ def _ensure_wheel_handlers(root: tk.Misc) -> None:
 
 
 def reset_mousewheel_state_for_tests() -> None:
-    global _wheel_handlers_installed
+    global _wheel_handlers_installed, _wheel_remainder
     _wheel_bindings.clear()
     _wheel_stack.clear()
     _wheel_handlers_installed = False
+    _wheel_remainder = 0
 
 
 def bind_mousewheel(widget: tk.Misc, *, target: tk.Misc | None = None) -> None:
@@ -114,9 +170,19 @@ def bind_mousewheel(widget: tk.Misc, *, target: tk.Misc | None = None) -> None:
         elif widget_id in _wheel_stack:
             _wheel_stack.remove(widget_id)
 
+    def on_wheel(event) -> str | None:
+        return _dispatch_wheel(event)
+
     widget.bind("<Enter>", on_enter, add="+")
     widget.bind("<Leave>", on_leave, add="+")
     widget.bind("<Destroy>", on_destroy, add="+")
+    if sys.platform == "win32":
+        widget.bind("<MouseWheel>", on_wheel, add="+")
+    try:
+        _wheel_bindings[widget.winfo_id()] = scroll_target
+        _ensure_wheel_handlers(widget.winfo_toplevel())
+    except tk.TclError:
+        pass
 
 
 class HoverTooltip:
