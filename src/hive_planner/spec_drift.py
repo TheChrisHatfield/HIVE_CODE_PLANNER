@@ -7,6 +7,18 @@ from pathlib import Path
 from hive_planner.agents_memory import EDITABLE_SECTION, _match_section, _section_bullets, parse_sections
 from hive_planner.config import RepoPaths, validate_feature_id
 
+
+def _read_text(path: Path) -> str:
+    """Read a spec or AGENTS file saved as UTF-8 (with or without BOM) or UTF-16."""
+    try:
+        return path.read_text(encoding="utf-8-sig")
+    except UnicodeDecodeError:
+        try:
+            return path.read_text(encoding="utf-16")
+        except UnicodeError:
+            return path.read_text(encoding="utf-8", errors="replace")
+
+
 FEATURE_RE = re.compile(r"\*\*([a-z0-9][a-z0-9-]*)\*\*")
 
 PLACEHOLDER_FEATURES = frozenset({"none", "tbd", "placeholder"})
@@ -119,7 +131,7 @@ def parse_active_feature(paths: RepoPaths) -> str | None:
     agents_path = paths.root / "AGENTS.md"
     if not agents_path.exists():
         return None
-    sections = parse_sections(agents_path.read_text(encoding="utf-8", errors="replace"))
+    sections = parse_sections(_read_text(agents_path))
     active_body = sections.get("Active feature", "")
     if not active_body:
         for title, body in sections.items():
@@ -188,7 +200,7 @@ def repair_agents_active_feature(paths: RepoPaths, feature: str | None = None) -
     agents_path = paths.root / "AGENTS.md"
     if not agents_path.is_file():
         return AgentsRepairResult(False, detail="AGENTS.md missing")
-    text = agents_path.read_text(encoding="utf-8", errors="replace")
+    text = _read_text(agents_path)
     match = ACTIVE_FEATURE_SECTION_RE.search(text)
     if not match:
         return AgentsRepairResult(False, detail="Active feature section not found")
@@ -212,7 +224,7 @@ def repair_agents_rosetta_section(paths: RepoPaths) -> AgentsRepairResult:
     agents_path = paths.root / "AGENTS.md"
     if not agents_path.is_file():
         return AgentsRepairResult(False, detail="AGENTS.md missing")
-    text = agents_path.read_text(encoding="utf-8", errors="replace")
+    text = _read_text(agents_path)
     if not agents_missing_rosetta_section(text):
         return AgentsRepairResult(False, detail="Rosetta section already present")
     updated = inject_agents_rosetta_section(text)
@@ -369,7 +381,7 @@ def spec_creation_gaps(paths: RepoPaths, feature: str, *, include_active: bool =
     spec_path = paths.root / "docs" / "specs" / feature / "spec.md"
     tasks_path = paths.root / "docs" / "specs" / feature / "tasks.md"
     if spec_path.is_file():
-        spec_text = spec_path.read_text(encoding="utf-8", errors="replace")
+        spec_text = _read_text(spec_path)
         scenarios = _section_body(spec_text, _USER_SCENARIOS_HEADING)
         assumptions = _section_body(spec_text, _ASSUMPTIONS_HEADING)
         success = _section_body(spec_text, _SUCCESS_HEADING)
@@ -386,7 +398,7 @@ def spec_creation_gaps(paths: RepoPaths, feature: str, *, include_active: bool =
         elif not _success_criteria_filled(success):
             gaps.append("spec.md Success Criteria section has no measurable criterion")
     if tasks_path.is_file():
-        tasks_text = tasks_path.read_text(encoding="utf-8", errors="replace")
+        tasks_text = _read_text(tasks_path)
         if "Integration wiring audit" not in tasks_text:
             gaps.append("tasks.md missing Integration wiring audit checklist")
     if include_active and parse_active_feature(paths) != feature:
@@ -407,7 +419,7 @@ def complete_spec_creation(paths: RepoPaths, feature: str) -> SpecHandoffReport:
     if gaps:
         return SpecHandoffReport(feature=feature, ok=False, missing=gaps)
     agents_path = paths.root / "AGENTS.md"
-    before = agents_path.read_text(encoding="utf-8") if agents_path.is_file() else None
+    before = _read_text(agents_path) if agents_path.is_file() else None
     repair = repair_agents_active_feature(paths, feature)
     if not repair.repaired and repair.detail not in {"already set", "already correct"}:
         return SpecHandoffReport(
@@ -417,7 +429,7 @@ def complete_spec_creation(paths: RepoPaths, feature: str) -> SpecHandoffReport:
         )
     report = check_spec_handoff(paths, feature)
     if not report.ok and before is not None and agents_path.is_file():
-        if agents_path.read_text(encoding="utf-8") != before:
+        if _read_text(agents_path) != before:
             agents_path.write_text(before, encoding="utf-8", newline="\n")
     return report
 
@@ -440,7 +452,7 @@ def check_spec_handoff(paths: RepoPaths, feature: str | None = None) -> SpecHand
         missing.extend(missing_handoff_rosetta_navigation(paths, active))
         missing.extend(spec_creation_gaps(paths, active, include_active=True))
         if agents_path.is_file():
-            agents_text = agents_path.read_text(encoding="utf-8", errors="replace")
+            agents_text = _read_text(agents_path)
             if agents_missing_rosetta_section(agents_text):
                 missing.append("AGENTS.md missing Planning Rosetta Stone section")
     return SpecHandoffReport(feature=active, ok=not missing, missing=missing)
@@ -450,7 +462,7 @@ def _read_spec_text(paths: RepoPaths, feature: str) -> str:
     spec_path = paths.root / "docs" / "specs" / feature / "spec.md"
     if not spec_path.exists():
         return ""
-    return spec_path.read_text(encoding="utf-8", errors="replace").lower()
+    return _read_text(spec_path).lower()
 
 
 def _bullet_reflected_in_spec(bullet: str, spec_text: str) -> bool:
@@ -476,7 +488,7 @@ def _collect_agents_facts(paths: RepoPaths) -> list[str]:
     agents_path = paths.root / "AGENTS.md"
     if not agents_path.exists():
         return []
-    sections = parse_sections(agents_path.read_text(encoding="utf-8", errors="replace"))
+    sections = parse_sections(_read_text(agents_path))
     key = _match_section(sections, EDITABLE_SECTION)
     if key is None:
         return []
@@ -517,7 +529,7 @@ def check_memory_spec_drift(
                 spec_actions.append(f"Candidates file not found: {candidate_file}")
         else:
             candidate_bullets = _collect_bullets_from_candidates(
-                candidate_file.read_text(encoding="utf-8", errors="replace")
+                _read_text(candidate_file)
             )
     agent_bullets = _collect_agents_facts(paths) if include_agents_facts else []
 

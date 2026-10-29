@@ -451,3 +451,19 @@ def test_bootstrap_example_spec_passes_creation_gates(tmp_path: Path) -> None:
     (spec_dir / "tasks.md").write_text(_example_tasks(), encoding="utf-8")
 
     assert spec_creation_gaps(paths, "example-feature") == []
+
+
+def test_utf16_spec_and_tasks_still_pass_creation_gates(tmp_path: Path) -> None:
+    from hive_planner.spec_drift import (
+        SPEC_CREATION_SPEC_TAIL,
+        SPEC_CREATION_TASKS_TAIL,
+        spec_creation_gaps,
+    )
+
+    paths = RepoPaths(root=tmp_path)
+    spec_dir = paths.root / "docs" / "specs" / "feat"
+    spec_dir.mkdir(parents=True)
+    (spec_dir / "spec.md").write_text("# Spec\n" + SPEC_CREATION_SPEC_TAIL, encoding="utf-16")
+    (spec_dir / "tasks.md").write_text("# Tasks\n" + SPEC_CREATION_TASKS_TAIL, encoding="utf-16")
+
+    assert spec_creation_gaps(paths, "feat", include_active=False) == []
