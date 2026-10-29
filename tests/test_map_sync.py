@@ -305,3 +305,35 @@ def test_undecodable_test_file_does_not_abort_sync(tmp_path: Path) -> None:
     assert "src/hive_planner/emitter.py" in report.test_added
     test_map = (paths.root / "docs" / "change-impact" / "test-map.md").read_text(encoding="utf-8")
     assert "tests/test_ok.py" in test_map
+
+
+def test_sync_keeps_a_note_row_and_the_rows_after_it(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    _write_src_module(paths, "src/hive_planner/emitter.py", "pass\n")
+    _write_test(paths, "test_auto.py", "from hive_planner.emitter import select_chunks\n")
+    _write_project_map(
+        paths,
+        "# Project Map\n\n| Module | Role | Spec / Delta deps |\n|--------|------|-------------------|\n",
+    )
+    note = "| `.cursor/hooks/*.py` + hive-continual-learning stop hook | `tests/test_cursor_hooks_compat.py` |"
+    _write_test_map(
+        paths,
+        "# Test Map\n\n"
+        "| Source module | Tests |\n"
+        "|---------------|-------|\n"
+        "| `src/hive_planner/emitter.py` | `tests/test_manual.py` |\n"
+        f"{note}\n"
+        "| `docs/delta/*.md` | `tests/test_delta.py` |\n",
+    )
+
+    sync_impact_maps(paths)
+    test_map = (paths.root / "docs" / "change-impact" / "test-map.md").read_text(encoding="utf-8")
+
+    assert note in test_map
+    assert "`tests/test_manual.py`" in test_map
+    assert "`tests/test_auto.py`" in test_map
+    assert "`tests/test_delta.py`" in test_map
+    assert test_map.index(note) < test_map.index("##") if "##" in test_map else True
+    table = test_map.split("##")[0]
+    assert note in table
+    assert "`docs/delta/*.md`" in table

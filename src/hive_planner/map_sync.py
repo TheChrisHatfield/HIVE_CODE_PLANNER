@@ -139,9 +139,12 @@ def _escape_table_cell(text: str) -> str:
     return text.replace("|", "\\|")
 
 
-def _parse_project_map(content: str) -> tuple[list[str], dict[str, tuple[str, str]], list[str]]:
+def _parse_project_map(
+    content: str,
+) -> tuple[list[str], dict[str, tuple[str, str]], list[str], list[str]]:
     header: list[str] = []
     footer: list[str] = []
+    preserved: list[str] = []
     rows: dict[str, tuple[str, str]] = {}
     in_table = False
     table_seen = False
@@ -153,22 +156,26 @@ def _parse_project_map(content: str) -> tuple[list[str], dict[str, tuple[str, st
         if line.startswith("|--------"):
             continue
         if in_table:
-            match = PROJECT_ROW_RE.match(line)
-            if match:
-                module, role, deps = match.group(1), match.group(2), match.group(3)
-                rows[module] = (role, deps)
+            if line.startswith("|"):
+                match = PROJECT_ROW_RE.match(line)
+                if match:
+                    module, role, deps = match.group(1), match.group(2), match.group(3)
+                    rows[module] = (role, deps)
+                else:
+                    preserved.append(line)
                 continue
             in_table = False
         if table_seen and not in_table:
             footer.append(line)
         elif not table_seen:
             header.append(line)
-    return header, rows, footer
+    return header, rows, footer, preserved
 
 
-def _parse_test_map(content: str) -> tuple[list[str], dict[str, set[str]], list[str]]:
+def _parse_test_map(content: str) -> tuple[list[str], dict[str, set[str]], list[str], list[str]]:
     header: list[str] = []
     footer: list[str] = []
+    preserved: list[str] = []
     rows: dict[str, set[str]] = {}
     in_table = False
     table_seen = False
@@ -180,24 +187,28 @@ def _parse_test_map(content: str) -> tuple[list[str], dict[str, set[str]], list[
         if line.startswith("|---------------"):
             continue
         if in_table:
-            match = TABLE_ROW_RE.match(line)
-            if match:
-                module = match.group(1)
-                tests = [t.strip().strip("`") for t in match.group(2).split(",")]
-                rows[module] = {t for t in tests if t}
+            if line.startswith("|"):
+                match = TABLE_ROW_RE.match(line)
+                if match:
+                    module = match.group(1)
+                    tests = [t.strip().strip("`") for t in match.group(2).split(",")]
+                    rows[module] = {t for t in tests if t}
+                else:
+                    preserved.append(line)
                 continue
             in_table = False
         if table_seen and not in_table:
             footer.append(line)
         elif not table_seen:
             header.append(line)
-    return header, rows, footer
+    return header, rows, footer, preserved
 
 
 def _render_project_map(
     header_lines: list[str],
     rows: dict[str, tuple[str, str]],
     footer_lines: list[str] | None = None,
+    preserved_lines: list[str] | None = None,
 ) -> str:
     body = list(header_lines)
     if body and body[-1].strip():
@@ -213,6 +224,7 @@ def _render_project_map(
         body.append(
             f"| `{module}` | {_escape_table_cell(role)} | {_escape_table_cell(deps)} |"
         )
+    body.extend(preserved_lines or [])
     if footer_lines:
         if body and body[-1].strip():
             body.append("")
@@ -224,6 +236,7 @@ def _render_test_map(
     header_lines: list[str],
     rows: dict[str, set[str]],
     footer_lines: list[str] | None = None,
+    preserved_lines: list[str] | None = None,
 ) -> str:
     body = list(header_lines)
     if body and body[-1].strip():
@@ -237,6 +250,7 @@ def _render_test_map(
     for module in sorted(rows):
         tests = ", ".join(f"`{t}`" for t in sorted(rows[module]))
         body.append(f"| `{module}` | {_escape_table_cell(tests)} |")
+    body.extend(preserved_lines or [])
     if footer_lines:
         if body and body[-1].strip():
             body.append("")
@@ -253,7 +267,7 @@ def sync_impact_maps(paths: RepoPaths, *, dry_run: bool = False) -> MapSyncRepor
     src_modules = discover_src_modules(paths)
     test_mappings = discover_test_mappings(paths)
 
-    project_header, project_rows, project_footer = _parse_project_map(
+    project_header, project_rows, project_footer, project_preserved = _parse_project_map(
         project_path.read_text(encoding="utf-8") if project_path.exists() else "# Project Map\n"
     )
     discovered_src = set(src_modules)
@@ -274,13 +288,13 @@ def sync_impact_maps(paths: RepoPaths, *, dry_run: bool = False) -> MapSyncRepor
         merged_project[module] = (role, "(auto-sync)")
         report.project_added.append(module)
 
-    test_header, test_rows, test_footer = _parse_test_map(
+    test_header, test_rows, test_footer, test_preserved = _parse_test_map(
         test_path.read_text(encoding="utf-8") if test_path.exists() else "# Test Map\n"
     )
     merged_tests: dict[str, set[str]] = {
         k: set(v)
         for k, v in test_rows.items()
-        if k.startswith("src/") and k not in discovered_src
+        if not k.startswith("src/") or k not in discovered_src
     }
     for module in src_modules:
         prior = test_rows.get(module, set())
@@ -304,11 +318,13 @@ def sync_impact_maps(paths: RepoPaths, *, dry_run: bool = False) -> MapSyncRepor
     if not dry_run:
         change_dir.mkdir(parents=True, exist_ok=True)
         project_path.write_text(
-            _render_project_map(project_header, merged_project, project_footer),
+            _render_project_map(
+                project_header, merged_project, project_footer, project_preserved
+            ),
             encoding="utf-8",
         )
         test_path.write_text(
-            _render_test_map(test_header, merged_tests, test_footer),
+            _render_test_map(test_header, merged_tests, test_footer, test_preserved),
             encoding="utf-8",
         )
 
