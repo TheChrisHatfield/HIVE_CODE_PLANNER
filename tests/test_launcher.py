@@ -6033,12 +6033,12 @@ def test_project_done_callback_keeps_late_result_with_origin_profile(tmp_path: P
 
     callback = app._project_done_callback("Impact map sync", delivered.append)
     app.config.active_project = project_b
-    callback({"ok": True})
+    callback({"ok": True, "detail": "maps updated"})
 
     assert delivered == []
     origin_history = app._home_log_histories[normalize_project_path(project_a)]
     assert origin_history == [
-        "Impact map sync finished after switching profiles; result retained for this project."
+        "Impact map sync finished after switching profiles: maps updated"
     ]
 
     app.config.active_project = project_a

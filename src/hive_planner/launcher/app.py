@@ -350,9 +350,10 @@ class HivePlannerApp:
 
         def scoped_done(result) -> None:
             if origin and origin != self._active_link_key():
+                detail = self._result_detail(result)
                 self._remember_home_log_for_scope(
                     origin,
-                    f"{label} finished after switching profiles; result retained for this project.",
+                    f"{label} finished after switching profiles: {detail}",
                 )
                 return
             on_done(result)
