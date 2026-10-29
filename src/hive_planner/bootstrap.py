@@ -127,6 +127,14 @@ _WORKSPACE_OPEN_COMMAND = "py -3.11 .cursor/hooks/hive_workspace_open.py"
 _WORKSPACE_OPEN_MARKER = "hive_workspace_open.py"
 
 
+def _read_hooks_json_text(path: Path) -> str:
+    """Read hooks.json saved as UTF-8 (with or without BOM) or UTF-16."""
+    try:
+        return path.read_text(encoding="utf-8-sig")
+    except UnicodeDecodeError:
+        return path.read_text(encoding="utf-16")
+
+
 def _ensure_workspace_open_hooks_json(
     target: Path,
     *,
@@ -143,8 +151,8 @@ def _ensure_workspace_open_hooks_json(
         _copy_file(template_path, target, rel, force=True, written=written)
         return
     try:
-        data = json.loads(dest.read_text(encoding="utf-8-sig"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        data = json.loads(_read_hooks_json_text(dest))
+    except (OSError, UnicodeError, json.JSONDecodeError):
         if force:
             _copy_file(template_path, target, rel, force=True, written=written)
         else:
