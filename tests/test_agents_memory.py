@@ -1017,6 +1017,29 @@ def test_normalize_candidates_requires_bullets() -> None:
         normalize_candidates_text("user: hello\nassistant: hi\n")
 
 
+def test_agents_ingest_cli_accepts_an_output_outside_the_repo(
+    tmp_path: Path, capsys: pytest.CaptureFixture
+) -> None:
+    from hive_planner.cli import main
+
+    project = tmp_path / "proj"
+    project.mkdir()
+    source = project / "export.md"
+    source.write_text("- Use py -3.11 for local commands.\n", encoding="utf-8")
+    outside = tmp_path / "elsewhere" / "candidates.md"
+
+    code = main(
+        ["--root", str(project), "agents-ingest", "--from", str(source), "--out", str(outside)]
+    )
+
+    captured = capsys.readouterr()
+    assert code == 0
+    assert outside.is_file()
+    assert "Use py -3.11 for local commands." in outside.read_text(encoding="utf-8")
+    assert str(outside) in captured.out
+    assert captured.err == ""
+
+
 def test_agents_apply_cli_prints_noop_when_already_present(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
 ) -> None:

@@ -1154,7 +1154,11 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Error: {exc}", file=sys.stderr)
             return 1
         print(f"Root: {root}")
-        print(f"Wrote normalized candidates: {out_path.relative_to(root)}")
+        try:
+            shown = out_path.relative_to(root)
+        except ValueError:
+            shown = out_path
+        print(f"Wrote normalized candidates: {shown}")
         return 0
 
     if args.command == "spec-drift-check":
