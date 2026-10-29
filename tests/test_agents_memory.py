@@ -129,6 +129,29 @@ def test_lint_ignores_bullets_inside_fenced_code(tmp_path: Path) -> None:
     assert sum("Behavioral bullet" in issue.message for issue in report.issues) == 1
 
 
+def test_fenced_example_does_not_block_the_same_operational_bullet() -> None:
+    from hive_planner.agents_memory import _evaluate_candidates
+
+    text = _minimal_agents().replace(
+        "- Existing durable fact one.",
+        "\n".join(
+            [
+                "- Existing durable fact one.",
+                "",
+                "```markdown",
+                "- Use the portable rebuild script.",
+                "```",
+            ]
+        ),
+    )
+    accepted, rejected, _, _ = _evaluate_candidates(
+        parse_sections(text),
+        ["Use the portable rebuild script. # operational"],
+    )
+    assert [item.split(" # ")[0] for item in accepted] == ["Use the portable rebuild script."]
+    assert rejected == []
+
+
 def test_lint_duplicate_bullets_warns(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     text = _minimal_agents()

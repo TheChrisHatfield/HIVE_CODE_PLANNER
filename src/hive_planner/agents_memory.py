@@ -182,10 +182,15 @@ def parse_sections(text: str) -> dict[str, str]:
 
 def _section_bullets(section_body: str) -> list[tuple[int, str]]:
     bullets: list[tuple[int, str]] = []
+    in_fence = False
     for idx, line in enumerate(section_body.splitlines(), start=1):
         stripped = line.strip()
-        if stripped.startswith("- "):
-            bullets.append((idx, stripped[2:].strip()))
+        if stripped.startswith("```"):
+            in_fence = not in_fence
+            continue
+        if in_fence or not stripped.startswith("- "):
+            continue
+        bullets.append((idx, stripped[2:].strip()))
     return bullets
 
 
