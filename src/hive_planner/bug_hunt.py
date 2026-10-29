@@ -458,13 +458,21 @@ def render_continue_hook() -> str:
     )
 
 
+def _read_hooks_json_text(path: Path) -> str:
+    """Read hooks.json saved as UTF-8 (with or without BOM) or UTF-16."""
+    try:
+        return path.read_text(encoding="utf-8-sig")
+    except UnicodeDecodeError:
+        return path.read_text(encoding="utf-16")
+
+
 def _continue_hook_registered(root: Path) -> bool:
     path = Path(root) / HOOKS_JSON_REL
     if not path.is_file():
         return False
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        data = json.loads(_read_hooks_json_text(path))
+    except (OSError, UnicodeError, json.JSONDecodeError):
         return False
     hooks = data.get("hooks") if isinstance(data, dict) else None
     stop = hooks.get("stop") if isinstance(hooks, dict) else None
@@ -480,8 +488,8 @@ def _hooks_document(root: Path) -> dict:
     path = Path(root) / HOOKS_JSON_REL
     if path.is_file():
         try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            data = json.loads(_read_hooks_json_text(path))
+        except (OSError, UnicodeError, json.JSONDecodeError) as exc:
             raise BugHuntError(f"existing hooks.json is not valid JSON: {path}") from exc
     else:
         data = {"version": 1, "hooks": {}}

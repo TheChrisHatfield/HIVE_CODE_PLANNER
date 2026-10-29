@@ -447,6 +447,29 @@ def test_install_does_not_replace_broken_hooks_json(tmp_path: Path) -> None:
     assert not (tmp_path / ".cursor" / "commands" / "bug-hunt.md").exists()
 
 
+def test_install_merges_a_hooks_file_with_a_bom_or_utf16(tmp_path: Path) -> None:
+    import json
+
+    original = {"version": 1, "hooks": {"workspaceOpen": [{"command": "py -3.11 keep.py"}]}}
+    payload = json.dumps(original)
+    for encoding, write in (
+        ("utf-8-sig", lambda path: path.write_bytes(b"\xef\xbb\xbf" + payload.encode("utf-8"))),
+        ("utf-16", lambda path: path.write_text(payload, encoding="utf-16")),
+    ):
+        project = tmp_path / encoding
+        hooks = project / ".cursor" / "hooks.json"
+        hooks.parent.mkdir(parents=True)
+        write(hooks)
+        install_bug_hunt(project, iterations=50, pause_seconds=10)
+        data = json.loads(hooks.read_text(encoding="utf-8"))
+        assert data["hooks"]["workspaceOpen"][0]["command"] == "py -3.11 keep.py"
+        assert any(
+            item["command"] == "py -3.11 .cursor/hooks/bug_hunt_continue.py"
+            for item in data["hooks"]["stop"]
+        )
+        assert missing_bug_hunt_artifacts(project) == []
+
+
 def test_install_leaves_no_tmp_bug_hunt_files(tmp_path: Path) -> None:
     install_bug_hunt(tmp_path, iterations=50)
     leftovers = [path for path in tmp_path.rglob("*.tmp") if path.is_file()]
