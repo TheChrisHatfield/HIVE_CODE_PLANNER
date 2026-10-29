@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from hive_planner.launcher.service import (
+    _loads_workspace_json,
     cl_runtime_status_label,
     read_code_workspace_folders,
     run_cartridge_import_folder,
@@ -33,6 +34,29 @@ def test_bom_workspace_file_uses_its_folder_not_the_parent(tmp_path: Path) -> No
     workspace.write_bytes(b"\xef\xbb\xbf" + payload.encode("utf-8"))
     assert read_code_workspace_folders(workspace) == [project.resolve()]
     assert workspace_primary_folder(workspace) == project.resolve()
+
+
+def test_jsonc_workspace_file_uses_its_folder_not_the_parent(tmp_path: Path) -> None:
+    parent = tmp_path / "links"
+    parent.mkdir()
+    project = tmp_path / "app"
+    project.mkdir()
+    workspace = parent / "hive.code-workspace"
+    workspace.write_text(
+        "{\n"
+        "  // linked project\n"
+        "  \"folders\": [\n"
+        f"    {{ \"path\": {json.dumps(str(project))}, }},\n"
+        "  ],\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    assert read_code_workspace_folders(workspace) == [project.resolve()]
+    assert workspace_primary_folder(workspace) == project.resolve()
+    kept = _loads_workspace_json(
+        '{ /* note */ "folders": [ { "path": "keep // still", } ] }'
+    )
+    assert kept["folders"][0]["path"] == "keep // still"
 
 
 def test_utf16_workspace_file_lists_its_folder(tmp_path: Path) -> None:

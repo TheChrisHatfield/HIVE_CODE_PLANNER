@@ -546,13 +546,104 @@ def _read_workspace_text(workspace_file: Path) -> str | None:
         return None
 
 
+def _loads_workspace_json(text: str):
+    """Parse a .code-workspace file. Cursor accepts comments and trailing commas."""
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+    stripped = _strip_jsonc(text)
+    try:
+        return json.loads(stripped)
+    except json.JSONDecodeError:
+        return None
+
+
+def _strip_jsonc(text: str) -> str:
+    without_comments = _strip_json_comments(text)
+    return _strip_trailing_commas(without_comments)
+
+
+def _strip_json_comments(text: str) -> str:
+    out: list[str] = []
+    i = 0
+    n = len(text)
+    in_string = False
+    escape = False
+    while i < n:
+        ch = text[i]
+        if in_string:
+            out.append(ch)
+            if escape:
+                escape = False
+            elif ch == "\\":
+                escape = True
+            elif ch == '"':
+                in_string = False
+            i += 1
+            continue
+        if ch == '"':
+            in_string = True
+            out.append(ch)
+            i += 1
+            continue
+        if ch == "/" and i + 1 < n and text[i + 1] == "/":
+            i += 2
+            while i < n and text[i] not in "\r\n":
+                i += 1
+            continue
+        if ch == "/" and i + 1 < n and text[i + 1] == "*":
+            i += 2
+            while i + 1 < n and not (text[i] == "*" and text[i + 1] == "/"):
+                i += 1
+            i = min(n, i + 2)
+            continue
+        out.append(ch)
+        i += 1
+    return "".join(out)
+
+
+def _strip_trailing_commas(text: str) -> str:
+    out: list[str] = []
+    i = 0
+    n = len(text)
+    in_string = False
+    escape = False
+    while i < n:
+        ch = text[i]
+        if in_string:
+            out.append(ch)
+            if escape:
+                escape = False
+            elif ch == "\\":
+                escape = True
+            elif ch == '"':
+                in_string = False
+            i += 1
+            continue
+        if ch == '"':
+            in_string = True
+            out.append(ch)
+            i += 1
+            continue
+        if ch == ",":
+            j = i + 1
+            while j < n and text[j] in " \t\r\n":
+                j += 1
+            if j < n and text[j] in "}]":
+                i += 1
+                continue
+        out.append(ch)
+        i += 1
+    return "".join(out)
+
+
 def read_code_workspace_folders(workspace_file: Path) -> list[Path]:
     text = _read_workspace_text(workspace_file)
     if text is None:
         return []
-    try:
-        data = json.loads(text)
-    except json.JSONDecodeError:
+    data = _loads_workspace_json(text)
+    if not isinstance(data, dict):
         return []
     folders: list[Path] = []
     for entry in data.get("folders") or []:
