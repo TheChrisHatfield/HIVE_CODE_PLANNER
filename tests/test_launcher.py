@@ -2964,12 +2964,14 @@ def _minimal_unified_project(tmp_path: Path, feature: str = "my-feature") -> Pat
     )
     _write_handoff_bundle(project, feature)
     tasks_path = project / "docs" / "specs" / feature / "tasks.md"
-    tasks_path.write_text(
-        tasks_path.read_text(encoding="utf-8").rstrip()
-        + "\n\n"
-        + _tasks_wiring_audit_block().replace("- [ ]", "- [x]"),
-        encoding="utf-8",
-    )
+    tasks_text = tasks_path.read_text(encoding="utf-8")
+    if "Integration wiring audit" in tasks_text:
+        for line in _tasks_wiring_audit_block().splitlines():
+            if line.startswith("- [ ]"):
+                tasks_text = tasks_text.replace(line, line.replace("- [ ]", "- [x]", 1))
+    else:
+        tasks_text = tasks_text.rstrip() + "\n\n" + _tasks_wiring_audit_block().replace("- [ ]", "- [x]")
+    tasks_path.write_text(tasks_text, encoding="utf-8")
     write_project_profile(project, profile="minimal", project_name="unified-app", agent_handoff_mode=AGENT_HANDOFF_UNIFIED)
     return project
 

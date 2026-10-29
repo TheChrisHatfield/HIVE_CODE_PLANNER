@@ -12,7 +12,7 @@ Load [`docs/planning-rosetta-stone.md`](../../planning-rosetta-stone.md) (`plann
 
 ## Phase 1 — Adapter and delivery script (US1, US3)
 
-- [ ] T001 Add the chat-target adapter interface and outcome values in `src/hive_planner/launcher/chat_target.py`
+- [x] T001 Add the chat-target adapter interface and outcome values in `src/hive_planner/launcher/chat_target.py`
 - [ ] T002 Add the Cursor delivery script and the in-workbench submitter. The script reads `composerHeaders` read-only for the active workspace id, matches the title, skips archived and subagent rows, and writes `request.json`. The submitter calls `submitChatMaybeAbortCurrent` and writes `result.json`. Do not open the desktop bridge and do not call that workbench function from Hive's process
 - [ ] T003 `tests/test_cursor_chat_delivery.py` for duplicate titles, another workspace ignored, unknown title, draft refused, loop not installed refused, already generating, and a failed script
 
@@ -30,7 +30,7 @@ Load [`docs/planning-rosetta-stone.md`](../../planning-rosetta-stone.md) (`plann
 
 ## After each implementation task — Integration wiring audit (required)
 
-- [ ] Traced caller → handler → core (no layer break)
-- [ ] No false success when a sub-step failed or was skipped
-- [ ] Integration-level validation evidence attached
-- [ ] See `.cursor/rules/integration-wiring-audit.mdc`
+- [x] Traced caller → handler → core (no layer break)
+- [x] No false success when a sub-step failed or was skipped
+- [x] Integration-level validation evidence attached
+- [x] See `.cursor/rules/integration-wiring-audit.mdc`
