@@ -13,7 +13,7 @@ Load [`docs/planning-rosetta-stone.md`](../../planning-rosetta-stone.md) (`plann
 ## Phase 1 — Adapter and delivery script (US1, US3)
 
 - [x] T001 Add the chat-target adapter interface and outcome values in `src/hive_planner/launcher/chat_target.py`
-- [ ] T002 Add the Cursor delivery script and the in-workbench submitter. The script reads `composerHeaders` read-only for the active workspace id, matches the title, skips archived and subagent rows, and writes `request.json`. The submitter calls `submitChatMaybeAbortCurrent` and writes `result.json`. Do not open the desktop bridge and do not call that workbench function from Hive's process
+- [x] T002 Add the Cursor delivery script and the in-workbench submitter. The script reads `composerHeaders` read-only for the active workspace id, matches the title, skips archived and subagent rows, and writes `request.json`. The submitter calls `submitChatMaybeAbortCurrent` and writes `result.json`. Do not open the desktop bridge and do not call that workbench function from Hive's process
 - [ ] T003 `tests/test_cursor_chat_delivery.py` for duplicate titles, another workspace ignored, unknown title, draft refused, loop not installed refused, already generating, and a failed script
 
 ## Phase 2 — Controls block (US1, US2)
