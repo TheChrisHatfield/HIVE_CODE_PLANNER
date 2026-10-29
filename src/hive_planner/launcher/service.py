@@ -2115,7 +2115,7 @@ def peek_hive_planner_mcp(project_root: Path, config: LauncherConfig) -> dict:
     from hive_planner.launcher.mcp_servers import (
         HIVE_PLANNER_MCP_NAME,
         McpConfigError,
-        format_mcp_args,
+        format_mcp_invocation,
         hive_planner_mcp_enabled,
         hive_planner_stdio_launch,
         load_mcp_document,
@@ -2143,13 +2143,14 @@ def peek_hive_planner_mcp(project_root: Path, config: LauncherConfig) -> dict:
     servers = doc.get("mcpServers")
     entry = servers.get(HIVE_PLANNER_MCP_NAME) if isinstance(servers, dict) else None
     enabled = hive_planner_mcp_enabled(doc)
-    proposed = " ".join([command, format_mcp_args(args)]).strip()
+    proposed = format_mcp_invocation(command, args)
     snippet = proposed
     if isinstance(entry, dict) and str(entry.get("command") or "").strip():
         stored_args = entry.get("args") if isinstance(entry.get("args"), list) else []
-        stored = " ".join(
-            [str(entry.get("command")).strip(), format_mcp_args([str(part) for part in stored_args])]
-        ).strip()
+        stored = format_mcp_invocation(
+            str(entry.get("command")).strip(),
+            [str(part) for part in stored_args],
+        )
         if stored:
             snippet = stored
     return {

@@ -48,14 +48,26 @@ def parse_mcp_args(raw: str) -> list[str]:
         raise McpConfigError(str(exc) or "Could not parse args.") from exc
 
 
+def format_mcp_token(text: str) -> str:
+    if not text or any(ch.isspace() for ch in text) or any(ch in text for ch in "\"'"):
+        return '"' + text.replace('"', '\\"') + '"'
+    return text
+
+
 def format_mcp_args(args: list[str]) -> str:
+    return " ".join(format_mcp_token(str(item)) for item in args)
+
+
+def format_mcp_invocation(command: str, args: list[str] | None = None) -> str:
+    """One shell line. A path with spaces stays a single token."""
     parts: list[str] = []
-    for item in args:
-        text = str(item)
-        if not text or any(ch.isspace() for ch in text) or any(ch in text for ch in '"\''):
-            parts.append('"' + text.replace('"', '\\"') + '"')
-        else:
-            parts.append(text)
+    command = str(command or "").strip()
+    if command:
+        parts.append(format_mcp_token(command))
+    if args:
+        formatted = format_mcp_args([str(item) for item in args])
+        if formatted:
+            parts.append(formatted)
     return " ".join(parts)
 
 

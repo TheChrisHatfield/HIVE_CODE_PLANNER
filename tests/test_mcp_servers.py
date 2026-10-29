@@ -75,6 +75,16 @@ def test_peek_launch_snippet_matches_mcp_json_after_python_settings_change(tmp_p
     assert "-3.12" not in peeked["launch_snippet"]
 
 
+def test_format_mcp_invocation_quotes_a_path_with_spaces() -> None:
+    from hive_planner.launcher.mcp_servers import format_mcp_invocation
+
+    text = format_mcp_invocation(
+        r"C:\Program Files\Python311\python.exe",
+        ["-m", "hive_planner", "mcp-serve"],
+    )
+    assert text == '"C:\\Program Files\\Python311\\python.exe" -m hive_planner mcp-serve'
+
+
 def test_settings_enable_mcp_writes_the_active_project(tmp_path: Path, monkeypatch) -> None:
     from hive_planner.launcher.app import HivePlannerApp
 
