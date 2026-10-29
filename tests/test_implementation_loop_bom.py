@@ -52,3 +52,28 @@ def test_bom_state_json_loads_the_installed_pack(tmp_path: Path) -> None:
 
     assert read_installed_pack(tmp_path) == "4-pack"
     assert _load_state(tmp_path).pack == "4-pack"
+
+
+def test_utf16_tasks_file_is_not_treated_as_finished(tmp_path: Path) -> None:
+    feature = "feat"
+    tasks = tmp_path / "docs" / "specs" / feature / "tasks.md"
+    tasks.parent.mkdir(parents=True)
+    tasks.write_text("## Phase\n\n- [ ] T001 first\n", encoding="utf-16")
+
+    task_id, heading, _body = _first_open_task(_read_feature_tasks(tmp_path, feature, "start"))
+
+    assert task_id == "T001"
+    assert heading == "Phase"
+    assert _has_open_task(tasks)
+
+
+def test_utf16_state_json_loads_the_installed_pack(tmp_path: Path) -> None:
+    path = tmp_path / ".hive" / "implementation-loop" / "state.json"
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        json.dumps({"pack": "4-pack", "feature": "feat", "status": "running"}),
+        encoding="utf-16",
+    )
+
+    assert read_installed_pack(tmp_path) == "4-pack"
+    assert _load_state(tmp_path).pack == "4-pack"
