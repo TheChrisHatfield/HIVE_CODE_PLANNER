@@ -1003,3 +1003,22 @@ def test_installed_text_calls_python_gates() -> None:
     assert "Do not `git commit`" in command or "Do not `git commit`" in coordinator
     assert "bug hunt" in command.lower()
     assert "then checker, then reviewer" in coordinator
+
+
+def test_utf16_result_still_shows_the_coder_pass(loop_root: Path) -> None:
+    _install_ready(loop_root)
+    coordinator_start(loop_root, "feature-x")
+    coordinator_handoff(loop_root, "coder")
+    result = loop_root / ".hive" / "implementation-loop" / "result.md"
+    result.write_text(
+        "\n- task: T001\n  role: coder\n  outcome: pass\n  evidence: test\n",
+        encoding="utf-16",
+    )
+
+    checked = coordinator_check(loop_root)
+
+    assert checked.ok is True
+    text = result.read_text(encoding="utf-8")
+    assert "role: coder" in text
+    assert "outcome: pass" in text
+    assert "role: checker" in text

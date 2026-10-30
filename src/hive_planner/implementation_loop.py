@@ -1201,8 +1201,8 @@ def _read_result_text(root: Path, action: str) -> str:
     if not path.is_file():
         return ""
     try:
-        return path.read_text(encoding="utf-8")
-    except OSError as exc:
+        return _read_text(path)
+    except (OSError, UnicodeError) as exc:
         raise CoordinatorError(f"cannot read result.md: {exc}", action=action) from exc
 
 
