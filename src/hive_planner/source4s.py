@@ -324,6 +324,14 @@ def stage_source4s_files(paths: RepoPaths, source_files: list[Path]) -> tuple[li
             rel_under_dest = None
         if rel_under_dest is not None:
             rel = _staged_rel(paths, src)
+            prev = staged_from.get(rel)
+            if prev is not None and prev != src:
+                warnings.append(
+                    f"Replaced staged {Path(rel).name} — kept upload from {src} "
+                    f"(skipped duplicate basename from {prev})"
+                )
+            else:
+                staged_from[rel] = src
             if rel not in copied:
                 copied.append(rel)
             continue

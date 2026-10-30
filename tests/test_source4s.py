@@ -116,6 +116,24 @@ def test_stage_source4s_warns_on_duplicate_basename_in_batch(tmp_path: Path) -> 
     )
 
 
+def test_stage_warns_when_a_new_file_replaces_the_already_staged_basename(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    paths.ensure_dirs()
+    staged = paths.sources / SOURCE4S_DIR_NAME / "notes.txt"
+    staged.parent.mkdir(parents=True, exist_ok=True)
+    staged.write_text("old version", encoding="utf-8")
+    incoming = tmp_path / "fresh" / "notes.txt"
+    incoming.parent.mkdir()
+    incoming.write_text("new version", encoding="utf-8")
+
+    copied, warnings = stage_source4s_files(paths, [staged, incoming])
+
+    assert copied == ["context-library/sources/source4s/notes.txt"]
+    assert len(warnings) == 1
+    assert "duplicate basename" in warnings[0]
+    assert staged.read_text(encoding="utf-8") == "new version"
+
+
 def test_run_source4s_fails_on_duplicate_basename_shortfall(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     paths.ensure_dirs()
