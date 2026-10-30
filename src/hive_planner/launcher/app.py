@@ -4425,7 +4425,17 @@ class HivePlannerApp:
     def _log_loop_gate(self, result: dict, inst: dict | None = None) -> None:
         line = self._format_loop_gate(result) if isinstance(result, dict) else self._result_detail(result)
         self._queue_home_log(line)
-        self._set_controls_last(line)
+        wrote_block = False
+        if inst is not None:
+            last = inst.get("last")
+            if last is not None:
+                try:
+                    last.set(line)
+                    wrote_block = True
+                except tk.TclError:
+                    wrote_block = False
+        if not wrote_block:
+            self._set_controls_last(line)
         self._refresh_home_dashboard()
         failed = self._codespec_failed_step(result, inst) if isinstance(result, dict) else None
         if inst is None:

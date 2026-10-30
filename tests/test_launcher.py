@@ -1694,6 +1694,62 @@ def test_codespec_failure_marks_only_the_block_that_ran() -> None:
     assert "stopped" not in primary["steps"].value
 
 
+def test_codespec_result_line_stays_on_the_block_that_ran() -> None:
+    """A finished command on the second block must not replace the first block's result line."""
+    from hive_planner.launcher.app import HivePlannerApp
+
+    class _Var:
+        def __init__(self, value: str) -> None:
+            self.value = value
+
+        def get(self) -> str:
+            return self.value
+
+        def set(self, value: str) -> None:
+            self.value = value
+
+    class _Label:
+        def pack_forget(self) -> None:
+            return None
+
+        def winfo_ismapped(self) -> int:
+            return 1
+
+        def pack(self, **_kwargs) -> None:
+            return None
+
+    primary = {
+        "loop": _Var("CodeSpec"),
+        "impl_pack": _Var("1-pack"),
+        "last": _Var("first still waiting"),
+        "steps": _Var(""),
+        "steps_label": _Label(),
+    }
+    second = {
+        "loop": _Var("CodeSpec"),
+        "impl_pack": _Var("4-pack"),
+        "last": _Var(""),
+        "steps": _Var(""),
+        "steps_label": _Label(),
+    }
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.config = type("Config", (), {"active_project": ""})()
+    app.controls_impl_pack = primary["impl_pack"]
+    app.controls_last = primary["last"]
+    app._controls_instances = [primary, second]
+    app._queue_home_log = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
+    app._refresh_home_dashboard = lambda **_kwargs: None  # type: ignore[method-assign]
+    app._set_controls_last = lambda text: primary["last"].set(text)  # type: ignore[method-assign]
+
+    app._log_loop_gate(
+        {"ok": True, "action": "handoff", "role": "reviewer"},
+        second,
+    )
+
+    assert second["last"].value
+    assert primary["last"].value == "first still waiting"
+
+
 def test_controls_caption_summarizes_each_loop() -> None:
     from hive_planner.launcher.app import HivePlannerApp
 
