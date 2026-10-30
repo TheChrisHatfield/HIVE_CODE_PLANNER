@@ -328,21 +328,47 @@ SPEC_CREATION_TASKS_TAIL = """
 """
 
 
+def _unfenced_lines(text: str) -> list[tuple[int, str]]:
+    """Lines outside fenced code, with the offset of each line in the original text."""
+    found: list[tuple[int, str]] = []
+    in_fence = False
+    pos = 0
+    for line in text.splitlines(keepends=True):
+        if line.strip().startswith("```"):
+            in_fence = not in_fence
+        elif not in_fence:
+            found.append((pos, line))
+        pos += len(line)
+    return found
+
+
 def _section_body(text: str, heading: re.Pattern[str]) -> str | None:
-    match = heading.search(text)
-    if not match:
+    start: int | None = None
+    level = 1
+    for pos, line in _unfenced_lines(text):
+        match = heading.match(line)
+        if not match:
+            continue
+        marks = re.match(r"#+", line)
+        level = len(marks.group(0)) if marks else 1
+        start = pos + match.end()
+        break
+    if start is None:
         return None
-    line_start = text.rfind("\n", 0, match.start()) + 1
-    marks = re.match(r"#+", text[line_start:])
-    level = len(marks.group(0)) if marks else 1
-    rest = text[match.end() :]
-    nxt = re.search(rf"(?m)^#{{1,{level}}}\s+", rest)
-    return rest[: nxt.start()] if nxt else rest
+    for pos, line in _unfenced_lines(text):
+        if pos < start:
+            continue
+        if re.match(rf"#{{1,{level}}}\s+", line):
+            return text[start:pos]
+    return text[start:]
+
+
+def _visible_lines(body: str) -> list[str]:
+    return [line.strip() for _, line in _unfenced_lines(body)]
 
 
 def _user_scenarios_filled(body: str) -> bool:
-    for line in body.splitlines():
-        stripped = line.strip()
+    for stripped in _visible_lines(body):
         if re.match(r"(?i)^###\s+user story\b", stripped) and "[Brief Title]" not in stripped:
             return True
         if re.match(r"(?i)^###\s+US\d+\b", stripped):
@@ -351,8 +377,7 @@ def _user_scenarios_filled(body: str) -> bool:
 
 
 def _assumptions_filled(body: str) -> bool:
-    for line in body.splitlines():
-        stripped = line.strip()
+    for stripped in _visible_lines(body):
         if not stripped.startswith(("-", "*")):
             continue
         if "[Assumption" in stripped or "[Dependency" in stripped:
@@ -362,8 +387,7 @@ def _assumptions_filled(body: str) -> bool:
 
 
 def _success_criteria_filled(body: str) -> bool:
-    for line in body.splitlines():
-        stripped = line.strip()
+    for stripped in _visible_lines(body):
         if not stripped or stripped.startswith("<!--") or stripped.startswith("-->"):
             continue
         if "[Measurable metric" in stripped:

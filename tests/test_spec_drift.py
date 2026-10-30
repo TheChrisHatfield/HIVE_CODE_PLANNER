@@ -467,3 +467,67 @@ def test_utf16_spec_and_tasks_still_pass_creation_gates(tmp_path: Path) -> None:
     (spec_dir / "tasks.md").write_text("# Tasks\n" + SPEC_CREATION_TASKS_TAIL, encoding="utf-16")
 
     assert spec_creation_gaps(paths, "feat", include_active=False) == []
+
+
+def test_fenced_template_example_does_not_hide_filled_sections(tmp_path: Path) -> None:
+    from hive_planner.spec_drift import (
+        SPEC_CREATION_SPEC_TAIL,
+        SPEC_CREATION_TASKS_TAIL,
+        spec_creation_gaps,
+    )
+
+    paths = RepoPaths(root=tmp_path)
+    spec_dir = paths.root / "docs" / "specs" / "feat"
+    spec_dir.mkdir(parents=True)
+    example = """# Spec
+
+The template looks like this:
+
+```markdown
+## User Scenarios & Testing
+
+### User Story 1 - [Brief Title] (Priority: P1)
+
+## Assumptions
+
+- [Assumption]
+
+## Success Criteria
+
+- **SC-001**: [Measurable metric]
+```
+"""
+    (spec_dir / "spec.md").write_text(example + SPEC_CREATION_SPEC_TAIL, encoding="utf-8")
+    (spec_dir / "tasks.md").write_text("# Tasks\n" + SPEC_CREATION_TASKS_TAIL, encoding="utf-8")
+    assert spec_creation_gaps(paths, "feat", include_active=False) == []
+
+
+def test_fenced_user_story_does_not_satisfy_the_creation_gate(tmp_path: Path) -> None:
+    from hive_planner.spec_drift import spec_creation_gaps
+
+    paths = RepoPaths(root=tmp_path)
+    spec_dir = paths.root / "docs" / "specs" / "feat"
+    spec_dir.mkdir(parents=True)
+    (spec_dir / "spec.md").write_text(
+        """# Spec
+
+## User Scenarios & Testing
+
+```markdown
+### User Story 1 - Operator accepts the spec (Priority: P1)
+```
+
+### User Story 1 - [Brief Title] (Priority: P1)
+
+## Assumptions
+
+- The feature id matches the spec folder name.
+
+## Success Criteria
+
+- **SC-001**: spec-create exits 0 only when these sections are present.
+""",
+        encoding="utf-8",
+    )
+    gaps = spec_creation_gaps(paths, "feat", include_active=False)
+    assert any("no filled user story" in item for item in gaps)
