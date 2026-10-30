@@ -207,9 +207,21 @@ def _match_section(sections: dict[str, str], required: str) -> str | None:
     if required in sections:
         return required
     for title in sections:
-        if title.startswith(required):
+        if _heading_continues(title, required):
             return title
     return None
+
+
+def _heading_continues(title: str, required: str) -> bool:
+    """True when title is the required heading plus a parenthetical or dash note.
+
+    ``Planning Rosetta Stone (required anchor)`` still counts. ``Active feature notes``
+    does not stand in for ``Active feature``.
+    """
+    if not title.startswith(required):
+        return False
+    rest = title[len(required) :].lstrip()
+    return rest.startswith(("(", "—", "-", ":"))
 
 
 def _existing_durable_bullets(sections: dict[str, str]) -> set[str]:

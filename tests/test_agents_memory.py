@@ -94,6 +94,15 @@ other body
     assert sections["Other"] == "other body"
 
 
+def test_lint_prefix_heading_does_not_satisfy_active_feature(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    text = _minimal_agents().replace("## Active feature\n", "## Active feature notes\n")
+    (paths.root / "AGENTS.md").write_text(text, encoding="utf-8")
+    report = lint_agents_md(paths)
+    assert not report.ok
+    assert any("Missing required section: ## Active feature" in issue.message for issue in report.issues)
+
+
 def test_lint_missing_section_errors(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     agents = paths.root / "AGENTS.md"
