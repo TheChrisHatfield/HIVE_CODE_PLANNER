@@ -1596,7 +1596,7 @@ def run_deploy_agent_handoff(
     from hive_planner.bootstrap import BootstrapError, deploy_agent_handoff_scaffold
     from hive_planner.cl_runtime import normalize_cl_runtime, resolve_cl_runtime
     from hive_planner.rosetta_nav import DEPLOY_HANDOFF_NAV_LAYERS, ensure_handoff_rosetta_navigation
-    from hive_planner.spec_drift import BOOTSTRAP_DEFAULT_FEATURE, repair_agents_active_feature, repair_agents_rosetta_section
+    from hive_planner.spec_drift import BOOTSTRAP_DEFAULT_FEATURE, repair_agents_rosetta_section
 
     target, error = linked_install_directory(project_root)
     if error:
@@ -1616,7 +1616,7 @@ def run_deploy_agent_handoff(
     except BootstrapError as exc:
         return {"ok": False, "error": str(exc)}
     target_paths = RepoPaths(root=target)
-    repair = repair_agents_active_feature(target_paths)
+    repair = _repair_active_feature_if_spec_ready(target_paths)
     rosetta_repair = repair_agents_rosetta_section(target_paths)
     patched = ensure_handoff_rosetta_navigation(
         target_paths,
@@ -1987,6 +1987,7 @@ def run_project_implementation_loop_start(
     *,
     allow_dirty: bool = False,
     force_feature: bool = False,
+    allow_overlap: bool = False,
 ) -> dict:
     """Start coordinator gates (same as CLI `implementation-loop start`)."""
     from hive_planner.implementation_loop import CoordinatorError, coordinator_start
@@ -2003,6 +2004,7 @@ def run_project_implementation_loop_start(
             feat,
             allow_dirty=allow_dirty,
             force_feature=force_feature,
+            allow_overlap=allow_overlap,
         )
     except CoordinatorError as exc:
         return _coordinator_error_payload(exc)
