@@ -261,6 +261,34 @@ def test_discover_test_mappings_in_subdirs(tmp_path: Path) -> None:
     assert "tests/integration/test_nested.py" in mapping["src/hive_planner/config.py"]
 
 
+def test_utf16_test_file_and_project_map_still_sync(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    _write_src_module(paths, "src/hive_planner/config.py", '"""Config holder."""\n')
+    test_path = paths.root / "tests" / "test_config.py"
+    test_path.parent.mkdir(parents=True)
+    test_path.write_text("from hive_planner.config import RepoPaths\n", encoding="utf-16")
+    project = (
+        "# Project Map\n\n"
+        "| Module | Role | Spec / Delta deps |\n"
+        "|--------|------|-------------------|\n"
+        "| `src/hive_planner/config.py` | Kept role | `docs/specs/config/` |\n"
+    )
+    target = paths.root / "docs" / "change-impact" / "project-map.md"
+    target.parent.mkdir(parents=True)
+    target.write_text(project, encoding="utf-16")
+    _write_test_map(
+        paths,
+        "# Test Map\n\n| Source module | Tests |\n|---------------|-------|\n",
+    )
+
+    sync_impact_maps(paths)
+
+    project_text = target.read_text(encoding="utf-8")
+    test_text = (paths.root / "docs" / "change-impact" / "test-map.md").read_text(encoding="utf-8")
+    assert "Kept role" in project_text
+    assert "tests/test_config.py" in test_text
+
+
 def test_sync_blank_docstring_uses_filename_and_keeps_real_role(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     _write_src_module(paths, "src/hive_planner/blank.py", '"""\n"""\n')

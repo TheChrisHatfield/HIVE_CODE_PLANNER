@@ -31,6 +31,14 @@ class MapSyncReport:
         }
 
 
+def _read_text(path: Path) -> str:
+    """Read a map or source file saved as UTF-8 (with or without BOM) or UTF-16."""
+    try:
+        return path.read_text(encoding="utf-8-sig")
+    except UnicodeDecodeError:
+        return path.read_text(encoding="utf-16")
+
+
 def discover_src_modules(paths: RepoPaths) -> list[str]:
     src_root = paths.root / "src"
     if not src_root.exists():
@@ -61,7 +69,7 @@ def import_module_to_src_path(import_module: str, repo_root: Path | None = None)
 
 def _imports_in_test_file(test_path: Path, repo_root: Path) -> set[str]:
     try:
-        tree = ast.parse(test_path.read_text(encoding="utf-8-sig"))
+        tree = ast.parse(_read_text(test_path))
     except (SyntaxError, OSError, UnicodeError):
         return set()
     modules: set[str] = set()
@@ -121,8 +129,8 @@ def discover_test_mappings(paths: RepoPaths) -> dict[str, set[str]]:
 
 def _module_role(module_path: Path) -> str:
     try:
-        text = module_path.read_text(encoding="utf-8")
-    except OSError:
+        text = _read_text(module_path)
+    except (OSError, UnicodeError):
         return module_path.stem.replace("_", " ")
     if text.startswith('"""') or text.startswith("'''"):
         quote = text[0:3]
@@ -268,7 +276,7 @@ def sync_impact_maps(paths: RepoPaths, *, dry_run: bool = False) -> MapSyncRepor
     test_mappings = discover_test_mappings(paths)
 
     project_header, project_rows, project_footer, project_preserved = _parse_project_map(
-        project_path.read_text(encoding="utf-8") if project_path.exists() else "# Project Map\n"
+        _read_text(project_path) if project_path.exists() else "# Project Map\n"
     )
     discovered_src = set(src_modules)
     # Non-src manuals + existing src/** rows not rediscovered (other packages / orphans).
@@ -289,7 +297,7 @@ def sync_impact_maps(paths: RepoPaths, *, dry_run: bool = False) -> MapSyncRepor
         report.project_added.append(module)
 
     test_header, test_rows, test_footer, test_preserved = _parse_test_map(
-        test_path.read_text(encoding="utf-8") if test_path.exists() else "# Test Map\n"
+        _read_text(test_path) if test_path.exists() else "# Test Map\n"
     )
     merged_tests: dict[str, set[str]] = {
         k: set(v)
