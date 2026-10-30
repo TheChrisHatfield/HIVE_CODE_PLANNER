@@ -135,6 +135,18 @@ def _read_hooks_json_text(path: Path) -> str:
         return path.read_text(encoding="utf-16")
 
 
+def _hooks_json_is_plain_utf8(path: Path) -> bool:
+    """True when Cursor can JSON.parse the file (UTF-8, no BOM)."""
+    raw = path.read_bytes()
+    if raw.startswith((b"\xef\xbb\xbf", b"\xff\xfe", b"\xfe\xff")):
+        return False
+    try:
+        raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return False
+    return True
+
+
 def _ensure_workspace_open_hooks_json(
     target: Path,
     *,
@@ -177,6 +189,10 @@ def _ensure_workspace_open_hooks_json(
         for item in events
     )
     if already:
+        if not _hooks_json_is_plain_utf8(dest):
+            dest.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+            if rel not in written:
+                written.append(rel)
         return
     events.append({"command": _WORKSPACE_OPEN_COMMAND})
     dest.parent.mkdir(parents=True, exist_ok=True)
