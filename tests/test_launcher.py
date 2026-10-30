@@ -1641,6 +1641,59 @@ def test_codespec_step_list_reads_the_workspace_folder(tmp_path: Path) -> None:
     assert "waiting" in codespec_progress_text(workspace, "4-pack")
 
 
+def test_codespec_failure_marks_only_the_block_that_ran() -> None:
+    """A 4-pack block's reviewer handoff must not stop the 1-pack block's Review step."""
+    from hive_planner.launcher.app import HivePlannerApp
+
+    class _Var:
+        def __init__(self, value: str) -> None:
+            self.value = value
+
+        def get(self) -> str:
+            return self.value
+
+        def set(self, value: str) -> None:
+            self.value = value
+
+    class _Label:
+        def pack_forget(self) -> None:
+            return None
+
+        def winfo_ismapped(self) -> int:
+            return 1
+
+        def pack(self, **_kwargs) -> None:
+            return None
+
+    primary = {
+        "loop": _Var("CodeSpec"),
+        "impl_pack": _Var("1-pack"),
+        "steps": _Var(""),
+        "steps_label": _Label(),
+    }
+    second = {
+        "loop": _Var("CodeSpec"),
+        "impl_pack": _Var("4-pack"),
+        "steps": _Var(""),
+        "steps_label": _Label(),
+    }
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.config = type("Config", (), {"active_project": ""})()
+    app.controls_impl_pack = primary["impl_pack"]
+    app._controls_instances = [primary, second]
+    app._controls_result_instance = second
+    app._queue_home_log = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
+    app._set_controls_last = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
+    app._refresh_home_dashboard = lambda **_kwargs: None  # type: ignore[method-assign]
+
+    callback = app._loop_gate_for_current_block()
+    app._controls_result_instance = primary
+    callback({"ok": False, "error": "handoff failed", "action": "handoff", "role": "reviewer"})
+
+    assert "Reviewer — stopped" in second["steps"].value
+    assert "stopped" not in primary["steps"].value
+
+
 def test_controls_caption_summarizes_each_loop() -> None:
     from hive_planner.launcher.app import HivePlannerApp
 

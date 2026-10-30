@@ -1895,11 +1895,15 @@ class HivePlannerApp:
         if "last" not in inst:
             inst["last"] = tk.StringVar(value="")
         previous_target = getattr(self, "_controls_result_target", None)
+        previous_instance = getattr(self, "_controls_result_instance", None)
         self._controls_result_target = inst["last"]
+        # Handlers close over this block before the alias returns to the first one.
+        self._controls_result_instance = inst
         try:
             self._on_controls_run()
         finally:
             self._controls_result_target = previous_target
+            self._controls_result_instance = previous_instance
             self._alias_primary_controls_instance()
 
     @classmethod
@@ -4300,7 +4304,20 @@ class HivePlannerApp:
         except tk.TclError:
             return
 
-    def _codespec_failed_step(self, result: dict) -> str | None:
+    def _codespec_pack_hint(self, inst: dict | None = None) -> str:
+        variable = None
+        if inst is not None:
+            variable = inst.get("impl_pack")
+        elif hasattr(self, "controls_impl_pack"):
+            variable = self.controls_impl_pack
+        if variable is None:
+            return ""
+        try:
+            return str(variable.get() or "")
+        except (tk.TclError, AttributeError):
+            return ""
+
+    def _codespec_failed_step(self, result: dict, inst: dict | None = None) -> str | None:
         from hive_planner.implementation_loop import codespec_active_pack, codespec_gate_step
 
         if result.get("ok") is True and not result.get("error") and str(result.get("blocked_reason") or "") not in {
@@ -4308,12 +4325,7 @@ class HivePlannerApp:
             "needs-sign-off",
         }:
             return None
-        pack_hint = ""
-        if hasattr(self, "controls_impl_pack"):
-            try:
-                pack_hint = str(self.controls_impl_pack.get() or "")
-            except tk.TclError:
-                pack_hint = ""
+        pack_hint = self._codespec_pack_hint(inst)
         pack = codespec_active_pack(self._codespec_project_root(), pack_hint)
         return codespec_gate_step(pack, str(result.get("action") or ""), str(result.get("role") or ""))
 
@@ -4399,13 +4411,30 @@ class HivePlannerApp:
         self._set_controls_last(line)
         self._refresh_home_dashboard()
 
-    def _log_loop_gate(self, result: dict) -> None:
+    def _finish_loop_gate(self, result: dict, inst: dict | None = None) -> None:
+        if inst is None:
+            self._log_loop_gate(result)
+            return
+        self._log_loop_gate(result, inst)
+
+    def _loop_gate_for_current_block(self):
+        """Keep the step mark on the block that started the command."""
+        inst = getattr(self, "_controls_result_instance", None)
+        return lambda result, bound=inst: self._log_loop_gate(result, bound)
+
+    def _log_loop_gate(self, result: dict, inst: dict | None = None) -> None:
         line = self._format_loop_gate(result) if isinstance(result, dict) else self._result_detail(result)
         self._queue_home_log(line)
         self._set_controls_last(line)
         self._refresh_home_dashboard()
-        failed = self._codespec_failed_step(result) if isinstance(result, dict) else None
-        self._refresh_all_codespec_steps(failed_step=failed)
+        failed = self._codespec_failed_step(result, inst) if isinstance(result, dict) else None
+        if inst is None:
+            self._refresh_all_codespec_steps(failed_step=failed)
+            return
+        self._refresh_codespec_steps(inst, failed_step=failed)
+        for other in getattr(self, "_controls_instances", None) or []:
+            if other is not inst:
+                self._refresh_codespec_steps(other)
 
     def _controls_feature_value(self) -> str:
         if hasattr(self, "controls_impl_feature"):
@@ -4425,7 +4454,7 @@ class HivePlannerApp:
         self._start_home_action("Checking CodeSpec status…")
         self._run_bg(
             lambda r=link, f=feature: run_project_implementation_loop_status(r, f or None),
-            self._project_done_callback("Implementation loop status", self._log_loop_gate),
+            self._project_done_callback("Implementation loop status", self._loop_gate_for_current_block()),
         )
 
     def _on_implementation_loop_start(self, *, from_controls: bool = False) -> None:
@@ -4451,12 +4480,16 @@ class HivePlannerApp:
         *,
         allow_dirty: bool,
         force_feature: bool,
+        controls_instance: dict | None = None,
     ) -> None:
+        if controls_instance is None:
+            controls_instance = getattr(self, "_controls_result_instance", None)
         ctx = {
             "link": link,
             "feature": feature,
             "allow_dirty": allow_dirty,
             "force_feature": force_feature,
+            "controls_instance": controls_instance,
         }
         self._loop_start_ctx = ctx
         self._start_home_action("Starting CodeSpec…")
@@ -4474,10 +4507,10 @@ class HivePlannerApp:
         )
 
     def _implementation_loop_start_done(self, result: dict, ctx: dict | None = None) -> None:
+        if ctx is None:
+            ctx = getattr(self, "_loop_start_ctx", None) or {}
         if self._is_bg_error(result) or result.get("ok") is not True:
             err = str(result.get("error") or result.get("blocked_reason") or "")
-            if ctx is None:
-                ctx = getattr(self, "_loop_start_ctx", None) or {}
             if "unrelated dirty" in err and not ctx.get("allow_dirty"):
                 dirty = result.get("dirty") or []
                 extra = ""
@@ -4499,6 +4532,7 @@ class HivePlannerApp:
                             ctx.get("feature") or "",
                             allow_dirty=True,
                             force_feature=bool(ctx.get("force_feature")),
+                            controls_instance=ctx.get("controls_instance"),
                         )
                         return
             if ("loop is blocked" in err or "loop is running for" in err) and not ctx.get("force_feature"):
@@ -4514,11 +4548,12 @@ class HivePlannerApp:
                             ctx.get("feature") or "",
                             allow_dirty=bool(ctx.get("allow_dirty")),
                             force_feature=True,
+                            controls_instance=ctx.get("controls_instance"),
                         )
                         return
-            self._log_loop_gate(result)
+            self._finish_loop_gate(result, ctx.get("controls_instance"))
             return
-        self._log_loop_gate(result)
+        self._finish_loop_gate(result, ctx.get("controls_instance"))
 
     def _on_implementation_loop_handoff(self, *, from_controls: bool = False) -> None:
         link = self._require_active_link()
@@ -4533,8 +4568,22 @@ class HivePlannerApp:
                 continue_after_cap = False
         self._run_loop_handoff(link, role, continue_after_cap=continue_after_cap)
 
-    def _run_loop_handoff(self, link: Path, role: str, *, continue_after_cap: bool) -> None:
-        ctx = {"link": link, "role": role, "continue_after_cap": continue_after_cap}
+    def _run_loop_handoff(
+        self,
+        link: Path,
+        role: str,
+        *,
+        continue_after_cap: bool,
+        controls_instance: dict | None = None,
+    ) -> None:
+        if controls_instance is None:
+            controls_instance = getattr(self, "_controls_result_instance", None)
+        ctx = {
+            "link": link,
+            "role": role,
+            "continue_after_cap": continue_after_cap,
+            "controls_instance": controls_instance,
+        }
         self._loop_handoff_ctx = ctx
         self._start_home_action(f"Writing CodeSpec handoff ({role})…")
         self._run_bg(
@@ -4550,10 +4599,10 @@ class HivePlannerApp:
         )
 
     def _implementation_loop_handoff_done(self, result: dict, ctx: dict | None = None) -> None:
+        if ctx is None:
+            ctx = getattr(self, "_loop_handoff_ctx", None) or {}
         if self._is_bg_error(result) or result.get("ok") is not True:
             err = str(result.get("error") or result.get("blocked_reason") or "")
-            if ctx is None:
-                ctx = getattr(self, "_loop_handoff_ctx", None) or {}
             if "continue-after-cap" in err and not ctx.get("continue_after_cap"):
                 if messagebox.askyesno(
                     "Round-trip cap",
@@ -4563,11 +4612,16 @@ class HivePlannerApp:
                     link = ctx.get("link")
                     role = ctx.get("role")
                     if link is not None and role:
-                        self._run_loop_handoff(link, role, continue_after_cap=True)
+                        self._run_loop_handoff(
+                            link,
+                            role,
+                            continue_after_cap=True,
+                            controls_instance=ctx.get("controls_instance"),
+                        )
                         return
-            self._log_loop_gate(result)
+            self._finish_loop_gate(result, ctx.get("controls_instance"))
             return
-        self._log_loop_gate(result)
+        self._finish_loop_gate(result, ctx.get("controls_instance"))
 
     def _on_implementation_loop_check(self) -> None:
         link = self._require_active_link()
@@ -4576,7 +4630,7 @@ class HivePlannerApp:
         self._start_home_action("Running CodeSpec check…")
         self._run_bg(
             lambda r=link: run_project_implementation_loop_check(r),
-            self._project_done_callback("Implementation loop check", self._log_loop_gate),
+            self._project_done_callback("Implementation loop check", self._loop_gate_for_current_block()),
         )
 
     def _on_implementation_loop_accept(self, *, from_controls: bool = False) -> None:
@@ -4588,7 +4642,7 @@ class HivePlannerApp:
         self._start_home_action(f"Accepting CodeSpec result ({role})…")
         self._run_bg(
             lambda r=link, n=role: run_project_implementation_loop_accept(r, n),
-            self._project_done_callback("Implementation loop accept", self._log_loop_gate),
+            self._project_done_callback("Implementation loop accept", self._loop_gate_for_current_block()),
         )
 
     def _on_implementation_loop_commit(self) -> None:
@@ -4598,7 +4652,7 @@ class HivePlannerApp:
         self._start_home_action("Running CodeSpec commit…")
         self._run_bg(
             lambda r=link: run_project_implementation_loop_commit(r),
-            self._project_done_callback("Implementation loop commit", self._log_loop_gate),
+            self._project_done_callback("Implementation loop commit", self._loop_gate_for_current_block()),
         )
 
     def _on_bug_hunt_status(self) -> None:
