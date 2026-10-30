@@ -283,3 +283,29 @@ def test_call_tool_ping_resolves_code_workspace_file(tmp_path: Path) -> None:
     payload = call_tool("hive_ping", {"root": str(workspace)})
     assert payload["ok"] is True
     assert Path(payload["root"]) == folder.resolve()
+
+
+def test_agnostic_arm_rejects_boolean_cycles(tmp_path: Path) -> None:
+    payload = call_tool(
+        "hive_agnostic_loop_arm",
+        {"root": str(tmp_path), "reward": "focus", "cycles": True},
+    )
+    assert payload["ok"] is False
+    assert payload["error"] == "cycles must be an integer"
+
+
+def test_agnostic_choose_keeps_a_whole_cycle_count(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: dict[str, int] = {}
+
+    def fake_choose(root: Path, open_text, *, do_arm: bool, cycles: int) -> dict:
+        del root, open_text, do_arm
+        seen["cycles"] = cycles
+        return {"ok": True}
+
+    monkeypatch.setattr(
+        "hive_planner.launcher.service.run_project_agnostic_loop_choose",
+        fake_choose,
+    )
+    payload = call_tool("hive_agnostic_loop_choose", {"root": str(tmp_path), "cycles": 4.0})
+    assert payload["ok"] is True
+    assert seen["cycles"] == 4

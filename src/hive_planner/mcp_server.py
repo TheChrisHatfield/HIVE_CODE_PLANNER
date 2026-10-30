@@ -202,6 +202,28 @@ def _bool(value: object, default: bool = False) -> bool:
     return default
 
 
+def _whole_int(value: object, *, default: int) -> tuple[int | None, str | None]:
+    """Parse a JSON number. Booleans and fractional numbers are not integers."""
+    if value is None:
+        return default, None
+    if isinstance(value, bool):
+        return None, "must be an integer"
+    if isinstance(value, int):
+        return value, None
+    if isinstance(value, float):
+        if not value.is_integer():
+            return None, "must be an integer"
+        return int(value), None
+    text = str(value).strip()
+    try:
+        number = float(text)
+    except ValueError:
+        return None, "must be an integer"
+    if not number.is_integer():
+        return None, "must be an integer"
+    return int(number), None
+
+
 def _optional_str(value: object) -> str | None:
     text = str(value or "").strip()
     return text or None
@@ -362,10 +384,9 @@ def _tool_hive_agnostic_loop_arm(arguments: dict[str, Any]) -> dict[str, Any]:
     if not reward:
         return {"ok": False, "error": "reward is required"}
     cycles = arguments.get("cycles", 30)
-    try:
-        count = int(cycles)
-    except (TypeError, ValueError):
-        return {"ok": False, "error": "cycles must be an integer"}
+    count, error = _whole_int(cycles, default=30)
+    if error:
+        return {"ok": False, "error": f"cycles {error}"}
     return run_project_agnostic_loop_arm(_workspace_root(arguments), reward, count)
 
 
@@ -403,10 +424,9 @@ def _tool_hive_agnostic_loop_choose(arguments: dict[str, Any]) -> dict[str, Any]
     from hive_planner.launcher.service import run_project_agnostic_loop_choose
 
     cycles = arguments.get("cycles", 1)
-    try:
-        count = int(cycles)
-    except (TypeError, ValueError):
-        return {"ok": False, "error": "cycles must be an integer"}
+    count, error = _whole_int(cycles, default=1)
+    if error:
+        return {"ok": False, "error": f"cycles {error}"}
     return run_project_agnostic_loop_choose(
         _workspace_root(arguments),
         _optional_str(arguments.get("open")),
