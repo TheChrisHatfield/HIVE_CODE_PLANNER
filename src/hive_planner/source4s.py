@@ -168,6 +168,17 @@ def pdf_ocr_quality_warnings(warnings: list[str]) -> list[str]:
     ]
 
 
+def _staged_rel(paths: RepoPaths, path: Path) -> str:
+    """Return the on-disk path relative to the repo.
+
+    Windows keeps the first filename's casing, so a later upload of ``notes.txt``
+    onto ``Notes.TXT`` still lives at ``Notes.TXT``. Reporting the upload's
+    casing makes ingest look indexed under a path that is not in the library.
+    """
+    actual = path.resolve()
+    return actual.relative_to(paths.root.resolve()).as_posix()
+
+
 def _unique_source_files(source_files: list[Path]) -> list[Path]:
     seen: set[Path] = set()
     unique: list[Path] = []
@@ -311,19 +322,19 @@ def stage_source4s_files(paths: RepoPaths, source_files: list[Path]) -> tuple[li
         except ValueError:
             rel_under_dest = None
         if rel_under_dest is not None:
-            rel = (dest_dir / rel_under_dest).relative_to(paths.root).as_posix()
+            rel = _staged_rel(paths, src)
             if rel not in copied:
                 copied.append(rel)
             continue
         dest = dest_dir / src.name
-        rel = dest.relative_to(paths.root).as_posix()
+        shutil.copy2(src, dest)
+        rel = _staged_rel(paths, dest)
         prev = staged_from.get(rel)
         if prev is not None and prev != src:
             warnings.append(
-                f"Replaced staged {dest.name} — kept upload from {src} "
+                f"Replaced staged {Path(rel).name} — kept upload from {src} "
                 f"(skipped duplicate basename from {prev})"
             )
-        shutil.copy2(src, dest)
         staged_from[rel] = src
         if rel not in copied:
             copied.append(rel)

@@ -37,6 +37,26 @@ def test_stage_source4s_accepts_txt_and_pdf(tmp_path: Path) -> None:
     assert any("skip.md" in w for w in warnings)
 
 
+def test_stage_source4s_case_different_name_uses_existing_library_path(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    paths.ensure_dirs()
+    dest = paths.sources / SOURCE4S_DIR_NAME / "Notes.TXT"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text("OLD", encoding="utf-8")
+    if not (dest.parent / "notes.txt").exists():
+        pytest.skip("case-sensitive filesystem keeps both names")
+    incoming = tmp_path / "notes.txt"
+    incoming.write_text("NEW text for the library.\n", encoding="utf-8")
+
+    result = run_source4s(paths, [incoming], update_cartridge=False)
+
+    assert result.ok
+    assert result.error is None
+    assert result.copied == ["context-library/sources/source4s/Notes.TXT"]
+    assert result.indexed_staged == 1
+    assert dest.read_text(encoding="utf-8") == "NEW text for the library.\n"
+
+
 def test_stage_source4s_refreshes_existing_basename(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     paths.ensure_dirs()
