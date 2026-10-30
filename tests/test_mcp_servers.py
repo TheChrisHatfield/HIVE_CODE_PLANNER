@@ -92,6 +92,13 @@ def test_format_mcp_invocation_quotes_a_shell_operator() -> None:
     assert text == '"C:\\tools\\python&py.exe" -m hive_planner'
 
 
+def test_format_mcp_invocation_quotes_parentheses_without_spaces() -> None:
+    from hive_planner.launcher.mcp_servers import format_mcp_invocation
+
+    text = format_mcp_invocation(r"C:\Python(x86)\python.exe", ["-m", "hive_planner"])
+    assert text == '"C:\\Python(x86)\\python.exe" -m hive_planner'
+
+
 def test_settings_enable_mcp_writes_the_active_project(tmp_path: Path, monkeypatch) -> None:
     from hive_planner.launcher.app import HivePlannerApp
 

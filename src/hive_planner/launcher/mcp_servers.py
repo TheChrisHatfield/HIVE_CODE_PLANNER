@@ -50,7 +50,7 @@ def parse_mcp_args(raw: str) -> list[str]:
 
 def format_mcp_token(text: str) -> str:
     """Quote a token that the shell would split or treat as an operator."""
-    if not text or any(ch.isspace() for ch in text) or any(ch in text for ch in "\"'&|<>^%;"):
+    if not text or any(ch.isspace() for ch in text) or any(ch in text for ch in "\"'&|<>^%;()"):
         return '"' + text.replace('"', '\\"') + '"'
     return text
 
