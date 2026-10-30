@@ -36,6 +36,21 @@ def test_bom_workspace_file_uses_its_folder_not_the_parent(tmp_path: Path) -> No
     assert workspace_primary_folder(workspace) == project.resolve()
 
 
+def test_uri_workspace_folder_is_not_the_workspace_parent(tmp_path: Path) -> None:
+    parent = tmp_path / "links"
+    parent.mkdir()
+    project = tmp_path / "app"
+    project.mkdir()
+    (project / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    workspace = parent / "hive.code-workspace"
+    workspace.write_text(
+        json.dumps({"folders": [{"uri": project.resolve().as_uri()}]}),
+        encoding="utf-8",
+    )
+    assert read_code_workspace_folders(workspace) == [project.resolve()]
+    assert workspace_primary_folder(workspace) == project.resolve()
+
+
 def test_jsonc_workspace_file_uses_its_folder_not_the_parent(tmp_path: Path) -> None:
     parent = tmp_path / "links"
     parent.mkdir()

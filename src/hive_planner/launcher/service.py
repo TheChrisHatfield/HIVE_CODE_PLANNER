@@ -638,6 +638,21 @@ def _strip_trailing_commas(text: str) -> str:
     return "".join(out)
 
 
+def _workspace_folder_text(entry: object) -> str:
+    if isinstance(entry, str):
+        text = entry.strip()
+    elif isinstance(entry, dict):
+        raw = entry.get("path")
+        if raw is None or not str(raw).strip():
+            raw = entry.get("uri")
+        text = str(raw or "").strip()
+    else:
+        return ""
+    if text.startswith("file://"):
+        return file_uri_to_path(text) or ""
+    return text
+
+
 def read_code_workspace_folders(workspace_file: Path) -> list[Path]:
     text = _read_workspace_text(workspace_file)
     if text is None:
@@ -647,12 +662,14 @@ def read_code_workspace_folders(workspace_file: Path) -> list[Path]:
         return []
     folders: list[Path] = []
     for entry in data.get("folders") or []:
-        rel = entry.get("path") if isinstance(entry, dict) else entry
-        if not rel:
+        rel_text = _workspace_folder_text(entry)
+        if not rel_text:
             continue
-        rel_text = str(rel).strip()
         try:
-            if rel_text in (".", "./"):
+            candidate = Path(rel_text)
+            if candidate.is_absolute():
+                folders.append(candidate.resolve())
+            elif rel_text in (".", "./"):
                 folders.append(workspace_file.parent.resolve())
             else:
                 folders.append((workspace_file.parent / rel_text).resolve())
