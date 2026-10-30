@@ -49,10 +49,31 @@ def parse_mcp_args(raw: str) -> list[str]:
 
 
 def format_mcp_token(text: str) -> str:
-    """Quote a token that the shell would split or treat as an operator."""
-    if not text or any(ch.isspace() for ch in text) or any(ch in text for ch in "\"'&|<>^%;()"):
-        return '"' + text.replace('"', '\\"') + '"'
-    return text
+    """Quote a token that the shell would split or treat as an operator.
+
+    cmd.exe expands ``%VAR%`` even inside double quotes, so each percent sign
+    is caret-escaped outside the quotes.
+    """
+    text = str(text or "")
+    needs_wrap = (
+        not text
+        or any(ch.isspace() for ch in text)
+        or any(ch in text for ch in "\"'&|<>^;()")
+    )
+    if "%" not in text:
+        if needs_wrap:
+            return '"' + text.replace('"', '\\"') + '"'
+        return text
+    if not needs_wrap:
+        return text.replace("%", "^%")
+    parts = text.split("%")
+    chunks: list[str] = []
+    for index, part in enumerate(parts):
+        if part:
+            chunks.append('"' + part.replace('"', '\\"') + '"')
+        if index != len(parts) - 1:
+            chunks.append("^%")
+    return "".join(chunks)
 
 
 def format_mcp_args(args: list[str]) -> str:

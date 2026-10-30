@@ -99,6 +99,23 @@ def test_format_mcp_invocation_quotes_parentheses_without_spaces() -> None:
     assert text == '"C:\\Python(x86)\\python.exe" -m hive_planner'
 
 
+def test_format_mcp_invocation_keeps_percent_signs_literal() -> None:
+    import subprocess
+
+    from hive_planner.launcher.mcp_servers import format_mcp_invocation
+
+    text = format_mcp_invocation(r"C:\Users\%USERNAME%\python.exe", ["-m", "hive_planner"])
+    assert text == r"C:\Users\^%USERNAME^%\python.exe -m hive_planner"
+    proc = subprocess.run(
+        ["cmd", "/d", "/s", "/c", "echo " + text],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    echoed = proc.stdout.strip()
+    assert echoed == r"C:\Users\%USERNAME%\python.exe -m hive_planner"
+
+
 def test_settings_enable_mcp_writes_the_active_project(tmp_path: Path, monkeypatch) -> None:
     from hive_planner.launcher.app import HivePlannerApp
 
