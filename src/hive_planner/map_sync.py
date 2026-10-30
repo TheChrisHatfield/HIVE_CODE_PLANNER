@@ -147,6 +147,10 @@ def _escape_table_cell(text: str) -> str:
     return text.replace("|", "\\|")
 
 
+def _unescape_table_cell(text: str) -> str:
+    return text.replace("\\|", "|")
+
+
 def _parse_project_map(
     content: str,
 ) -> tuple[list[str], dict[str, tuple[str, str]], list[str], list[str]]:
@@ -168,7 +172,7 @@ def _parse_project_map(
                 match = PROJECT_ROW_RE.match(line)
                 if match:
                     module, role, deps = match.group(1), match.group(2), match.group(3)
-                    rows[module] = (role, deps)
+                    rows[module] = (_unescape_table_cell(role), _unescape_table_cell(deps))
                 else:
                     preserved.append(line)
                 continue
@@ -199,7 +203,10 @@ def _parse_test_map(content: str) -> tuple[list[str], dict[str, set[str]], list[
                 match = TABLE_ROW_RE.match(line)
                 if match:
                     module = match.group(1)
-                    tests = [t.strip().strip("`") for t in match.group(2).split(",")]
+                    tests = [
+                        t.strip().strip("`")
+                        for t in _unescape_table_cell(match.group(2)).split(",")
+                    ]
                     rows[module] = {t for t in tests if t}
                 else:
                     preserved.append(line)

@@ -301,6 +301,26 @@ def test_sync_blank_docstring_uses_filename_and_keeps_real_role(tmp_path: Path) 
     assert "| `src/hive_planner/blank.py` | blank | (auto-sync) |" in project_map
 
 
+def test_sync_does_not_double_escape_a_pipe_in_a_role(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    _write_src_module(paths, "src/hive_planner/split.py", '"""Split a | b.\n"""\n')
+    _write_project_map(
+        paths,
+        "# Project Map\n\n| Module | Role | Spec / Delta deps |\n|--------|------|-------------------|\n",
+    )
+    _write_test_map(
+        paths,
+        "# Test Map\n\n| Source module | Tests |\n|---------------|-------|\n",
+    )
+
+    sync_impact_maps(paths)
+    sync_impact_maps(paths)
+
+    project_map = (paths.root / "docs" / "change-impact" / "project-map.md").read_text(encoding="utf-8")
+    assert "| `src/hive_planner/split.py` | Split a \\| b. | (auto-sync) |" in project_map
+    assert "\\\\|" not in project_map
+
+
 def test_bom_test_file_still_maps_its_import(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     _write_src_module(paths, "src/hive_planner/emitter.py", "def select_chunks(): pass\n")
