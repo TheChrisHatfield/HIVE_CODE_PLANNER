@@ -241,9 +241,13 @@ def _read_repo_overlay(root: Path) -> str:
     if not path.is_file():
         return ""
     try:
-        text = path.read_text(encoding="utf-8").strip()
-    except (OSError, UnicodeDecodeError):
+        try:
+            text = path.read_text(encoding="utf-8-sig")
+        except UnicodeDecodeError:
+            text = path.read_text(encoding="utf-16")
+    except (OSError, UnicodeError):
         return ""
+    text = text.strip()
     return f"\n{text}\n" if text else ""
 
 

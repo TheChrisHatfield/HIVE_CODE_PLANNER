@@ -519,6 +519,19 @@ def test_install_appends_repo_overlay(tmp_path: Path) -> None:
     assert again.count("coco_bug_hunt_audit.py") == 1
 
 
+def test_install_keeps_a_utf16_repo_overlay(tmp_path: Path) -> None:
+    overlay = tmp_path / ".hive" / "bug-hunt" / "repo-overlay.md"
+    overlay.parent.mkdir(parents=True)
+    overlay.write_text(
+        "## This repo\n\nRun coco_bug_hunt_audit.py after each fix.\n",
+        encoding="utf-16",
+    )
+    install_bug_hunt(tmp_path, iterations=8)
+    command = (tmp_path / ".cursor" / "commands" / "bug-hunt.md").read_text(encoding="utf-8")
+    assert "coco_bug_hunt_audit.py" in command
+    assert command.count("coco_bug_hunt_audit.py") == 1
+
+
 def test_install_skips_unreadable_overlay(tmp_path: Path) -> None:
     overlay = tmp_path / ".hive" / "bug-hunt" / "repo-overlay.md"
     overlay.parent.mkdir(parents=True)
