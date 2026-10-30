@@ -11,6 +11,17 @@ EDITABLE_SECTION = "Durable Workspace Facts"
 MAX_BULLET_CHARS = 240
 APPLY_VERSION = "v2"
 
+
+def _read_text(path: Path) -> str:
+    """Read AGENTS.md or a candidate file saved as UTF-8 (with or without BOM) or UTF-16."""
+    try:
+        return path.read_text(encoding="utf-8-sig")
+    except UnicodeDecodeError:
+        try:
+            return path.read_text(encoding="utf-16")
+        except UnicodeError:
+            return path.read_text(encoding="utf-8", errors="replace")
+
 REQUIRED_SECTIONS = (
     "Repository root",
     "Planning Rosetta Stone",
@@ -263,7 +274,7 @@ def _iter_section_bullets(text: str) -> list[tuple[str, int, str]]:
 
 def lint_agents_md(paths: RepoPaths, agents_path: Path | None = None) -> AgentsLintReport:
     target = _resolve_agents_path(paths, agents_path)
-    text = target.read_text(encoding="utf-8", errors="replace")
+    text = _read_text(target)
     sections = parse_sections(text)
     report = AgentsLintReport(path=str(target.relative_to(paths.root)).replace("\\", "/"))
 
@@ -805,9 +816,9 @@ def run_agents_memory(
             "Select a candidates file, not a generated agents-memory proposal.",
         )
 
-    agents_text = target.read_text(encoding="utf-8", errors="replace")
+    agents_text = _read_text(target)
     sections = parse_sections(agents_text)
-    raw_candidates = _parse_candidates(candidate_file.read_text(encoding="utf-8", errors="replace"))
+    raw_candidates = _parse_candidates(_read_text(candidate_file))
     if not raw_candidates:
         raise AgentsMemoryError("No candidate bullets found in candidates file")
 
@@ -941,7 +952,7 @@ def apply_agents_memory_accepted(
         raise AgentsMemoryError(str(exc)) from exc
 
     target = _resolve_agents_path(paths, agents_path)
-    agents_text = target.read_text(encoding="utf-8", errors="replace")
+    agents_text = _read_text(target)
     sections = parse_sections(agents_text)
     current_key = _match_section(sections, EDITABLE_SECTION)
     facts = sections.get(current_key, "").strip() if current_key else ""
@@ -1147,7 +1158,7 @@ def ingest_agents_candidates(
     if not source.exists():
         raise AgentsMemoryError(f"Source file not found: {source_path}")
 
-    normalized = normalize_candidates_text(source.read_text(encoding="utf-8", errors="replace"))
+    normalized = normalize_candidates_text(_read_text(source))
     if output_path is None:
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         out = paths.root / "docs" / "proposals" / f"candidates-normalized-{timestamp}.md"

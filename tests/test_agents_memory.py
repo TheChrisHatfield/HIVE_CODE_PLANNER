@@ -161,6 +161,14 @@ def test_fenced_example_does_not_block_the_same_operational_bullet() -> None:
     assert rejected == []
 
 
+def test_utf16_agents_file_still_has_its_sections(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    (paths.root / "AGENTS.md").write_text(_minimal_agents(), encoding="utf-16")
+    report = lint_agents_md(paths)
+    assert not any("Missing required section" in issue.message for issue in report.issues)
+    assert not any("Duplicate bullet" in issue.message for issue in report.issues)
+
+
 def test_lint_duplicate_bullets_warns(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     text = _minimal_agents()
