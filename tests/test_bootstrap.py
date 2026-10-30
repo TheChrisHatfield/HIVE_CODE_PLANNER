@@ -349,6 +349,17 @@ def test_init_full_profile_generates_valid_python_and_toml(tmp_path: Path) -> No
     tomllib.loads((target / "pyproject.toml").read_text(encoding="utf-8"))
 
 
+def test_init_full_profile_package_doc_survives_a_windows_path_name(tmp_path: Path) -> None:
+    source = _hive_source(tmp_path)
+    target = tmp_path / "path_app"
+    init_project(source, target, name="C:\\Users\\demo", profile="full")
+
+    init_src = (target / "src" / "path_app" / "__init__.py").read_text(encoding="utf-8")
+    namespace: dict[str, object] = {}
+    exec(compile(init_src, "init", "exec"), namespace)
+    assert namespace["__doc__"] == "C:\\Users\\demo application package."
+
+
 def test_init_full_profile_avoids_python_keyword_package_slug(tmp_path: Path) -> None:
     source = _hive_source(tmp_path)
     target = tmp_path / "class"

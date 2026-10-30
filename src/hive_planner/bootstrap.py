@@ -787,9 +787,9 @@ jobs:
 
 
 def _src_init(package_slug: str, project_name: str) -> str:
-    return f'''{BOOTSTRAP_COMMENT}
-"""{project_name} application package."""
-'''
+    del package_slug
+    doc = json.dumps(f"{project_name} application package.")
+    return f"{BOOTSTRAP_COMMENT}\n__doc__ = {doc}\n"
 
 
 def _test_placeholder(package_slug: str) -> str:
