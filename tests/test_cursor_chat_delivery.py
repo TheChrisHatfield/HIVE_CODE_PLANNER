@@ -111,6 +111,28 @@ def test_duplicate_titles_use_later_update(tmp_path: Path) -> None:
     assert seen == {"id": "new", "phrase": "bug hunt"}
 
 
+def test_chat_in_a_later_workspace_slot_is_found(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _install(repo)
+    storage = tmp_path / "ws"
+    _storage(storage, "aaa-stale", repo)
+    _storage(storage, "zzz-live", repo)
+    db = tmp_path / "state.vscdb"
+    _db(db, [_header("live", "zzz-live", 20, "Hive face")])
+    seen: dict[str, str] = {}
+
+    def on_request(path: Path) -> None:
+        request = json.loads(path.read_text(encoding="utf-8"))
+        seen["id"] = request["composerId"]
+        _mark_generating(db, request["composerId"])
+        apply_request(repo, lambda composer_id, phrase: None)
+
+    outcome = _target(db, storage, on_request=on_request).deliver("Hive face", repo, "bug hunt")
+    assert outcome == "sent"
+    assert seen == {"id": "live"}
+
+
 def test_unknown_title_and_blank_are_not_found(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()

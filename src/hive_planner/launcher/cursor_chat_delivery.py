@@ -73,11 +73,17 @@ def _workspace_folder(workspace_json: Path) -> Path | None:
     return None
 
 
-def workspace_id_for_repo(repo: Path, storage_root: Path) -> str | None:
-    """Return the workspaceStorage id whose folder is the active repo."""
+def workspace_ids_for_repo(repo: Path, storage_root: Path) -> list[str]:
+    """Return every workspaceStorage id whose folder is the active repo.
+
+    Cursor keeps more than one slot for the same folder. Chat headers are
+    stored per slot, so a caller that keeps only the first directory entry
+    misses the composer in a later slot.
+    """
     if not storage_root.is_dir():
-        return None
+        return []
     target = repo.resolve()
+    found: list[str] = []
     for child in storage_root.iterdir():
         if not child.is_dir():
             continue
@@ -92,8 +98,16 @@ def workspace_id_for_repo(repo: Path, storage_root: Path) -> str | None:
         except OSError:
             resolved = folder
         if _same_path(resolved, target):
-            return child.name
-    return None
+            found.append(child.name)
+    return found
+
+
+def workspace_id_for_repo(repo: Path, storage_root: Path) -> str | None:
+    """Return one workspaceStorage id whose folder is the active repo."""
+    matches = workspace_ids_for_repo(repo, storage_root)
+    if not matches:
+        return None
+    return matches[0]
 
 
 def _cursor_user_dir() -> Path | None:
@@ -246,18 +260,19 @@ class CursorChatTarget:
             return "failed"
         if self.db_path is None or self.storage_root is None or not self.db_path.is_file():
             return "failed"
-        workspace_id = workspace_id_for_repo(repo, self.storage_root)
-        if not workspace_id:
+        workspace_ids = workspace_ids_for_repo(repo, self.storage_root)
+        if not workspace_ids:
             return "not_found"
         conn = _open_ro(self.db_path)
         try:
+            placeholders = ", ".join("?" for _ in workspace_ids)
             queried = conn.execute(
-                """
+                f"""
                 SELECT composerId, lastUpdatedAt, isArchived, isSubagent, value
                 FROM composerHeaders
-                WHERE workspaceId = ?
+                WHERE workspaceId IN ({placeholders})
                 """,
-                (workspace_id,),
+                tuple(workspace_ids),
             ).fetchall()
         finally:
             conn.close()
