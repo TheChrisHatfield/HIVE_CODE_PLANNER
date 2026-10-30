@@ -2261,6 +2261,35 @@ def _stage_context_sources(paths: RepoPaths, source_files: list[Path]) -> tuple[
     return copied, warnings
 
 
+def _load_json_object(path: Path) -> dict | None:
+    """Read a JSON object saved as UTF-8 (with or without BOM) or UTF-16.
+
+    A UTF-16 file is rewritten as UTF-8 so later readers in the project can open it.
+    """
+    if not path.is_file():
+        return None
+    utf16 = False
+    try:
+        text = path.read_text(encoding="utf-8-sig")
+    except UnicodeDecodeError:
+        try:
+            text = path.read_text(encoding="utf-16")
+        except (OSError, UnicodeError):
+            return None
+        utf16 = True
+    except OSError:
+        return None
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(data, dict):
+        return None
+    if utf16:
+        path.write_text(text, encoding="utf-8", newline="\n")
+    return data
+
+
 def _merge_cartridge_promote(payload: dict, promote_result: dict | None) -> dict:
     if not promote_result:
         return payload
@@ -2525,10 +2554,7 @@ def run_cartridge_import_folder(
     manifest = None
     manifest_path = paths.cartridge / "manifest.json"
     if manifest_path.is_file():
-        try:
-            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            manifest = None
+        manifest = _load_json_object(manifest_path)
 
     if promote:
         from hive_planner.cartridge_adapt import (

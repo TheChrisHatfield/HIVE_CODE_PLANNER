@@ -1164,6 +1164,24 @@ def test_run_cartridge_import_folder_copies_cartridge_tree(tmp_path: Path) -> No
     assert (project / "cartridge" / "manifest.json").is_file()
 
 
+def test_utf16_manifest_keeps_its_feature_on_import(tmp_path: Path) -> None:
+    project = _minimal_hive_project(tmp_path / "proj")
+    external = tmp_path / "external-cartridge"
+    external.mkdir()
+    (external / "holistic.md").write_text("# Holistic\n", encoding="utf-8")
+    (external / "manifest.json").write_text(
+        '{"features":["kept-feature"]}\n',
+        encoding="utf-16",
+    )
+
+    result = run_cartridge_import_folder(project, external, promote=True)
+
+    assert result["ok"] is True
+    assert result["feature"] == "kept-feature"
+    stored = (project / "cartridge" / "manifest.json").read_text(encoding="utf-8")
+    assert "kept-feature" in stored
+
+
 def test_run_cartridge_import_folder_fails_when_all_files_exist(tmp_path: Path) -> None:
     project = _minimal_hive_project(tmp_path / "proj")
     external = tmp_path / "external-cartridge"
