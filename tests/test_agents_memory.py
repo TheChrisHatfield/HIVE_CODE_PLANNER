@@ -14,6 +14,7 @@ from hive_planner.agents_memory import (
     propose_agents_memory,
     run_agents_memory,
     _parse_active_feature_from_sections,
+    _section_render_order,
 )
 from hive_planner.config import RepoPaths
 
@@ -1102,4 +1103,39 @@ See **old-feature** for history.
     sections = parse_sections(text)
     assert _parse_active_feature_from_sections(sections) == "my-feature"
     assert parse_active_feature(RepoPaths(root=tmp_path)) == "my-feature"
+
+
+def test_empty_active_feature_does_not_take_the_id_from_notes() -> None:
+    text = """# AGENTS.md
+
+## Active feature
+
+## Active feature notes
+
+**old-feature**
+"""
+    sections = parse_sections(text)
+    assert _parse_active_feature_from_sections(sections) is None
+
+
+def test_active_feature_continuation_heading_still_supplies_the_id() -> None:
+    text = """# AGENTS.md
+
+## Active feature — current
+
+**my-feature**
+"""
+    sections = parse_sections(text)
+    assert _parse_active_feature_from_sections(sections) == "my-feature"
+
+
+def test_new_facts_section_is_not_inserted_after_a_notes_heading() -> None:
+    order = _section_render_order(
+        {
+            "Active feature notes": "see **old-feature**",
+            "Active feature": "**my-feature**",
+        },
+        insert_key="Durable Workspace Facts",
+    )
+    assert order == ["Active feature notes", "Active feature", "Durable Workspace Facts"]
 

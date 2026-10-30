@@ -244,10 +244,12 @@ def _existing_durable_bullets(sections: dict[str, str]) -> set[str]:
 def _parse_active_feature_from_sections(sections: dict[str, str]) -> str | None:
     from hive_planner.spec_drift import parse_feature_from_active_body
 
-    active_body = sections.get("Active feature", "")
-    if not active_body:
+    if "Active feature" in sections:
+        active_body = sections["Active feature"]
+    else:
+        active_body = ""
         for title, body in sections.items():
-            if title.startswith("Active feature"):
+            if _heading_continues(title, "Active feature"):
                 active_body = body
                 break
     return parse_feature_from_active_body(active_body)
@@ -646,7 +648,7 @@ def _section_render_order(sections: dict[str, str], *, insert_key: str | None = 
         return order
     insert_at = len(order)
     for idx, title in enumerate(order):
-        if title.startswith("Active feature"):
+        if title == "Active feature" or _heading_continues(title, "Active feature"):
             insert_at = idx + 1
             break
     order.insert(insert_at, insert_key)
