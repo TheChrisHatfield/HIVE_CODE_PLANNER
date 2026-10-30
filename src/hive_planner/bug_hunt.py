@@ -470,6 +470,18 @@ def _read_hooks_json_text(path: Path) -> str:
         return path.read_text(encoding="utf-16")
 
 
+def _hooks_json_is_plain_utf8(path: Path) -> bool:
+    """True when Cursor can JSON.parse the file (UTF-8, no BOM)."""
+    raw = path.read_bytes()
+    if raw.startswith((b"\xef\xbb\xbf", b"\xff\xfe", b"\xfe\xff")):
+        return False
+    try:
+        raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return False
+    return True
+
+
 def _continue_hook_registered(root: Path) -> bool:
     path = Path(root) / HOOKS_JSON_REL
     if not path.is_file():
@@ -532,6 +544,12 @@ def ensure_continue_hook(root: Path, *, pause_seconds: int = 0) -> bool:
                 item["loop_limit"] = CONTINUE_HOOK_LOOP_LIMIT
                 changed = True
             if not changed:
+                if not _hooks_json_is_plain_utf8(path):
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    tmp = path.with_name(path.name + ".tmp")
+                    tmp.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8", newline="\n")
+                    tmp.replace(path)
+                    return True
                 return False
             path.parent.mkdir(parents=True, exist_ok=True)
             tmp = path.with_name(path.name + ".tmp")

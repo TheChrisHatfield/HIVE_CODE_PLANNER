@@ -470,6 +470,77 @@ def test_install_merges_a_hooks_file_with_a_bom_or_utf16(tmp_path: Path) -> None
         assert missing_bug_hunt_artifacts(project) == []
 
 
+def test_utf16_hooks_json_that_already_has_the_stop_hook_is_rewritten(tmp_path: Path) -> None:
+    import json
+
+    from hive_planner.bug_hunt import (
+        CONTINUE_HOOK_COMMAND,
+        CONTINUE_HOOK_LOOP_LIMIT,
+        CONTINUE_HOOK_TIMEOUT,
+        ensure_continue_hook,
+    )
+
+    hooks = tmp_path / ".cursor" / "hooks.json"
+    hooks.parent.mkdir(parents=True)
+    original = {
+        "version": 1,
+        "hooks": {
+            "workspaceOpen": [{"command": "py -3.11 keep.py"}],
+            "stop": [
+                {
+                    "command": CONTINUE_HOOK_COMMAND,
+                    "timeout": CONTINUE_HOOK_TIMEOUT,
+                    "loop_limit": CONTINUE_HOOK_LOOP_LIMIT,
+                }
+            ],
+        },
+    }
+    hooks.write_text(json.dumps(original), encoding="utf-16")
+
+    changed = ensure_continue_hook(tmp_path, pause_seconds=10)
+
+    raw = hooks.read_bytes()
+    assert changed is True
+    assert not raw.startswith(b"\xff\xfe")
+    data = json.loads(raw.decode("utf-8"))
+    assert data["hooks"]["workspaceOpen"][0]["command"] == "py -3.11 keep.py"
+    assert data["hooks"]["stop"][0]["command"] == CONTINUE_HOOK_COMMAND
+    assert data["hooks"]["stop"][0]["timeout"] == CONTINUE_HOOK_TIMEOUT
+
+
+def test_plain_hooks_json_with_the_stop_hook_is_left_alone(tmp_path: Path) -> None:
+    import json
+
+    from hive_planner.bug_hunt import (
+        CONTINUE_HOOK_COMMAND,
+        CONTINUE_HOOK_LOOP_LIMIT,
+        CONTINUE_HOOK_TIMEOUT,
+        ensure_continue_hook,
+    )
+
+    hooks = tmp_path / ".cursor" / "hooks.json"
+    hooks.parent.mkdir(parents=True)
+    original = {
+        "version": 1,
+        "hooks": {
+            "stop": [
+                {
+                    "command": CONTINUE_HOOK_COMMAND,
+                    "timeout": CONTINUE_HOOK_TIMEOUT,
+                    "loop_limit": CONTINUE_HOOK_LOOP_LIMIT,
+                }
+            ]
+        },
+    }
+    hooks.write_text(json.dumps(original, indent=2) + "\n", encoding="utf-8", newline="\n")
+    before = hooks.read_bytes()
+
+    changed = ensure_continue_hook(tmp_path, pause_seconds=10)
+
+    assert changed is False
+    assert hooks.read_bytes() == before
+
+
 def test_install_leaves_no_tmp_bug_hunt_files(tmp_path: Path) -> None:
     install_bug_hunt(tmp_path, iterations=50)
     leftovers = [path for path in tmp_path.rglob("*.tmp") if path.is_file()]
