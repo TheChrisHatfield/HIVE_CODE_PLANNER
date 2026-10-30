@@ -169,6 +169,19 @@ def test_discover_source4s_files_in_folder_skips_common_vendor_dirs(tmp_path: Pa
     assert [path.name for path in found] == ["keep.txt"]
 
 
+def test_discover_skips_vendor_dirs_regardless_of_case(tmp_path: Path) -> None:
+    folder = tmp_path / "refs"
+    (folder / "Node_Modules" / "pkg").mkdir(parents=True)
+    (folder / "Tests").mkdir()
+    (folder / "good").mkdir()
+    (folder / "Node_Modules" / "pkg" / "bad.txt").write_text("bad", encoding="utf-8")
+    (folder / "Tests" / "fixture.txt").write_text("fixture", encoding="utf-8")
+    (folder / "good" / "keep.txt").write_text("keep", encoding="utf-8")
+
+    found = discover_source4s_files_in_folder(folder)
+    assert [path.name for path in found] == ["keep.txt"]
+
+
 def test_discover_source4s_files_in_folder_skips_project_internals_from_repo_root(
     tmp_path: Path,
 ) -> None:

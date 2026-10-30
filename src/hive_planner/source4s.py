@@ -44,6 +44,7 @@ SOURCE4S_DISCOVER_SKIP_DIR_NAMES = {
     "tests",
     "vendor",
 }
+_SOURCE4S_DISCOVER_SKIP_DIR_KEYS = {name.casefold() for name in SOURCE4S_DISCOVER_SKIP_DIR_NAMES}
 
 
 def discover_source4s_files_in_folder(folder: Path, *, recursive: bool = True) -> list[Path]:
@@ -54,7 +55,7 @@ def discover_source4s_files_in_folder(folder: Path, *, recursive: bool = True) -
     found: list[Path] = []
 
     def scan_dir(current: Path) -> None:
-        if current != root and current.name in SOURCE4S_DISCOVER_SKIP_DIR_NAMES:
+        if current != root and current.name.casefold() in _SOURCE4S_DISCOVER_SKIP_DIR_KEYS:
             return
         try:
             entries = sorted(current.iterdir())
