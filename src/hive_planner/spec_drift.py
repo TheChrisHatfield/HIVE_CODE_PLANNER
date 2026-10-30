@@ -4,7 +4,13 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from hive_planner.agents_memory import EDITABLE_SECTION, _match_section, _section_bullets, parse_sections
+from hive_planner.agents_memory import (
+    EDITABLE_SECTION,
+    _heading_continues,
+    _match_section,
+    _section_bullets,
+    parse_sections,
+)
 from hive_planner.config import RepoPaths, validate_feature_id
 
 
@@ -132,10 +138,12 @@ def parse_active_feature(paths: RepoPaths) -> str | None:
     if not agents_path.exists():
         return None
     sections = parse_sections(_read_text(agents_path))
-    active_body = sections.get("Active feature", "")
-    if not active_body:
+    if "Active feature" in sections:
+        active_body = sections["Active feature"]
+    else:
+        active_body = ""
         for title, body in sections.items():
-            if title.startswith("Active feature"):
+            if _heading_continues(title, "Active feature"):
                 active_body = body
                 break
     return parse_feature_from_active_body(active_body)

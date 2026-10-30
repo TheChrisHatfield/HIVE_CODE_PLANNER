@@ -318,6 +318,24 @@ def test_parse_active_feature(tmp_path: Path) -> None:
     assert parse_active_feature(paths) == "git-handoff-ci-v1"
 
 
+def test_empty_active_feature_does_not_take_the_id_from_notes(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    (paths.root / "AGENTS.md").write_text(
+        "# AGENTS.md\n\n## Active feature\n\n## Active feature notes\n\n**old-feature**\n",
+        encoding="utf-8",
+    )
+    assert parse_active_feature(paths) is None
+
+
+def test_active_feature_continuation_heading_still_supplies_the_id(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    (paths.root / "AGENTS.md").write_text(
+        "# AGENTS.md\n\n## Active feature — current\n\n**my-feature**\n",
+        encoding="utf-8",
+    )
+    assert parse_active_feature(paths) == "my-feature"
+
+
 def test_parse_active_feature_rejects_placeholder_none(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     (paths.root / "AGENTS.md").write_text(_minimal_agents("none"), encoding="utf-8")
