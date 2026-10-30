@@ -110,6 +110,19 @@ def test_force_init_installs_bug_hunt_after_replacing_broken_hooks_json(tmp_path
     assert not any("Bug-hunt install skipped" in item for item in result.warnings)
 
 
+def test_init_without_force_fails_when_hooks_json_is_invalid(tmp_path: Path) -> None:
+    source = _hive_source(tmp_path)
+    target = tmp_path / "broken-hooks"
+    init_project(source, target, name="Broken Hooks")
+    hooks = target / ".cursor" / "hooks.json"
+    hooks.write_text("{", encoding="utf-8")
+
+    with pytest.raises(BootstrapError, match="Bug-hunt install failed"):
+        init_project(source, target, force=False)
+
+    assert hooks.read_text(encoding="utf-8") == "{"
+
+
 def test_deploy_agent_handoff_scaffold_includes_rosetta_navigation(tmp_path: Path) -> None:
     from hive_planner.bootstrap import deploy_agent_handoff_scaffold
 

@@ -224,8 +224,7 @@ def _install_bug_hunt_artifacts(
         # or upgraded Hive Planner leaves a stale "one bug then wait" rule.
         result = install_bug_hunt(target, force=True)
     except BugHuntError as exc:
-        warnings.append(f"Bug-hunt install skipped: {exc}")
-        return
+        raise BootstrapError(f"Bug-hunt install failed: {exc}") from exc
     for rel in result.files_written:
         if rel not in written:
             written.append(rel)
