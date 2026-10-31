@@ -148,6 +148,24 @@ def _titles_match(typed: str, title: str) -> bool:
     return left.casefold() == right.casefold()
 
 
+def _read_json_object(path: Path) -> dict | None:
+    """Read a small JSON object saved as UTF-8 (with or without BOM) or UTF-16."""
+    try:
+        text = path.read_text(encoding="utf-8-sig")
+    except UnicodeDecodeError:
+        try:
+            text = path.read_text(encoding="utf-16")
+        except (OSError, UnicodeError):
+            return None
+    except OSError:
+        return None
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        return None
+    return data if isinstance(data, dict) else None
+
+
 def _loop_in_progress(repo: Path, phrase: str) -> bool:
     if phrase == "bug hunt":
         path = repo / ".hive" / "bug-hunt" / "continue.json"
@@ -165,11 +183,8 @@ def _loop_in_progress(repo: Path, phrase: str) -> bool:
         return False
     if not path.is_file():
         return False
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError):
-        return False
-    if not isinstance(data, dict):
+    data = _read_json_object(path)
+    if data is None:
         return False
     return data.get(key) == want
 

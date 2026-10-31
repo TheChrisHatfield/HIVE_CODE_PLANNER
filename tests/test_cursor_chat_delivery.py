@@ -200,6 +200,20 @@ def test_already_generating_skips_submit(tmp_path: Path) -> None:
     assert not (repo / ".hive" / "controls-execute" / "request.json").exists()
 
 
+def test_utf16_loop_state_still_counts_as_already_generating(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _install(repo)
+    db = tmp_path / "state.vscdb"
+    storage = _storage(tmp_path / "ws", "ws-a", repo)
+    _db(db, [_header("idle", "ws-a", 4, "Hive face")])
+    state = repo / ".hive" / "bug-hunt"
+    state.mkdir(parents=True)
+    (state / "continue.json").write_text(json.dumps({"active": True}), encoding="utf-16")
+    assert _target(db, storage).deliver("Hive face", repo, "bug hunt") == "already_generating"
+    assert not (repo / ".hive" / "controls-execute" / "request.json").exists()
+
+
 def test_archived_and_other_workspace_do_not_win(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
