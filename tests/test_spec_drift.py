@@ -549,3 +549,26 @@ def test_fenced_user_story_does_not_satisfy_the_creation_gate(tmp_path: Path) ->
     )
     gaps = spec_creation_gaps(paths, "feat", include_active=False)
     assert any("no filled user story" in item for item in gaps)
+
+
+def test_prose_or_fenced_wiring_mention_does_not_satisfy_the_creation_gate(tmp_path: Path) -> None:
+    from hive_planner.spec_drift import SPEC_CREATION_SPEC_TAIL, spec_creation_gaps
+
+    paths = RepoPaths(root=tmp_path)
+    spec_dir = paths.root / "docs" / "specs" / "feat"
+    spec_dir.mkdir(parents=True)
+    (spec_dir / "spec.md").write_text("# Spec\n" + SPEC_CREATION_SPEC_TAIL, encoding="utf-8")
+    (spec_dir / "tasks.md").write_text(
+        """# Tasks
+
+Mention the Integration wiring audit in prose.
+
+```markdown
+## Integration wiring audit
+- [ ] example box
+```
+""",
+        encoding="utf-8",
+    )
+    gaps = spec_creation_gaps(paths, "feat", include_active=False)
+    assert any("missing Integration wiring audit checklist" in item for item in gaps)

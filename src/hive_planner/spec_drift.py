@@ -336,6 +336,18 @@ SPEC_CREATION_TASKS_TAIL = """
 """
 
 
+def _tasks_have_wiring_audit_heading(tasks_text: str) -> bool:
+    """True when a real heading names the wiring-audit checklist.
+
+    A prose mention, or the same heading inside a code fence, does not count.
+    """
+    heading = re.compile(r"^## .*Integration wiring audit.*$", re.IGNORECASE)
+    for _pos, line in _unfenced_lines(tasks_text):
+        if heading.match(line.strip()):
+            return True
+    return False
+
+
 def _unfenced_lines(text: str) -> list[tuple[int, str]]:
     """Lines outside fenced code, with the offset of each line in the original text."""
     found: list[tuple[int, str]] = []
@@ -431,7 +443,7 @@ def spec_creation_gaps(paths: RepoPaths, feature: str, *, include_active: bool =
             gaps.append("spec.md Success Criteria section has no measurable criterion")
     if tasks_path.is_file():
         tasks_text = _read_text(tasks_path)
-        if "Integration wiring audit" not in tasks_text:
+        if not _tasks_have_wiring_audit_heading(tasks_text):
             gaps.append("tasks.md missing Integration wiring audit checklist")
     if include_active and parse_active_feature(paths) != feature:
         current = parse_active_feature(paths) or "unset"
