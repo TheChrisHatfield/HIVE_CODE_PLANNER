@@ -385,6 +385,18 @@ def test_init_full_profile_avoids_python_keyword_package_slug(tmp_path: Path) ->
     compile(test_src, "test", "exec")
 
 
+def test_init_full_profile_avoids_windows_device_package_slug(tmp_path: Path) -> None:
+    source = _hive_source(tmp_path)
+    target = tmp_path / "nul_"
+
+    init_project(source, target, profile="full")
+
+    assert (target / "src" / "nul_pkg" / "__init__.py").is_file()
+    test_src = (target / "tests" / "test_placeholder.py").read_text(encoding="utf-8")
+    assert "import nul_pkg" in test_src
+    compile(test_src, "test", "exec")
+
+
 def test_init_full_profile_escapes_quotes_in_pyproject_description(tmp_path: Path) -> None:
     import tomllib
 
