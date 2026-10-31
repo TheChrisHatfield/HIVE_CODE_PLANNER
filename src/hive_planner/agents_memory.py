@@ -669,6 +669,7 @@ def _apply_accepted_bullets(agents_text: str, accepted: list[str]) -> str:
     sections = parse_sections(agents_text)
     matched_key = _match_section(sections, EDITABLE_SECTION)
     key = matched_key or EDITABLE_SECTION
+    order = _section_render_order(sections, insert_key=None if matched_key else key)
     current = sections.get(key, "").strip()
     new_bullets = "\n".join(f"- {c}" for c in accepted)
     sections[key] = f"{current}\n{new_bullets}".strip() if current else new_bullets
@@ -676,7 +677,7 @@ def _apply_accepted_bullets(agents_text: str, accepted: list[str]) -> str:
     out = list(preamble)
     if out and out[-1].strip():
         out.append("")
-    for heading in _section_render_order(sections, insert_key=None if matched_key else key):
+    for heading in order:
         body = sections[heading]
         out.append(f"## {heading}")
         out.append("")

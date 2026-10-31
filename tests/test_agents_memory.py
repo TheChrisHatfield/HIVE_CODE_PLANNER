@@ -294,6 +294,30 @@ def test_apply_merges_operational_candidates(tmp_path: Path) -> None:
     assert lint_agents_md(paths).ok
 
 
+def test_apply_places_a_new_facts_section_after_active_feature(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    agents = paths.root / "AGENTS.md"
+    without_facts = _minimal_agents().replace(
+        "## Durable Workspace Facts\n\n- Existing durable fact one.\n",
+        "",
+    ).replace(
+        "## Active feature\n\n**feature-x**\n",
+        "## Active feature\n\n**feature-x**\n\n## Planning source archive\n\n- archive\n",
+    )
+    assert "## Durable Workspace Facts" not in without_facts
+    agents.write_text(without_facts, encoding="utf-8")
+    candidates = paths.root / "candidates.md"
+    candidates.write_text("- New durable fact from guarded apply.\n", encoding="utf-8")
+
+    result = run_agents_memory(paths, candidates, apply=True)
+
+    assert result.applied
+    updated = agents.read_text(encoding="utf-8")
+    assert "New durable fact from guarded apply." in updated
+    assert updated.index("## Active feature") < updated.index("## Durable Workspace Facts")
+    assert updated.index("## Durable Workspace Facts") < updated.index("## Planning source archive")
+
+
 def test_apply_preserves_preamble_before_first_section(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     agents = paths.root / "AGENTS.md"
