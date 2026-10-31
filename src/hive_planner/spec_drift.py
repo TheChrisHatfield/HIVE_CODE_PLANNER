@@ -32,7 +32,7 @@ PLACEHOLDER_FEATURES = frozenset({"none", "tbd", "placeholder"})
 BOOTSTRAP_DEFAULT_FEATURE = "example-feature"
 
 ACTIVE_FEATURE_SECTION_RE = re.compile(
-    r"(^## Active feature[^\n]*\n)(.*?)(?=^## |\Z)",
+    r"(^## Active feature(?:[ \t]*|[ \t]+[(—\-:][^\n]*)\r?\n)(.*?)(?=^## |\Z)",
     re.MULTILINE | re.DOTALL,
 )
 

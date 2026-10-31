@@ -457,6 +457,36 @@ def test_repair_agents_active_feature_preserves_custom_body_for_same_feature(tmp
     assert "implementing shipping flow" in (paths.root / "AGENTS.md").read_text(encoding="utf-8")
 
 
+def test_repair_does_not_write_the_feature_into_the_notes_section(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    (paths.root / "AGENTS.md").write_text(
+        "# AGENTS.md\n\n"
+        "## Active feature notes\n\n"
+        "**old-feature** stay here\n\n"
+        "## Active feature\n\n",
+        encoding="utf-8",
+    )
+    result = repair_agents_active_feature(paths, "kept-feature")
+    text = (paths.root / "AGENTS.md").read_text(encoding="utf-8")
+    assert result.repaired is True
+    assert parse_active_feature(paths) == "kept-feature"
+    assert "**old-feature** stay here" in text
+    assert "**kept-feature**" in text.split("## Active feature\n", 1)[1]
+
+
+def test_repair_updates_an_active_feature_continuation_heading(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    (paths.root / "AGENTS.md").write_text(
+        "# AGENTS.md\n\n## Active feature — current\n\n**none**\n",
+        encoding="utf-8",
+    )
+    result = repair_agents_active_feature(paths, "kept-feature")
+    text = (paths.root / "AGENTS.md").read_text(encoding="utf-8")
+    assert result.repaired is True
+    assert "## Active feature — current" in text
+    assert parse_active_feature(paths) == "kept-feature"
+
+
 def test_bootstrap_example_spec_passes_creation_gates(tmp_path: Path) -> None:
     from hive_planner.bootstrap import _example_spec, _example_tasks
     from hive_planner.spec_drift import spec_creation_gaps
