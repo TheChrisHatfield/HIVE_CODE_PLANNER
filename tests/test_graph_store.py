@@ -12,6 +12,8 @@ from hive_planner.graph_store import (
     GraphStoreError,
     export_tier,
     graph_status,
+    load_manifest,
+    load_tier,
     offload_from_file,
     promote_staging,
     validate_edge,
@@ -67,6 +69,62 @@ def test_validate_edge_rejects_non_numeric_string_confidence() -> None:
                 "confidence": "high",
             }
         )
+
+
+def test_load_tier_reads_a_utf16_nodes_file(tmp_path: Path) -> None:
+    paths = _paths(tmp_path)
+    paths.ensure_shared_memory_dirs()
+    node = {"id": "n1", "type": "concept", "label": "x", "status": "staging"}
+    (paths.shared_memory_staging / "nodes.jsonl").write_text(
+        json.dumps(node) + "\n", encoding="utf-16"
+    )
+
+    nodes, _, _ = load_tier(paths, "staging")
+
+    assert [n["id"] for n in nodes] == ["n1"]
+    status = graph_status(paths)
+    assert status["manifest"]["staging_nodes"] == 1
+
+
+def test_load_tier_reads_a_bom_prefixed_jsonl_file(tmp_path: Path) -> None:
+    paths = _paths(tmp_path)
+    paths.ensure_shared_memory_dirs()
+    rows = [
+        json.dumps({"id": "n1", "type": "concept", "label": "x"}),
+        json.dumps({"id": "n2", "type": "concept", "label": "y"}),
+    ]
+    (paths.shared_memory_staging / "nodes.jsonl").write_text(
+        "\n".join(rows) + "\n", encoding="utf-8-sig"
+    )
+
+    nodes, _, warnings = load_tier(paths, "staging")
+
+    assert [n["id"] for n in nodes] == ["n1", "n2"]
+    assert warnings == []
+
+
+def test_load_manifest_accepts_utf16_and_bom(tmp_path: Path) -> None:
+    paths = _paths(tmp_path)
+    paths.ensure_shared_memory_dirs()
+    manifest = paths.shared_memory_manifest
+    manifest.write_text(json.dumps({"schema_version": "shared-graph.v1"}), encoding="utf-16")
+    assert load_manifest(paths)["schema_version"] == "shared-graph.v1"
+    manifest.write_text(json.dumps({"schema_version": "shared-graph.v1"}), encoding="utf-8-sig")
+    assert load_manifest(paths)["schema_version"] == "shared-graph.v1"
+
+
+def test_offload_accepts_a_utf16_bundle(tmp_path: Path) -> None:
+    paths = _paths(tmp_path)
+    bundle = tmp_path / "bundle.json"
+    bundle.write_text(
+        json.dumps({"nodes": [{"id": "n9", "type": "concept", "label": "x"}]}),
+        encoding="utf-16",
+    )
+
+    result = offload_from_file(paths, bundle)
+
+    assert result.nodes_written == 1
+    assert graph_status(paths)["manifest"]["staging_nodes"] == 1
 
 
 def test_offload_appends_staging(tmp_path: Path) -> None:

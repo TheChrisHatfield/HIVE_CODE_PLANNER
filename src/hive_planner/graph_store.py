@@ -148,6 +148,14 @@ def _jsonl_path(paths: RepoPaths, tier: Tier, kind: Literal["nodes", "edges"]) -
     return base / f"{kind}.jsonl"
 
 
+def _read_json_text(path: Path) -> str:
+    """Read JSON/JSONL saved as UTF-8 (with or without BOM) or UTF-16."""
+    try:
+        return path.read_text(encoding="utf-8-sig")
+    except UnicodeDecodeError:
+        return path.read_text(encoding="utf-16")
+
+
 def _read_jsonl(
     path: Path,
     *,
@@ -157,7 +165,14 @@ def _read_jsonl(
         return [], []
     rows: list[dict[str, Any]] = []
     warnings: list[str] = []
-    text = path.read_text(encoding="utf-8")
+    try:
+        text = _read_json_text(path)
+    except UnicodeError as exc:
+        msg = f"Unreadable JSONL in {path.name}: {exc}"
+        if on_error == "skip":
+            warnings.append(msg)
+            return rows, warnings
+        raise GraphStoreError(msg) from exc
     for line_no, line in enumerate(text.splitlines(), start=1):
         stripped = line.strip()
         if not stripped:
@@ -210,8 +225,8 @@ def load_manifest(paths: RepoPaths) -> dict[str, Any]:
             "last_promote": None,
         }
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
+        data = json.loads(_read_json_text(path))
+    except (UnicodeError, json.JSONDecodeError) as exc:
         raise GraphStoreError(f"Invalid manifest JSON: {exc}") from exc
     if not isinstance(data, dict):
         raise GraphStoreError("Manifest must be a JSON object")
@@ -245,7 +260,10 @@ def refresh_manifest_counts(paths: RepoPaths, *, last_promote: str | None = None
 def parse_offload_input(path: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     if not path.is_file():
         raise GraphStoreError(f"Input file not found: {path}")
-    text = path.read_text(encoding="utf-8").strip()
+    try:
+        text = _read_json_text(path).strip()
+    except UnicodeError as exc:
+        raise GraphStoreError(f"Input file is not valid text: {path}: {exc}") from exc
     if not text:
         return [], []
 
