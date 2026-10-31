@@ -28,7 +28,7 @@ FONT_SUBTITLE = ("Segoe UI", 9)
 _wheel_bindings: dict[int, tk.Misc] = {}
 _wheel_stack: list[int] = []
 _wheel_handlers_installed = False
-_wheel_remainder = 0
+_wheel_remainders: dict[int, int] = {}
 
 
 def _target_for_widget(widget: tk.Misc | None) -> tk.Misc | None:
@@ -66,17 +66,21 @@ def _widget_under_pointer(event) -> tk.Misc | None:
         return None
 
 
-def _wheel_steps(delta: int) -> int:
-    """Turn a Windows wheel delta into list lines. Small notches add up to one line."""
-    global _wheel_remainder
-    _wheel_remainder += delta
+def _wheel_steps(delta: int, key: int) -> int:
+    """Turn a Windows wheel delta into list lines for one scroll target.
+
+    The remainder is per target: partial notches over one area must not leak
+    into the area the pointer moves to next.
+    """
+    remainder = _wheel_remainders.get(key, 0) + delta
     steps = 0
-    while _wheel_remainder >= 120:
-        _wheel_remainder -= 120
+    while remainder >= 120:
+        remainder -= 120
         steps -= 1
-    while _wheel_remainder <= -120:
-        _wheel_remainder += 120
+    while remainder <= -120:
+        remainder += 120
         steps += 1
+    _wheel_remainders[key] = remainder
     return steps
 
 
@@ -102,8 +106,14 @@ def _resolve_wheel_target(event=None) -> tk.Misc | None:
 
 def _dispatch_wheel(event) -> str | None:
     target = _resolve_wheel_target(event)
-    steps = _wheel_steps(int(getattr(event, "delta", 0) or 0))
-    if target is not None and steps and hasattr(target, "yview_scroll"):
+    if target is None:
+        return None
+    try:
+        key = target.winfo_id()
+    except tk.TclError:
+        return None
+    steps = _wheel_steps(int(getattr(event, "delta", 0) or 0), key)
+    if steps and hasattr(target, "yview_scroll"):
         target.yview_scroll(steps, "units")
         return "break"
     return None
@@ -136,11 +146,11 @@ def _ensure_wheel_handlers(root: tk.Misc) -> None:
 
 
 def reset_mousewheel_state_for_tests() -> None:
-    global _wheel_handlers_installed, _wheel_remainder
+    global _wheel_handlers_installed
     _wheel_bindings.clear()
     _wheel_stack.clear()
+    _wheel_remainders.clear()
     _wheel_handlers_installed = False
-    _wheel_remainder = 0
 
 
 def bind_mousewheel(widget: tk.Misc, *, target: tk.Misc | None = None) -> None:
@@ -165,6 +175,10 @@ def bind_mousewheel(widget: tk.Misc, *, target: tk.Misc | None = None) -> None:
     def on_destroy(_event=None) -> None:
         widget_id = widget.winfo_id()
         _wheel_bindings.pop(widget_id, None)
+        try:
+            _wheel_remainders.pop(scroll_target.winfo_id(), None)
+        except tk.TclError:
+            pass
         if _wheel_stack and _wheel_stack[-1] == widget_id:
             _wheel_stack.pop()
         elif widget_id in _wheel_stack:
