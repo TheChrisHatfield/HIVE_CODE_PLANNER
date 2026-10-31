@@ -8,6 +8,7 @@ from hive_planner.rosetta_nav import (
     has_rosetta_navigation,
     inject_after_header,
     inject_agents_rosetta_section,
+    agents_has_rosetta_section,
     spec_navigation_block,
 )
 from hive_planner.spec_drift import repair_agents_rosetta_section
@@ -53,6 +54,29 @@ def test_prose_mention_does_not_count_as_rosetta_navigation(tmp_path: Path) -> N
     updated = spec_path.read_text(encoding="utf-8")
     assert has_rosetta_navigation(updated)
     assert spec_path.relative_to(root).as_posix() in patched
+
+
+def test_fenced_rosetta_marker_does_not_count_as_navigation() -> None:
+    text = """# Spec
+
+```markdown
+<!-- ROSETTA-NAV -->
+## Agent navigation (Rosetta Stone)
+```
+"""
+    assert has_rosetta_navigation(text) is False
+    updated = inject_after_header(text, spec_navigation_block("feat"))
+    before_fence = updated.split("```", 1)[0]
+    assert "## Agent navigation (Rosetta Stone)" in before_fence
+    agents = """# AGENTS
+
+```markdown
+## Planning Rosetta Stone
+
+- hook `planning.rosetta`
+```
+"""
+    assert agents_has_rosetta_section(agents) is False
 
 
 def test_ensure_handoff_rosetta_navigation_patches_existing_spec(tmp_path: Path) -> None:

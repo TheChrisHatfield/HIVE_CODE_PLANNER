@@ -10,8 +10,16 @@ ROSETTA_NAV_MARKER = "<!-- ROSETTA-NAV -->"
 AGENTS_ROSETTA_HEADING = "## Planning Rosetta Stone"
 
 
+def _visible_lines(text: str) -> str:
+    """Text outside fenced examples."""
+    from hive_planner.spec_drift import _unfenced_lines
+
+    return "".join(line for _pos, line in _unfenced_lines(text))
+
+
 def has_rosetta_navigation(text: str) -> bool:
-    return ROSETTA_NAV_MARKER in text or ROSETTA_NAV_HEADING in text
+    visible = _visible_lines(text)
+    return ROSETTA_NAV_MARKER in visible or ROSETTA_NAV_HEADING in visible
 
 
 def spec_navigation_block(feature: str) -> str:
@@ -172,7 +180,7 @@ def ensure_handoff_rosetta_navigation(
 def agents_has_rosetta_section(text: str) -> bool:
     match = re.search(
         rf"^{re.escape(AGENTS_ROSETTA_HEADING)}[^\n]*\n(.*?)(?=^## |\Z)",
-        text,
+        _visible_lines(text),
         re.MULTILINE | re.DOTALL,
     )
     if not match:
