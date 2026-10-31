@@ -261,8 +261,12 @@ def _read_points(path: Path) -> dict[str, tuple[int, int]]:
     if not path.is_file():
         return {}
     try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+        try:
+            text = path.read_text(encoding="utf-8-sig")
+        except UnicodeDecodeError:
+            text = path.read_text(encoding="utf-16")
+        raw = json.loads(text)
+    except (OSError, UnicodeError, json.JSONDecodeError):
         return {}
     if not isinstance(raw, dict):
         return {}

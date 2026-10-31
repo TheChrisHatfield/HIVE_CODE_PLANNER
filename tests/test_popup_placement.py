@@ -83,6 +83,25 @@ def test_corrupt_file_does_not_raise(tmp_path: Path) -> None:
     assert json.loads(path.read_text(encoding="utf-8"))["Add workspace link"] == {"x": 8, "y": 9}
 
 
+def test_utf16_placements_file_still_loads(tmp_path: Path) -> None:
+    path = tmp_path / "popup-placements.json"
+    path.write_text(
+        json.dumps({"Add workspace link": {"x": -1600, "y": 120}}),
+        encoding="utf-16",
+    )
+    store = PlacementStore(path)
+    assert store.get("Add workspace link") == (-1600, 120)
+    store.set("Load Sources", 30, 44)
+    assert json.loads(path.read_text(encoding="utf-8"))["Load Sources"] == {"x": 30, "y": 44}
+
+
+def test_utf8_bom_placements_file_still_loads(tmp_path: Path) -> None:
+    path = tmp_path / "popup-placements.json"
+    path.write_bytes(b"\xef\xbb\xbf" + json.dumps({"Load Sources": {"x": 30, "y": 44}}).encode("utf-8"))
+    store = PlacementStore(path)
+    assert store.get("Load Sources") == (30, 44)
+
+
 def _pump(root, ms: int) -> None:
     root.after(ms, root.quit)
     root.mainloop()
