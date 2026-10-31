@@ -142,8 +142,8 @@ def resolve_manifest_path(repo_root: Path) -> Path:
 
 def load_manifest(path: Path) -> dict:
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+        data = json.loads(_read_json_text(path))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         raise VendorSyncError(f"Could not read manifest: {path}") from exc
     if not isinstance(data, dict):
         raise VendorSyncError(f"Manifest must be a JSON object: {path}")

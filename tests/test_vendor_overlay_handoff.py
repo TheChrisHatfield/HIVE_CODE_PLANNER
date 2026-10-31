@@ -53,3 +53,20 @@ def test_handoff_flags_hooks_json_that_omits_workspace_open(tmp_path: Path) -> N
 
     assert status.complete is False
     assert ".cursor/hooks.json" in status.missing
+
+
+def test_load_manifest_reads_utf16_json(tmp_path: Path) -> None:
+    from hive_planner.vendor_sync import VendorSyncError, load_manifest
+
+    path = tmp_path / "manifest.json"
+    path.write_text('{"schema": "hive-vendor-v1"}\n', encoding="utf-16")
+    loaded = load_manifest(path)
+    assert loaded["schema"] == "hive-vendor-v1"
+
+    broken = tmp_path / "broken.json"
+    broken.write_bytes(b"\xff\xfe\x00\x00")
+    try:
+        load_manifest(broken)
+    except VendorSyncError:
+        return
+    raise AssertionError("expected VendorSyncError")
