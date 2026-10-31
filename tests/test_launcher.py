@@ -1575,7 +1575,7 @@ def test_loop_install_failures_update_controls_last() -> None:
     text = source.read_text(encoding="utf-8")
     assert "def _controls_action_failed" in text
     helper = text.split("def _controls_action_failed", 1)[-1].split("    def ", 1)[0]
-    assert "_set_controls_last" in helper
+    assert "_write_block_last" in helper
     for name in (
         "_bug_hunt_install_done",
         "_agnostic_loop_install_done",
@@ -1765,6 +1765,36 @@ def test_codespec_result_line_stays_on_the_block_that_ran() -> None:
     )
 
     assert second["last"].value
+    assert primary["last"].value == "first still waiting"
+
+
+def test_bug_hunt_status_line_stays_on_the_block_that_ran() -> None:
+    """A bug-hunt status result from the second block must not replace the first block's line."""
+    from hive_planner.launcher.app import HivePlannerApp
+
+    class _Var:
+        def __init__(self, value: str) -> None:
+            self.value = value
+
+        def get(self) -> str:
+            return self.value
+
+        def set(self, value: str) -> None:
+            self.value = value
+
+    primary = {"last": _Var("first still waiting")}
+    second = {"last": _Var("")}
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.controls_last = primary["last"]
+    app._controls_result_instance = second
+    app._queue_home_log = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
+    app._refresh_home_dashboard = lambda **_kwargs: None  # type: ignore[method-assign]
+
+    callback = app._bind_controls_writer(app._log_controls_result)
+    app._controls_result_instance = primary
+    callback({"ok": True, "installed": True, "action": "bug-hunt-status", "root": r"D:\proj"})
+
+    assert second["last"].value == r"Bug hunt: installed in D:\proj"
     assert primary["last"].value == "first still waiting"
 
 

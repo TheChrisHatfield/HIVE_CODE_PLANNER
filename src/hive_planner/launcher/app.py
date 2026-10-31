@@ -4098,12 +4098,12 @@ class HivePlannerApp:
             lambda r=link, n=iterations, p=pause: run_project_bug_hunt_install(
                 r, iterations=n, pause_seconds=p
             ),
-            self._project_done_callback("Bug-hunt install", self._bug_hunt_install_done),
+            self._project_done_callback("Bug-hunt install", self._bind_controls_writer(self._bug_hunt_install_done)),
         )
 
-    def _bug_hunt_install_done(self, result: dict) -> None:
+    def _bug_hunt_install_done(self, result: dict, inst: dict | None = None) -> None:
         if self._is_bg_error(result) or result.get("ok") is not True:
-            self._controls_action_failed(result)
+            self._controls_action_failed(result, inst)
             return
         count = len(result.get("files_written") or [])
         iterations = result.get("iterations", 50)
@@ -4115,7 +4115,7 @@ class HivePlannerApp:
             "In any Cursor chat on this project, say bug hunt — or hunt for bugs / start a bug hunt."
         )
         self._queue_home_log(message)
-        self._set_controls_last(message)
+        self._write_block_last(message, inst)
         self._refresh_home_dashboard()
 
     def _on_agnostic_loop_install(self) -> None:
@@ -4126,12 +4126,12 @@ class HivePlannerApp:
         self._start_home_action("Installing hive-loop-kit…")
         self._run_bg(
             lambda r=link: run_project_agnostic_loop_install(r),
-            self._project_done_callback("Agnostic-loop install", self._agnostic_loop_install_done),
+            self._project_done_callback("Agnostic-loop install", self._bind_controls_writer(self._agnostic_loop_install_done)),
         )
 
-    def _agnostic_loop_install_done(self, result: dict) -> None:
+    def _agnostic_loop_install_done(self, result: dict, inst: dict | None = None) -> None:
         if self._is_bg_error(result) or result.get("ok") is not True:
-            self._controls_action_failed(result)
+            self._controls_action_failed(result, inst)
             return
         count = len(result.get("files_written") or [])
         message = (
@@ -4139,7 +4139,7 @@ class HivePlannerApp:
             "Use Controls → Agnostic loop, or say agnostic loop / hive loop kit in Cursor chat."
         )
         self._queue_home_log(message)
-        self._set_controls_last(message)
+        self._write_block_last(message, inst)
         self._refresh_home_dashboard()
 
     def _codespec_controls_instance(self) -> dict | None:
@@ -4230,12 +4230,12 @@ class HivePlannerApp:
         self._start_home_action(f"Installing CodeSpec ({pack})…")
         self._run_bg(
             lambda r=link, p=pack, f=force_pack: run_project_implementation_loop_install(r, p, force_pack=f),
-            self._project_done_callback("Implementation loop install", self._implementation_loop_install_done),
+            self._project_done_callback("Implementation loop install", self._bind_controls_writer(self._implementation_loop_install_done)),
         )
 
-    def _implementation_loop_install_done(self, result: dict) -> None:
+    def _implementation_loop_install_done(self, result: dict, inst: dict | None = None) -> None:
         if self._is_bg_error(result) or result.get("ok") is not True:
-            self._controls_action_failed(result)
+            self._controls_action_failed(result, inst)
             return
         count = len(result.get("files_written") or [])
         pack = result.get("pack", "")
@@ -4244,7 +4244,7 @@ class HivePlannerApp:
             "Use Controls → CodeSpec, or say code spec in Cursor chat."
         )
         self._queue_home_log(message)
-        self._set_controls_last(message)
+        self._write_block_last(message, inst)
         self._refresh_home_dashboard()
         self._refresh_all_codespec_steps()
 
@@ -4395,6 +4395,24 @@ class HivePlannerApp:
             return "CodeSpec: " + "; ".join(parts)
         return "CodeSpec: " + str(result)
 
+    def _bind_controls_writer(self, writer):
+        """Run a result writer against the block that started the command."""
+        inst = getattr(self, "_controls_result_instance", None)
+        return lambda result, bound=inst: writer(result, bound)
+
+    def _write_block_last(self, line: str, inst: dict | None = None) -> None:
+        wrote_block = False
+        if inst is not None:
+            last = inst.get("last")
+            if last is not None:
+                try:
+                    last.set(line)
+                    wrote_block = True
+                except tk.TclError:
+                    wrote_block = False
+        if not wrote_block:
+            self._set_controls_last(line)
+
     def _set_controls_last(self, text: str) -> None:
         if hasattr(self, "controls_last"):
             self.controls_last.set(text)
@@ -4405,10 +4423,10 @@ class HivePlannerApp:
             except tk.TclError:
                 pass
 
-    def _controls_action_failed(self, result) -> None:
+    def _controls_action_failed(self, result, inst: dict | None = None) -> None:
         line = self._result_detail(result)
         self._queue_home_log(line)
-        self._set_controls_last(line)
+        self._write_block_last(line, inst)
         self._refresh_home_dashboard()
 
     def _finish_loop_gate(self, result: dict, inst: dict | None = None) -> None:
@@ -4425,17 +4443,7 @@ class HivePlannerApp:
     def _log_loop_gate(self, result: dict, inst: dict | None = None) -> None:
         line = self._format_loop_gate(result) if isinstance(result, dict) else self._result_detail(result)
         self._queue_home_log(line)
-        wrote_block = False
-        if inst is not None:
-            last = inst.get("last")
-            if last is not None:
-                try:
-                    last.set(line)
-                    wrote_block = True
-                except tk.TclError:
-                    wrote_block = False
-        if not wrote_block:
-            self._set_controls_last(line)
+        self._write_block_last(line, inst)
         self._refresh_home_dashboard()
         failed = self._codespec_failed_step(result, inst) if isinstance(result, dict) else None
         if inst is None:
@@ -4672,7 +4680,7 @@ class HivePlannerApp:
         self._start_home_action("Checking bug-hunt install…")
         self._run_bg(
             lambda r=link: peek_bug_hunt_status(r),
-            self._project_done_callback("Bug-hunt status", self._log_controls_result),
+            self._project_done_callback("Bug-hunt status", self._bind_controls_writer(self._log_controls_result)),
         )
 
     def _on_implementation_loop_peek_pack(self) -> None:
@@ -4682,7 +4690,7 @@ class HivePlannerApp:
         self._start_home_action("Checking CodeSpec pack…")
         self._run_bg(
             lambda r=link: peek_implementation_loop_pack(r),
-            self._project_done_callback("Implementation loop pack", self._log_controls_result),
+            self._project_done_callback("Implementation loop pack", self._bind_controls_writer(self._log_controls_result)),
         )
 
     def _on_agnostic_loop_peek(self) -> None:
@@ -4692,7 +4700,7 @@ class HivePlannerApp:
         self._start_home_action("Checking agnostic-loop install…")
         self._run_bg(
             lambda r=link: peek_agnostic_loop_status(r),
-            self._project_done_callback("Agnostic-loop install check", self._log_controls_result),
+            self._project_done_callback("Agnostic-loop install check", self._bind_controls_writer(self._log_controls_result)),
         )
 
     def _on_agnostic_loop_rewards(self) -> None:
@@ -4702,7 +4710,7 @@ class HivePlannerApp:
         self._start_home_action("Listing agnostic-loop rewards…")
         self._run_bg(
             lambda r=link: run_project_agnostic_loop_rewards(r),
-            self._project_done_callback("Agnostic-loop rewards", self._log_agnostic_gate),
+            self._project_done_callback("Agnostic-loop rewards", self._bind_controls_writer(self._log_agnostic_gate)),
         )
 
     def _on_agnostic_loop_status(self) -> None:
@@ -4712,7 +4720,7 @@ class HivePlannerApp:
         self._start_home_action("Reading agnostic-loop status…")
         self._run_bg(
             lambda r=link: run_project_agnostic_loop_status(r),
-            self._project_done_callback("Agnostic-loop status", self._log_agnostic_gate),
+            self._project_done_callback("Agnostic-loop status", self._bind_controls_writer(self._log_agnostic_gate)),
         )
 
     def _controls_positive_int(self, raw: str, label: str, default: int) -> int | None:
@@ -4755,7 +4763,7 @@ class HivePlannerApp:
         self._start_home_action(f"Arming agnostic-loop reward {reward}…")
         self._run_bg(
             lambda r=link, w=reward, n=cycles: run_project_agnostic_loop_arm(r, w, n),
-            self._project_done_callback("Agnostic-loop arm", self._log_agnostic_gate),
+            self._project_done_callback("Agnostic-loop arm", self._bind_controls_writer(self._log_agnostic_gate)),
         )
 
     def _on_agnostic_loop_begin(self) -> None:
@@ -4765,7 +4773,7 @@ class HivePlannerApp:
         self._start_home_action("Beginning agnostic-loop tick…")
         self._run_bg(
             lambda r=link: run_project_agnostic_loop_begin(r),
-            self._project_done_callback("Agnostic-loop begin", self._log_agnostic_gate),
+            self._project_done_callback("Agnostic-loop begin", self._bind_controls_writer(self._log_agnostic_gate)),
         )
 
     def _on_agnostic_loop_review(self) -> None:
@@ -4779,7 +4787,7 @@ class HivePlannerApp:
         self._start_home_action("Writing agnostic-loop review…")
         self._run_bg(
             lambda r=link, n=note: run_project_agnostic_loop_review(r, n),
-            self._project_done_callback("Agnostic-loop review", self._log_agnostic_gate),
+            self._project_done_callback("Agnostic-loop review", self._bind_controls_writer(self._log_agnostic_gate)),
         )
 
     def _on_agnostic_loop_observe(self, hit: bool) -> None:
@@ -4793,7 +4801,7 @@ class HivePlannerApp:
         self._start_home_action("Recording agnostic-loop observation…")
         self._run_bg(
             lambda r=link, w=reward, h=hit: run_project_agnostic_loop_observe(r, w, h),
-            self._project_done_callback("Agnostic-loop observe", self._log_agnostic_gate),
+            self._project_done_callback("Agnostic-loop observe", self._bind_controls_writer(self._log_agnostic_gate)),
         )
 
     def _on_agnostic_loop_choose(self) -> None:
@@ -4835,7 +4843,7 @@ class HivePlannerApp:
             lambda r=link, o=open_text, a=do_arm, n=cycles, s=sims, h=horizon, sd=seed: run_project_agnostic_loop_choose(
                 r, o, do_arm=a, cycles=n, sims=s, horizon=h, seed=sd
             ),
-            self._project_done_callback("Agnostic-loop choose", self._log_agnostic_gate),
+            self._project_done_callback("Agnostic-loop choose", self._bind_controls_writer(self._log_agnostic_gate)),
         )
 
     def _format_agnostic_gate(self, result: dict) -> str:
@@ -4870,13 +4878,13 @@ class HivePlannerApp:
             return "Agnostic loop: " + "; ".join(parts)
         return "Agnostic loop: " + str(result)
 
-    def _log_agnostic_gate(self, result: dict) -> None:
+    def _log_agnostic_gate(self, result: dict, inst: dict | None = None) -> None:
         line = self._format_agnostic_gate(result) if isinstance(result, dict) else self._result_detail(result)
         self._queue_home_log(line)
-        self._set_controls_last(line)
+        self._write_block_last(line, inst)
         self._refresh_home_dashboard()
 
-    def _log_controls_result(self, result: dict) -> None:
+    def _log_controls_result(self, result: dict, inst: dict | None = None) -> None:
         if isinstance(result, dict) and result.get("action", "").startswith("bug-hunt"):
             installed = result.get("installed")
             missing = result.get("missing") or []
@@ -4897,7 +4905,7 @@ class HivePlannerApp:
         else:
             line = self._result_detail(result)
         self._queue_home_log(line)
-        self._set_controls_last(line)
+        self._write_block_last(line, inst)
         self._refresh_home_dashboard()
 
     def _on_deploy_agent_handoff(self) -> None:
