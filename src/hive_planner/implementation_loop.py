@@ -392,11 +392,19 @@ def _has_open_task(tasks_path: Path) -> bool:
     return _has_open_task_text(text)
 
 
+def _read_command_source(path: Path) -> str:
+    """Read a build file saved as UTF-8 (with or without BOM) or UTF-16."""
+    try:
+        return _read_text(path)
+    except (OSError, UnicodeError):
+        return ""
+
+
 def _discover_commands(root: Path) -> dict[str, str]:
     commands: dict[str, str] = {}
     pyproject = root / "pyproject.toml"
     if pyproject.is_file():
-        text = pyproject.read_text(encoding="utf-8", errors="replace")
+        text = _read_command_source(pyproject)
         if "pytest" in text and "[tool.pytest" in text:
             commands["test:quick"] = "py -3.11 -m pytest"
         if "ci-check" in text or "hive_planner" in text or "hive-planner" in text:
@@ -406,7 +414,7 @@ def _discover_commands(root: Path) -> dict[str, str]:
     for name in ("Makefile", "makefile", "GNUmakefile"):
         p = root / name
         if p.is_file():
-            text = p.read_text(encoding="utf-8", errors="replace")
+            text = _read_command_source(p)
             if "build" not in commands and re.search(r"^build:", text, re.MULTILINE):
                 commands["build"] = "make build"
             if "test:quick" not in commands and re.search(r"^test:", text, re.MULTILINE):
@@ -415,7 +423,7 @@ def _discover_commands(root: Path) -> dict[str, str]:
     for name in ("Justfile", "justfile"):
         p = root / name
         if p.is_file():
-            text = p.read_text(encoding="utf-8", errors="replace")
+            text = _read_command_source(p)
             if "build" not in commands and re.search(r"^build[\s:]", text, re.MULTILINE):
                 commands["build"] = "just build"
             if "test:quick" not in commands and re.search(r"^test[\s:]", text, re.MULTILINE):
@@ -424,7 +432,7 @@ def _discover_commands(root: Path) -> dict[str, str]:
     for name in ("Taskfile.yml", "Taskfile.yaml", "taskfile.yml"):
         p = root / name
         if p.is_file():
-            text = p.read_text(encoding="utf-8", errors="replace")
+            text = _read_command_source(p)
             if "build" not in commands and re.search(r"^ {2,4}build:", text, re.MULTILINE):
                 commands["build"] = "task build"
             if "test:quick" not in commands and re.search(r"^ {2,4}test:", text, re.MULTILINE):
@@ -433,18 +441,19 @@ def _discover_commands(root: Path) -> dict[str, str]:
     pkg = root / "package.json"
     if pkg.is_file():
         try:
-            data = json.loads(pkg.read_text(encoding="utf-8"))
-            scripts = data.get("scripts", {})
+            data = json.loads(_read_command_source(pkg))
+        except json.JSONDecodeError:
+            data = None
+        scripts = data.get("scripts", {}) if isinstance(data, dict) else {}
+        if isinstance(scripts, dict):
             if "build" not in commands and "build" in scripts:
                 commands["build"] = "npm run build"
             if "test:quick" not in commands and "test" in scripts:
                 commands["test:quick"] = "npm test"
-        except Exception:
-            pass
     workflows = root / ".github" / "workflows"
     if workflows.is_dir():
         for wf in [*workflows.glob("*.yml"), *workflows.glob("*.yaml")]:
-            text = wf.read_text(encoding="utf-8", errors="replace")
+            text = _read_command_source(wf)
             if "pytest" in text and "test:quick" not in commands:
                 commands["test:quick"] = "py -3.11 -m pytest"
             if "hive_planner ci-check" in text and "test:full" not in commands:

@@ -124,6 +124,17 @@ def test_install_4pack_writes_all_files(project_root: Path) -> None:
     assert commands["test:full"] == ""
 
 
+def test_discover_commands_reads_utf16_pyproject(tmp_path: Path) -> None:
+    from hive_planner.implementation_loop import _discover_commands
+
+    (tmp_path / "pyproject.toml").write_text(
+        "[tool.pytest.ini_options]\ntestpaths = ['tests']\n",
+        encoding="utf-16",
+    )
+    commands = _discover_commands(tmp_path)
+    assert commands["test:quick"] == "py -3.11 -m pytest"
+
+
 def test_install_leaves_no_tmp_loop_files(project_root: Path) -> None:
     install_implementation_loop(project_root, PACK_4)
     leftovers = [path for path in project_root.rglob("*.tmp") if path.is_file()]
