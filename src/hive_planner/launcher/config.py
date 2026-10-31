@@ -206,6 +206,14 @@ def config_path() -> Path:
     return default_config_dir() / "config.json"
 
 
+def _read_json_text(path: Path) -> str:
+    """Read config JSON saved as UTF-8 (with or without BOM) or UTF-16."""
+    try:
+        return path.read_text(encoding="utf-8-sig")
+    except UnicodeDecodeError:
+        return path.read_text(encoding="utf-16")
+
+
 def _sync_portable_config_fields(cfg: LauncherConfig) -> bool:
     """Rewrite portable config paths to match the current exe folder."""
     import sys
@@ -241,8 +249,8 @@ def load_config() -> LauncherConfig:
         save_config(cfg)
         return cfg
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+        data = json.loads(_read_json_text(path))
+    except (OSError, UnicodeError, json.JSONDecodeError):
         cfg = LauncherConfig(
             hive_planner_root=str(default_hive_root().resolve()),
             home_action_groups=normalize_home_groups(None),
@@ -294,8 +302,8 @@ def save_config(config: LauncherConfig) -> None:
     old_python: str | None = None
     if path.is_file():
         try:
-            old_python = str(json.loads(path.read_text(encoding="utf-8")).get("python_executable") or "")
-        except (OSError, json.JSONDecodeError):
+            old_python = str(json.loads(_read_json_text(path)).get("python_executable") or "")
+        except (OSError, UnicodeError, json.JSONDecodeError):
             old_python = None
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(asdict(config), indent=2), encoding="utf-8")

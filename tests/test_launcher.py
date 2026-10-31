@@ -6255,6 +6255,48 @@ def test_load_config_recovers_corrupt_json(tmp_path: Path, monkeypatch: pytest.M
     json.loads(bad.read_text(encoding="utf-8"))
 
 
+def test_load_config_reads_a_utf16_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import json
+
+    cfg_dir = tmp_path / "cfg"
+    monkeypatch.setattr("hive_planner.launcher.config.default_config_dir", lambda: cfg_dir)
+    project = tmp_path / "demo"
+    project.mkdir()
+    cfg_dir.mkdir(parents=True)
+    (cfg_dir / "config.json").write_text(
+        json.dumps(
+            {
+                "onboarding_complete": True,
+                "hive_planner_root": str(tmp_path / "hive"),
+                "active_project": str(project),
+                "recent_projects": [str(project)],
+            }
+        ),
+        encoding="utf-16",
+    )
+
+    loaded = load_config()
+
+    assert loaded.onboarding_complete is True
+    assert loaded.active_project == str(project.resolve())
+    assert load_config().active_project == str(project.resolve())
+
+
+def test_load_config_recovers_an_undecodable_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import json
+
+    cfg_dir = tmp_path / "cfg"
+    monkeypatch.setattr("hive_planner.launcher.config.default_config_dir", lambda: cfg_dir)
+    bad = cfg_dir / "config.json"
+    bad.parent.mkdir(parents=True, exist_ok=True)
+    bad.write_bytes(b"\xff\xfe\x00")
+    cfg = load_config()
+    assert cfg.hive_planner_root
+    json.loads(bad.read_text(encoding="utf-8"))
+
+
 def test_console_python_pyw_branch(monkeypatch: pytest.MonkeyPatch) -> None:
     from hive_planner.launcher import __main__ as main_mod
 
