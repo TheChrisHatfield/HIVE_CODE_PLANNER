@@ -188,6 +188,30 @@ def test_record_and_check_fail_when_checklist_section_is_missing(tmp_path: Path)
     assert any("missing Integration wiring audit checklist" in item for item in report.missing)
 
 
+def test_record_rejects_wiring_heading_that_exists_only_in_a_fence(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    (paths.root / "AGENTS.md").write_text(_minimal_agents("my-feature"), encoding="utf-8")
+    _write_handoff(paths, "my-feature", wiring_checked=True)
+    tasks_path = paths.root / "docs" / "specs" / "my-feature" / "tasks.md"
+    tasks_path.write_text(
+        """# Tasks
+
+```markdown
+## After each implementation task — Integration wiring audit (required)
+
+- [x] Traced caller → handler → core (no layer break)
+- [x] No false success when a sub-step failed or was skipped
+- [x] Integration-level validation evidence attached
+```
+""",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(WiringAuditError, match="missing Integration wiring audit checklist"):
+        record_wiring_audit(paths, evidence="pytest -q")
+    assert not (paths.root / ".hive" / "wiring-audit.json").exists()
+
+
 def test_agents_propose_blocked_without_wiring_audit(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     (paths.root / "AGENTS.md").write_text(_minimal_agents("my-feature"), encoding="utf-8")

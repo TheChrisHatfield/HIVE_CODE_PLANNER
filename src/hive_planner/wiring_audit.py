@@ -84,7 +84,15 @@ def _parse_iso_timestamp(value: str) -> datetime | None:
     return parsed
 
 
+def _audit_tasks_text(tasks_text: str) -> str:
+    """Drop fenced examples so a sample heading is not the real checklist."""
+    from hive_planner.spec_drift import _unfenced_lines
+
+    return "".join(line for _pos, line in _unfenced_lines(tasks_text))
+
+
 def _find_wiring_audit_section(tasks_text: str) -> str:
+    tasks_text = _audit_tasks_text(tasks_text)
     start = tasks_text.find(TASKS_WIRING_AUDIT_HEADING)
     if start >= 0:
         return tasks_text[start + len(TASKS_WIRING_AUDIT_HEADING) :]
@@ -96,6 +104,7 @@ def _find_wiring_audit_section(tasks_text: str) -> str:
 
 
 def _has_wiring_audit_section(tasks_text: str) -> bool:
+    tasks_text = _audit_tasks_text(tasks_text)
     return TASKS_WIRING_AUDIT_HEADING in tasks_text or WIRING_AUDIT_SECTION_RE.search(tasks_text) is not None
 
 
