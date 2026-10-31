@@ -513,3 +513,25 @@ def test_wiring_checklist_boxes_are_not_tasks_but_task_ids_still_are() -> None:
     assert "- [x] T010 write the audit log" in checked
     assert "- [ ] Traced caller → handler → core (no layer break)" in checked
     assert _has_open_task_text(checked) is False
+
+
+def test_fenced_wiring_heading_does_not_hide_the_next_task() -> None:
+    text = """```markdown
+## Integration wiring audit
+
+- [ ] T099 example only
+```
+
+## Slice
+
+- [ ] Review the promoted spec
+"""
+    assert _has_open_task_text(text) is True
+    task_id, heading, body = _first_open_task(text)
+    assert task_id == ""
+    assert heading == "Slice"
+    assert body == "Review the promoted spec"
+    checked = _check_off_task(text, "", body)
+    assert "- [x] Review the promoted spec" in checked
+    assert "- [ ] T099 example only" in checked
+    assert _has_open_task_text(checked) is False
