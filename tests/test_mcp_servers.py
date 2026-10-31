@@ -34,6 +34,9 @@ def test_load_mcp_document_accepts_utf8_bom(tmp_path: Path) -> None:
     (cursor / "mcp.json").write_bytes(b"\xef\xbb\xbf" + payload.encode("utf-8"))
     doc = load_mcp_document(tmp_path)
     assert doc["mcpServers"]["other"]["command"] == "npx"
+    raw = (cursor / "mcp.json").read_bytes()
+    assert not raw.startswith(b"\xef\xbb\xbf")
+    assert json.loads(raw.decode("utf-8"))["mcpServers"]["other"]["command"] == "npx"
 
 
 def test_disable_clears_leftover_enabled_true() -> None:

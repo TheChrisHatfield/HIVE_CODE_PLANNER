@@ -98,13 +98,17 @@ def load_mcp_document(root: Path) -> dict[str, Any]:
     if not path.is_file():
         return {"mcpServers": {}}
     try:
-        data = json.loads(path.read_text(encoding="utf-8-sig"))
+        raw = path.read_bytes()
+    except OSError as exc:
+        raise McpConfigError(str(exc)) from exc
+    bom = raw.startswith(b"\xef\xbb\xbf")
+    try:
+        text = raw.decode("utf-8-sig")
+        data = json.loads(text)
     except json.JSONDecodeError as exc:
         raise McpConfigError(".cursor/mcp.json is not valid JSON") from exc
     except UnicodeDecodeError as exc:
         raise McpConfigError(".cursor/mcp.json is not UTF-8 (save it without UTF-16 encoding)") from exc
-    except OSError as exc:
-        raise McpConfigError(str(exc)) from exc
     if not isinstance(data, dict):
         raise McpConfigError(".cursor/mcp.json must be a JSON object")
     servers = data.get("mcpServers")
@@ -112,6 +116,8 @@ def load_mcp_document(root: Path) -> dict[str, Any]:
         data["mcpServers"] = {}
     elif not isinstance(servers, dict):
         raise McpConfigError("mcpServers must be an object")
+    if bom:
+        path.write_text(text, encoding="utf-8", newline="\n")
     return data
 
 
