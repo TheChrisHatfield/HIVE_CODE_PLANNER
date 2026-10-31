@@ -315,6 +315,34 @@ def test_list_source4s_files_does_not_loop_on_a_directory_junction(tmp_path: Pat
     assert source4s_needs_pdf_support(paths, []) is False
 
 
+def test_source4s_needs_pdf_support_ignores_a_missing_pdf_path(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    paths.ensure_dirs()
+    txt = tmp_path / "notes.txt"
+    txt.write_text("notes only", encoding="utf-8")
+    missing_pdf = tmp_path / "gone.pdf"
+
+    assert source4s_needs_pdf_support(paths, [txt, missing_pdf]) is False
+    assert source4s_needs_pdf_support(paths, [missing_pdf]) is False
+
+
+def test_run_source4s_stages_txt_when_a_missing_pdf_path_is_selected(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("hive_planner.source4s.pdf_support_available", lambda: False)
+    paths = RepoPaths(root=tmp_path)
+    paths.ensure_dirs()
+    txt = tmp_path / "notes.txt"
+    txt.write_text("notes only", encoding="utf-8")
+    missing_pdf = tmp_path / "gone.pdf"
+
+    result = run_source4s(paths, [txt, missing_pdf], update_cartridge=False)
+
+    assert result.ok
+    assert result.copied == ["context-library/sources/source4s/notes.txt"]
+    assert any("Skipped (not a file)" in w for w in result.warnings)
+
+
 def test_merge_source4s_selection_dedupes_paths(tmp_path: Path) -> None:
     first = tmp_path / "a.txt"
     second = tmp_path / "b.pdf"

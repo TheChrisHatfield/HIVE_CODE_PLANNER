@@ -326,7 +326,7 @@ def source4s_needs_pdf_support(paths: RepoPaths, source_files: list[Path]) -> bo
                 for item in discover_source4s_files_in_folder(path)
             ):
                 return True
-        elif path.suffix.lower() == ".pdf":
+        elif path.is_file() and path.suffix.lower() == ".pdf":
             return True
     sources_root = paths.sources
     if not sources_root.is_dir():
