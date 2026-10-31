@@ -744,6 +744,43 @@ def test_deploy_spec_kit_overlay_uses_target_pins_rev_for_refresh(tmp_path: Path
     assert (project / ".hive" / "spec-kit" / ".hive-overlay-rev").read_text(encoding="utf-8").strip() == "2"
 
 
+def test_deploy_spec_kit_overlay_reads_utf16_pins_rev(tmp_path: Path) -> None:
+    from hive_planner.vendor_sync import deploy_spec_kit_overlay, write_project_pins
+
+    source = tmp_path / "hive"
+    vendor = source / "vendor"
+    vendor.mkdir(parents=True)
+    (vendor / "manifest.json").write_text(
+        json.dumps(
+            {
+                "schema": MANIFEST_SCHEMA,
+                "spec_kit": {"upstream": "u", "path": "p", "ref": "abc", "hive_patch_rev": "1"},
+                "continual_learning": {"upstream": "u", "path": "p", "ref": "def", "hive_patch_rev": "1"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    project = tmp_path / "project"
+    project.mkdir()
+    pins = {
+        "schema": MANIFEST_SCHEMA,
+        "spec_kit": {"upstream": "u", "path": "p", "ref": "abc", "hive_patch_rev": "2"},
+        "continual_learning": {"upstream": "u", "path": "p", "ref": "def", "hive_patch_rev": "1"},
+    }
+    write_project_pins(project, pins)
+    pins_path = project / ".hive" / "upstream-pins.json"
+    pins_path.write_text(pins_path.read_text(encoding="utf-8"), encoding="utf-16")
+    tasks_dest = project / ".hive" / "spec-kit" / "templates" / "tasks-template.md"
+    tasks_dest.parent.mkdir(parents=True)
+    tasks_dest.write_text("# stale\n", encoding="utf-8")
+    (project / ".hive" / "spec-kit" / ".hive-overlay-rev").write_text("1\n", encoding="utf-8")
+
+    deploy_spec_kit_overlay(source, project)
+
+    assert "Integration wiring audit" in tasks_dest.read_text(encoding="utf-8")
+    assert (project / ".hive" / "spec-kit" / ".hive-overlay-rev").read_text(encoding="utf-8").strip() == "2"
+
+
 def test_ci_unified_vendor_checks_overlay_when_packaged_unavailable(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

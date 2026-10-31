@@ -261,13 +261,21 @@ def write_project_pins(target: Path, manifest: dict, *, force: bool = False) -> 
     return dest
 
 
+def _read_json_text(path: Path) -> str:
+    """Read JSON saved as UTF-8 (with or without BOM) or UTF-16."""
+    try:
+        return path.read_text(encoding="utf-8-sig")
+    except UnicodeDecodeError:
+        return path.read_text(encoding="utf-16")
+
+
 def read_project_pins(project_root: Path) -> dict | None:
     path = project_root.resolve() / PROJECT_PINS_REL
     if not path.is_file():
         return None
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+        data = json.loads(_read_json_text(path))
+    except (OSError, UnicodeError, json.JSONDecodeError):
         return None
     return data if isinstance(data, dict) else None
 
