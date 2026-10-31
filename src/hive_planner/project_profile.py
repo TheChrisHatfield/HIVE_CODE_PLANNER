@@ -39,6 +39,14 @@ def project_meta_path(project_root: Path) -> Path:
     return project_root.resolve() / PROJECT_META_FILE
 
 
+def _read_meta_text(path: Path) -> str:
+    """Read project.json saved as UTF-8 (with or without BOM) or UTF-16."""
+    try:
+        return path.read_text(encoding="utf-8-sig")
+    except UnicodeDecodeError:
+        return path.read_text(encoding="utf-16")
+
+
 def infer_bootstrap_profile(project_root: Path) -> str:
     root = project_root.resolve()
     if (root / "pyproject.toml").is_file() and (root / "START_HERE.md").is_file():
@@ -73,8 +81,8 @@ def read_project_profile(project_root: Path) -> ProjectProfile | None:
     if not path.is_file():
         return None
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+        data = json.loads(_read_meta_text(path))
+    except (OSError, UnicodeError, json.JSONDecodeError):
         return None
     profile = str(data.get("bootstrap_profile") or "").strip()
     if profile not in BOOTSTRAP_PROFILES:

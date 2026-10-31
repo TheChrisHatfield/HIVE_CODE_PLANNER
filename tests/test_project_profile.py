@@ -37,6 +37,26 @@ def test_write_and_read_project_profile(tmp_path: Path) -> None:
     assert payload["bootstrap_profile"] == "full"
 
 
+def test_read_project_profile_utf16_keeps_handoff_mode(tmp_path: Path) -> None:
+    from hive_planner.agent_handoff import resolve_agent_handoff_mode
+
+    project = tmp_path / "demo"
+    project.mkdir()
+    write_project_profile(
+        project,
+        profile="full",
+        project_name="Demo App",
+        agent_handoff_mode="unified",
+    )
+    path = project / ".hive" / "project.json"
+    path.write_text(path.read_text(encoding="utf-8"), encoding="utf-16")
+
+    meta = read_project_profile(project)
+    assert meta is not None
+    assert meta.agent_handoff_mode == "unified"
+    assert resolve_agent_handoff_mode(project) == "unified"
+
+
 def test_write_project_profile_preserves_created_at_on_update(tmp_path: Path) -> None:
     project = tmp_path / "demo"
     project.mkdir()
