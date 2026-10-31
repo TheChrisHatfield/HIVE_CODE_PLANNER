@@ -39,15 +39,46 @@ def _read_text(path: Path) -> str:
         return path.read_text(encoding="utf-16")
 
 
+def _iter_files(root: Path, match) -> list[Path]:
+    """Files under root. A directory junction back into the tree is not walked again."""
+    found: list[Path] = []
+    seen: set[Path] = set()
+
+    def scan(current: Path) -> None:
+        try:
+            key = current.resolve()
+        except OSError:
+            return
+        if key in seen:
+            return
+        seen.add(key)
+        try:
+            entries = list(current.iterdir())
+        except OSError:
+            return
+        for path in entries:
+            if path.is_dir():
+                if path.is_symlink():
+                    continue
+                scan(path)
+                continue
+            if path.is_file() and match(path):
+                found.append(path)
+
+    scan(root)
+    return sorted(found)
+
+
 def discover_src_modules(paths: RepoPaths) -> list[str]:
     src_root = paths.root / "src"
     if not src_root.exists():
         return []
     modules: list[str] = []
     for pkg_dir in sorted(p for p in src_root.iterdir() if p.is_dir()):
-        for py_file in sorted(pkg_dir.rglob("*.py")):
-            if py_file.name == "__init__.py":
-                continue
+        for py_file in _iter_files(
+            pkg_dir,
+            lambda path: path.suffix == ".py" and path.name != "__init__.py",
+        ):
             modules.append(py_file.relative_to(paths.root).as_posix())
     return modules
 
@@ -120,7 +151,10 @@ def discover_test_mappings(paths: RepoPaths) -> dict[str, set[str]]:
     mapping: dict[str, set[str]] = {}
     if not tests_root.exists():
         return mapping
-    for test_file in sorted(tests_root.rglob("test_*.py")):
+    for test_file in _iter_files(
+        tests_root,
+        lambda path: path.name.startswith("test_") and path.suffix == ".py",
+    ):
         rel_test = test_file.relative_to(paths.root).as_posix()
         for src_module in _imports_in_test_file(test_file, paths.root):
             mapping.setdefault(src_module, set()).add(rel_test)
