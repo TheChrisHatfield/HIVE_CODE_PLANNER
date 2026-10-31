@@ -486,6 +486,8 @@ def _continue_hook_registered(root: Path) -> bool:
     path = Path(root) / HOOKS_JSON_REL
     if not path.is_file():
         return False
+    if not _hooks_json_is_plain_utf8(path):
+        return False
     try:
         data = json.loads(_read_hooks_json_text(path))
     except (OSError, UnicodeError, json.JSONDecodeError):
