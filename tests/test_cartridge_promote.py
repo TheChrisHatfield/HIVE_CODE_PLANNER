@@ -167,6 +167,39 @@ def test_promote_appends_wiring_audit_to_existing_tasks(tmp_path: Path) -> None:
     assert result.promotions.get("tasks") == "updated (wiring audit)"
 
 
+def test_promote_appends_wiring_audit_when_phrase_is_only_prose_or_fenced(tmp_path: Path) -> None:
+    project = _unified_project(tmp_path / "proj")
+    feature = "legacy-feature"
+    paths = RepoPaths(root=project)
+    spec_dir = project / "docs" / "specs" / feature
+    spec_dir.mkdir(parents=True, exist_ok=True)
+    (spec_dir / "tasks.md").write_text(
+        """# Tasks: legacy-feature
+
+Mention the Integration wiring audit in prose.
+
+```markdown
+## After each implementation task — Integration wiring audit (required)
+- [ ] example box
+```
+""",
+        encoding="utf-8",
+    )
+    micro = paths.cartridge / "micro" / f"{feature}.md"
+    micro.parent.mkdir(parents=True, exist_ok=True)
+    micro.write_text(
+        f"{DRAFT_BANNER}\n\n# Micro Brief: {feature}\n\n- Acceptance criteria: emit works.\n",
+        encoding="utf-8",
+    )
+
+    result = promote_cartridge_drafts(paths, feature)
+
+    tasks_text = (spec_dir / "tasks.md").read_text(encoding="utf-8")
+    after_fence = tasks_text.rsplit("```", 1)[-1]
+    assert "## After each implementation task — Integration wiring audit (required)" in after_fence
+    assert result.promotions.get("tasks") == "updated (wiring audit)"
+
+
 def test_promote_memory_writes_classified_candidates(tmp_path: Path) -> None:
     project = _unified_project(tmp_path / "proj")
     feature = "mem-feature"

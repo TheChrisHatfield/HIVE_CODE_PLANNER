@@ -18,6 +18,7 @@ from hive_planner.delta_emit import (
     _strip_leading_banner,
 )
 from hive_planner.spec_drift import (
+    _tasks_have_wiring_audit_heading,
     check_memory_spec_drift,
     check_spec_handoff,
     classify_bullet,
@@ -57,7 +58,7 @@ def _append_tasks_wiring_audit_if_missing(tasks_path: Path) -> bool:
     if not tasks_path.is_file():
         return False
     text = tasks_path.read_text(encoding="utf-8", errors="replace")
-    if TASKS_WIRING_AUDIT_HEADING in text or "Integration wiring audit" in text:
+    if _tasks_have_wiring_audit_heading(text):
         return False
     updated = text.rstrip() + "\n\n" + _tasks_wiring_audit_block()
     tasks_path.write_text(updated, encoding="utf-8")
