@@ -156,6 +156,39 @@ def test_discover_test_mappings(tmp_path: Path) -> None:
     assert "tests/test_sample.py" in mapping["src/hive_planner/config.py"]
 
 
+def test_discover_test_mappings_for_a_bootstrapped_project_package(tmp_path: Path) -> None:
+    """A project whose src package is not hive_planner still maps its own tests."""
+    paths = RepoPaths(root=tmp_path)
+    _write_src_module(paths, "src/demo/core.py", "def select(): pass\n")
+    _write_src_module(paths, "src/demo/util/__init__.py", "")
+    _write_test(
+        paths,
+        "test_core.py",
+        """
+        from demo.core import select
+        import demo.util
+        """,
+    )
+    mapping = discover_test_mappings(paths)
+    assert "tests/test_core.py" in mapping["src/demo/core.py"]
+    assert "tests/test_core.py" in mapping["src/demo/util/__init__.py"]
+
+
+def test_sync_links_tests_in_a_bootstrapped_project(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    _write_src_module(paths, "src/demo/core.py", '"""Core module."""\n')
+    _write_test(paths, "test_core.py", "from demo.core import select\n")
+
+    report = sync_impact_maps(paths)
+
+    test_map = (paths.root / "docs" / "change-impact" / "test-map.md").read_text(
+        encoding="utf-8"
+    )
+    assert "| `src/demo/core.py` | `tests/test_core.py` |" in test_map
+    assert "src/demo/core.py" in report.test_added
+    assert not any("no mapped tests" in w for w in report.warnings)
+
+
 def test_sync_dry_run_does_not_write(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     _write_src_module(paths, "src/hive_planner/newmod.py", "pass\n")

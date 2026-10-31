@@ -83,8 +83,13 @@ def discover_src_modules(paths: RepoPaths) -> list[str]:
     return modules
 
 
-def import_module_to_src_path(import_module: str, repo_root: Path | None = None) -> str | None:
-    if not import_module or not import_module.startswith("hive_planner"):
+def import_module_to_src_path(
+    import_module: str,
+    repo_root: Path | None = None,
+    *,
+    package: str = "hive_planner",
+) -> str | None:
+    if not import_module or not import_module.startswith(package):
         return None
     parts = import_module.split(".")
     direct = Path("src", *parts).with_suffix(".py")
@@ -98,7 +103,31 @@ def import_module_to_src_path(import_module: str, repo_root: Path | None = None)
     return None
 
 
-def _imports_in_test_file(test_path: Path, repo_root: Path) -> set[str]:
+def _src_package_names(paths: RepoPaths) -> tuple[str, ...]:
+    """Import roots under src/. A bootstrapped project's own slug package counts."""
+    src_root = paths.root / "src"
+    if not src_root.is_dir():
+        return ("hive_planner",)
+    names = sorted(
+        p.name
+        for p in src_root.iterdir()
+        if p.is_dir() and p.name.isidentifier() and p.name != "__pycache__"
+    )
+    return tuple(names) or ("hive_planner",)
+
+
+def _match_package(module: str, packages: tuple[str, ...]) -> str | None:
+    for package in packages:
+        if module == package or module.startswith(f"{package}."):
+            return package
+    return None
+
+
+def _imports_in_test_file(
+    test_path: Path,
+    repo_root: Path,
+    packages: tuple[str, ...] = ("hive_planner",),
+) -> set[str]:
     try:
         tree = ast.parse(_read_text(test_path))
     except (SyntaxError, OSError, UnicodeError):
@@ -110,37 +139,45 @@ def _imports_in_test_file(test_path: Path, repo_root: Path) -> set[str]:
                 continue
             if not node.module:
                 continue
-            if node.module == "hive_planner":
+            package = _match_package(node.module, packages)
+            if package is None:
+                continue
+            if node.module == package:
                 for alias in node.names:
                     if alias.name == "*":
                         continue
                     src_path = import_module_to_src_path(
-                        f"hive_planner.{alias.name}",
+                        f"{package}.{alias.name}",
                         repo_root=repo_root,
+                        package=package,
                     )
                     if src_path:
                         modules.add(src_path)
             else:
-                if not node.module.startswith("hive_planner"):
-                    continue
                 for alias in node.names:
                     if alias.name == "*":
                         continue
                     sub_path = import_module_to_src_path(
                         f"{node.module}.{alias.name}",
                         repo_root=repo_root,
+                        package=package,
                     )
                     if sub_path:
                         modules.add(sub_path)
                         continue
-                    src_path = import_module_to_src_path(node.module, repo_root=repo_root)
+                    src_path = import_module_to_src_path(
+                        node.module, repo_root=repo_root, package=package
+                    )
                     if src_path:
                         modules.add(src_path)
         elif isinstance(node, ast.Import):
             for alias in node.names:
-                if not alias.name.startswith("hive_planner"):
+                package = _match_package(alias.name, packages)
+                if package is None:
                     continue
-                src_path = import_module_to_src_path(alias.name, repo_root=repo_root)
+                src_path = import_module_to_src_path(
+                    alias.name, repo_root=repo_root, package=package
+                )
                 if src_path:
                     modules.add(src_path)
     return modules
@@ -151,12 +188,13 @@ def discover_test_mappings(paths: RepoPaths) -> dict[str, set[str]]:
     mapping: dict[str, set[str]] = {}
     if not tests_root.exists():
         return mapping
+    packages = _src_package_names(paths)
     for test_file in _iter_files(
         tests_root,
         lambda path: path.name.startswith("test_") and path.suffix == ".py",
     ):
         rel_test = test_file.relative_to(paths.root).as_posix()
-        for src_module in _imports_in_test_file(test_file, paths.root):
+        for src_module in _imports_in_test_file(test_file, paths.root, packages):
             mapping.setdefault(src_module, set()).add(rel_test)
     return mapping
 
