@@ -53,8 +53,16 @@ def discover_source4s_files_in_folder(folder: Path, *, recursive: bool = True) -
     if not root.is_dir():
         return []
     found: list[Path] = []
+    seen: set[Path] = set()
 
     def scan_dir(current: Path) -> None:
+        try:
+            key = current.resolve()
+        except OSError:
+            return
+        if key in seen:
+            return
+        seen.add(key)
         if current != root and current.name.casefold() in _SOURCE4S_DISCOVER_SKIP_DIR_KEYS:
             return
         try:
