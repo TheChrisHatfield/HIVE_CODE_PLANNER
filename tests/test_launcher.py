@@ -1182,6 +1182,29 @@ def test_utf16_manifest_keeps_its_feature_on_import(tmp_path: Path) -> None:
     assert "kept-feature" in stored
 
 
+def test_cartridge_import_does_not_loop_on_a_directory_junction(tmp_path: Path) -> None:
+    project = _minimal_hive_project(tmp_path / "proj")
+    external = tmp_path / "external-cartridge"
+    nested = external / "notes"
+    nested.mkdir(parents=True)
+    (external / "manifest.json").write_text('{"schema_version":"cartridge.v1"}\n', encoding="utf-8")
+    (nested / "holistic.md").write_text("# Holistic\n", encoding="utf-8")
+    link = external / "again"
+    created = subprocess.run(
+        ["cmd", "/c", "mklink", "/J", str(link), str(external)],
+        capture_output=True,
+        text=True,
+    )
+    if created.returncode != 0:
+        pytest.skip("directory junction is not permitted")
+
+    result = run_cartridge_import_folder(project, external, promote=False)
+
+    assert result["ok"] is True
+    assert result["written"] == ["manifest.json", "notes/holistic.md"]
+    assert not (project / "cartridge" / "again").exists()
+
+
 def test_run_cartridge_import_folder_fails_when_all_files_exist(tmp_path: Path) -> None:
     project = _minimal_hive_project(tmp_path / "proj")
     external = tmp_path / "external-cartridge"

@@ -2240,6 +2240,36 @@ def _cartridge_import_allowed(rel: Path) -> bool:
     return name.endswith(".mdc.seed")
 
 
+def _cartridge_import_files(root: Path) -> list[Path]:
+    """Files under a cartridge folder, without re-entering a directory junction."""
+    found: list[Path] = []
+    seen: set[Path] = set()
+
+    def scan(current: Path) -> None:
+        try:
+            key = current.resolve()
+        except OSError:
+            return
+        if key in seen:
+            return
+        seen.add(key)
+        try:
+            entries = list(current.iterdir())
+        except OSError:
+            return
+        for path in entries:
+            if path.is_dir():
+                if path.is_symlink():
+                    continue
+                scan(path)
+                continue
+            if path.is_file():
+                found.append(path)
+
+    scan(root)
+    return sorted(found)
+
+
 def _stage_context_sources(paths: RepoPaths, source_files: list[Path]) -> tuple[list[str], list[str]]:
     dest_dir = paths.sources / "imported"
     dest_dir.mkdir(parents=True, exist_ok=True)
@@ -2520,7 +2550,7 @@ def run_cartridge_import_folder(
     paths.cartridge.mkdir(parents=True, exist_ok=True)
     written: list[str] = []
     skipped: list[str] = []
-    for path in sorted(cart_src.rglob("*")):
+    for path in _cartridge_import_files(cart_src):
         if not path.is_file():
             continue
         rel = path.relative_to(cart_src)
