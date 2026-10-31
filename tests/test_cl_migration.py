@@ -70,6 +70,103 @@ def test_merge_learned_workspace_facts_dedupes(tmp_path: Path) -> None:
     assert merged.count("Run ci-check before handoff.") == 1
 
 
+def test_merge_places_a_new_durable_section_after_active_feature() -> None:
+    text = "\n".join(
+        [
+            "# AGENTS.md",
+            "",
+            "## Active feature",
+            "",
+            "**my-feature**",
+            "",
+            "## Learned Workspace Facts",
+            "",
+            "- Prefer py -3.11 for Hive CLI.",
+            "",
+            "## Planning source archive",
+            "",
+            "Full thread export.",
+        ]
+    )
+    merged, count = merge_learned_workspace_facts(text)
+    assert count == 1
+    assert merged.index("## Active feature") < merged.index("## Durable Workspace Facts")
+    assert merged.index("## Durable Workspace Facts") < merged.index("## Planning source archive")
+
+
+def test_merge_removes_an_empty_legacy_section_without_a_durable_section() -> None:
+    text = "\n".join(
+        [
+            "# AGENTS.md",
+            "",
+            "## Active feature",
+            "",
+            "**my-feature**",
+            "",
+            "## Learned Workspace Facts",
+            "",
+        ]
+    )
+    merged, count = merge_learned_workspace_facts(text)
+    assert count == 0
+    assert "## Learned Workspace Facts" not in merged
+    assert "## Durable Workspace Facts" not in merged
+
+
+def test_merge_all_duplicate_bullets_without_a_durable_section() -> None:
+    text = "\n".join(
+        [
+            "# AGENTS.md",
+            "",
+            "## Active feature",
+            "",
+            "**my-feature**",
+            "",
+            "## Tool roles",
+            "",
+            "- Prefer py -3.11 for Hive CLI.",
+            "",
+            "## Learned Workspace Facts",
+            "",
+            "- Prefer py -3.11 for Hive CLI.",
+        ]
+    )
+    merged, count = merge_learned_workspace_facts(text)
+    assert count == 0
+    assert "## Learned Workspace Facts" not in merged
+    assert "## Durable Workspace Facts" not in merged
+
+
+def test_migrate_does_not_report_removal_for_a_fenced_legacy_example(tmp_path: Path) -> None:
+    project = tmp_path / "fenced"
+    project.mkdir()
+    (project / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    agents = "\n".join(
+        [
+            "# AGENTS.md",
+            "",
+            "## Active feature",
+            "",
+            "**my-feature**",
+            "",
+            "## Delta model",
+            "",
+            "```",
+            "## Learned Workspace Facts",
+            "",
+            "- example only",
+            "```",
+        ]
+    )
+    (project / "AGENTS.md").write_text(agents, encoding="utf-8")
+    _write_plugin(project, CL_OVERLAY_REL, "hive-continual-learning")
+
+    report = migrate_marketplace_cl(RepoPaths(root=project))
+
+    assert not any("Removed empty" in action for action in report.actions)
+    assert (project / "AGENTS.md").read_text(encoding="utf-8") == agents
+
+
 def test_run_cl_migrate_failure_includes_structured_keys(tmp_path: Path) -> None:
     from hive_planner.launcher.service import run_cl_migrate
 

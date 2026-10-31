@@ -117,21 +117,30 @@ def merge_learned_workspace_facts(agents_text: str) -> tuple[str, int]:
             merged.append(bullet)
             existing.add(normalized)
 
+    sections.pop(legacy_key, None)
     if merged:
+        # Compute the render order before assigning a new Durable section so it
+        # lands after Active feature, like agents-apply, instead of at EOF.
+        insert_key = None if durable_key in sections else durable_key
+        order = _section_render_order(sections, insert_key=insert_key)
         merged_lines = "\n".join(f"- {bullet}" for bullet in merged)
         sections[durable_key] = f"{durable_body}\n{merged_lines}".strip() if durable_body else merged_lines
+    else:
+        order = list(sections.keys())
+    return _render_agents_sections(agents_text, sections, order=order), len(merged)
 
-    sections.pop(legacy_key, None)
-    return _render_agents_sections(agents_text, sections), len(merged)
 
-
-def _render_agents_sections(agents_text: str, sections: dict[str, str]) -> str:
+def _render_agents_sections(
+    agents_text: str,
+    sections: dict[str, str],
+    *,
+    order: list[str] | None = None,
+) -> str:
     preamble = _preamble_lines(agents_text)
-    durable_key = _match_section(sections, EDITABLE_SECTION)
     out = list(preamble)
     if out and out[-1].strip():
         out.append("")
-    for heading in _section_render_order(sections, insert_key=None if durable_key else EDITABLE_SECTION):
+    for heading in (order if order is not None else list(sections.keys())):
         body = sections[heading]
         out.append(f"## {heading}")
         out.append("")
@@ -202,7 +211,7 @@ def migrate_marketplace_cl(
 
     if count:
         report.actions.append(f"Merged {count} bullet(s) from ## {LEGACY_WORKSPACE_FACTS} into ## {EDITABLE_SECTION}")
-    elif LEGACY_WORKSPACE_FACTS in original:
+    elif merged_text != original:
         report.actions.append(f"Removed empty ## {LEGACY_WORKSPACE_FACTS} section")
 
     if merged_text != original and agents_path.is_file():
