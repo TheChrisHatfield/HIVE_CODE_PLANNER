@@ -75,6 +75,26 @@ def test_peek_launch_snippet_matches_mcp_json_after_python_settings_change(tmp_p
     assert "-3.12" not in peeked["launch_snippet"]
 
 
+def test_peek_launch_snippet_uses_a_url_entry(tmp_path: Path) -> None:
+    cursor = tmp_path / ".cursor"
+    cursor.mkdir()
+    (cursor / "mcp.json").write_text(
+        json.dumps(
+            {
+                "mcpServers": {
+                    HIVE_PLANNER_MCP_NAME: {"url": "http://127.0.0.1:9/mcp"}
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    peeked = peek_hive_planner_mcp(tmp_path, LauncherConfig(python_executable="py -3.11"))
+    assert peeked["ok"] is True
+    assert peeked["enabled"] is True
+    assert peeked["launch_snippet"] == "http://127.0.0.1:9/mcp"
+    assert "mcp-serve" not in peeked["launch_snippet"]
+
+
 def test_format_mcp_invocation_quotes_a_path_with_spaces() -> None:
     from hive_planner.launcher.mcp_servers import format_mcp_invocation
 

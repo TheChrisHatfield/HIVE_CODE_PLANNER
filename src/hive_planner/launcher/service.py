@@ -2164,14 +2164,19 @@ def peek_hive_planner_mcp(project_root: Path, config: LauncherConfig) -> dict:
     enabled = hive_planner_mcp_enabled(doc)
     proposed = format_mcp_invocation(command, args)
     snippet = proposed
-    if isinstance(entry, dict) and str(entry.get("command") or "").strip():
-        stored_args = entry.get("args") if isinstance(entry.get("args"), list) else []
-        stored = format_mcp_invocation(
-            str(entry.get("command")).strip(),
-            [str(part) for part in stored_args],
-        )
-        if stored:
-            snippet = stored
+    if isinstance(entry, dict):
+        url = str(entry.get("url") or "").strip()
+        stored_command = str(entry.get("command") or "").strip()
+        if url and not stored_command:
+            snippet = url
+        elif stored_command:
+            stored_args = entry.get("args") if isinstance(entry.get("args"), list) else []
+            stored = format_mcp_invocation(
+                stored_command,
+                [str(part) for part in stored_args],
+            )
+            if stored:
+                snippet = stored
     return {
         "ok": True,
         "enabled": enabled,
