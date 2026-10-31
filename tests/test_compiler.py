@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -7,7 +8,7 @@ import pytest
 from hive_planner.chunker import chunk_markdown, chunk_plain_text
 from hive_planner.config import RepoPaths
 from hive_planner.discovery import discover_sources, doc_id_for_path
-from hive_planner.emitter import _score_chunk, emit_cartridge
+from hive_planner.emitter import _score_chunk, emit_cartridge, emit_source_context
 from hive_planner.indexer import load_chunk_index, load_document_index
 from hive_planner.models import ChunkRecord
 from hive_planner.normalizer import normalize_document
@@ -184,3 +185,32 @@ def test_emit_warns_without_index(tmp_path: Path) -> None:
     paths.ensure_dirs()
     _, warnings = emit_cartridge(paths, "cartridge-compiler-v1")
     assert any("No documents indexed" in w for w in warnings)
+
+
+def test_emit_source_context_merges_a_utf16_manifest(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    paths.ensure_dirs()
+    paths.cartridge.mkdir(parents=True, exist_ok=True)
+    (paths.cartridge / "manifest.json").write_text(
+        json.dumps({"schema_version": "cartridge.v1", "features": ["kept-feature"]}),
+        encoding="utf-16",
+    )
+
+    emit_source_context(paths, "new-feature")
+
+    data = json.loads((paths.cartridge / "manifest.json").read_text(encoding="utf-8"))
+    assert "kept-feature" in data["features"]
+    assert "new-feature" in data["features"]
+
+
+def test_emit_source_context_recovers_an_undecodable_manifest(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    paths.ensure_dirs()
+    paths.cartridge.mkdir(parents=True, exist_ok=True)
+    (paths.cartridge / "manifest.json").write_bytes(b"\xff\xfe\x00")
+
+    outputs, _ = emit_source_context(paths, "new-feature")
+
+    data = json.loads((paths.cartridge / "manifest.json").read_text(encoding="utf-8"))
+    assert data["features"] == ["new-feature"]
+    assert "manifest" in outputs

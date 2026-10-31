@@ -140,13 +140,21 @@ def _warn_unembedded_preferred_docs(
             )
 
 
+def _read_json_text(path: Path) -> str:
+    """Read JSON saved as UTF-8 (with or without BOM) or UTF-16."""
+    try:
+        return path.read_text(encoding="utf-8-sig")
+    except UnicodeDecodeError:
+        return path.read_text(encoding="utf-16")
+
+
 def _load_cartridge_manifest(paths: RepoPaths) -> dict:
     manifest_path = paths.cartridge / "manifest.json"
     if not manifest_path.is_file():
         return {}
     try:
-        return json.loads(manifest_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+        return json.loads(_read_json_text(manifest_path))
+    except (OSError, UnicodeError, json.JSONDecodeError):
         return {}
 
 
