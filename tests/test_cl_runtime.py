@@ -56,6 +56,28 @@ def test_headless_deploy_writes_workflow_and_manifest(tmp_path: Path) -> None:
     assert HEADLESS_CL_WORKFLOW_REL in written
 
 
+def test_headless_deploy_refresh_recopies_a_differing_workflow(tmp_path: Path) -> None:
+    project = tmp_path / "headless-refresh"
+    project.mkdir()
+    deploy_headless_cl_artifacts(project, CL_RUNTIME_HEADLESS, force=True)
+    workflow = project / HEADLESS_CL_WORKFLOW_REL
+    original = workflow.read_text(encoding="utf-8")
+    workflow.write_text("# stale workflow\n", encoding="utf-8")
+
+    written: list[str] = []
+    stats: dict = {"unchanged": 0}
+    deploy_headless_cl_artifacts(
+        project,
+        CL_RUNTIME_HEADLESS,
+        refresh_changed=True,
+        written=written,
+        refresh_stats=stats,
+    )
+
+    assert workflow.read_text(encoding="utf-8") == original
+    assert HEADLESS_CL_WORKFLOW_REL in written
+
+
 def test_unified_handoff_artifacts_runtime_aware(tmp_path: Path) -> None:
     project = tmp_path / "mixed"
     project.mkdir()

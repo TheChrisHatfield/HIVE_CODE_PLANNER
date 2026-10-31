@@ -122,9 +122,17 @@ Use **Home → Deploy agent handoff** in Hive Planner, or re-run unified bootstr
 def write_cl_runtime_manifest(project_root: Path, runtime: str) -> Path:
     root = project_root.resolve()
     path = root / CL_RUNTIME_MANIFEST
+    normalized = normalize_cl_runtime(runtime)
+    if path.is_file():
+        try:
+            current = json.loads(path.read_text(encoding="utf-8-sig"))
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            current = None
+        if isinstance(current, dict) and current.get("runtime") == normalized:
+            return path
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
-        "runtime": normalize_cl_runtime(runtime),
+        "runtime": normalized,
         "updated_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
     }
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
@@ -137,21 +145,46 @@ def deploy_headless_cl_artifacts(
     *,
     force: bool = False,
     written: list[str] | None = None,
+    refresh_changed: bool = False,
+    refresh_stats: dict | None = None,
 ) -> None:
     normalized = normalize_cl_runtime(runtime, default=CL_RUNTIME_HEADLESS)
     if normalized == CL_RUNTIME_CURSOR:
         raise ValueError("deploy_headless_cl_artifacts requires headless or external runtime")
     root = target.resolve()
     workflow_path = root / HEADLESS_CL_WORKFLOW_REL
-    if force or not workflow_path.is_file():
+    desired = _headless_workflow_markdown(normalized).replace("\r\n", "\n")
+    same = False
+    if workflow_path.is_file():
+        try:
+            same = workflow_path.read_text(encoding="utf-8").replace("\r\n", "\n") == desired
+        except (OSError, UnicodeError):
+            same = False
+    if workflow_path.is_file() and same:
+        if refresh_changed and refresh_stats is not None:
+            refresh_stats["unchanged"] = int(refresh_stats.get("unchanged", 0)) + 1
+    elif force or not workflow_path.is_file() or (refresh_changed and not same):
         workflow_path.parent.mkdir(parents=True, exist_ok=True)
-        workflow_path.write_text(_headless_workflow_markdown(normalized), encoding="utf-8")
+        workflow_path.write_text(desired, encoding="utf-8")
         if written is not None:
             rel = HEADLESS_CL_WORKFLOW_REL
             if rel not in written:
                 written.append(rel)
+    manifest_path = root / CL_RUNTIME_MANIFEST
+    try:
+        manifest_before = manifest_path.read_bytes() if manifest_path.is_file() else None
+    except OSError:
+        manifest_before = None
     manifest_path = write_cl_runtime_manifest(root, normalized)
-    if written is not None:
+    try:
+        manifest_after = manifest_path.read_bytes() if manifest_path.is_file() else None
+    except OSError:
+        manifest_after = None
+    manifest_changed = manifest_before != manifest_after
+    if refresh_changed and not manifest_changed:
+        if refresh_stats is not None:
+            refresh_stats["unchanged"] = int(refresh_stats.get("unchanged", 0)) + 1
+    elif written is not None and (manifest_changed or not refresh_changed):
         rel = manifest_path.relative_to(root).as_posix()
         if rel not in written:
             written.append(rel)
