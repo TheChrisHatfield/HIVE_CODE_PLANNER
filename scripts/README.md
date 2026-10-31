@@ -83,7 +83,8 @@ Buttons sit in titled groups. **Arrange groups** (or **Settings → Arrange Home
 | **Run health check** | Checks planning files, specs, maps, and vendor overlays on the active project. Read **Output** at the bottom if a step fails. |
 | **Open in Cursor** | Opens the active project in Cursor. |
 | **Sync impact maps** | Refreshes the files that list which source files and tests a planning change touches. |
-| **Deploy agent handoff** | Copies Spec Kit and Continual Learning into the project (`.hive/spec-kit/`, `.cursor/plugins/hive-continual-learning/`, `.hive/upstream-pins.json`). Run it again after you update Hive Planner. |
+| **Deploy agent handoff** | Copies Spec Kit and Continual Learning into the project (`.hive/spec-kit/`, `.cursor/plugins/hive-continual-learning/`, `.hive/upstream-pins.json`). Refreshes overlays only when the patch rev changes. |
+| **Update** | After you update Hive Planner, compares the linked project to this Hive Planner and recopies only planning tools that differ. Matching files and your customized project files stay in place. |
 | **Load cartridge…** | Add reference docs, turn a research note into a draft cartridge, or import a cartridge folder. |
 | **Load Sources…** | Copy `.txt` and `.pdf` files into the project so agents can search them. Image-only PDFs are read with Tesseract when it is installed. |
 | **Open in Explorer** | Opens the project folder in File Explorer. |
@@ -288,6 +289,7 @@ CLI: `py -3.11 -m hive_planner mcp-serve` (portable: `HivePlanner.exe --hive-cli
 | You want to… | Do this |
 |--------------|---------|
 | Install or refresh those files | **Home → Deploy agent handoff** |
+| Refresh them after updating Hive Planner | **Home → Update** (recopies only files that differ) |
 | Check them | **Home → Verify vendor pins**, or `py -3.11 -m hive_planner unified-verify` |
 | Find an old marketplace copy | **Home → Scan legacy deployment** |
 | Move an old marketplace plugin to Hive’s copy | **Home → Migrate marketplace CL…**, or `py -3.11 -m hive_planner cl-migrate` |
