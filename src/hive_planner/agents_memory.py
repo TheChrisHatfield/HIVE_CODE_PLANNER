@@ -329,7 +329,7 @@ def lint_agents_md(paths: RepoPaths, agents_path: Path | None = None) -> AgentsL
                 )
                 break
 
-        if title.startswith(EDITABLE_SECTION) or title == EDITABLE_SECTION:
+        if title == EDITABLE_SECTION or _heading_continues(title, EDITABLE_SECTION):
             from hive_planner.spec_drift import classify_bullet
 
             classified = classify_bullet(bullet)

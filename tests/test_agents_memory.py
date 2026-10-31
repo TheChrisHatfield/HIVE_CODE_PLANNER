@@ -104,6 +104,32 @@ def test_lint_prefix_heading_does_not_satisfy_active_feature(tmp_path: Path) -> 
     assert any("Missing required section: ## Active feature" in issue.message for issue in report.issues)
 
 
+def test_lint_does_not_treat_a_longer_facts_heading_as_the_editable_section(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    text = _minimal_agents() + (
+        "\n## Durable Workspace Facts notebook\n\n"
+        "- The launcher must refuse an unsigned spec before opening a project.\n"
+    )
+    (paths.root / "AGENTS.md").write_text(text, encoding="utf-8")
+    report = lint_agents_md(paths)
+    assert report.ok
+    assert not any("Behavioral bullet" in issue.message for issue in report.issues)
+
+
+def test_lint_still_flags_behavioral_bullets_in_a_facts_continuation(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    text = _minimal_agents().replace(
+        "## Durable Workspace Facts\n",
+        "## Durable Workspace Facts — local\n",
+    ).replace(
+        "- Existing durable fact one.",
+        "- The launcher must refuse an unsigned spec before opening a project.",
+    )
+    (paths.root / "AGENTS.md").write_text(text, encoding="utf-8")
+    report = lint_agents_md(paths)
+    assert any("Behavioral bullet" in issue.message for issue in report.issues)
+
+
 def test_lint_missing_section_errors(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     agents = paths.root / "AGENTS.md"
