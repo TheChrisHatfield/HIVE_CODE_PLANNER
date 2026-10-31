@@ -294,6 +294,27 @@ def test_source4s_needs_pdf_support_when_folder_argument_contains_pdf(tmp_path: 
     assert source4s_needs_pdf_support(paths, [folder / "brief.txt"]) is False
 
 
+def test_list_source4s_files_does_not_loop_on_a_directory_junction(tmp_path: Path) -> None:
+    import subprocess
+
+    paths = RepoPaths(root=tmp_path)
+    paths.ensure_dirs()
+    staged = paths.sources / SOURCE4S_DIR_NAME
+    staged.mkdir(parents=True)
+    (staged / "note.txt").write_text("hi", encoding="utf-8")
+    link = staged / "again"
+    created = subprocess.run(
+        ["cmd", "/c", "mklink", "/J", str(link), str(staged)],
+        capture_output=True,
+        text=True,
+    )
+    if created.returncode != 0:
+        pytest.skip("directory junction is not permitted")
+
+    assert list_source4s_files(paths) == ["context-library/sources/source4s/note.txt"]
+    assert source4s_needs_pdf_support(paths, []) is False
+
+
 def test_merge_source4s_selection_dedupes_paths(tmp_path: Path) -> None:
     first = tmp_path / "a.txt"
     second = tmp_path / "b.pdf"

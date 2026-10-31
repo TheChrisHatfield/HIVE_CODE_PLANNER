@@ -275,15 +275,46 @@ def source4s_dir(paths: RepoPaths) -> Path:
     return paths.sources / SOURCE4S_DIR_NAME
 
 
+def _walk_files(root: Path) -> list[Path]:
+    """Files under root. A directory junction back into the tree is not walked again."""
+    found: list[Path] = []
+    seen: set[Path] = set()
+
+    def scan(current: Path) -> None:
+        try:
+            key = current.resolve()
+        except OSError:
+            return
+        if key in seen:
+            return
+        seen.add(key)
+        try:
+            entries = list(current.iterdir())
+        except OSError:
+            return
+        for path in entries:
+            if path.is_dir():
+                if path.is_symlink():
+                    continue
+                scan(path)
+                continue
+            if path.is_file():
+                found.append(path)
+
+    scan(root)
+    return found
+
+
 def list_source4s_files(paths: RepoPaths) -> list[str]:
     root = source4s_dir(paths)
     if not root.is_dir():
         return []
-    found: list[str] = []
-    for path in sorted(root.rglob("*")):
-        if path.is_file() and path.suffix.lower() in SOURCE4S_EXTENSIONS:
-            found.append(path.relative_to(paths.root).as_posix())
-    return found
+    found = [
+        path.relative_to(paths.root).as_posix()
+        for path in _walk_files(root)
+        if path.suffix.lower() in SOURCE4S_EXTENSIONS
+    ]
+    return sorted(found)
 
 
 def source4s_needs_pdf_support(paths: RepoPaths, source_files: list[Path]) -> bool:
@@ -300,9 +331,7 @@ def source4s_needs_pdf_support(paths: RepoPaths, source_files: list[Path]) -> bo
     sources_root = paths.sources
     if not sources_root.is_dir():
         return False
-    return any(
-        path.suffix.lower() == ".pdf" for path in sources_root.rglob("*") if path.is_file()
-    )
+    return any(path.suffix.lower() == ".pdf" for path in _walk_files(sources_root))
 
 
 def stage_source4s_files(paths: RepoPaths, source_files: list[Path]) -> tuple[list[str], list[str]]:
