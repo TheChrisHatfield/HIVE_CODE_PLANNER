@@ -57,6 +57,21 @@ def test_read_project_profile_utf16_keeps_handoff_mode(tmp_path: Path) -> None:
     assert resolve_agent_handoff_mode(project) == "unified"
 
 
+def test_write_project_profile_skips_identical_utf16_file(tmp_path: Path) -> None:
+    project = tmp_path / "demo"
+    project.mkdir()
+    write_project_profile(project, profile="full", project_name="Demo", agent_handoff_mode="unified")
+    path = project / ".hive" / "project.json"
+    text = path.read_text(encoding="utf-8")
+    path.write_text(text, encoding="utf-16")
+    before = path.stat().st_mtime_ns
+
+    write_project_profile(project, profile="full", project_name="Demo", agent_handoff_mode="unified")
+
+    assert path.stat().st_mtime_ns == before
+    assert path.read_text(encoding="utf-16") == text
+
+
 def test_write_project_profile_preserves_created_at_on_update(tmp_path: Path) -> None:
     project = tmp_path / "demo"
     project.mkdir()

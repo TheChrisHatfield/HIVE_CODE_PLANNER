@@ -197,7 +197,15 @@ def write_project_profile(
         ),
     )
     path = project_meta_path(root)
-    path.write_text(json.dumps(payload.to_dict(), indent=2) + "\n", encoding="utf-8")
+    text = json.dumps(payload.to_dict(), indent=2) + "\n"
+    if path.is_file():
+        try:
+            current = _read_meta_text(path)
+        except (OSError, UnicodeError):
+            current = None
+        if current == text:
+            return path
+    path.write_text(text, encoding="utf-8")
     return path
 
 
