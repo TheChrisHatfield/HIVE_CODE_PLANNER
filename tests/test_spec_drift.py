@@ -474,6 +474,28 @@ def test_repair_does_not_write_the_feature_into_the_notes_section(tmp_path: Path
     assert "**kept-feature**" in text.split("## Active feature\n", 1)[1]
 
 
+def test_repair_ignores_a_fenced_active_feature_example(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    (paths.root / "AGENTS.md").write_text(
+        "# AGENTS.md\n\n"
+        "## Guide\n\n"
+        "```markdown\n"
+        "## Active feature\n\n"
+        "**none**\n"
+        "```\n\n"
+        "## Active feature\n\n"
+        "**none**\n",
+        encoding="utf-8",
+    )
+    result = repair_agents_active_feature(paths, "kept-feature")
+    text = (paths.root / "AGENTS.md").read_text(encoding="utf-8")
+    assert result.repaired is True
+    assert parse_active_feature(paths) == "kept-feature"
+    fenced = text.split("```markdown", 1)[1].split("```", 1)[0]
+    assert "**kept-feature**" not in fenced
+    assert "**none**" in fenced
+
+
 def test_repair_updates_an_active_feature_continuation_heading(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     (paths.root / "AGENTS.md").write_text(

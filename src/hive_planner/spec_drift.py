@@ -36,6 +36,28 @@ ACTIVE_FEATURE_SECTION_RE = re.compile(
     re.MULTILINE | re.DOTALL,
 )
 
+
+def _active_feature_section_match(text: str) -> re.Match[str] | None:
+    """First Active feature heading outside a fenced code block.
+
+    The bare regex also matches an example heading inside a ``` fence, which
+    would rewrite the example and report the feature as set while the real
+    section keeps its placeholder.
+    """
+    in_fence = False
+    pos = 0
+    for line in text.splitlines(keepends=True):
+        if line.strip().startswith("```"):
+            in_fence = not in_fence
+            pos += len(line)
+            continue
+        if not in_fence:
+            match = ACTIVE_FEATURE_SECTION_RE.match(text, pos)
+            if match:
+                return match
+        pos += len(line)
+    return None
+
 BEHAVIORAL_PATTERNS = (
     re.compile(r"\bmust\b", re.IGNORECASE),
     re.compile(r"\bshould always\b", re.IGNORECASE),
@@ -209,7 +231,7 @@ def repair_agents_active_feature(paths: RepoPaths, feature: str | None = None) -
     if not agents_path.is_file():
         return AgentsRepairResult(False, detail="AGENTS.md missing")
     text = _read_text(agents_path)
-    match = ACTIVE_FEATURE_SECTION_RE.search(text)
+    match = _active_feature_section_match(text)
     if not match:
         return AgentsRepairResult(False, detail="Active feature section not found")
     from hive_planner.agent_handoff import AGENT_HANDOFF_UNIFIED, resolve_agent_handoff_mode
