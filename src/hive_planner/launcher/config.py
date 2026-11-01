@@ -277,7 +277,10 @@ def load_config() -> LauncherConfig:
         if str(v) in ("minimal", "full") and str(k).strip()
     }
     cfg = LauncherConfig(
-        onboarding_complete=bool(data.get("onboarding_complete", False)),
+        onboarding_complete=_read_config_bool(
+            data.get("onboarding_complete", False),
+            default=False,
+        ),
         hive_planner_root=str(data.get("hive_planner_root") or default_hive_root().resolve()),
         python_executable=str(data.get("python_executable") or "py -3.11"),
         cursor_executable=str(data.get("cursor_executable") or ""),

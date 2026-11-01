@@ -234,3 +234,31 @@ def test_save_settings_preserves_portable_paths(monkeypatch: pytest.MonkeyPatch,
     assert cfg.hive_planner_root == str(tmp_path)
     assert cfg.python_executable == "py -3.11"
     assert cfg.cursor_executable == r"C:\Cursor\Cursor.exe"
+
+
+def test_load_config_treats_onboarding_complete_false_string_as_false(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import json
+
+    from hive_planner.launcher.config import load_config
+
+    cfg_dir = tmp_path / "cfg"
+    cfg_dir.mkdir()
+    monkeypatch.setattr("hive_planner.launcher.config.default_config_dir", lambda: cfg_dir)
+    monkeypatch.setattr(
+        "hive_planner.launcher.service.auto_complete_onboarding_if_ready",
+        lambda _cfg: False,
+    )
+    payload = {"hive_planner_root": str(tmp_path), "onboarding_complete": "false"}
+    (cfg_dir / "config.json").write_text(json.dumps(payload), encoding="utf-8")
+
+    assert load_config().onboarding_complete is False
+
+    payload["onboarding_complete"] = "true"
+    (cfg_dir / "config.json").write_text(json.dumps(payload), encoding="utf-8")
+    assert load_config().onboarding_complete is True
+
+    payload["onboarding_complete"] = False
+    (cfg_dir / "config.json").write_text(json.dumps(payload), encoding="utf-8")
+    assert load_config().onboarding_complete is False
