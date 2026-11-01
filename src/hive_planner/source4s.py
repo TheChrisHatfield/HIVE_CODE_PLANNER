@@ -387,6 +387,14 @@ def stage_source4s_files(paths: RepoPaths, source_files: list[Path]) -> tuple[li
     return copied, warnings
 
 
+def _read_json_text(path: Path) -> str:
+    """Read JSON saved as UTF-8 (with or without BOM) or UTF-16."""
+    try:
+        return path.read_text(encoding="utf-8-sig")
+    except UnicodeDecodeError:
+        return path.read_text(encoding="utf-16")
+
+
 def staged_pdf_ocr_warnings(paths: RepoPaths, copied: list[str]) -> list[str]:
     """Surface OCR quality issues recorded during PDF normalization."""
     warnings: list[str] = []
@@ -403,8 +411,8 @@ def staged_pdf_ocr_warnings(paths: RepoPaths, copied: list[str]) -> list[str]:
         if not meta_path.is_file():
             continue
         try:
-            meta = json.loads(meta_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
+            meta = json.loads(_read_json_text(meta_path))
+        except (OSError, UnicodeError, json.JSONDecodeError):
             continue
         meta_hash = meta.get("content_hash")
         if not meta_hash or meta_hash != doc.content_hash:
