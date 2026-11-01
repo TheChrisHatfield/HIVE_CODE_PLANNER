@@ -72,6 +72,30 @@ def test_write_project_profile_skips_identical_utf16_file(tmp_path: Path) -> Non
     assert path.read_text(encoding="utf-16") == text
 
 
+def test_read_project_profile_treats_false_strings_as_off(tmp_path: Path) -> None:
+    project = tmp_path / "demo"
+    project.mkdir()
+    write_project_profile(project, profile="minimal", project_name="Demo", agent_handoff_mode="off")
+    path = project / ".hive" / "project.json"
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload["spec_kit_enabled"] = "false"
+    payload["continual_learning_enabled"] = "0"
+    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+    meta = read_project_profile(project)
+    assert meta is not None
+    assert meta.spec_kit_enabled is False
+    assert meta.continual_learning_enabled is False
+
+    payload["spec_kit_enabled"] = "true"
+    payload["continual_learning_enabled"] = False
+    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    meta = read_project_profile(project)
+    assert meta is not None
+    assert meta.spec_kit_enabled is True
+    assert meta.continual_learning_enabled is False
+
+
 def test_write_project_profile_preserves_created_at_on_update(tmp_path: Path) -> None:
     project = tmp_path / "demo"
     project.mkdir()

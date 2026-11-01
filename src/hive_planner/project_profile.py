@@ -47,6 +47,23 @@ def _read_meta_text(path: Path) -> str:
         return path.read_text(encoding="utf-16")
 
 
+def _read_meta_bool(value: object) -> bool | None:
+    """Read a stored flag. A missing or null value stays unset."""
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in {"1", "true", "yes", "on"}:
+            return True
+        if lowered in {"0", "false", "no", "off"}:
+            return False
+    return bool(value)
+
+
 def infer_bootstrap_profile(project_root: Path) -> str:
     root = project_root.resolve()
     if (root / "pyproject.toml").is_file() and (root / "START_HERE.md").is_file():
@@ -92,13 +109,11 @@ def read_project_profile(project_root: Path) -> ProjectProfile | None:
         schema_version = int(data.get("schema_version") or SCHEMA_VERSION)
     except (TypeError, ValueError):
         schema_version = SCHEMA_VERSION
-    spec_kit = data["spec_kit_enabled"] if "spec_kit_enabled" in data else None
-    continual_learning = data["continual_learning_enabled"] if "continual_learning_enabled" in data else None
+    spec_kit = _read_meta_bool(data["spec_kit_enabled"]) if "spec_kit_enabled" in data else None
+    continual_learning = (
+        _read_meta_bool(data["continual_learning_enabled"]) if "continual_learning_enabled" in data else None
+    )
     agent_handoff = str(data["agent_handoff_mode"]).strip().lower() if data.get("agent_handoff_mode") else None
-    if spec_kit is not None:
-        spec_kit = bool(spec_kit)
-    if continual_learning is not None:
-        continual_learning = bool(continual_learning)
     cl_source = str(data["cl_source"]).strip().lower() if data.get("cl_source") else None
     if cl_source not in {None, "vendored", "marketplace"}:
         cl_source = None
