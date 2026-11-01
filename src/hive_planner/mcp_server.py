@@ -87,6 +87,7 @@ TOOLS: list[dict[str, Any]] = [
                 "feature": {"type": "string"},
                 "allow_dirty": {"type": "boolean"},
                 "force_feature": {"type": "boolean"},
+                "allow_overlap": {"type": "boolean"},
             }
         ),
     },
@@ -180,13 +181,23 @@ def _version() -> str:
         return "1.3.0"
 
 
+class _RootError(Exception):
+    """The tool's project path is missing or not a directory."""
+
+    def __init__(self, error: str) -> None:
+        self.error = error
+        super().__init__(error)
+
+
 def _workspace_root(arguments: dict[str, Any] | None) -> Path:
     raw = str((arguments or {}).get("root") or "").strip()
     path = Path(raw).expanduser().resolve() if raw else Path.cwd().resolve()
     from hive_planner.launcher.service import linked_install_directory
 
-    target, _error = linked_install_directory(path)
-    return target if target is not None else path
+    target, error = linked_install_directory(path)
+    if target is None:
+        raise _RootError(error or "Path is not a project directory")
+    return target
 
 
 def _bool(value: object, default: bool = False) -> bool:
@@ -322,6 +333,7 @@ def _tool_hive_implementation_loop_start(arguments: dict[str, Any]) -> dict[str,
         _optional_str(arguments.get("feature")),
         allow_dirty=_bool(arguments.get("allow_dirty")),
         force_feature=_bool(arguments.get("force_feature")),
+        allow_overlap=_bool(arguments.get("allow_overlap")),
     )
 
 
@@ -467,7 +479,10 @@ def call_tool(name: str, arguments: dict[str, Any] | None = None) -> dict[str, A
     handler = _HANDLERS.get(name)
     if handler is None:
         return {"ok": False, "error": f"Unknown tool: {name}"}
-    return handler(dict(arguments or {}))
+    try:
+        return handler(dict(arguments or {}))
+    except _RootError as exc:
+        return {"ok": False, "error": exc.error}
 
 
 def _initialize_result() -> dict[str, Any]:
