@@ -707,6 +707,26 @@ def test_apply_rejects_behavioral_candidate(tmp_path: Path) -> None:
         run_agents_memory(paths, candidates, apply=True)
 
 
+def test_apply_rollback_restores_utf16_agents_bytes(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    broken = _minimal_agents().replace("## Planning Rosetta Stone", "## Missing Rosetta")
+    agents = paths.root / "AGENTS.md"
+    agents.write_bytes(broken.encode("utf-16"))
+    before = agents.read_bytes()
+    candidates = paths.root / "candidates.md"
+    candidates.write_text("- Valid operational candidate bullet.\n", encoding="utf-8")
+
+    with pytest.raises(AgentsMemoryError, match="Apply rolled back"):
+        run_agents_memory(paths, candidates, apply=True)
+    assert agents.read_bytes() == before
+
+    from hive_planner.agents_memory import apply_agents_memory_accepted
+
+    with pytest.raises(AgentsMemoryError, match="Apply rolled back"):
+        apply_agents_memory_accepted(paths, accepted=["Another operational fact."])
+    assert agents.read_bytes() == before
+
+
 def test_apply_rolls_back_on_lint_failure(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     broken = _minimal_agents().replace("## Planning Rosetta Stone", "## Missing Rosetta")

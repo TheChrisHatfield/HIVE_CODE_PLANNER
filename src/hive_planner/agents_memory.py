@@ -866,11 +866,12 @@ def run_agents_memory(
         pending = [c for c in accepted if _normalize_bullet(c) not in _existing_durable_bullets(sections)]
         apply_bullets = pending
         if pending:
+            before_bytes = target.read_bytes()
             updated = _apply_accepted_bullets(agents_text, pending)
             target.write_text(updated, encoding="utf-8")
             lint = lint_agents_md(paths, agents_path=target)
             if not lint.ok:
-                target.write_text(agents_text, encoding="utf-8")
+                target.write_bytes(before_bytes)
                 errors = [i.message for i in lint.issues if i.severity == "error"]
                 rollback_proposal = _write_proposal(
                     paths,
@@ -994,11 +995,12 @@ def apply_agents_memory_accepted(
     proposed_bullets = "\n".join(f"- {c}" for c in pending)
     after = f"{facts}\n{proposed_bullets}".strip() if facts else proposed_bullets
 
+    before_bytes = target.read_bytes()
     updated = _apply_accepted_bullets(agents_text, pending)
     target.write_text(updated, encoding="utf-8")
     lint = lint_agents_md(paths, agents_path=target)
     if not lint.ok:
-        target.write_text(agents_text, encoding="utf-8")
+        target.write_bytes(before_bytes)
         errors = [i.message for i in lint.issues if i.severity == "error"]
         rollback_proposal = _write_proposal(
             paths,
