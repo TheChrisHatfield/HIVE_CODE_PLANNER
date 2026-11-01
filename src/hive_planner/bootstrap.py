@@ -260,7 +260,9 @@ def _install_implementation_loop_artifacts(
     try:
         files = install_implementation_loop(target, pack, force_pack=force)
     except (ValueError, OSError) as exc:
-        raise BootstrapError(f"Implementation-loop install failed: {exc}") from exc
+        # install's own CLI flag is --force-pack. init changes an installed pack with --force.
+        detail = str(exc).replace("--force-pack", "--force")
+        raise BootstrapError(f"Implementation-loop install failed: {detail}") from exc
     for rel in files:
         if rel not in written:
             written.append(rel)
