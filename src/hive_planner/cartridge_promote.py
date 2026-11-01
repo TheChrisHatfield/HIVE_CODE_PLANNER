@@ -19,6 +19,7 @@ from hive_planner.delta_emit import (
 )
 from hive_planner.spec_drift import (
     _tasks_have_wiring_audit_heading,
+    _unfenced_lines,
     check_memory_spec_drift,
     check_spec_handoff,
     classify_bullet,
@@ -233,8 +234,9 @@ def _promote_to_target(
 
 
 def _extract_bullets(text: str) -> list[str]:
+    """Bullets outside code fences. A fenced example is not a memory candidate."""
     bullets: list[str] = []
-    for line in text.splitlines():
+    for _pos, line in _unfenced_lines(text):
         stripped = line.strip()
         if stripped.startswith("- "):
             bullets.append(stripped[2:].strip())

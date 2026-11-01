@@ -262,6 +262,35 @@ def test_promote_memory_writes_classified_candidates(tmp_path: Path) -> None:
     assert "(none classified)" not in text
 
 
+def test_promote_memory_ignores_a_fenced_example_bullet(tmp_path: Path) -> None:
+    project = _unified_project(tmp_path / "proj")
+    feature = "fenced-mem"
+    paths = RepoPaths(root=project)
+    (paths.cartridge / "memory.md").write_text(
+        "\n".join(
+            [
+                DRAFT_BANNER,
+                "",
+                "# Memory Candidates (draft)",
+                "",
+                "- Run ci-check before handoff.",
+                "",
+                "```markdown",
+                "- API must return 404 when disabled.",
+                "```",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    result = promote_cartridge_drafts(paths, feature)
+
+    assert result.candidates_path is not None
+    text = (project / result.candidates_path).read_text(encoding="utf-8")
+    assert "ci-check" in text
+    assert "404" not in text
+
+
 def test_promote_memory_skips_empty_candidate_sections(tmp_path: Path) -> None:
     project = _unified_project(tmp_path / "proj")
     feature = "empty-mem"
