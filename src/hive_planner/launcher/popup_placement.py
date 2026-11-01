@@ -253,6 +253,9 @@ def install_popup_memory(
         saved = placement.get(title)
         if saved is not None and titlebar_on_a_monitor(saved[0], saved[1], _window_width(window), screens()):
             _move_window(window, saved[0], saved[1])
+        elif _is_at_screen_origin(window):
+            # Same rule as remember_popup: transient() leaves a new dialog at 0,0.
+            _center_on_parent(window)
         _track_moves(window, title, placement, save_delay_ms=save_delay_ms)
 
     root.bind_class("Toplevel", "<Map>", on_map, add="+")

@@ -249,6 +249,32 @@ def test_other_titled_popups_share_memory_tooltips_do_not(tmp_path: Path, tk_roo
     root.update()
 
 
+def test_unsaved_popup_at_origin_opens_on_the_parent(tmp_path: Path, tk_root) -> None:
+    root = tk_root
+    root.attributes("-alpha", 0.0)
+    root.deiconify()
+    root.geometry("920x680+400+200")
+    root.update()
+    store = PlacementStore(tmp_path / "popup-placements.json")
+    install_popup_memory(root, store=store, monitors=lambda: PRIMARY)
+    dialog = tk.Toplevel(root)
+    dialog.withdraw()
+    dialog.title("Ask")
+    dialog.geometry("280x120+0+0")
+    dialog.deiconify()
+    root.update()
+    expected_x = root.winfo_rootx() + max(0, (root.winfo_width() - 280) // 2)
+    expected_y = root.winfo_rooty() + max(0, (root.winfo_height() - 120) // 2)
+    assert dialog.winfo_x() == expected_x
+    assert dialog.winfo_y() == expected_y
+    assert dialog.winfo_x() != 0
+    assert store.get("Ask") is None
+    dialog.destroy()
+    root.withdraw()
+    root.attributes("-alpha", 1.0)
+    root.update()
+
+
 def test_dialog_helper_uses_shared_popup_memory() -> None:
     source = (Path(__file__).resolve().parents[1] / "src/hive_planner/launcher/app.py").read_text(
         encoding="utf-8"
