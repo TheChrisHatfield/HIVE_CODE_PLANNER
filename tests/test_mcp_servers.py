@@ -39,6 +39,27 @@ def test_load_mcp_document_accepts_utf8_bom(tmp_path: Path) -> None:
     assert json.loads(raw.decode("utf-8"))["mcpServers"]["other"]["command"] == "npx"
 
 
+def test_load_mcp_document_readonly_bom_is_a_user_error(tmp_path: Path) -> None:
+    import stat
+
+    import pytest
+
+    from hive_planner.launcher.mcp_servers import McpConfigError
+
+    cursor = tmp_path / ".cursor"
+    cursor.mkdir()
+    path = cursor / "mcp.json"
+    raw = b"\xef\xbb\xbf" + json.dumps({"mcpServers": {}}).encode("utf-8")
+    path.write_bytes(raw)
+    path.chmod(stat.S_IREAD)
+    try:
+        with pytest.raises(McpConfigError, match="BOM"):
+            load_mcp_document(tmp_path)
+        assert path.read_bytes() == raw
+    finally:
+        path.chmod(stat.S_IWRITE | stat.S_IREAD)
+
+
 def test_disable_clears_leftover_enabled_true() -> None:
     doc = {
         "mcpServers": {

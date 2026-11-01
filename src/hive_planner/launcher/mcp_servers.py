@@ -117,7 +117,12 @@ def load_mcp_document(root: Path) -> dict[str, Any]:
     elif not isinstance(servers, dict):
         raise McpConfigError("mcpServers must be an object")
     if bom:
-        path.write_text(text, encoding="utf-8", newline="\n")
+        try:
+            path.write_text(text, encoding="utf-8", newline="\n")
+        except OSError as exc:
+            raise McpConfigError(
+                f"Could not remove the UTF-8 BOM from .cursor/mcp.json: {exc}"
+            ) from exc
     return data
 
 
