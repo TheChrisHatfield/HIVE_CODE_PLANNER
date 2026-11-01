@@ -61,7 +61,7 @@ The desktop app **Deploy agent handoff** button (Home tab) runs the same deploy 
 | Situation | Action |
 |-----------|--------|
 | New project with unified handoff | **Projects → Create project** with handoff **unified**, or **Home → Deploy agent handoff** on an existing Hive project |
-| After upgrading Hive Planner | **Home → Deploy agent handoff** again (refreshes overlays when patch rev changes) |
+| After upgrading Hive Planner | **Home → Update** compares the linked project to this Hive Planner, recopies planning tools that differ, and leaves matching or customized project files in place. **Deploy agent handoff** still refreshes overlays only when the patch rev changes |
 | Check pins and overlays in a project | **Home → Verify vendor pins**, or `py -3.11 -m hive_planner unified-verify` |
 | Detect old marketplace / starter-kit layout | **Home → Scan legacy deployment** |
 | Migrate marketplace CL → Hive vendored CL | **Home → Migrate marketplace CL…**, or `py -3.11 -m hive_planner cl-migrate` |
@@ -167,14 +167,22 @@ def user_guide_path(config: LauncherConfig | None = None) -> Path:
     return root.resolve() / "scripts" / "README.md"
 
 
+def _read_guide_text(path: Path) -> str:
+    """Read scripts/README.md saved as UTF-8 (with or without BOM) or UTF-16."""
+    try:
+        return path.read_text(encoding="utf-8-sig")
+    except UnicodeDecodeError:
+        return path.read_text(encoding="utf-16")
+
+
 def load_user_guide(config: LauncherConfig | None = None) -> str:
     path = user_guide_path(config)
     readme_on_disk = path.is_file()
     text: str | None = None
     if readme_on_disk:
         try:
-            text = path.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError):
+            text = _read_guide_text(path)
+        except (OSError, UnicodeError):
             text = None
     if text is None:
         text = _FALLBACK_GUIDE
