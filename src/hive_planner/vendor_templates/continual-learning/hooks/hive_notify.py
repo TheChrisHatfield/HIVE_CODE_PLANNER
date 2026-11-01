@@ -54,6 +54,19 @@ def _geometry(width: int, height: int, work: tuple[int, int, int, int]) -> str:
     return f"{width}x{height}+{x}+{y}"
 
 
+def _foreground_sample(left: int, top: int, right: int, bottom: int) -> tuple[int, int] | None:
+    """Center of a usable foreground window, or None when the rect should be ignored.
+
+    A minimized window is parked near (-32000, -32000). A real window whose
+    center is the origin is still a point: (0, 0) is the seam between monitors.
+    """
+    width = right - left
+    height = bottom - top
+    if width > 0 and height > 0 and left > -20000 and top > -20000:
+        return left + width // 2, top + height // 2
+    return None
+
+
 def _foreground_work_area() -> tuple[int, int, int, int] | None:
     """Work area of the monitor that holds the window in front.
 
@@ -88,16 +101,16 @@ def _foreground_work_area() -> tuple[int, int, int, int] | None:
 
     point = POINT()
     hwnd = user.GetForegroundWindow()
+    sample = None
     if hwnd:
         rect = RECT()
         if user.GetWindowRect(hwnd, ctypes.byref(rect)):
-            width = rect.right - rect.left
-            height = rect.bottom - rect.top
-            if width > 0 and height > 0 and rect.left > -20000 and rect.top > -20000:
-                point.x = rect.left + width // 2
-                point.y = rect.top + height // 2
-    if point.x == 0 and point.y == 0 and not user.GetCursorPos(ctypes.byref(point)):
-        return None
+            sample = _foreground_sample(rect.left, rect.top, rect.right, rect.bottom)
+    if sample is None:
+        if not user.GetCursorPos(ctypes.byref(point)):
+            return None
+    else:
+        point.x, point.y = sample
     monitor = user.MonitorFromPoint(point, 2)
     if not monitor:
         return None

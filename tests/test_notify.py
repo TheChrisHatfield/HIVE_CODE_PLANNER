@@ -110,6 +110,12 @@ def test_notify_accepts_a_repo_heading_that_starts_with_a_dash(tmp_path: Path, m
     assert json.loads(log.read_text(encoding="utf-8"))["repo"] == heading
 
 
+def test_foreground_center_at_the_origin_is_a_real_point() -> None:
+    hive_notify = _hive_notify()
+    assert hive_notify._foreground_sample(-20, -10, 20, 10) == (0, 0)
+    assert hive_notify._foreground_sample(-32000, -32000, -31800, -31900) is None
+
+
 def test_popup_sits_on_the_monitor_in_front() -> None:
     hive_notify = _hive_notify()
     # Cursor on this machine occupies the monitor whose work area is left of the origin.
