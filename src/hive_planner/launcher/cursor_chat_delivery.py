@@ -177,7 +177,7 @@ def _loop_in_progress(repo: Path, phrase: str) -> bool:
     elif phrase == "code spec":
         path = repo / ".hive" / "implementation-loop" / "state.json"
         key = "status"
-        want = "running"
+        want = ("running", "blocked")
     elif phrase == "agnostic loop":
         path = repo / ".hive" / "agnostic-loop" / "state.json"
         key = "status"
@@ -189,7 +189,10 @@ def _loop_in_progress(repo: Path, phrase: str) -> bool:
     data = _read_json_object(path)
     if data is None:
         return False
-    return data.get(key) == want
+    actual = data.get(key)
+    if isinstance(want, tuple):
+        return actual in want
+    return actual == want
 
 
 def _command_missing(repo: Path, phrase: str) -> bool:

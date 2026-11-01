@@ -209,6 +209,27 @@ def test_already_generating_skips_submit(tmp_path: Path) -> None:
     assert not (repo / ".hive" / "controls-execute" / "request.json").exists()
 
 
+def test_blocked_codespec_loop_is_not_sent_again(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _install(repo, "code spec")
+    db = tmp_path / "state.vscdb"
+    storage = _storage(tmp_path / "ws", "ws-a", repo)
+    _db(db, [_header("idle", "ws-a", 4, "Hive face")])
+    state = repo / ".hive" / "implementation-loop"
+    state.mkdir(parents=True)
+    (state / "state.json").write_text(json.dumps({"status": "blocked"}), encoding="utf-8")
+    assert _target(db, storage).deliver("Hive face", repo, "code spec") == "already_generating"
+    assert not (repo / ".hive" / "controls-execute" / "request.json").exists()
+
+    (state / "state.json").write_text(json.dumps({"status": "running"}), encoding="utf-8")
+    assert _target(db, storage).deliver("Hive face", repo, "code spec") == "already_generating"
+
+    (state / "state.json").write_text(json.dumps({"status": "complete"}), encoding="utf-8")
+    assert _target(db, storage, timeout=0.05).deliver("Hive face", repo, "code spec") == "failed"
+    assert (repo / ".hive" / "controls-execute" / "request.json").is_file()
+
+
 def test_utf16_loop_state_still_counts_as_already_generating(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
