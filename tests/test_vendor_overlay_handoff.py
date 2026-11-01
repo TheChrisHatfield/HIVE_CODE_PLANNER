@@ -55,6 +55,28 @@ def test_handoff_flags_hooks_json_that_omits_workspace_open(tmp_path: Path) -> N
     assert ".cursor/hooks.json" in status.missing
 
 
+def test_utf16_project_hooks_are_reported_unreadable(tmp_path: Path) -> None:
+    from hive_planner.vendor_sync import _verify_cl_overlay, overlay_issues_as_missing
+
+    target = tmp_path / "utf16-hooks"
+    hooks = target / ".cursor" / "hooks.json"
+    hooks.parent.mkdir(parents=True)
+    hooks.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "hooks": {"workspaceOpen": [{"command": "py -3.11 .cursor/hooks/hive_workspace_open.py"}]},
+            }
+        ),
+        encoding="utf-16",
+    )
+
+    issues = _verify_cl_overlay(target)
+    assert any(".cursor/hooks.json is not UTF-8" in issue for issue in issues)
+    assert not any("missing workspaceOpen" in issue for issue in issues)
+    assert ".cursor/hooks.json" in overlay_issues_as_missing(target, None)
+
+
 def test_load_manifest_reads_utf16_json(tmp_path: Path) -> None:
     from hive_planner.vendor_sync import VendorSyncError, load_manifest
 

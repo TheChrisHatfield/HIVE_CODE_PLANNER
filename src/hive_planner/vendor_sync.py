@@ -269,6 +269,24 @@ def _read_json_text(path: Path) -> str:
         return path.read_text(encoding="utf-16")
 
 
+def _read_cursor_json_text(path: Path) -> tuple[str, bool]:
+    """Return hook JSON text and whether Cursor can load it as UTF-8.
+
+    An unreadable file returns empty text and True so the existing missing-hook
+    checks still run. UTF-16 returns False because Cursor rejects that encoding.
+    """
+    try:
+        raw = path.read_bytes()
+    except OSError:
+        return "", True
+    if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+        return "", False
+    try:
+        return raw.decode("utf-8-sig"), True
+    except UnicodeDecodeError:
+        return "", False
+
+
 def read_project_pins(project_root: Path) -> dict | None:
     path = project_root.resolve() / PROJECT_PINS_REL
     if not path.is_file():
@@ -335,38 +353,43 @@ def _verify_cl_overlay(root: Path, *, manifest: dict | None = None) -> list[str]
             issues.append(f"continual-learning overlay missing: {CL_OVERLAY_REL}/{rel}")
     hooks_json = overlay_root / "hooks" / "hooks.json"
     if hooks_json.is_file():
-        try:
-            hooks_text = hooks_json.read_text(encoding="utf-8")
-        except OSError:
-            hooks_text = ""
-        if "bun " in hooks_text or "bun\t" in hooks_text or '"bun' in hooks_text:
+        hooks_text, hooks_utf8 = _read_cursor_json_text(hooks_json)
+        if not hooks_utf8:
             issues.append(
-                f"continual-learning overlay uses Bun stop hook (need Python): "
+                f"continual-learning overlay hooks.json is not UTF-8: "
                 f"{CL_OVERLAY_REL}/hooks/hooks.json"
             )
-        if "continual-learning-stop.py" not in hooks_text:
-            issues.append(
-                f"continual-learning overlay hooks.json must invoke continual-learning-stop.py: "
-                f"{CL_OVERLAY_REL}/hooks/hooks.json"
-            )
+        else:
+            if "bun " in hooks_text or "bun\t" in hooks_text or '"bun' in hooks_text:
+                issues.append(
+                    f"continual-learning overlay uses Bun stop hook (need Python): "
+                    f"{CL_OVERLAY_REL}/hooks/hooks.json"
+                )
+            if "continual-learning-stop.py" not in hooks_text:
+                issues.append(
+                    f"continual-learning overlay hooks.json must invoke continual-learning-stop.py: "
+                    f"{CL_OVERLAY_REL}/hooks/hooks.json"
+                )
     # Cursor 3.x does not auto-discover project plugins; workspaceOpen must register them.
     project_hooks = root / ".cursor" / "hooks.json"
     workspace_hook = root / ".cursor" / "hooks" / "hive_workspace_open.py"
     if not project_hooks.is_file():
         issues.append("continual-learning registration missing: .cursor/hooks.json (workspaceOpen)")
     else:
-        try:
-            project_hooks_text = project_hooks.read_text(encoding="utf-8")
-        except OSError:
-            project_hooks_text = ""
-        if "workspaceOpen" not in project_hooks_text:
+        project_hooks_text, project_hooks_utf8 = _read_cursor_json_text(project_hooks)
+        if not project_hooks_utf8:
             issues.append(
-                "continual-learning registration missing workspaceOpen in .cursor/hooks.json"
+                ".cursor/hooks.json is not UTF-8, so Cursor cannot load the continual-learning registration"
             )
-        if "hive_workspace_open.py" not in project_hooks_text:
-            issues.append(
-                "continual-learning registration missing hive_workspace_open.py in .cursor/hooks.json"
-            )
+        else:
+            if "workspaceOpen" not in project_hooks_text:
+                issues.append(
+                    "continual-learning registration missing workspaceOpen in .cursor/hooks.json"
+                )
+            if "hive_workspace_open.py" not in project_hooks_text:
+                issues.append(
+                    "continual-learning registration missing hive_workspace_open.py in .cursor/hooks.json"
+                )
     if not workspace_hook.is_file():
         issues.append(
             "continual-learning registration missing: .cursor/hooks/hive_workspace_open.py"
@@ -433,8 +456,10 @@ def overlay_issues_as_missing(root: Path, manifest: dict | None) -> list[str]:
         elif issue.startswith("continual-learning registration missing: "):
             rest = issue.split("continual-learning registration missing: ", 1)[1]
             add(rest.split(" (", 1)[0].strip())
-        elif "in .cursor/hooks.json" in issue:
+        elif "in .cursor/hooks.json" in issue or ".cursor/hooks.json is not UTF-8" in issue:
             add(".cursor/hooks.json")
+        elif "overlay hooks.json is not UTF-8" in issue:
+            add(f"{CL_OVERLAY_REL}/hooks/hooks.json")
     return missing
 
 
@@ -663,6 +688,11 @@ def vendor_sync_apply(repo_root: Path) -> VendorManifestReport:
     return validate_manifest_data(manifest, manifest_path=manifest_path, repo_root=root)
 
 
+def _note_refresh_unchanged(stats: dict | None) -> None:
+    if stats is not None:
+        stats["unchanged"] = int(stats.get("unchanged", 0)) + 1
+
+
 def write_unified_vendor_pins(
     source_root: Path,
     target: Path,
@@ -670,6 +700,8 @@ def write_unified_vendor_pins(
     force: bool = False,
     written: list[str] | None = None,
     warnings: list[str] | None = None,
+    refresh_changed: bool = False,
+    refresh_stats: dict | None = None,
 ) -> bool:
     try:
         manifest_path = resolve_manifest_path(source_root)
@@ -678,8 +710,20 @@ def write_unified_vendor_pins(
         if warnings is not None:
             warnings.append(str(exc))
         return False
+    dest = target.resolve() / PROJECT_PINS_REL
+    try:
+        before = dest.read_bytes() if dest.is_file() else None
+    except OSError:
+        before = None
     write_project_pins(target, manifest, force=force)
-    if written is not None:
+    try:
+        after = dest.read_bytes() if dest.is_file() else None
+    except OSError:
+        after = None
+    changed = before != after
+    if refresh_changed and not changed:
+        _note_refresh_unchanged(refresh_stats)
+    elif written is not None:
         rel = PROJECT_PINS_REL
         if rel not in written:
             written.append(rel)
@@ -705,8 +749,8 @@ def _read_component_overlay_rev(target: Path, overlay_rel: str) -> str | None:
     if not marker.is_file():
         return None
     try:
-        return marker.read_text(encoding="utf-8").strip() or None
-    except OSError:
+        return _read_json_text(marker).strip() or None
+    except (OSError, UnicodeError):
         return None
 
 
@@ -726,6 +770,67 @@ def _write_overlay_patch_rev(target: Path, patch_rev: str) -> None:
     _write_component_overlay_rev(target, SPEC_KIT_OVERLAY_REL, patch_rev)
 
 
+def _sync_overlay_tree(
+    overlay_root: Path,
+    dest_root: Path,
+    target: Path,
+    *,
+    overlay_force: bool,
+    refresh_changed: bool,
+    refresh_stats: dict | None,
+    written: list[str] | None,
+) -> None:
+    for src in sorted(overlay_root.rglob("*")):
+        if not src.is_file():
+            continue
+        rel = src.relative_to(overlay_root)
+        dest = dest_root / rel
+        if dest.exists() and not overlay_force:
+            if not refresh_changed:
+                continue
+            try:
+                if src.read_bytes() == dest.read_bytes():
+                    _note_refresh_unchanged(refresh_stats)
+                    continue
+            except OSError:
+                pass
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dest)
+        if written is not None:
+            rel_dest = dest.relative_to(target).as_posix()
+            if rel_dest not in written:
+                written.append(rel_dest)
+
+
+def _stamp_overlay_rev(
+    target: Path,
+    overlay_rel: str,
+    patch_rev: str,
+    *,
+    refresh_changed: bool,
+    refresh_stats: dict | None,
+    written: list[str] | None,
+) -> None:
+    if not patch_rev:
+        return
+    marker = target / overlay_rel / OVERLAY_REV_FILE
+    desired = patch_rev + "\n"
+    same = False
+    if marker.is_file():
+        try:
+            same = _read_json_text(marker) == desired
+        except (OSError, UnicodeError):
+            same = False
+    if refresh_changed and same:
+        _note_refresh_unchanged(refresh_stats)
+        return
+    _write_component_overlay_rev(target, overlay_rel, patch_rev)
+    if written is not None:
+        rel_marker = f"{overlay_rel}/{OVERLAY_REV_FILE}"
+        if rel_marker not in written:
+            written.append(rel_marker)
+
+
 def deploy_spec_kit_overlay(
     source_root: Path,
     target: Path,
@@ -733,6 +838,8 @@ def deploy_spec_kit_overlay(
     force: bool = False,
     written: list[str] | None = None,
     warnings: list[str] | None = None,
+    refresh_changed: bool = False,
+    refresh_stats: dict | None = None,
 ) -> None:
     try:
         overlay_root = resolve_spec_kit_overlay_path(source_root)
@@ -755,29 +862,27 @@ def deploy_spec_kit_overlay(
             patch_rev = pins_rev
     dest_root = target / SPEC_KIT_OVERLAY_REL
     overlay_force = force
-    if not overlay_force and patch_rev:
+    if not refresh_changed and not overlay_force and patch_rev:
         deployed_rev = _read_overlay_patch_rev(target)
         if deployed_rev != patch_rev:
             overlay_force = True
-    for src in sorted(overlay_root.rglob("*")):
-        if not src.is_file():
-            continue
-        rel = src.relative_to(overlay_root)
-        dest = dest_root / rel
-        if dest.exists() and not overlay_force:
-            continue
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(src, dest)
-        if written is not None:
-            rel_dest = dest.relative_to(target).as_posix()
-            if rel_dest not in written:
-                written.append(rel_dest)
-    if patch_rev:
-        _write_overlay_patch_rev(target, patch_rev)
-        if written is not None:
-            rel_marker = f"{SPEC_KIT_OVERLAY_REL}/{OVERLAY_REV_FILE}"
-            if rel_marker not in written:
-                written.append(rel_marker)
+    _sync_overlay_tree(
+        overlay_root,
+        dest_root,
+        target,
+        overlay_force=overlay_force,
+        refresh_changed=refresh_changed,
+        refresh_stats=refresh_stats,
+        written=written,
+    )
+    _stamp_overlay_rev(
+        target,
+        SPEC_KIT_OVERLAY_REL,
+        patch_rev,
+        refresh_changed=refresh_changed,
+        refresh_stats=refresh_stats,
+        written=written,
+    )
 
 
 def deploy_continual_learning_overlay(
@@ -787,6 +892,8 @@ def deploy_continual_learning_overlay(
     force: bool = False,
     written: list[str] | None = None,
     warnings: list[str] | None = None,
+    refresh_changed: bool = False,
+    refresh_stats: dict | None = None,
 ) -> None:
     try:
         overlay_root = resolve_continual_learning_overlay_path(source_root)
@@ -809,29 +916,27 @@ def deploy_continual_learning_overlay(
             patch_rev = pins_rev
     dest_root = target / CL_OVERLAY_REL
     overlay_force = force
-    if not overlay_force and patch_rev:
+    if not refresh_changed and not overlay_force and patch_rev:
         deployed_rev = _read_component_overlay_rev(target, CL_OVERLAY_REL)
         if deployed_rev != patch_rev:
             overlay_force = True
-    for src in sorted(overlay_root.rglob("*")):
-        if not src.is_file():
-            continue
-        rel = src.relative_to(overlay_root)
-        dest = dest_root / rel
-        if dest.exists() and not overlay_force:
-            continue
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(src, dest)
-        if written is not None:
-            rel_dest = dest.relative_to(target).as_posix()
-            if rel_dest not in written:
-                written.append(rel_dest)
-    if patch_rev:
-        _write_component_overlay_rev(target, CL_OVERLAY_REL, patch_rev)
-        if written is not None:
-            rel_marker = f"{CL_OVERLAY_REL}/{OVERLAY_REV_FILE}"
-            if rel_marker not in written:
-                written.append(rel_marker)
+    _sync_overlay_tree(
+        overlay_root,
+        dest_root,
+        target,
+        overlay_force=overlay_force,
+        refresh_changed=refresh_changed,
+        refresh_stats=refresh_stats,
+        written=written,
+    )
+    _stamp_overlay_rev(
+        target,
+        CL_OVERLAY_REL,
+        patch_rev,
+        refresh_changed=refresh_changed,
+        refresh_stats=refresh_stats,
+        written=written,
+    )
     # Cursor 3.x does not auto-discover `.cursor/plugins/`; workspaceOpen must register them.
     # Overlay-only deploy (Home handoff / unified-verify) used to skip this and fail verify.
     from hive_planner.bootstrap import _copy_cursor_workspace_plugin_hooks
@@ -843,6 +948,8 @@ def deploy_continual_learning_overlay(
         force=overlay_force,
         written=hook_written,
         warnings=hook_warnings,
+        refresh_changed=refresh_changed,
+        refresh_stats=refresh_stats,
     )
 
 
@@ -854,6 +961,8 @@ def deploy_unified_vendor_artifacts(
     written: list[str] | None = None,
     warnings: list[str] | None = None,
     cl_runtime: str | None = None,
+    refresh_changed: bool = False,
+    refresh_stats: dict | None = None,
 ) -> None:
     from hive_planner.cl_runtime import (
         CL_RUNTIME_CURSOR,
@@ -870,6 +979,8 @@ def deploy_unified_vendor_artifacts(
         force=force,
         written=written,
         warnings=warnings,
+        refresh_changed=refresh_changed,
+        refresh_stats=refresh_stats,
     ):
         return
     deploy_spec_kit_overlay(
@@ -878,6 +989,8 @@ def deploy_unified_vendor_artifacts(
         force=force,
         written=written,
         warnings=warnings,
+        refresh_changed=refresh_changed,
+        refresh_stats=refresh_stats,
     )
     if requires_cursor_plugin(runtime):
         deploy_continual_learning_overlay(
@@ -886,9 +999,18 @@ def deploy_unified_vendor_artifacts(
             force=force,
             written=written,
             warnings=warnings,
+            refresh_changed=refresh_changed,
+            refresh_stats=refresh_stats,
         )
     else:
-        deploy_headless_cl_artifacts(target, runtime, force=force, written=written)
+        deploy_headless_cl_artifacts(
+            target,
+            runtime,
+            force=force,
+            written=written,
+            refresh_changed=refresh_changed,
+            refresh_stats=refresh_stats,
+        )
         from hive_planner.agent_handoff import MARKETPLACE_CL_REL
         from hive_planner.cl_migration import marketplace_plugin_tree_present
 
