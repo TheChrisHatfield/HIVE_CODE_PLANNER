@@ -425,6 +425,24 @@ def test_spec_create_sets_active_feature(tmp_path: Path) -> None:
     assert parse_active_feature(paths) == "my-feature"
 
 
+def test_spec_create_failure_restores_crlf_agents_bytes(tmp_path: Path) -> None:
+    from hive_planner.spec_drift import SPEC_CREATION_SPEC_TAIL, complete_spec_creation
+
+    paths = RepoPaths(root=tmp_path)
+    before = _minimal_agents("other-feature").replace("\n", "\r\n").encode("utf-8")
+    (paths.root / "AGENTS.md").write_bytes(before)
+    _write_full_handoff(paths, "my-feature")
+    spec_path = paths.root / "docs" / "specs" / "my-feature" / "spec.md"
+    spec_path.write_text("# Spec\n" + SPEC_CREATION_SPEC_TAIL, encoding="utf-8")
+
+    report = complete_spec_creation(paths, "my-feature")
+
+    assert report.ok is False
+    assert any("Rosetta" in item for item in report.missing)
+    assert (paths.root / "AGENTS.md").read_bytes() == before
+    assert parse_active_feature(paths) == "other-feature"
+
+
 def test_spec_create_restores_agents_when_handoff_still_fails(tmp_path: Path) -> None:
     from hive_planner.spec_drift import SPEC_CREATION_SPEC_TAIL, complete_spec_creation
 

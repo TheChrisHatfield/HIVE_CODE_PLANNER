@@ -485,7 +485,7 @@ def complete_spec_creation(paths: RepoPaths, feature: str) -> SpecHandoffReport:
     if gaps:
         return SpecHandoffReport(feature=feature, ok=False, missing=gaps)
     agents_path = paths.root / "AGENTS.md"
-    before = _read_text(agents_path) if agents_path.is_file() else None
+    before_bytes = agents_path.read_bytes() if agents_path.is_file() else None
     repair = repair_agents_active_feature(paths, feature)
     if not repair.repaired and repair.detail not in {"already set", "already correct"}:
         return SpecHandoffReport(
@@ -494,9 +494,9 @@ def complete_spec_creation(paths: RepoPaths, feature: str) -> SpecHandoffReport:
             missing=[repair.detail or "could not set AGENTS.md Active feature"],
         )
     report = check_spec_handoff(paths, feature)
-    if not report.ok and before is not None and agents_path.is_file():
-        if _read_text(agents_path) != before:
-            agents_path.write_text(before, encoding="utf-8", newline="\n")
+    if not report.ok and before_bytes is not None and agents_path.is_file():
+        if agents_path.read_bytes() != before_bytes:
+            agents_path.write_bytes(before_bytes)
     return report
 
 
