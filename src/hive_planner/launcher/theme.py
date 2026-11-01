@@ -258,9 +258,15 @@ class HoverTooltip:
             pady=6,
         ).pack()
         tip.update_idletasks()
-        screen_w = tip.winfo_screenwidth()
-        if x + tip.winfo_width() > screen_w - 8:
-            x = max(8, screen_w - tip.winfo_width() - 8)
+        x, y = _tooltip_origin(
+            x,
+            y,
+            tip.winfo_width(),
+            tip.winfo_height(),
+            tip.winfo_screenwidth(),
+            tip.winfo_screenheight(),
+            anchor_top=self.widget.winfo_rooty(),
+        )
         tip.wm_geometry(f"+{x}+{y}")
         self.tipwindow = tip
 
@@ -273,6 +279,26 @@ class HoverTooltip:
     def _destroy(self, _event=None) -> None:
         self._cancel_schedule()
         self._hide()
+
+
+def _tooltip_origin(
+    x: int,
+    y: int,
+    width: int,
+    height: int,
+    screen_w: int,
+    screen_h: int,
+    *,
+    anchor_top: int,
+) -> tuple[int, int]:
+    """Keep a tooltip on the primary screen. Flip above the widget when the bottom is cut off."""
+    if x + width > screen_w - 8:
+        x = max(8, screen_w - width - 8)
+    if y + height > screen_h - 8:
+        above = anchor_top - height - 6
+        if above >= 8:
+            y = above
+    return x, y
 
 
 def attach_hover_tooltip(widget: tk.Misc, text: str, *, delay_ms: int = 450) -> HoverTooltip:

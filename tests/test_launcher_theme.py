@@ -24,6 +24,15 @@ def test_wheel_remainder_does_not_eat_opposite_scroll_on_another_target() -> Non
     assert theme._wheel_steps(-80, key=2) == 1
 
 
+def test_tooltip_flips_above_the_widget_when_the_bottom_is_cut_off() -> None:
+    # Below the widget still fits: the origin stays put, including a left-hand monitor.
+    assert theme._tooltip_origin(-400, 20, 120, 40, 2560, 1440, anchor_top=10) == (-400, 20)
+    # The right edge still clamps onto the primary screen.
+    assert theme._tooltip_origin(2500, 20, 120, 40, 2560, 1440, anchor_top=10) == (2432, 20)
+    # A control at the bottom of the screen opens the tip above itself.
+    assert theme._tooltip_origin(100, 1420, 120, 40, 2560, 1440, anchor_top=1400) == (100, 1354)
+
+
 def test_reset_clears_remainders() -> None:
     assert theme._wheel_steps(100, key=1) == 0
     theme.reset_mousewheel_state_for_tests()
