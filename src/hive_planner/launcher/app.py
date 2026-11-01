@@ -4150,8 +4150,7 @@ class HivePlannerApp:
                 continue
             if name == "CodeSpec":
                 return inst
-        instances = getattr(self, "_controls_instances", None) or []
-        return instances[0] if instances else None
+        return None
 
     def _prepare_codespec_block_for_enable(self, inst: dict) -> None:
         """Select CodeSpec, keep the pack, fold settings, then Enable. Compact does not write."""

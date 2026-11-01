@@ -1643,6 +1643,28 @@ def test_resolved_loop_command_rejects_pairs_from_another_loop() -> None:
     assert HivePlannerApp.normalize_controls_loop("bug hunt") == "Bug hunt"
 
 
+def test_codespec_install_target_leaves_another_loop_in_place() -> None:
+    """Install CodeSpec must not turn a Bug hunt block into CodeSpec."""
+    from hive_planner.launcher.app import HivePlannerApp
+
+    class _Var:
+        def __init__(self, value: str) -> None:
+            self.value = value
+
+        def get(self) -> str:
+            return self.value
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    bug = {"loop": _Var("Bug hunt")}
+    codespec = {"loop": _Var("CodeSpec")}
+    app._controls_instances = [bug]
+    assert app._codespec_controls_instance() is None
+    app._controls_instances = [bug, codespec]
+    assert app._codespec_controls_instance() is codespec
+    app._controls_instances = [codespec]
+    assert app._codespec_controls_instance() is codespec
+
+
 def test_codespec_install_button_runs_enable_through_block_run() -> None:
     source = Path(__file__).resolve().parents[1] / "src" / "hive_planner" / "launcher" / "app.py"
     text = source.read_text(encoding="utf-8")
