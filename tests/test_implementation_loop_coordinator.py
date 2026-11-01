@@ -1034,6 +1034,30 @@ def test_cli_handoff_rejects_unknown_role_and_keeps_coder(loop_root: Path, capsy
     assert json.loads(state_path.read_text(encoding="utf-8"))["round_trips"] == before + 1
 
 
+def test_mcp_handoff_rejects_unknown_role_and_keeps_coder(loop_root: Path) -> None:
+    from hive_planner.mcp_server import call_tool
+
+    _install_ready(loop_root)
+    coordinator_start(loop_root, "feature-x")
+    state_path = loop_root / ".hive/implementation-loop/state.json"
+    before = json.loads(state_path.read_text(encoding="utf-8"))["round_trips"]
+    payload = call_tool(
+        "hive_implementation_loop_handoff",
+        {"root": str(loop_root), "role": "banana"},
+    )
+    assert payload["ok"] is False
+    assert payload["role"] == "banana"
+    assert json.loads(state_path.read_text(encoding="utf-8"))["round_trips"] == before
+    assert not (loop_root / ".hive/implementation-loop/handoff.md").is_file()
+    payload = call_tool(
+        "hive_implementation_loop_handoff",
+        {"root": str(loop_root), "role": "Coder"},
+    )
+    assert payload["ok"] is True
+    assert payload["role"] == "coder"
+    assert json.loads(state_path.read_text(encoding="utf-8"))["round_trips"] == before + 1
+
+
 def test_cli_check_exits_2_when_checker_fails(loop_root: Path, capsys: pytest.CaptureFixture[str]) -> None:
     from hive_planner.cli import main
 

@@ -340,9 +340,16 @@ def _tool_hive_implementation_loop_start(arguments: dict[str, Any]) -> dict[str,
 def _tool_hive_implementation_loop_handoff(arguments: dict[str, Any]) -> dict[str, Any]:
     from hive_planner.launcher.service import run_project_implementation_loop_handoff
 
-    role = str(arguments.get("role") or "").strip()
+    role = str(arguments.get("role") or "").strip().lower()
     if not role:
         return {"ok": False, "error": "role is required"}
+    if role not in {"coder", "checker", "reviewer", "coordinator"}:
+        return {
+            "ok": False,
+            "action": "handoff",
+            "role": role,
+            "error": "role must be coder, checker, reviewer, or coordinator",
+        }
     return run_project_implementation_loop_handoff(
         _workspace_root(arguments),
         role,
