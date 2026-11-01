@@ -63,6 +63,15 @@ def test_placement_store_roundtrip_skips_corrupt_entries(tmp_path: Path) -> None
     assert reloaded.get("Load Sources") == (30, 44)
 
 
+def test_get_sees_a_title_saved_by_another_store(tmp_path: Path) -> None:
+    path = tmp_path / "popup-placements.json"
+    first = PlacementStore(path)
+    assert first.get("Add workspace link") is None
+    second = PlacementStore(path)
+    second.set("Add workspace link", 10, 20)
+    assert first.get("Add workspace link") == (10, 20)
+
+
 def test_two_store_objects_keep_each_others_titles(tmp_path: Path) -> None:
     path = tmp_path / "popup-placements.json"
     first = PlacementStore(path)

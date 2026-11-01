@@ -119,6 +119,8 @@ class PlacementStore:
         key = title.strip()
         if not key:
             return None
+        # The file is the shared store. A cache filled by an earlier get would
+        # hide a position another PlacementStore has since saved.
         return self._load().get(key)
 
     def set(self, title: str, x: int, y: int) -> None:
@@ -134,8 +136,7 @@ class PlacementStore:
         self._write(data)
 
     def _load(self) -> dict[str, tuple[int, int]]:
-        if self._data is None:
-            self._data = _read_points(self.path)
+        self._data = _read_points(self.path)
         return self._data
 
     def _write(self, data: dict[str, tuple[int, int]]) -> None:
