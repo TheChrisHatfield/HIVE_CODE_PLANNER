@@ -33,7 +33,8 @@ from hive_planner.rosetta_nav import (
 )
 from hive_planner.translator import DRAFT_BANNER
 
-PROMOTED_BANNER = "<!-- PROMOTED: from cartridge — review before handoff -->"
+PROMOTED_PREFIX = "<!-- PROMOTED: from cartridge — review before handoff"
+PROMOTED_BANNER = f"{PROMOTED_PREFIX} -->"
 
 
 def _read_text(path: Path) -> str:
@@ -180,7 +181,7 @@ def _target_writable(path: Path, *, force: bool) -> tuple[bool, str]:
         return False, "manual target (use --force to overwrite)"
     if first.startswith(DRAFT_MARKER):
         return True, "draft target"
-    if first.startswith(PROMOTED_BANNER):
+    if first.startswith(PROMOTED_PREFIX):
         return True, "prior promotion"
     if first.startswith(AUTO_SYNC_PREFIX):
         return False, "auto-sync target (use --force to overwrite)"
@@ -223,7 +224,8 @@ def _promote_to_target(
     body = _promote_body(cartridge_path)
     if not body.strip():
         return "skipped (empty)", None
-    banner = f"{PROMOTED_BANNER} source: {_repo_relative(paths, cartridge_path)} -->"
+    source = _repo_relative(paths, cartridge_path)
+    banner = f"{PROMOTED_PREFIX}; source: {source} -->"
     target_path.parent.mkdir(parents=True, exist_ok=True)
     status = "updated" if target_path.exists() else "written"
     target_path.write_text(f"{banner}\n\n{body.strip()}\n", encoding="utf-8")

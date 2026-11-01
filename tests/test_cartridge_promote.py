@@ -133,6 +133,18 @@ def test_promote_strips_draft_and_auto_sync_banners(tmp_path: Path) -> None:
     assert AUTO_SYNC_PREFIX not in delta_text
     assert "Holistic mission" in delta_text
     assert DRAFT_BANNER not in delta_text
+    banner = delta_text.splitlines()[0]
+    assert banner == (
+        "<!-- PROMOTED: from cartridge — review before handoff; "
+        "source: cartridge/holistic.md -->"
+    )
+    again = promote_cartridge_drafts(
+        paths,
+        feature,
+        run_spec_drift=False,
+        only_cartridge_paths=[holistic],
+    )
+    assert again.promotions["holistic"] == "updated"
 
 
 def test_promote_micro_and_spec_scaffold_from_draft(tmp_path: Path) -> None:
