@@ -197,6 +197,16 @@ def _read_jsonl(
 
 def _append_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+    # A UTF-16 store is readable, but appending UTF-8 bytes onto it makes the
+    # next read drop or corrupt the rows already there. Rewrite it first.
+    if path.is_file():
+        raw = path.read_bytes()
+        if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+            text = raw.decode("utf-16")
+            text = text.replace("\r\n", "\n").replace("\r", "\n")
+            if text and not text.endswith("\n"):
+                text += "\n"
+            path.write_bytes(text.encode("utf-8"))
     with path.open("a", encoding="utf-8") as handle:
         for row in rows:
             handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
