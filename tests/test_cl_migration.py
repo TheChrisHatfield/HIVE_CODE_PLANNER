@@ -203,6 +203,29 @@ def test_migrate_preserves_inferred_unified_handoff_mode(tmp_path: Path) -> None
     assert meta.get("agent_handoff_mode") == "unified"
     assert meta.get("cl_source") == "vendored"
 
+def test_migrate_merges_learned_facts_from_a_utf16_agents_file(tmp_path: Path) -> None:
+    from hive_planner.agent_handoff import AGENT_HANDOFF_UNIFIED
+    from hive_planner.project_profile import write_project_profile
+
+    project = tmp_path / "utf16-agents"
+    project.mkdir()
+    (project / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    agents_path = project / "AGENTS.md"
+    agents_path.write_text(_minimal_agents_with_learned(), encoding="utf-16")
+    write_project_profile(
+        project, profile="minimal", project_name="utf16-agents", agent_handoff_mode=AGENT_HANDOFF_UNIFIED
+    )
+    _write_plugin(project, CL_OVERLAY_REL, "hive-continual-learning")
+
+    report = migrate_marketplace_cl(RepoPaths(root=project))
+
+    assert report.ok is True
+    assert report.merged_bullets == 1
+    merged = agents_path.read_text(encoding="utf-8")
+    assert "Prefer py -3.11 for Hive CLI." in merged
+    assert "## Learned Workspace Facts" not in merged
+
+
 def test_migrate_marketplace_cl_merges_and_removes_plugin(tmp_path: Path) -> None:
     from hive_planner.agent_handoff import AGENT_HANDOFF_UNIFIED
     from hive_planner.project_profile import write_project_profile

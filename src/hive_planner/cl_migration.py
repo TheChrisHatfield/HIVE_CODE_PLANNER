@@ -18,6 +18,7 @@ from hive_planner.agents_memory import (
     lint_agents_md,
     parse_sections,
     _preamble_lines,
+    _read_text,
 )
 from hive_planner.config import RepoPaths
 
@@ -203,7 +204,7 @@ def migrate_marketplace_cl(
     merged_text = ""
     count = 0
     if agents_path.is_file():
-        original = agents_path.read_text(encoding="utf-8", errors="replace")
+        original = _read_text(agents_path)
         merged_text, count = merge_learned_workspace_facts(original)
     else:
         report.warnings.append("AGENTS.md not found — skipping Learned Workspace Facts merge.")
