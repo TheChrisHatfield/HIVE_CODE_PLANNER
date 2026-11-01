@@ -94,12 +94,20 @@ def plan_continue(state: object) -> tuple[int, dict]:
     return pause, {"followup_message": FOLLOWUP_MESSAGE}
 
 
+def _read_state_text(path: Path) -> str:
+    """Read continue.json saved as UTF-8 (with or without BOM) or UTF-16."""
+    try:
+        return path.read_text(encoding="utf-8-sig")
+    except UnicodeDecodeError:
+        return path.read_text(encoding="utf-16")
+
+
 def _read_state(path: Path) -> dict | None:
     if not path.is_file():
         return None
     try:
-        parsed = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        parsed = json.loads(_read_state_text(path))
+    except (OSError, UnicodeError, json.JSONDecodeError):
         return None
     return parsed if isinstance(parsed, dict) else None
 

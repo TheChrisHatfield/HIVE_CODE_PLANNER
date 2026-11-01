@@ -263,6 +263,26 @@ def test_continue_hook_waits_then_starts_the_next_pass(tmp_path: Path) -> None:
     assert not (state_path.with_name(state_path.name + ".tmp")).exists()
 
 
+def test_continue_hook_reads_a_utf16_active_file(tmp_path: Path) -> None:
+    import json
+
+    from hive_planner.bug_hunt_continue import apply_continue
+
+    state_path = tmp_path / ".hive" / "bug-hunt" / "continue.json"
+    state_path.parent.mkdir(parents=True)
+    state_path.write_text(
+        json.dumps({"active": True, "pause_seconds": 0, "ceiling": 50, "committed": 1}),
+        encoding="utf-16",
+    )
+    slept: list[int] = []
+    payload = apply_continue(tmp_path, sleep=lambda seconds: slept.append(seconds))
+    assert slept == []
+    assert "followup_message" in payload
+    saved = json.loads(state_path.read_text(encoding="utf-8-sig"))
+    assert saved["active"] is False
+    assert saved["committed"] == 1
+
+
 def test_continue_hook_zero_does_not_wait_and_abort_consumes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     import json
 
