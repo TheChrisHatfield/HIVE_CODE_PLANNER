@@ -258,9 +258,19 @@ def load_config() -> LauncherConfig:
         auto_complete_onboarding_if_ready(cfg)
         save_config(cfg)
         return cfg
+    if not isinstance(data, dict):
+        data = {}
     active = normalize_project_path(data.get("active_project") or "")
-    recent = [normalize_project_path(p) for p in data.get("recent_projects", []) if str(p).strip()]
+    recent_raw = data.get("recent_projects", [])
+    # A string is one path. Iterating it would save one recent entry per character.
+    if isinstance(recent_raw, str):
+        recent_raw = [recent_raw]
+    elif not isinstance(recent_raw, list):
+        recent_raw = []
+    recent = [normalize_project_path(p) for p in recent_raw if str(p).strip()]
     profiles_raw = data.get("project_profiles") or {}
+    if not isinstance(profiles_raw, dict):
+        profiles_raw = {}
     profiles = {
         normalize_project_path(k): str(v)
         for k, v in profiles_raw.items()
