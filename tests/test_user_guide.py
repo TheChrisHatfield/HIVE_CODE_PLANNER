@@ -22,6 +22,20 @@ def test_load_user_guide_reads_a_utf16_readme(tmp_path: Path) -> None:
     assert "mcp-serve" in text
 
 
+def test_stale_readme_codespec_help_includes_check_pack(tmp_path: Path) -> None:
+    hive = tmp_path / "hive"
+    scripts = hive / "scripts"
+    scripts.mkdir(parents=True)
+    (scripts / "README.md").write_text("# Guide\n\nNo loop section.\n", encoding="utf-8")
+    cfg = LauncherConfig(hive_planner_root=str(hive))
+
+    text = load_user_guide(cfg)
+
+    assert "**Check pack**" in text
+    assert "**Handoff**" in text
+    assert text.count("## Implementation loop") == 1
+
+
 def test_load_user_guide_strips_a_utf8_bom(tmp_path: Path) -> None:
     hive = tmp_path / "hive"
     scripts = hive / "scripts"

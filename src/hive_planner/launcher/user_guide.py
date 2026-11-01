@@ -124,7 +124,7 @@ def implementation_loop_help_text() -> str:
 Controls calls this loop **CodeSpec**. Use it after a feature already has `spec.md`, `plan.md`, and `tasks.md`. It codes that task list; it does not write a new spec.
 
 1. **Home → CodeSpec** opens Controls on a CodeSpec block. **Home → Loop controls** opens the same tab. **+** adds another loop block; **−** removes one, and the last block stays. **Install CodeSpec** targets the Cursor window in front, folds settings, then Enable. Compact only hides settings.
-2. On that block, pick a command (**Enable**, **Status**, **Start**, **Handoff**, **Check**, **Accept**, **Commit**), then **Run**. The block lists the pack's steps and marks the one that is running or stopped. There is no role picker. Type **code spec** in the Loop box or in Cursor chat.
+2. On that block, pick a command (**Enable**, **Check pack**, **Status**, **Start**, **Handoff**, **Check**, **Accept**, **Commit**), then **Run**. The block lists the pack's steps and marks the one that is running or stopped. There is no role picker. Type **code spec** in the Loop box or in Cursor chat.
 
 CLI: `py -3.11 -m hive_planner implementation-loop` with `status`, `start`, `handoff`, `check`, `accept`, or `commit`. Init installs the loop only with `--implementation-loop-pack`.
 
