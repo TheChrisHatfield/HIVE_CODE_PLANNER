@@ -55,6 +55,26 @@ def _unified_project(root: Path) -> Path:
     return root
 
 
+def test_promote_reads_a_utf16_draft(tmp_path: Path) -> None:
+    project = _unified_project(tmp_path / "proj")
+    feature = "example-feature"
+    paths = RepoPaths(root=project)
+    holistic = paths.cartridge / "holistic.md"
+    holistic.parent.mkdir(parents=True, exist_ok=True)
+    holistic.write_text(f"{DRAFT_BANNER}\n\n# From UTF-16\n", encoding="utf-16")
+
+    result = promote_cartridge_drafts(
+        paths,
+        feature,
+        run_spec_drift=False,
+        only_cartridge_paths=[holistic],
+    )
+
+    assert result.promotions["holistic"] == "written"
+    promoted = (project / "docs" / "delta" / "00_holistic.md").read_text(encoding="utf-8")
+    assert "# From UTF-16" in promoted
+
+
 def test_promote_skips_stale_draft_layers_not_in_emit_outputs(tmp_path: Path) -> None:
     project = _unified_project(tmp_path / "proj")
     feature = "example-feature"

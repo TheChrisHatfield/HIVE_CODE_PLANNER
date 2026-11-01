@@ -34,6 +34,17 @@ from hive_planner.rosetta_nav import (
 from hive_planner.translator import DRAFT_BANNER
 
 PROMOTED_BANNER = "<!-- PROMOTED: from cartridge — review before handoff -->"
+
+
+def _read_text(path: Path) -> str:
+    """Read a cartridge or spec file saved as UTF-8 (with or without BOM) or UTF-16."""
+    try:
+        return path.read_text(encoding="utf-8-sig")
+    except UnicodeDecodeError:
+        try:
+            return path.read_text(encoding="utf-16")
+        except UnicodeError:
+            return path.read_text(encoding="utf-8", errors="replace")
 HANDOFF_INCOMPLETE_MSG = (
     "Handoff incomplete — files saved but promotion/spec-drift needs review (see promote output above)."
 )
@@ -57,7 +68,7 @@ def _tasks_wiring_audit_block() -> str:
 def _append_tasks_wiring_audit_if_missing(tasks_path: Path) -> bool:
     if not tasks_path.is_file():
         return False
-    text = tasks_path.read_text(encoding="utf-8", errors="replace")
+    text = _read_text(tasks_path)
     if _tasks_have_wiring_audit_heading(text):
         return False
     updated = text.rstrip() + "\n\n" + _tasks_wiring_audit_block()
@@ -121,7 +132,7 @@ def mark_cartridge_layers_draft(
         if _is_cartridge_draft(path):
             results[name] = "already draft"
             continue
-        content = path.read_text(encoding="utf-8", errors="replace")
+        content = _read_text(path)
         first = _first_content_line(content)
         if first.startswith(MANUAL_MARKER):
             results[name] = "skipped (manual)"
@@ -146,7 +157,7 @@ def _cartridge_source_emitted(path: Path, allowed: set[Path] | None) -> bool:
 def _is_cartridge_draft(path: Path) -> bool:
     if not path.is_file():
         return False
-    content = path.read_text(encoding="utf-8", errors="replace")
+    content = _read_text(path)
     first = _first_content_line(content)
     if first.startswith(DRAFT_MARKER):
         return True
@@ -159,7 +170,7 @@ def _is_cartridge_draft(path: Path) -> bool:
 def _target_writable(path: Path, *, force: bool) -> tuple[bool, str]:
     if force or not path.exists():
         return True, ""
-    content = path.read_text(encoding="utf-8", errors="replace")
+    content = _read_text(path)
     if BOOTSTRAP_BANNER in content:
         return True, "bootstrap placeholder"
     if "Replace this spec with the first real feature" in content:
@@ -187,7 +198,7 @@ def _strip_draft_banner(content: str) -> str:
 
 
 def _promote_body(cartridge_path: Path) -> str:
-    raw = cartridge_path.read_text(encoding="utf-8", errors="replace")
+    raw = _read_text(cartridge_path)
     body = raw
     for _ in range(8):
         stripped = _strip_draft_banner(_strip_leading_banner(body))
