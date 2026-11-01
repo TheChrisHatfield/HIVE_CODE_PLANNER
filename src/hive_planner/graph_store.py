@@ -223,17 +223,21 @@ def load_tier(
     return nodes, edges, node_warnings + edge_warnings
 
 
+def _empty_manifest() -> dict[str, Any]:
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "staging_nodes": 0,
+        "staging_edges": 0,
+        "permanent_nodes": 0,
+        "permanent_edges": 0,
+        "last_promote": None,
+    }
+
+
 def load_manifest(paths: RepoPaths) -> dict[str, Any]:
     path = paths.shared_memory_manifest
     if not path.is_file():
-        return {
-            "schema_version": SCHEMA_VERSION,
-            "staging_nodes": 0,
-            "staging_edges": 0,
-            "permanent_nodes": 0,
-            "permanent_edges": 0,
-            "last_promote": None,
-        }
+        return _empty_manifest()
     try:
         data = json.loads(_read_json_text(path))
     except (UnicodeError, json.JSONDecodeError) as exc:
@@ -255,7 +259,11 @@ def refresh_manifest_counts(paths: RepoPaths, *, last_promote: str | None = None
     # Count valid rows only — corrupt JSONL must not block status/offload refresh.
     staging_nodes, staging_edges, _ = load_tier(paths, "staging", on_error="skip")
     permanent_nodes, permanent_edges, _ = load_tier(paths, "permanent", on_error="skip")
-    manifest = load_manifest(paths)
+    try:
+        manifest = load_manifest(paths)
+    except GraphStoreError:
+        # A truncated manifest must not block status or the next offload.
+        manifest = _empty_manifest()
     manifest["schema_version"] = SCHEMA_VERSION
     manifest["staging_nodes"] = len(staging_nodes)
     manifest["staging_edges"] = len(staging_edges)

@@ -363,6 +363,26 @@ def test_status_tolerates_corrupt_staging_jsonl(tmp_path: Path) -> None:
     assert status["manifest"]["staging_edges"] == 1
 
 
+def test_status_rebuilds_a_corrupt_manifest(tmp_path: Path) -> None:
+    paths = _paths(tmp_path)
+    offload_from_file(paths, FIXTURE)
+    paths.shared_memory_manifest.write_text("{not-json", encoding="utf-8")
+    extra = tmp_path / "extra.json"
+    extra.write_text(
+        json.dumps({"nodes": [{"id": "n-extra", "type": "concept", "label": "Extra"}]}),
+        encoding="utf-8",
+    )
+
+    result = offload_from_file(paths, extra)
+
+    assert result.nodes_written == 1
+    status = graph_status(paths)
+    assert status["manifest"]["staging_nodes"] == 3
+    assert status["manifest"]["staging_edges"] == 1
+    saved = json.loads(paths.shared_memory_manifest.read_text(encoding="utf-8"))
+    assert saved["staging_nodes"] == 3
+
+
 def test_offload_jsonl_node_without_type_defaults_other(tmp_path: Path) -> None:
     paths = _paths(tmp_path)
     jsonl = tmp_path / "no-type.jsonl"
