@@ -2,6 +2,7 @@ from pathlib import Path
 
 from hive_planner.launcher.service import (
     CursorWorkspace,
+    cursor_window_title_usable,
     detect_active_cursor_project,
     match_cursor_workspace_from_title,
 )
@@ -18,6 +19,24 @@ def _ws(path: Path, name: str | None = None) -> CursorWorkspace:
         has_git=False,
         entry_kind="folder",
     )
+
+
+def test_hive_planner_cursor_window_stays_eligible(tmp_path: Path) -> None:
+    """A Cursor window for a project named HIVE Planner is not the launcher."""
+    assert cursor_window_title_usable("HIVE Planner") is False
+    assert cursor_window_title_usable("app.py - HIVE Planner - Cursor") is True
+    assert cursor_window_title_usable("HIVE Planner - Cursor") is True
+    hive = tmp_path / "HIVE Planner"
+    hive.mkdir()
+    other = tmp_path / "other-app"
+    other.mkdir()
+    found = detect_active_cursor_project(
+        hive_active=str(other),
+        window_titles=["HIVE Planner - Cursor"],
+        workspaces=[_ws(other), _ws(hive)],
+    )
+    assert found is not None
+    assert found.path == str(hive.resolve())
 
 
 def test_match_title_does_not_treat_a_short_name_as_a_substring(tmp_path: Path) -> None:

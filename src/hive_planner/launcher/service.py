@@ -1089,8 +1089,16 @@ def match_cursor_workspace_from_title(
     return None
 
 
+def cursor_window_title_usable(title: str) -> bool:
+    """True for a Cursor editor window. The Hive Planner launcher has no Cursor in its title."""
+    text = (title or "").strip()
+    if not text:
+        return False
+    return "cursor" in text.lower()
+
+
 def _cursor_window_titles() -> list[str]:
-    """Visible Cursor window titles, front-most first. Hive Planner is skipped."""
+    """Visible Cursor window titles, front-most first."""
     if sys.platform != "win32":
         return []
     import ctypes
@@ -1109,12 +1117,7 @@ def _cursor_window_titles() -> list[str]:
         buf = ctypes.create_unicode_buffer(length + 1)
         user32.GetWindowTextW(hwnd, buf, length + 1)
         title = buf.value.strip()
-        if not title:
-            return True
-        lowered = title.lower()
-        if "cursor" not in lowered:
-            return True
-        if "hive planner" in lowered:
+        if not cursor_window_title_usable(title):
             return True
         titles.append(title)
         return True
