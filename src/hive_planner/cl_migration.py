@@ -203,7 +203,9 @@ def migrate_marketplace_cl(
     original = ""
     merged_text = ""
     count = 0
+    before_bytes: bytes | None = None
     if agents_path.is_file():
+        before_bytes = agents_path.read_bytes()
         original = _read_text(agents_path)
         merged_text, count = merge_learned_workspace_facts(original)
     else:
@@ -221,7 +223,8 @@ def migrate_marketplace_cl(
             agents_path.write_text(merged_text, encoding="utf-8")
             lint = lint_agents_md(paths, agents_path=agents_path)
             if not lint.ok:
-                agents_path.write_text(original, encoding="utf-8")
+                if before_bytes is not None:
+                    agents_path.write_bytes(before_bytes)
                 report.ok = False
                 report.agents_updated = False
                 errors = [issue.message for issue in lint.issues if issue.severity == "error"]
@@ -235,8 +238,8 @@ def migrate_marketplace_cl(
                     try:
                         report.removed_marketplace_plugin = remove_marketplace_cl_plugin(root)
                     except ClMigrationError as exc:
-                        if report.agents_updated and agents_path.is_file():
-                            agents_path.write_text(original, encoding="utf-8")
+                        if report.agents_updated and before_bytes is not None:
+                            agents_path.write_bytes(before_bytes)
                             report.agents_updated = False
                         report.ok = False
                         report.warnings.append(str(exc))

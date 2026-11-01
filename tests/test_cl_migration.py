@@ -329,6 +329,38 @@ def test_migrate_still_removes_marketplace_when_agents_lint_fails(
     assert meta.get("cl_source") != "vendored"
 
 
+def test_migrate_lint_rollback_restores_utf16_agents_bytes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from hive_planner.agent_handoff import AGENT_HANDOFF_UNIFIED
+    from hive_planner.agents_memory import AgentsLintReport, LintIssue
+    from hive_planner.project_profile import write_project_profile
+
+    project = tmp_path / "utf16-lint"
+    project.mkdir()
+    (project / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    agents_path = project / "AGENTS.md"
+    agents_path.write_bytes(_minimal_agents_with_learned().encode("utf-16"))
+    before = agents_path.read_bytes()
+    write_project_profile(
+        project, profile="minimal", project_name="utf16-lint", agent_handoff_mode=AGENT_HANDOFF_UNIFIED
+    )
+    _write_plugin(project, CL_OVERLAY_REL, "hive-continual-learning")
+
+    def _fail_lint(paths, agents_path=None):
+        return AgentsLintReport(
+            path=str(agents_path or paths.root / "AGENTS.md"),
+            issues=[LintIssue(severity="error", message="simulated lint failure")],
+        )
+
+    monkeypatch.setattr("hive_planner.cl_migration.lint_agents_md", _fail_lint)
+
+    report = migrate_marketplace_cl(RepoPaths(root=project))
+
+    assert any("lint failed" in warning for warning in report.warnings)
+    assert agents_path.read_bytes() == before
+
+
 def test_migrate_rolls_back_agents_when_plugin_removal_fails(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
