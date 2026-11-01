@@ -102,6 +102,21 @@ def _enable_unified(paths: RepoPaths) -> None:
     )
 
 
+def test_utf16_tasks_still_record_and_check(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    (paths.root / "AGENTS.md").write_text(_minimal_agents("my-feature"), encoding="utf-8")
+    _write_handoff(paths, "my-feature")
+    tasks = paths.root / "docs" / "specs" / "my-feature" / "tasks.md"
+    tasks.write_bytes(tasks.read_text(encoding="utf-8").encode("utf-16"))
+
+    out = record_wiring_audit(paths, evidence="pytest -q")
+    report = check_wiring_audit(paths)
+
+    assert out.is_file()
+    assert report.ok is True
+    assert report.missing == []
+
+
 def test_record_and_check_wiring_audit(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     (paths.root / "AGENTS.md").write_text(_minimal_agents("my-feature"), encoding="utf-8")

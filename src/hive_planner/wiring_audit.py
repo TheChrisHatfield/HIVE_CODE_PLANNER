@@ -11,7 +11,7 @@ from pathlib import Path
 
 from hive_planner.agent_handoff import AGENT_HANDOFF_UNIFIED
 from hive_planner.config import RepoPaths, validate_feature_id
-from hive_planner.spec_drift import handoff_artifact_paths, parse_active_feature
+from hive_planner.spec_drift import _read_text, handoff_artifact_paths, parse_active_feature
 
 WIRING_AUDIT_REL = Path(".hive") / "wiring-audit.json"
 WIRING_AUDIT_VERSION = 1
@@ -172,7 +172,7 @@ def record_wiring_audit(
     tasks_path = _tasks_markdown(paths, active)
     if tasks_path is None:
         raise WiringAuditError("tasks.md missing Integration wiring audit checklist")
-    problem = _wiring_checklist_problem(tasks_path.read_text(encoding="utf-8", errors="replace"))
+    problem = _wiring_checklist_problem(_read_text(tasks_path))
     if problem:
         raise WiringAuditError(problem)
 
@@ -256,7 +256,7 @@ def check_wiring_audit(
     if tasks_path is None:
         missing.append("tasks.md missing Integration wiring audit checklist")
     else:
-        problem = _wiring_checklist_problem(tasks_path.read_text(encoding="utf-8", errors="replace"))
+        problem = _wiring_checklist_problem(_read_text(tasks_path))
         if problem:
             missing.append(problem)
 
