@@ -1008,6 +1008,32 @@ def test_check_appends_fail_when_build_command_missing(loop_root: Path) -> None:
     assert _last_outcome(parse_result_entries(text), "T001", "checker") == "fail"
 
 
+def test_cli_handoff_rejects_unknown_role_and_keeps_coder(loop_root: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    from hive_planner.cli import main
+
+    _install_ready(loop_root)
+    coordinator_start(loop_root, "feature-x")
+    state_path = loop_root / ".hive/implementation-loop/state.json"
+    before = json.loads(state_path.read_text(encoding="utf-8"))["round_trips"]
+    code = main(
+        ["--root", str(loop_root), "implementation-loop", "handoff", "--role", "banana"]
+    )
+    assert code == 2
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is False
+    assert payload["role"] == "banana"
+    assert json.loads(state_path.read_text(encoding="utf-8"))["round_trips"] == before
+    assert not (loop_root / ".hive/implementation-loop/handoff.md").is_file()
+    code = main(
+        ["--root", str(loop_root), "implementation-loop", "handoff", "--role", "Coder"]
+    )
+    assert code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is True
+    assert payload["role"] == "coder"
+    assert json.loads(state_path.read_text(encoding="utf-8"))["round_trips"] == before + 1
+
+
 def test_cli_check_exits_2_when_checker_fails(loop_root: Path, capsys: pytest.CaptureFixture[str]) -> None:
     from hive_planner.cli import main
 

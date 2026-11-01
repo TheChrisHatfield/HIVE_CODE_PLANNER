@@ -1367,9 +1367,23 @@ def main(argv: list[str] | None = None) -> int:
                     force_feature=args.force_feature,
                 )
             elif args.implementation_loop_command == "handoff":
+                role = (args.role or "").strip().lower()
+                if role not in {"coder", "checker", "reviewer", "coordinator"}:
+                    print(
+                        json.dumps(
+                            {
+                                "ok": False,
+                                "action": "handoff",
+                                "role": role,
+                                "blocked_reason": "role must be coder, checker, reviewer, or coordinator",
+                            },
+                            indent=2,
+                        )
+                    )
+                    return 2
                 gate = coordinator_handoff(
                     root,
-                    args.role,
+                    role,
                     continue_after_cap=args.continue_after_cap,
                 )
             elif args.implementation_loop_command == "check":
