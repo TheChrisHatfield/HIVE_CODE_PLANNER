@@ -7,7 +7,8 @@ import sqlite3
 from pathlib import Path
 
 from hive_planner.launcher.chat_target import execute_controls, outcome_text
-from hive_planner.launcher.cursor_chat_delivery import CursorChatTarget
+from hive_planner.launcher.cursor_chat_delivery import CursorChatTarget, _same_path, _uri_to_path
+from hive_planner.launcher.service import file_uri_to_path
 from hive_planner.launcher.cursor_submitter import apply_request
 
 
@@ -81,6 +82,14 @@ def _mark_generating(db: Path, composer_id: str) -> None:
     )
     conn.commit()
     conn.close()
+
+
+def test_workspace_file_uri_uses_the_launcher_path() -> None:
+    uri = "file://server/share/repo"
+    got = _uri_to_path(uri)
+    expected = file_uri_to_path(uri)
+    assert got is not None and expected is not None
+    assert _same_path(got, Path(expected))
 
 
 def test_duplicate_titles_use_later_update(tmp_path: Path) -> None:

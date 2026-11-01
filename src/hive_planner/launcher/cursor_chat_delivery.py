@@ -16,7 +16,7 @@ from pathlib import Path
 from urllib.parse import unquote, urlparse
 
 from hive_planner.launcher.cursor_submitter import REQUEST_REL, RESULT_REL
-from hive_planner.launcher.service import resolve_linked_project_root
+from hive_planner.launcher.service import file_uri_to_path, resolve_linked_project_root
 
 PHRASE_COMMANDS = {
     "bug hunt": ".cursor/commands/bug-hunt.md",
@@ -38,6 +38,9 @@ def _uri_to_path(uri: str) -> Path | None:
     text = (uri or "").strip()
     if not text:
         return None
+    if text.startswith("file://"):
+        converted = file_uri_to_path(text)
+        return Path(converted) if converted else None
     if text.startswith("file:"):
         parsed = urlparse(text)
         raw = unquote(parsed.path or "")
