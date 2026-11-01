@@ -9,10 +9,7 @@ from pathlib import Path
 from hive_planner.runtime_paths import APP_DISPLAY_NAME
 
 NOTICE_TITLE = APP_DISPLAY_NAME
-MEMORY_CHECK_BODY = (
-    "Automatic memory check. You did not type this. "
-    "Hive left your chat on the task you were doing."
-)
+MEMORY_CHECK_BODY = "Automated: continual learning is updating this repo's memory."
 
 
 def notifier_script() -> Path:
@@ -48,7 +45,14 @@ def failure_message() -> str:
     return "Error: Hive notify script is missing."
 
 
-def notify(title: str, body: str, *, seconds: int = 12, script: Path | None = None) -> bool:
+def notify(
+    title: str,
+    body: str,
+    *,
+    seconds: int = 12,
+    repo: str | None = None,
+    script: Path | None = None,
+) -> bool:
     """Show a popup. True only while the notice process is still running."""
     path = script if script is not None else notifier_script()
     if not path.is_file():
@@ -63,6 +67,8 @@ def notify(title: str, body: str, *, seconds: int = 12, script: Path | None = No
         "--seconds",
         str(max(1, seconds)),
     ]
+    if repo:
+        cmd.extend(["--repo", repo])
     env = os.environ.copy()
     dry = env.get("HIVE_NOTIFY_DRY_RUN") == "1"
     try:
@@ -96,9 +102,10 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="hive_planner.notify")
     parser.add_argument("--title", default=NOTICE_TITLE)
     parser.add_argument("--body", required=True)
+    parser.add_argument("--repo", default="")
     parser.add_argument("--seconds", type=int, default=12)
     args = parser.parse_args(argv)
-    ok = notify(args.title, args.body, seconds=args.seconds)
+    ok = notify(args.title, args.body, seconds=args.seconds, repo=args.repo or None)
     if not ok:
         sys.stderr.write(failure_message() + "\n")
         return 1

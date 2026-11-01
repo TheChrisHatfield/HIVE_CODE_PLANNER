@@ -23,10 +23,7 @@ TRIAL_DEFAULT_MIN_MINUTES = 15
 TRIAL_DEFAULT_DURATION_MINUTES = 24 * 60
 
 NOTICE_TITLE = "HIVE Planner"
-NOTICE_BODY = (
-    "Automatic memory check. You did not type this. "
-    "Hive left your chat on the task you were doing."
-)
+NOTICE_BODY = "Automated: continual learning is updating this repo's memory."
 
 
 def _parse_positive_int(value: str | None, fallback: int) -> int:
@@ -171,6 +168,25 @@ def _notice_stayed_open(proc: subprocess.Popen[bytes]) -> bool:
     return False
 
 
+def _repo_heading() -> str:
+    """Folder label for this workspace, matching the launcher's linked-repo line.
+
+    The stop hook runs with cwd set to the workspace, so each open repo gets
+    its own heading. The launcher's active_project is one global path and
+    would stamp every window with the same repo.
+    """
+    root = Path.cwd()
+    try:
+        root = root.resolve()
+    except OSError:
+        pass
+    name = root.name or str(root)
+    parent = str(root.parent)
+    if parent and parent not in {".", name}:
+        return f"{name}  ·  {parent}"
+    return name
+
+
 def _show_user_notice() -> bool:
     """Popup over the desktop. False when the window never stays up."""
     script = Path(__file__).with_name("hive_notify.py")
@@ -184,6 +200,8 @@ def _show_user_notice() -> bool:
         NOTICE_TITLE,
         "--body",
         NOTICE_BODY,
+        "--repo",
+        _repo_heading(),
     ]
     env = os.environ.copy()
     dry = env.get("HIVE_NOTIFY_DRY_RUN") == "1"

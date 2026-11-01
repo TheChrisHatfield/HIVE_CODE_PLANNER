@@ -85,8 +85,29 @@ def test_notify_cli_dry_run(tmp_path: Path) -> None:
     )
     assert result.returncode == 0, result.stderr
     assert json.loads(result.stdout)["ok"] is True
-    assert "You did not type this" in json.loads(log.read_text(encoding="utf-8"))["body"]
+    recorded = json.loads(log.read_text(encoding="utf-8"))
+    assert recorded["body"] == MEMORY_CHECK_BODY
+    assert "repo" not in recorded
     assert notifier_script().is_file()
+
+
+def test_notify_dry_run_records_the_repo_heading(tmp_path: Path, monkeypatch) -> None:
+    log = tmp_path / "notice.json"
+    monkeypatch.setenv("HIVE_NOTIFY_DRY_RUN", "1")
+    monkeypatch.setenv("HIVE_NOTIFY_LOG", str(log))
+    assert notify(NOTICE_TITLE, MEMORY_CHECK_BODY, repo="HIVE_CODE_PLANNER  ·  D:\\DRIVE_DOWNLOADS")
+    payload = json.loads(log.read_text(encoding="utf-8"))
+    assert payload["repo"] == "HIVE_CODE_PLANNER  ·  D:\\DRIVE_DOWNLOADS"
+    assert payload["body"] == MEMORY_CHECK_BODY
+
+
+def test_notify_accepts_a_repo_heading_that_starts_with_a_dash(tmp_path: Path, monkeypatch) -> None:
+    log = tmp_path / "notice.json"
+    monkeypatch.setenv("HIVE_NOTIFY_DRY_RUN", "1")
+    monkeypatch.setenv("HIVE_NOTIFY_LOG", str(log))
+    heading = "-odd  ·  D:\\repos"
+    assert notify(NOTICE_TITLE, MEMORY_CHECK_BODY, repo=heading)
+    assert json.loads(log.read_text(encoding="utf-8"))["repo"] == heading
 
 
 def test_popup_sits_on_the_monitor_in_front() -> None:

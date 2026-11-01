@@ -182,11 +182,55 @@ def test_continual_learning_stop_pops_notice_instead_of_chat_prompt(tmp_path: Pa
     assert "followup_message" not in result.stdout
     notice = json.loads(log.read_text(encoding="utf-8"))
     assert notice["title"] == "HIVE Planner"
-    assert "You did not type this" in notice["body"]
-    assert "left your chat" in notice["body"]
+    assert notice["body"] == "Automated: continual learning is updating this repo's memory."
+    root = tmp_path.resolve()
+    assert notice["repo"] == f"{root.name}  ·  {root.parent}"
     saved = json.loads((tmp_path / ".cursor" / "hooks" / "state" / "continual-learning.json").read_text(encoding="utf-8"))
     assert saved["lastRunAtMs"] > 0
     assert saved["turnsSinceLastRun"] == 0
+
+
+def test_continual_learning_stop_notice_accepts_a_dash_repo_name(tmp_path: Path) -> None:
+    """A folder name that starts with a dash is still the notice heading."""
+    repo = tmp_path / "-odd"
+    repo.mkdir()
+    transcript = repo / "transcript.jsonl"
+    transcript.write_text("{}\n", encoding="utf-8")
+    log = tmp_path / "notice.json"
+    script = (
+        ROOT
+        / ".cursor"
+        / "plugins"
+        / "hive-continual-learning"
+        / "hooks"
+        / "continual-learning-stop.py"
+    )
+    env = os.environ.copy()
+    env["CONTINUAL_LEARNING_MIN_TURNS"] = "1"
+    env["HIVE_NOTIFY_DRY_RUN"] = "1"
+    env["HIVE_NOTIFY_LOG"] = str(log)
+    result = subprocess.run(
+        [sys.executable, str(script)],
+        input=json.dumps(
+            {
+                "status": "completed",
+                "loop_count": 0,
+                "generation_id": "gen-dash-repo",
+                "transcript_path": str(transcript),
+            }
+        ),
+        text=True,
+        capture_output=True,
+        cwd=str(repo),
+        env=env,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout.strip()) == {}
+    notice = json.loads(log.read_text(encoding="utf-8"))
+    assert notice["repo"].startswith("-odd  ·  ")
+    saved = json.loads((repo / ".cursor" / "hooks" / "state" / "continual-learning.json").read_text(encoding="utf-8"))
+    assert saved["lastRunAtMs"] > 0
 
 
 def test_continual_learning_stop_stays_quiet_during_bug_hunt(tmp_path: Path) -> None:

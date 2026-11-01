@@ -13,10 +13,13 @@ import sys
 from pathlib import Path
 
 
-def show_popup(title: str, body: str, *, seconds: int = 12) -> bool:
+def show_popup(title: str, body: str, *, seconds: int = 12, repo: str | None = None) -> bool:
     """True when a window was shown. A log-only fallback is not a shown notice."""
     if os.environ.get("HIVE_NOTIFY_DRY_RUN") == "1":
-        payload = json.dumps({"ok": True, "title": title, "body": body}) + "\n"
+        payload_obj = {"ok": True, "title": title, "body": body}
+        if repo:
+            payload_obj["repo"] = repo
+        payload = json.dumps(payload_obj) + "\n"
         log = os.environ.get("HIVE_NOTIFY_LOG")
         if log:
             Path(log).write_text(payload, encoding="utf-8")
@@ -24,9 +27,9 @@ def show_popup(title: str, body: str, *, seconds: int = 12) -> bool:
             sys.stdout.write(payload)
         return True
     try:
-        _tk_popup(title, body, seconds)
+        _tk_popup(title, body, seconds, repo)
     except Exception:
-        return _fallback(title, body)
+        return _fallback(title, body, repo)
     return True
 
 
@@ -108,7 +111,7 @@ def _foreground_work_area() -> tuple[int, int, int, int] | None:
     return int(work.left), int(work.top), int(work.right), int(work.bottom)
 
 
-def _tk_popup(title: str, body: str, seconds: int) -> None:
+def _tk_popup(title: str, body: str, seconds: int, repo: str | None = None) -> None:
     if sys.platform == "win32":
         import ctypes
 
@@ -118,7 +121,7 @@ def _tk_popup(title: str, body: str, seconds: int) -> None:
     import tkinter as tk
 
     root = tk.Tk()
-    root.title(title)
+    root.title(f"{title} — {repo}" if repo else title)
     try:
         from hive_planner.launcher.theme import apply_app_icon
 
@@ -129,7 +132,16 @@ def _tk_popup(title: str, body: str, seconds: int) -> None:
     root.resizable(False, False)
     frame = tk.Frame(root, padx=16, pady=12)
     frame.pack(fill="both", expand=True)
-    tk.Label(frame, text=title, font=("Segoe UI", 12, "bold"), anchor="w").pack(fill="x")
+    tk.Label(frame, text=title, font=("Segoe UI", 9), anchor="w").pack(fill="x")
+    if repo:
+        tk.Label(
+            frame,
+            text=repo,
+            font=("Segoe UI", 12, "bold"),
+            wraplength=360,
+            justify="left",
+            anchor="w",
+        ).pack(fill="x", pady=(2, 0))
     tk.Label(
         frame,
         text=body,
@@ -148,24 +160,51 @@ def _tk_popup(title: str, body: str, seconds: int) -> None:
     root.mainloop()
 
 
-def _fallback(title: str, body: str) -> bool:
+def _fallback(title: str, body: str, repo: str | None = None) -> bool:
     if sys.platform == "win32":
         import ctypes
 
+        shown_title = f"{title} — {repo}" if repo else title
         # MB_ICONINFORMATION | MB_TOPMOST | MB_SETFOREGROUND. Zero means the dialog did not open.
-        shown = ctypes.windll.user32.MessageBoxW(0, body, title, 0x00000040 | 0x00040000 | 0x00010000)
+        shown = ctypes.windll.user32.MessageBoxW(0, body, shown_title, 0x00000040 | 0x00040000 | 0x00010000)
         return shown != 0
     sys.stderr.write(f"{title}: {body}\n")
     return False
 
 
+def _take_repo(argv: list[str] | None) -> tuple[list[str], str]:
+    """Read --repo before argparse. A folder name may start with a dash."""
+    source = list(sys.argv[1:] if argv is None else argv)
+    kept: list[str] = []
+    repo = ""
+    index = 0
+    while index < len(source):
+        arg = source[index]
+        if arg == "--repo":
+            if index + 1 >= len(source):
+                kept.append(arg)
+                index += 1
+                continue
+            repo = source[index + 1]
+            index += 2
+            continue
+        if arg.startswith("--repo="):
+            repo = arg.split("=", 1)[1]
+            index += 1
+            continue
+        kept.append(arg)
+        index += 1
+    return kept, repo
+
+
 def main(argv: list[str] | None = None) -> int:
+    kept, repo = _take_repo(argv)
     parser = argparse.ArgumentParser(prog="hive_notify")
     parser.add_argument("--title", default="HIVE Planner")
     parser.add_argument("--body", required=True)
     parser.add_argument("--seconds", type=int, default=12)
-    args = parser.parse_args(argv)
-    return 0 if show_popup(args.title, args.body, seconds=max(1, args.seconds)) else 1
+    args = parser.parse_args(kept)
+    return 0 if show_popup(args.title, args.body, seconds=max(1, args.seconds), repo=repo or None) else 1
 
 
 if __name__ == "__main__":
