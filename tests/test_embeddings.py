@@ -76,6 +76,20 @@ def test_hybrid_select_prefers_semantic_match() -> None:
     assert selected[0].doc_id == "b"
 
 
+def test_unembedded_hit_count_does_not_outrank_a_full_hybrid_match() -> None:
+    query = "alpha beta"
+    text = "alpha beta"
+    query_vec = embed_query(query)
+    unembedded = ChunkRecord("u", "u", "h", text, chunk_index=0)
+    embedded = ChunkRecord("e", "e", "h", text, chunk_index=0)
+    selected = select_chunks(
+        [unembedded, embedded],
+        query,
+        embedding_vectors={embedded.chunk_id: query_vec},
+    )
+    assert selected[0].chunk_id == "e"
+
+
 def test_ingest_embed_builds_index(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     paths.ensure_dirs()

@@ -43,7 +43,9 @@ def _hybrid_score(
 
         sem = max(0.0, cosine_similarity(query_vector, vectors[chunk.chunk_id]))
         return KEYWORD_WEIGHT * kw_component + SEMANTIC_WEIGHT * sem
-    return float(kw)
+    # Same 0–1 keyword scale as the hybrid term. A raw hit count of 2 or more
+    # would outrank a perfect keyword-and-semantic match, whose score is at most 1.
+    return KEYWORD_WEIGHT * kw_component
 
 
 def select_chunks(
