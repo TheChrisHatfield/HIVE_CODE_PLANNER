@@ -1082,7 +1082,8 @@ def _check_off_task(text: str, task_id: str, body: str) -> str:
 
 
 def _task_line_unresolved(text: str, task_id: str, body: str) -> bool:
-    for line in text.splitlines():
+    """The open-task reader ignores fenced examples. This check must use that same text."""
+    for line in _without_wiring_audit_section(text).splitlines():
         match = re.match(r"^[ \t]{0,3}- \[ \] (.+)$", line)
         if not match:
             continue

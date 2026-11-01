@@ -256,6 +256,62 @@ def test_commit_checks_off_current_task_not_first_open(loop_root: Path) -> None:
     assert "- [ ] T002 later" in text
 
 
+def test_commit_ignores_unresolved_assumption_inside_a_fence(loop_root: Path) -> None:
+    tasks = loop_root / "docs/specs/feature-x/tasks.md"
+    from hive_planner.spec_drift import SPEC_CREATION_TASKS_TAIL
+
+    _install_ready(loop_root)
+    coordinator_start(loop_root, "feature-x")
+    tasks.write_text(
+        "# tasks\n\n## Slice\n\n```\n- [ ] T001 assumption: unresolved\n```\n\n"
+        "- [ ] T001 do the thing\n" + SPEC_CREATION_TASKS_TAIL,
+        encoding="utf-8",
+    )
+    (loop_root / "src").mkdir()
+    (loop_root / "src" / "ok.py").write_text("x = 1\n", encoding="utf-8")
+    coordinator_handoff(loop_root, "coder")
+    _write_result(loop_root, "T001", "coder", "pass")
+    coordinator_accept(loop_root, "coder")
+    coordinator_handoff(loop_root, "checker")
+    _write_result(loop_root, "T001", "checker", "pass")
+    coordinator_accept(loop_root, "checker")
+    coordinator_handoff(loop_root, "reviewer")
+    _write_result(loop_root, "T001", "reviewer", "pass")
+    coordinator_accept(loop_root, "reviewer")
+    report = coordinator_commit(loop_root)
+    assert report.ok is True
+    text = tasks.read_text(encoding="utf-8")
+    assert "- [ ] T001 assumption: unresolved" in text
+    assert "- [x] T001 do the thing" in text
+
+
+def test_commit_still_blocks_a_real_unresolved_assumption(loop_root: Path) -> None:
+    tasks = loop_root / "docs/specs/feature-x/tasks.md"
+    from hive_planner.spec_drift import SPEC_CREATION_TASKS_TAIL
+
+    _install_ready(loop_root)
+    coordinator_start(loop_root, "feature-x")
+    tasks.write_text(
+        "# tasks\n\n## Slice\n\n```\n- [ ] T001 do the thing\n```\n\n"
+        "- [ ] T001 do the thing assumption: unresolved\n" + SPEC_CREATION_TASKS_TAIL,
+        encoding="utf-8",
+    )
+    (loop_root / "src").mkdir()
+    (loop_root / "src" / "ok.py").write_text("x = 1\n", encoding="utf-8")
+    coordinator_handoff(loop_root, "coder")
+    _write_result(loop_root, "T001", "coder", "pass")
+    coordinator_accept(loop_root, "coder")
+    coordinator_handoff(loop_root, "checker")
+    _write_result(loop_root, "T001", "checker", "pass")
+    coordinator_accept(loop_root, "checker")
+    coordinator_handoff(loop_root, "reviewer")
+    _write_result(loop_root, "T001", "reviewer", "pass")
+    coordinator_accept(loop_root, "reviewer")
+    with pytest.raises(CoordinatorError, match="unresolved assumption"):
+        coordinator_commit(loop_root)
+    assert "- [ ] T001 do the thing assumption: unresolved" in tasks.read_text(encoding="utf-8")
+
+
 def test_commit_refuses_without_reviewer_pass(loop_root: Path) -> None:
     _install_ready(loop_root)
     coordinator_start(loop_root, "feature-x")
