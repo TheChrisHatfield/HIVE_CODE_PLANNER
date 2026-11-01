@@ -493,6 +493,32 @@ def test_migrate_warns_on_unexpected_marketplace_plugin_name(tmp_path: Path) -> 
     assert not any(action == "No marketplace plugin directory detected" for action in report.actions)
 
 
+def test_migrate_refuses_a_utf16_plugin_with_an_unexpected_name(tmp_path: Path) -> None:
+    from hive_planner.agent_handoff import AGENT_HANDOFF_UNIFIED
+    from hive_planner.project_profile import write_project_profile
+
+    project = tmp_path / "utf16-name"
+    project.mkdir()
+    (project / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    (project / "AGENTS.md").write_text(_minimal_agents_with_learned(), encoding="utf-8")
+    write_project_profile(
+        project, profile="minimal", project_name="utf16-name", agent_handoff_mode=AGENT_HANDOFF_UNIFIED
+    )
+    _write_plugin(project, MARKETPLACE_CL_REL, "continual-learning")
+    _write_plugin(project, CL_OVERLAY_REL, "hive-continual-learning")
+    plugin_json = project / MARKETPLACE_CL_REL / ".cursor-plugin" / "plugin.json"
+    plugin_json.write_text(
+        json.dumps({"name": "not-continual-learning"}) + "\n",
+        encoding="utf-16",
+    )
+
+    report = migrate_marketplace_cl(RepoPaths(root=project), remove_marketplace_plugin=True)
+
+    assert report.ok is False
+    assert (project / MARKETPLACE_CL_REL).exists()
+    assert any("unexpected name" in warning for warning in report.warnings)
+
+
 def test_ci_cl_install_cursor_requires_hive_plugin(tmp_path: Path) -> None:
     from hive_planner.agent_handoff import AGENT_HANDOFF_UNIFIED
     from hive_planner.project_profile import write_project_profile

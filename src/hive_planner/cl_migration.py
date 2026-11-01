@@ -61,7 +61,7 @@ def _plugin_name(plugin_root: Path) -> str | None:
     if not plugin_json.is_file():
         return None
     try:
-        data = json.loads(plugin_json.read_text(encoding="utf-8"))
+        data = json.loads(_read_text(plugin_json))
     except (OSError, json.JSONDecodeError):
         return None
     name = data.get("name")
