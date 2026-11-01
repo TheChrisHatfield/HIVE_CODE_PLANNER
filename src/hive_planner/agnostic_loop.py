@@ -171,6 +171,14 @@ def _catalog_path(root: Path) -> Path:
     return _loop_dir(root) / CATALOG_NAME
 
 
+def _read_text(path: Path) -> str:
+    """Read loop JSON saved as UTF-8 (with or without BOM) or UTF-16."""
+    try:
+        return path.read_text(encoding="utf-8-sig")
+    except UnicodeDecodeError:
+        return path.read_text(encoding="utf-16")
+
+
 def try_load_catalog(root: Path | None = None) -> tuple[LoopCatalog, str | None]:
     if root is None:
         return default_catalog(), None
@@ -178,8 +186,8 @@ def try_load_catalog(root: Path | None = None) -> tuple[LoopCatalog, str | None]
     if not path.is_file():
         return default_catalog(), None
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError):
+        data = json.loads(_read_text(path))
+    except (OSError, UnicodeError):
         return default_catalog(), "catalog.json could not be read"
     except json.JSONDecodeError:
         return default_catalog(), "catalog.json is not valid JSON"
@@ -259,8 +267,8 @@ def _load_state(root: Path) -> dict[str, Any]:
     if not path.is_file():
         return _fresh_state(root)
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+        data = json.loads(_read_text(path))
+    except (OSError, json.JSONDecodeError, UnicodeError):
         return _fresh_state(root)
     if not isinstance(data, dict):
         return _fresh_state(root)
@@ -484,8 +492,8 @@ def load_policy(root: Path, names: tuple[str, ...] | None = None) -> dict[str, A
     if not path.is_file():
         return _fresh(names)
     try:
-        policy = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+        policy = json.loads(_read_text(path))
+    except (OSError, json.JSONDecodeError, UnicodeError):
         return _fresh(names)
     if not isinstance(policy, dict):
         return _fresh(names)

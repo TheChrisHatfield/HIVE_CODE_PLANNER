@@ -320,6 +320,26 @@ def test_invalid_catalog_refuses_arm(tmp_path: Path) -> None:
     assert "catalog.json" in payload["blocked_reason"]
 
 
+def test_utf16_catalog_and_state_keep_the_loop(tmp_path: Path) -> None:
+    root = tmp_path / "proj"
+    root.mkdir()
+    install_agnostic_loop(root)
+    catalog = root / ".hive" / "agnostic-loop" / "catalog.json"
+    catalog.write_text(catalog.read_text(encoding="utf-8"), encoding="utf-16")
+    payload, code = arm(root, "inspect", 2)
+    assert code == 0
+    assert payload["ok"] is True
+    state = root / ".hive" / "agnostic-loop" / "state.json"
+    saved = json.loads(state.read_text(encoding="utf-8"))
+    saved["completed"] = 4
+    saved["status"] = "running"
+    state.write_text(json.dumps(saved), encoding="utf-16")
+    report = status(root)
+    assert report["ok"] is True
+    assert report["completed"] == 4
+    assert report["status"] == "running"
+
+
 def test_replaced_catalog_is_used(tmp_path: Path) -> None:
     root = tmp_path / "proj"
     root.mkdir()
