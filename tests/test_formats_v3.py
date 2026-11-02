@@ -123,6 +123,20 @@ def test_html_skips_duplicate_title_h1(html_dep, tmp_path: Path) -> None:
     assert "Body text here" in result.normalized_body
 
 
+def test_html_keeps_a_table_after_a_paragraph(html_dep, tmp_path: Path) -> None:
+    html_path = tmp_path / "page.html"
+    html_path.write_text(
+        "<html><body><p>Intro</p><table><tr><td>Cell fact</td></tr></table></body></html>",
+        encoding="utf-8",
+    )
+
+    result = normalize_html(html_path)
+
+    assert "Intro" in result.raw_text
+    assert "Cell fact" in result.raw_text
+    assert result.raw_text.index("Intro") < result.raw_text.index("Cell fact")
+
+
 def test_html_normalization(html_dep, tmp_path: Path) -> None:
     html_path = tmp_path / "page.html"
     _make_html(html_path, "<h2>Section</h2><p>Hello HTML world.</p>", title="My Page")

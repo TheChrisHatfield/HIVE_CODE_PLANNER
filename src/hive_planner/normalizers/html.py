@@ -5,7 +5,23 @@ from pathlib import Path
 from hive_planner.models import NormalizeResult
 from hive_planner.normalizers import EmptySourceError, MissingDependencyError
 
-_BLOCK_TAGS = ("h1", "h2", "h3", "h4", "h5", "h6", "p", "li")
+_BLOCK_TAGS = ("h1", "h2", "h3", "h4", "h5", "h6", "p", "li", "table")
+
+
+def _table_lines(table) -> list[str]:
+    """One line per row. Cell text is not visited as its own block."""
+    lines: list[str] = []
+    for row in table.find_all("tr"):
+        if row.find_parent("table") is not table:
+            continue
+        cells: list[str] = []
+        for cell in row.find_all(["td", "th"], recursive=False):
+            text = cell.get_text(" ", strip=True)
+            if text:
+                cells.append(text)
+        if cells:
+            lines.append(" | ".join(cells))
+    return lines
 
 
 def _should_skip_element(element) -> bool:
@@ -64,6 +80,17 @@ def normalize_html(file_path: Path) -> NormalizeResult:
     root = soup.body or soup
 
     for element in root.find_all(_BLOCK_TAGS):
+        if element.name == "table":
+            if element.find_parent("table"):
+                continue
+            for text in _table_lines(element):
+                if not text or text in seen_text:
+                    continue
+                seen_text.add(text)
+                lines.append(text)
+                lines.append("")
+                raw_parts.append(text)
+            continue
         if _should_skip_element(element):
             continue
         name = element.name or ""
