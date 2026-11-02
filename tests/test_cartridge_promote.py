@@ -232,6 +232,35 @@ Mention the Integration wiring audit in prose.
     assert result.promotions.get("tasks") == "updated (wiring audit)"
 
 
+def test_promote_wiring_audit_survives_an_unclosed_fence(tmp_path: Path) -> None:
+    from hive_planner.spec_drift import _tasks_have_wiring_audit_heading
+
+    project = _unified_project(tmp_path / "proj")
+    feature = "legacy-feature"
+    paths = RepoPaths(root=project)
+    spec_dir = project / "docs" / "specs" / feature
+    spec_dir.mkdir(parents=True, exist_ok=True)
+    tasks_path = spec_dir / "tasks.md"
+    tasks_path.write_text("# Tasks: legacy-feature\n\n```\nexample with no closer\n", encoding="utf-8")
+    micro = paths.cartridge / "micro" / f"{feature}.md"
+    micro.parent.mkdir(parents=True, exist_ok=True)
+    micro.write_text(
+        f"{DRAFT_BANNER}\n\n# Micro Brief: {feature}\n\n- Acceptance criteria: emit works.\n",
+        encoding="utf-8",
+    )
+
+    first = promote_cartridge_drafts(paths, feature)
+    tasks_text = tasks_path.read_text(encoding="utf-8")
+    assert _tasks_have_wiring_audit_heading(tasks_text)
+    assert first.promotions.get("tasks") == "updated (wiring audit)"
+    assert tasks_text.count("## After each implementation task — Integration wiring audit (required)") == 1
+
+    second = promote_cartridge_drafts(paths, feature)
+    again = tasks_path.read_text(encoding="utf-8")
+    assert again.count("## After each implementation task — Integration wiring audit (required)") == 1
+    assert second.promotions.get("tasks") != "updated (wiring audit)"
+
+
 def test_promote_memory_writes_classified_candidates(tmp_path: Path) -> None:
     project = _unified_project(tmp_path / "proj")
     feature = "mem-feature"

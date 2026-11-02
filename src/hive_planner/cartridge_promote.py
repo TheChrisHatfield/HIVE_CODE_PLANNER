@@ -73,7 +73,11 @@ def _append_tasks_wiring_audit_if_missing(tasks_path: Path) -> bool:
     text = _read_text(tasks_path)
     if _tasks_have_wiring_audit_heading(text):
         return False
-    updated = text.rstrip() + "\n\n" + _tasks_wiring_audit_block()
+    # An unclosed fence would hide the checklist from the same check that decided
+    # it was missing, so every later promote would append another copy.
+    open_fence = sum(1 for line in text.splitlines() if line.strip().startswith("```")) % 2
+    closer = "\n```\n" if open_fence else ""
+    updated = text.rstrip() + closer + "\n\n" + _tasks_wiring_audit_block()
     tasks_path.write_text(updated, encoding="utf-8")
     return True
 
