@@ -296,10 +296,15 @@ def _tooltip_origin(
     *,
     anchor_top: int,
 ) -> tuple[int, int]:
-    """Keep a tooltip on the primary screen. Flip above the widget when the bottom is cut off."""
-    if x + width > screen_w - 8:
+    """Keep a tooltip on the screen it opened on.
+
+    The right and bottom clamps use the primary screen size. A tip that
+    already starts past that screen is on another monitor, and pulling it
+    back parks it away from the control.
+    """
+    if x < screen_w and x + width > screen_w - 8:
         x = max(8, screen_w - width - 8)
-    if y + height > screen_h - 8:
+    if y < screen_h and y + height > screen_h - 8:
         above = anchor_top - height - 6
         if above >= 8:
             y = above

@@ -33,6 +33,11 @@ def test_tooltip_flips_above_the_widget_when_the_bottom_is_cut_off() -> None:
     assert theme._tooltip_origin(100, 1420, 120, 40, 2560, 1440, anchor_top=1400) == (100, 1354)
 
 
+def test_tooltip_stays_beside_a_control_on_another_monitor() -> None:
+    assert theme._tooltip_origin(2000, 40, 120, 40, 1920, 1080, anchor_top=20) == (2000, 40)
+    assert theme._tooltip_origin(100, 1200, 120, 40, 1920, 1080, anchor_top=1180) == (100, 1200)
+
+
 def test_partial_notch_is_handled_once() -> None:
     scrolled: list[tuple[int, str]] = []
 
