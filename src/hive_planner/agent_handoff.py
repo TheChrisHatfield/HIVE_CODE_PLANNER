@@ -287,8 +287,8 @@ def scan_legacy_deployment(project_root: Path) -> LegacyDeploymentReport:
     agents_path = root / "AGENTS.md"
     if agents_path.is_file():
         try:
-            agents_text = agents_path.read_text(encoding="utf-8", errors="replace")
-        except OSError:
+            agents_text = _read_text(agents_path)
+        except (OSError, UnicodeError):
             agents_text = ""
         if "## Learned Workspace Facts" in agents_text:
             findings.append(

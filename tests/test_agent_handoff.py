@@ -214,6 +214,34 @@ def test_scan_legacy_deployment_detects_starter_kit_without_pins(tmp_path: Path)
     assert "starter_kit_only_layout" in codes
 
 
+def test_scan_legacy_deployment_reads_utf16_learned_facts(tmp_path: Path) -> None:
+    project = tmp_path / "legacy"
+    project.mkdir()
+    (project / "AGENTS.md").write_text(
+        "# AGENTS\n\n## Learned Workspace Facts\n\n- Old fact.\n",
+        encoding="utf-16",
+    )
+
+    report = scan_legacy_deployment(project)
+
+    assert any(item.code == "learned_workspace_facts" for item in report.findings)
+
+
+def test_scan_legacy_deployment_leaves_an_undecodable_agents_file(tmp_path: Path) -> None:
+    project = tmp_path / "legacy"
+    project.mkdir()
+    agents = project / "AGENTS.md"
+    raw = bytearray(b"# AGENTS\n\n## Learned Workspace Facts\n")
+    raw[2] = 0xE9
+    agents.write_bytes(bytes(raw))
+    before = agents.read_bytes()
+
+    report = scan_legacy_deployment(project)
+
+    assert agents.read_bytes() == before
+    assert not any(item.code == "learned_workspace_facts" for item in report.findings)
+
+
 def test_scan_legacy_deployment_skips_hive_planner_source_repo(tmp_path: Path) -> None:
     repo = tmp_path / "hive-planner"
     repo.mkdir()
