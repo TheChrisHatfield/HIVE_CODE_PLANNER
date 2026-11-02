@@ -78,6 +78,24 @@ def test_resolve_session_contract_reads_utf16_repo_docs(tmp_path: Path) -> None:
     assert repo_contract.read_bytes().startswith(b"\xff\xfe")
 
 
+def test_resolve_session_contract_reads_utf16_le_repo_docs_without_a_bom(tmp_path: Path) -> None:
+    root = tmp_path / "proj"
+    docs = root / "docs"
+    docs.mkdir(parents=True)
+    repo_contract = docs / CONTRACT_FILENAME
+    repo_contract.write_bytes("# repo contract\n".encode("utf-16-le"))
+    before = repo_contract.read_bytes()
+
+    resolved = resolve_session_contract_path(root)
+    assert resolved == repo_contract
+    assert load_session_contract_text(repo_root=root).startswith("# repo contract")
+    result = eject_rosetta_cartridge(tmp_path / "exports", repo_root=root, project_name="Demo")
+    copied = result.contract_path.read_text(encoding="utf-8")
+    assert copied.startswith("# repo contract")
+    assert "\x00" not in copied
+    assert repo_contract.read_bytes() == before
+
+
 def test_resolve_session_contract_skips_an_undecodable_repo_doc(tmp_path: Path) -> None:
     root = tmp_path / "proj"
     docs = root / "docs"

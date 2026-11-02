@@ -70,13 +70,23 @@ def _packaged_contract_path() -> Path:
 
 
 def _read_text(path: Path) -> str:
-    try:
+    """Read a session contract saved as UTF-8 (with or without BOM) or UTF-16.
+
+    UTF-16 LE without a byte-order mark is still the contract. Those bytes
+    are valid UTF-8 because the extra bytes are NULs, so eject used to copy
+    a null between every character into the cartridge.
+    """
+    raw = path.read_bytes()
+    if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+        text = raw.decode("utf-16")
+    elif b"\x00" not in raw:
         return path.read_text(encoding="utf-8-sig")
-    except UnicodeDecodeError:
-        raw = path.read_bytes()
-        if raw.startswith(b"\xff\xfe") or raw.startswith(b"\xfe\xff"):
-            return raw.decode("utf-16")
-        raise
+    else:
+        try:
+            text = raw.decode("utf-16-le")
+        except UnicodeDecodeError:
+            return path.read_text(encoding="utf-8-sig")
+    return text.replace("\r\n", "\n").replace("\r", "\n")
 
 
 def _contract_file_usable(path: Path) -> bool:
