@@ -93,13 +93,23 @@ def resolve_ground_truth_root(root: Path) -> Path:
     return target
 
 
+def _read_text(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8-sig")
+    except UnicodeDecodeError:
+        raw = path.read_bytes()
+        if raw.startswith(b"\xff\xfe") or raw.startswith(b"\xfe\xff"):
+            return raw.decode("utf-16")
+        raise
+
+
 def _read_repo_overlay(root: Path) -> str:
     path = Path(root) / OVERLAY_REL
     if not path.is_file():
         return ""
     try:
-        text = path.read_text(encoding="utf-8").strip()
-    except (OSError, UnicodeDecodeError):
+        text = _read_text(path).strip()
+    except (OSError, UnicodeError):
         return ""
     return f"\n{text}\n" if text else ""
 

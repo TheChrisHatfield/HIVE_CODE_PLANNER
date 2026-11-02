@@ -85,6 +85,31 @@ def test_install_writes_hive_packet_and_keeps_overlay(tmp_path: Path) -> None:
     assert preview_agent_prompt(tmp_path).count("seam_flow.pdf pins the paper.") == 1
 
 
+def test_install_keeps_a_utf16_overlay_in_the_prompt(tmp_path: Path) -> None:
+    overlay = tmp_path / ".hive" / "ground-truth-on-mine" / "repo-overlay.md"
+    overlay.parent.mkdir(parents=True)
+    overlay.write_bytes("## This repo\n\nseam_flow.pdf pins the paper.\n".encode("utf-16"))
+
+    install_ground_truth_mine(tmp_path)
+
+    packet = (tmp_path / ".hive" / "ground-truth-on-mine" / "AGENT_PROMPT.md").read_text(encoding="utf-8")
+    assert "seam_flow.pdf pins the paper." in packet
+    assert overlay.read_bytes().startswith(b"\xff\xfe")
+
+
+def test_install_leaves_an_undecodable_overlay_out_of_the_prompt(tmp_path: Path) -> None:
+    overlay = tmp_path / ".hive" / "ground-truth-on-mine" / "repo-overlay.md"
+    overlay.parent.mkdir(parents=True)
+    original = b"## caf\xe9\n"
+    overlay.write_bytes(original)
+
+    install_ground_truth_mine(tmp_path)
+
+    packet = (tmp_path / ".hive" / "ground-truth-on-mine" / "AGENT_PROMPT.md").read_text(encoding="utf-8")
+    assert "caf" not in packet
+    assert overlay.read_bytes() == original
+
+
 def test_cli_print_does_not_write(tmp_path: Path) -> None:
     stdout = io.StringIO()
     with redirect_stdout(stdout):
