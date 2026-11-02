@@ -207,11 +207,22 @@ def config_path() -> Path:
 
 
 def _read_json_text(path: Path) -> str:
-    """Read config JSON saved as UTF-8 (with or without BOM) or UTF-16."""
+    """Read config JSON saved as UTF-8 (with or without BOM) or UTF-16.
+
+    UTF-16 LE without a byte-order mark is still the user's config. Those
+    bytes are valid UTF-8 because the extra bytes are NULs, so a JSON parse
+    failure used to replace the file with defaults.
+    """
+    raw = path.read_bytes()
+    if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+        return raw.decode("utf-16")
+    text = raw.decode("utf-8-sig")
+    if "\x00" not in text:
+        return text
     try:
-        return path.read_text(encoding="utf-8-sig")
+        return raw.decode("utf-16-le")
     except UnicodeDecodeError:
-        return path.read_text(encoding="utf-16")
+        return text
 
 
 def _sync_portable_config_fields(cfg: LauncherConfig) -> bool:
