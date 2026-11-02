@@ -336,3 +336,19 @@ def test_execute_handler_does_not_read_the_database_or_run_a_gate() -> None:
     assert '"Execute"' in text
     assert "impl_allow_overlap" in text
     assert "Allow overlap" in text
+
+
+def test_apply_request_records_failure_for_a_json_array(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    path = repo / ".hive" / "controls-execute" / "request.json"
+    path.parent.mkdir(parents=True)
+    path.write_text("[]\n", encoding="utf-8")
+    called: list[str] = []
+
+    payload = apply_request(repo, lambda composer_id, phrase: called.append(composer_id))
+
+    assert called == []
+    assert payload["outcome"] == "failed"
+    saved = json.loads((repo / ".hive" / "controls-execute" / "result.json").read_text(encoding="utf-8"))
+    assert saved["outcome"] == "failed"
+    assert path.read_text(encoding="utf-8") == "[]\n"
