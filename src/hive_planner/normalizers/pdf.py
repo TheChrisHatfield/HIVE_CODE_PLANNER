@@ -30,9 +30,19 @@ def normalize_pdf(file_path: Path) -> NormalizeResult:
 
         embedded: dict[int, str] = {}
         for page_num in range(page_count):
-            text = doc[page_num].get_text("text").strip()
+            page = doc[page_num]
+            parts: list[str] = []
+            text = page.get_text("text").strip()
             if text:
-                embedded[page_num + 1] = text
+                parts.append(text)
+            annots = page.annots()
+            if annots:
+                for annot in annots:
+                    content = str((annot.info or {}).get("content") or "").strip()
+                    if content and content not in parts:
+                        parts.append(content)
+            if parts:
+                embedded[page_num + 1] = "\n".join(parts)
 
         extraction = "text"
         ocr_install = None

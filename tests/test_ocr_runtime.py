@@ -70,6 +70,46 @@ def test_normalize_pdf_rejects_zero_page_document(
         normalize_pdf(tmp_path / "empty.pdf")
 
 
+def test_pdf_annotation_is_indexed_with_page_text(tmp_path: Path) -> None:
+    pytest.importorskip("fitz")
+    import fitz
+
+    pdf_path = tmp_path / "noted.pdf"
+    doc = fitz.open()
+    page = doc.new_page()
+    page.insert_text((72, 72), "Page line")
+    page.add_text_annot(fitz.Point(72, 120), "Annot fact")
+    doc.save(pdf_path)
+    doc.close()
+
+    result = normalize_pdf(pdf_path)
+
+    assert "Page line" in result.raw_text
+    assert "Annot fact" in result.raw_text
+    assert result.raw_text.index("Page line") < result.raw_text.index("Annot fact")
+
+
+def test_annotation_only_pdf_is_not_empty(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    pytest.importorskip("fitz")
+    import fitz
+
+    pdf_path = tmp_path / "annot.pdf"
+    doc = fitz.open()
+    page = doc.new_page()
+    page.add_text_annot(fitz.Point(72, 72), "Only annot")
+    doc.save(pdf_path)
+    doc.close()
+    monkeypatch.setattr(
+        "hive_planner.normalizers.pdf.ocr_pdf_enabled",
+        type("Flag", (), {"get": staticmethod(lambda: False)})(),
+    )
+
+    result = normalize_pdf(pdf_path)
+
+    assert "Only annot" in result.normalized_body
+    assert result.extra_metadata.get("extraction") == "text"
+
+
 def test_normalize_pdf_ocr_fallback(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     pytest.importorskip("fitz")
     import fitz
