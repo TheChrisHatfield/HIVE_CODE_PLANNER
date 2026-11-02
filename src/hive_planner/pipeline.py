@@ -65,8 +65,13 @@ def ingest(paths: RepoPaths, *, embed: bool = False) -> IngestReport:
                 chunks = chunk_markdown(doc.doc_id, normalized_body)
 
             if not chunks:
+                reason = (
+                    "empty or whitespace-only"
+                    if not raw_text.strip()
+                    else "no body text under the headings"
+                )
                 report.warnings.append(
-                    f"No chunks produced for {relative_source_path(paths, file_path)} (empty or whitespace-only)"
+                    f"No chunks produced for {relative_source_path(paths, file_path)} ({reason})"
                 )
 
             upsert_document(doc_index, doc)

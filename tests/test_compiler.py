@@ -237,7 +237,21 @@ def test_ingest_warns_on_empty_source(tmp_path: Path) -> None:
     report = ingest(paths)
     assert report.processed == 1
     assert any("No chunks produced" in w for w in report.warnings)
+    assert any("empty or whitespace-only" in w for w in report.warnings)
     assert len(load_chunk_index(paths.chunk_index).chunks) == 0
+
+
+def test_ingest_does_not_call_a_heading_only_note_empty(tmp_path: Path) -> None:
+    sources = tmp_path / "context-library" / "sources"
+    sources.mkdir(parents=True)
+    (sources / "title.md").write_text("# Title Only\n", encoding="utf-8")
+
+    paths = RepoPaths(root=tmp_path)
+    report = ingest(paths)
+
+    assert report.processed == 1
+    assert any("no body text under the headings" in w for w in report.warnings)
+    assert not any("empty or whitespace-only" in w for w in report.warnings)
 
 
 def test_indexer_tolerates_corrupt_json(tmp_path: Path) -> None:
