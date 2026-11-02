@@ -61,13 +61,23 @@ def continual_learning_artifact_paths(runtime: str) -> tuple[str, ...]:
     return HEADLESS_CL_ARTIFACTS
 
 
+def _read_manifest_text(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8-sig")
+    except UnicodeDecodeError:
+        raw = path.read_bytes()
+        if raw.startswith(b"\xff\xfe") or raw.startswith(b"\xfe\xff"):
+            return raw.decode("utf-16")
+        raise
+
+
 def read_cl_runtime_manifest(project_root: Path) -> dict | None:
     path = project_root.resolve() / CL_RUNTIME_MANIFEST
     if not path.is_file():
         return None
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+        data = json.loads(_read_manifest_text(path))
+    except (OSError, UnicodeError, json.JSONDecodeError):
         return None
     return data if isinstance(data, dict) else None
 

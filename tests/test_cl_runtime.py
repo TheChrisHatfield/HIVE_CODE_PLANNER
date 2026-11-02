@@ -45,6 +45,29 @@ def test_set_and_resolve_cl_runtime(tmp_path: Path) -> None:
     assert resolve_cl_runtime(project) == CL_RUNTIME_HEADLESS
 
 
+def test_utf16_manifest_still_resolves(tmp_path: Path) -> None:
+    project = tmp_path / "app"
+    project.mkdir()
+    path = project / ".hive" / "cl-runtime.json"
+    path.parent.mkdir()
+    path.write_bytes(json.dumps({"runtime": "headless"}).encode("utf-16"))
+
+    assert resolve_cl_runtime(project) == CL_RUNTIME_HEADLESS
+    assert path.read_bytes().startswith(b"\xff\xfe")
+
+
+def test_unreadable_manifest_uses_the_default_runtime(tmp_path: Path) -> None:
+    project = tmp_path / "app"
+    project.mkdir()
+    path = project / ".hive" / "cl-runtime.json"
+    path.parent.mkdir()
+    original = b'{"runtime": "h\xe9adless"}'
+    path.write_bytes(original)
+
+    assert resolve_cl_runtime(project) == "cursor"
+    assert path.read_bytes() == original
+
+
 def test_headless_deploy_writes_workflow_and_manifest(tmp_path: Path) -> None:
     project = tmp_path / "headless"
     project.mkdir()
