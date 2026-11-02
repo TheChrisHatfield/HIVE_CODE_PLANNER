@@ -479,6 +479,17 @@ def review(root: Path, note: str) -> tuple[dict[str, Any], int]:
     return payload, 0
 
 
+def _observation_count(raw: object) -> int:
+    """A saved observation count. JSON true is not the number 1."""
+    if isinstance(raw, bool) or raw is None:
+        return 0
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return 0
+    return value if value >= 0 else 0
+
+
 def _fresh(names: tuple[str, ...]) -> dict[str, Any]:
     return {
         "arms": {name: {"alpha": 1.0, "beta": 1.0} for name in names},
@@ -517,7 +528,7 @@ def load_policy(root: Path, names: tuple[str, ...] | None = None) -> dict[str, A
             beta = 1.0
         arms[name] = {"alpha": alpha, "beta": beta}
     try:
-        policy["observations"] = int(policy.get("observations", 0) or 0)
+        policy["observations"] = _observation_count(policy.get("observations", 0))
     except (TypeError, ValueError):
         policy["observations"] = 0
     return policy
@@ -721,7 +732,7 @@ def observe(root: Path, reward: str, hit: bool, names: tuple[str, ...] | None = 
     else:
         arm["beta"] += 1.0
     policy["last_reward"] = reward
-    policy["observations"] = int(policy.get("observations", 0)) + 1
+    policy["observations"] = _observation_count(policy.get("observations", 0)) + 1
     save_policy(root, policy)
     return (
         _payload(

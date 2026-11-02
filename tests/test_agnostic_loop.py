@@ -187,6 +187,22 @@ def test_nonfinite_policy_weight_is_reset_and_choose_still_runs(tmp_path: Path) 
     assert saved["observations"] == 4
 
 
+def test_json_true_observation_count_starts_at_one_after_one_reward(tmp_path: Path) -> None:
+    root = tmp_path / "proj"
+    root.mkdir()
+    folder = root / ".hive" / "agnostic-loop"
+    folder.mkdir(parents=True)
+    (folder / "policy.json").write_text(
+        json.dumps({"arms": {}, "last_reward": None, "observations": True}),
+        encoding="utf-8",
+    )
+    payload, code = observe(root, "inspect", True)
+    assert code == 0
+    assert payload["ok"] is True
+    saved = json.loads((folder / "policy.json").read_text(encoding="utf-8"))
+    assert saved["observations"] == 1
+
+
 def test_observe_and_choose_seed(tmp_path: Path) -> None:
     root = tmp_path / "proj"
     root.mkdir()
