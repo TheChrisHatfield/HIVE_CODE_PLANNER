@@ -274,13 +274,16 @@ def _parse_active_feature_from_sections(sections: dict[str, str]) -> str | None:
 def _iter_section_bullets(text: str) -> list[tuple[str, int, str]]:
     current_section: str | None = None
     bullets: list[tuple[str, int, str]] = []
-    in_fence = False
+    fence_marker = ""
     for line_no, line in enumerate(text.splitlines(), start=1):
         stripped = line.strip()
-        if stripped.startswith("```"):
-            in_fence = not in_fence
+        if fence_marker:
+            if _closes_fence(line, fence_marker):
+                fence_marker = ""
             continue
-        if in_fence:
+        opened = _open_fence(line)
+        if opened:
+            fence_marker = opened
             continue
         if line.startswith("## "):
             current_section = line[3:].strip()
