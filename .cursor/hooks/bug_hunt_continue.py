@@ -95,11 +95,21 @@ def plan_continue(state: object) -> tuple[int, dict]:
 
 
 def _read_state_text(path: Path) -> str:
-    """Read continue.json saved as UTF-8 (with or without BOM) or UTF-16."""
+    """Read continue.json saved as UTF-8 (with or without BOM) or UTF-16.
+
+    UTF-16 LE without a byte-order mark is still the continue file. Those
+    bytes are valid UTF-8 because the extra bytes are NULs, so the stop hook
+    used to treat an active hunt as missing and did not start the next pass.
+    """
+    raw = path.read_bytes()
+    if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+        return raw.decode("utf-16")
+    if b"\x00" not in raw:
+        return raw.decode("utf-8-sig")
     try:
-        return path.read_text(encoding="utf-8-sig")
+        return raw.decode("utf-16-le")
     except UnicodeDecodeError:
-        return path.read_text(encoding="utf-16")
+        return raw.decode("utf-8-sig")
 
 
 def _read_state(path: Path) -> dict | None:
