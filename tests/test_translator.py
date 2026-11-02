@@ -33,6 +33,14 @@ def test_segment_text_ignores_headings_in_code_fences() -> None:
     assert not any(seg.startswith("not a heading") for seg in segments)
 
 
+def test_segment_text_keeps_a_heading_inside_an_indented_fence_line() -> None:
+    text = "# Real\n\n```\nexample\n    ```\n# Mission\nstill example\n```\n\nDone."
+    segments = segment_text(text)
+    assert not any(seg.startswith("Mission") for seg in segments)
+    assert any("still example" in seg for seg in segments)
+    assert any(seg.strip() == "Real\n\nDone." or "Done." in seg for seg in segments)
+
+
 def test_classify_holistic_segment() -> None:
     assert classify_segment("Our mission is to reduce coding drift.") == "holistic"
 

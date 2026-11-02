@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
 
+from hive_planner.chunker import _closes_fence, _open_fence
 from hive_planner.config import RepoPaths, validate_feature_id
 
 Bucket = Literal["holistic", "macro", "micro", "memory", "reject"]
@@ -138,7 +139,7 @@ def segment_text(text: str) -> list[str]:
     segments: list[str] = []
     current_heading = ""
     paragraph_lines: list[str] = []
-    in_fence = False
+    fence_marker = ""
 
     def flush_paragraph() -> None:
         nonlocal paragraph_lines
@@ -154,13 +155,18 @@ def segment_text(text: str) -> list[str]:
             segments.append(body)
 
     for line in text.splitlines():
-        stripped = line.strip()
-        if stripped.startswith("```"):
-            in_fence = not in_fence
+        if fence_marker:
+            if _closes_fence(line, fence_marker):
+                fence_marker = ""
+            paragraph_lines.append(line)
+            continue
+        opened = _open_fence(line)
+        if opened:
+            fence_marker = opened
             paragraph_lines.append(line)
             continue
 
-        heading_match = None if in_fence else re.match(r"^(#{1,6})\s+(.*)$", line)
+        heading_match = re.match(r"^(#{1,6})\s+(.*)$", line)
         if heading_match:
             flush_paragraph()
             current_heading = heading_match.group(2).strip()
