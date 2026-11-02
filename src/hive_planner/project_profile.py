@@ -40,11 +40,23 @@ def project_meta_path(project_root: Path) -> Path:
 
 
 def _read_meta_text(path: Path) -> str:
-    """Read project.json saved as UTF-8 (with or without BOM) or UTF-16."""
-    try:
+    """Read project.json saved as UTF-8 (with or without BOM) or UTF-16.
+
+    UTF-16 LE without a byte-order mark is still the saved profile. Those
+    bytes are valid UTF-8 because the extra bytes are NULs, so the JSON parse
+    used to fail and the project opened as if it had no profile.
+    """
+    raw = path.read_bytes()
+    if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+        text = raw.decode("utf-16")
+    elif b"\x00" not in raw:
         return path.read_text(encoding="utf-8-sig")
-    except UnicodeDecodeError:
-        return path.read_text(encoding="utf-16")
+    else:
+        try:
+            text = raw.decode("utf-16-le")
+        except UnicodeDecodeError:
+            return path.read_text(encoding="utf-8-sig")
+    return text.replace("\r\n", "\n").replace("\r", "\n")
 
 
 def _read_meta_bool(value: object) -> bool | None:

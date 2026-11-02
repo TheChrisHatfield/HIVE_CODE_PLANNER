@@ -57,6 +57,26 @@ def test_read_project_profile_utf16_keeps_handoff_mode(tmp_path: Path) -> None:
     assert resolve_agent_handoff_mode(project) == "unified"
 
 
+def test_read_project_profile_utf16_le_without_bom_keeps_the_name(tmp_path: Path) -> None:
+    project = tmp_path / "demo"
+    project.mkdir()
+    (project / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    write_project_profile(
+        project,
+        profile="full",
+        project_name="Demo App",
+        agent_handoff_mode="unified",
+    )
+    path = project / ".hive" / "project.json"
+    path.write_bytes(path.read_text(encoding="utf-8").encode("utf-16-le"))
+
+    meta = read_project_profile(project)
+
+    assert meta is not None
+    assert meta.project_name == "Demo App"
+    assert resolve_project_profile(project).project_name == "Demo App"
+
+
 def test_write_project_profile_skips_identical_utf16_file(tmp_path: Path) -> None:
     project = tmp_path / "demo"
     project.mkdir()
