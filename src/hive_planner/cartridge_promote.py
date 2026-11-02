@@ -80,14 +80,19 @@ def _append_tasks_wiring_audit_if_missing(tasks_path: Path) -> bool:
     # An unclosed fence would hide the checklist from the same check that decided
     # it was missing, so every later promote would append another copy. An
     # indented fence line inside a closed example is not an open fence.
-    closer = "\n```\n" if _fence_left_open(text) else ""
+    marker = _unclosed_fence_marker(text)
+    closer = f"\n{marker}\n" if marker else ""
     updated = text.rstrip() + closer + "\n\n" + _tasks_wiring_audit_block()
     tasks_path.write_text(updated, encoding="utf-8")
     return True
 
 
-def _fence_left_open(text: str) -> bool:
-    """True when a fence is still open at the end of the file."""
+def _unclosed_fence_marker(text: str) -> str:
+    """Fence token still open at the end of the file, or empty.
+
+    The closer has to use that same token. A tilde fence stays open when the
+    closer is backticks, so the next promote appends the checklist again.
+    """
     from hive_planner.chunker import _closes_fence, _open_fence
 
     marker = ""
@@ -99,7 +104,7 @@ def _fence_left_open(text: str) -> bool:
         opened = _open_fence(line)
         if opened:
             marker = opened
-    return bool(marker)
+    return marker
 
 
 @dataclass
