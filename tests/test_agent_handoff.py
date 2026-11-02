@@ -34,6 +34,15 @@ def _hive_source(tmp_path: Path) -> RepoPaths:
     return RepoPaths(root=root)
 
 
+def test_json_false_handoff_mode_stays_off() -> None:
+    from hive_planner.agent_handoff import normalize_agent_handoff_mode
+
+    assert normalize_agent_handoff_mode(False) == AGENT_HANDOFF_OFF
+    assert normalize_agent_handoff_mode(True) == AGENT_HANDOFF_UNIFIED
+    assert normalize_agent_handoff_mode("false") == AGENT_HANDOFF_OFF
+    assert normalize_agent_handoff_mode("", default=AGENT_HANDOFF_UNIFIED) == AGENT_HANDOFF_UNIFIED
+
+
 def test_integrations_from_mode_unified_pairs_both() -> None:
     spec, cl = integrations_from_mode(AGENT_HANDOFF_UNIFIED)
     assert spec is True

@@ -22,6 +22,10 @@ class AgentHandoffStatus:
 
 
 def normalize_agent_handoff_mode(value: str | None, *, default: str = AGENT_HANDOFF_UNIFIED) -> str:
+    # JSON false is a boolean. `value or default` would treat it as missing and
+    # turn a saved Off into unified.
+    if isinstance(value, bool):
+        value = "true" if value else "false"
     mode = str(value or default).strip().lower()
     if mode in AGENT_HANDOFF_MODES:
         return mode
