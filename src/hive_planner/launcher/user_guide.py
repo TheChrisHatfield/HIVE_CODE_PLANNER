@@ -168,11 +168,18 @@ def user_guide_path(config: LauncherConfig | None = None) -> Path:
 
 
 def _read_guide_text(path: Path) -> str:
-    """Read scripts/README.md saved as UTF-8 (with or without BOM) or UTF-16."""
+    """Read scripts/README.md saved as UTF-8 (with or without BOM) or UTF-16.
+
+    UTF-16 is used only when the file has a byte-order mark. Any other
+    undecodable file raises so the caller can show the built-in help.
+    """
     try:
         return path.read_text(encoding="utf-8-sig")
     except UnicodeDecodeError:
-        return path.read_text(encoding="utf-16")
+        raw = path.read_bytes()
+        if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+            return raw.decode("utf-16")
+        raise
 
 
 def load_user_guide(config: LauncherConfig | None = None) -> str:

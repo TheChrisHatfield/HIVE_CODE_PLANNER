@@ -36,6 +36,22 @@ def test_stale_readme_codespec_help_includes_check_pack(tmp_path: Path) -> None:
     assert text.count("## Implementation loop") == 1
 
 
+def test_load_user_guide_uses_builtin_help_when_the_readme_is_not_utf8(tmp_path: Path) -> None:
+    hive = tmp_path / "hive"
+    scripts = hive / "scripts"
+    scripts.mkdir(parents=True)
+    guide = scripts / "README.md"
+    raw = bytearray(b"Cafe guide line\n")
+    raw[1] = 0xE9
+    guide.write_bytes(bytes(raw))
+    cfg = LauncherConfig(hive_planner_root=str(hive))
+
+    text = load_user_guide(cfg)
+
+    assert text.startswith("Hive Planner — quick help")
+    assert "Home → CodeSpec" in text
+
+
 def test_load_user_guide_strips_a_utf8_bom(tmp_path: Path) -> None:
     hive = tmp_path / "hive"
     scripts = hive / "scripts"
