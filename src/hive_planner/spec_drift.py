@@ -16,14 +16,22 @@ from hive_planner.config import RepoPaths, validate_feature_id
 
 
 def _read_text(path: Path) -> str:
-    """Read a spec or AGENTS file saved as UTF-8 (with or without BOM) or UTF-16."""
-    try:
-        return path.read_text(encoding="utf-8-sig")
-    except UnicodeDecodeError:
-        raw = path.read_bytes()
-        if raw.startswith(b"\xff\xfe") or raw.startswith(b"\xfe\xff"):
-            return raw.decode("utf-16")
-        raise
+    """Read a spec or AGENTS file saved as UTF-8 (with or without BOM) or UTF-16.
+
+    UTF-16 LE without a byte-order mark decodes as UTF-8 with a null between
+    every character, so spec-create used to report the real sections missing.
+    A file that is neither UTF-8 nor UTF-16 still raises so the caller can
+    leave it on disk.
+    """
+    raw = path.read_bytes()
+    if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+        return raw.decode("utf-16")
+    if b"\x00" not in raw:
+        return raw.decode("utf-8-sig")
+    text = raw.decode("utf-16-le")
+    if "\x00" in text:
+        raise UnicodeError("file is not UTF-8 or UTF-16 text")
+    return text
 
 
 def _read_saved_text(path: Path) -> str:

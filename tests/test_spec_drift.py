@@ -592,6 +592,22 @@ def test_rosetta_repair_reads_a_utf16_agents_file(tmp_path: Path) -> None:
     assert "planning.rosetta" in text
 
 
+def test_utf16_le_spec_without_bom_still_passes_creation_gates(tmp_path: Path) -> None:
+    from hive_planner.spec_drift import (
+        SPEC_CREATION_SPEC_TAIL,
+        SPEC_CREATION_TASKS_TAIL,
+        spec_creation_gaps,
+    )
+
+    paths = RepoPaths(root=tmp_path)
+    spec_dir = paths.root / "docs" / "specs" / "feat"
+    spec_dir.mkdir(parents=True)
+    (spec_dir / "spec.md").write_bytes(("# Spec\n" + SPEC_CREATION_SPEC_TAIL).encode("utf-16-le"))
+    (spec_dir / "tasks.md").write_bytes(("# Tasks\n" + SPEC_CREATION_TASKS_TAIL).encode("utf-16-le"))
+
+    assert spec_creation_gaps(paths, "feat", include_active=False) == []
+
+
 def test_utf16_spec_and_tasks_still_pass_creation_gates(tmp_path: Path) -> None:
     from hive_planner.spec_drift import (
         SPEC_CREATION_SPEC_TAIL,
