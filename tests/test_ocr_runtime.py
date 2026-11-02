@@ -479,11 +479,34 @@ def test_run_tesseract_on_png_tolerates_non_utf8_output(
 
     class Completed:
         returncode = 0
-        stdout = "caf\xe9 scan"
-        stderr = ""
+        stdout = "caf\xe9 scan".encode("utf-8")
+        stderr = b""
 
     monkeypatch.setattr("hive_planner.ocr_runtime.subprocess.run", lambda *a, **k: Completed())
     assert _run_tesseract_on_png(install, png_path) == "caf\xe9 scan"
+
+
+def test_run_tesseract_on_png_rejects_output_that_is_not_utf8(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from hive_planner.ocr_runtime import TesseractInstall, _run_tesseract_on_png
+
+    install = TesseractInstall(
+        exe=tmp_path / "tesseract.exe",
+        tessdata_dir=tmp_path / "tessdata",
+        source="test",
+    )
+    png_path = tmp_path / "page.png"
+    png_path.write_bytes(b"png")
+
+    class Completed:
+        returncode = 0
+        stdout = b"caf\xe9 scan"
+        stderr = b""
+
+    monkeypatch.setattr("hive_planner.ocr_runtime.subprocess.run", lambda *a, **k: Completed())
+    with pytest.raises(RuntimeError, match="not UTF-8"):
+        _run_tesseract_on_png(install, png_path)
 
 
 def test_convert_pdf_to_markdown_rejects_password_protected_pdf(tmp_path: Path) -> None:

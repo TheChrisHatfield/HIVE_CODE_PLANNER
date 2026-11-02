@@ -232,17 +232,22 @@ def _run_tesseract_on_png(install: TesseractInstall, png_path: Path, *, lang: st
             "3",
         ],
         capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
         env=env,
         timeout=180,
         check=False,
     )
     if completed.returncode != 0:
-        err = (completed.stderr or completed.stdout or "").strip()
-        raise RuntimeError(err or f"Tesseract exited {completed.returncode}")
-    return completed.stdout.strip()
+        err = completed.stderr or completed.stdout or b""
+        try:
+            detail = err.decode("utf-8").strip()
+        except UnicodeDecodeError:
+            detail = ""
+        raise RuntimeError(detail or f"Tesseract exited {completed.returncode}")
+    try:
+        text = completed.stdout.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise RuntimeError("Tesseract output is not UTF-8") from exc
+    return text.strip()
 
 
 def ocr_pdf_pages(
