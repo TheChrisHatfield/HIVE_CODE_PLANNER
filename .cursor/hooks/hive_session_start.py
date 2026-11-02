@@ -40,8 +40,10 @@ def main() -> int:
             f"docs/specs/{feature}/tasks.md",
             f"docs/delta/20_micro/{feature}.md",
         ):
-            status = "ok" if label not in handoff.missing else "MISSING"
-            lines.append(f"  [{status}] {label}")
+            # Handoff failures name the path and then the reason, so an exact
+            # match misses "spec.md missing Rosetta navigation".
+            failed = any(item == label or item.startswith(label + " ") for item in handoff.missing)
+            lines.append(f"  [{'MISSING' if failed else 'ok'}] {label}")
         print(json.dumps({"additional_context": "\n".join(lines)}))
         return 0
     except Exception as exc:  # noqa: BLE001 — Cursor hooks must fail-open with JSON

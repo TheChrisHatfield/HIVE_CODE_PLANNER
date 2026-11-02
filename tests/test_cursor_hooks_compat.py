@@ -68,6 +68,37 @@ def test_session_stop_names_a_missing_spec_file(tmp_path: Path) -> None:
     assert "docs/specs/demo-feature/spec.md" in result.stderr
 
 
+def test_session_start_marks_a_spec_missing_navigation(tmp_path: Path) -> None:
+    project = tmp_path / "proj"
+    feature = "demo-feature"
+    (project / "docs" / "specs" / feature).mkdir(parents=True)
+    (project / "docs" / "delta" / "20_micro").mkdir(parents=True)
+    (project / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    (project / "docs" / "planning-rosetta-stone.md").write_text("# rosetta\n", encoding="utf-8")
+    (project / "AGENTS.md").write_text(
+        "# AGENTS\n\n## Active feature\n\n**demo-feature** — test\n",
+        encoding="utf-8",
+    )
+    marker = "<!-- ROSETTA-NAV -->\n"
+    (project / "docs" / "specs" / feature / "spec.md").write_text("# Spec\n\n## Requirements\n", encoding="utf-8")
+    (project / "docs" / "specs" / feature / "plan.md").write_text(marker + "# Plan\n", encoding="utf-8")
+    (project / "docs" / "specs" / feature / "tasks.md").write_text(marker + "# Tasks\n", encoding="utf-8")
+    (project / "docs" / "delta" / "20_micro" / f"{feature}.md").write_text(marker + "# Micro\n", encoding="utf-8")
+    script = ROOT / ".cursor" / "hooks" / "hive_session_start.py"
+    result = subprocess.run(
+        [sys.executable, str(script)],
+        input="{}",
+        text=True,
+        capture_output=True,
+        cwd=str(project),
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    context = json.loads(result.stdout)["additional_context"]
+    assert "[MISSING] docs/specs/demo-feature/spec.md" in context
+    assert "[ok] docs/specs/demo-feature/plan.md" in context
+
+
 def test_agents_lint_hook_ignores_a_name_that_only_contains_agents(tmp_path: Path) -> None:
     project = tmp_path / "proj"
     (project / "docs").mkdir(parents=True)
