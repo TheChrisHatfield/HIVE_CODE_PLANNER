@@ -730,18 +730,26 @@ def write_unified_vendor_pins(
     return True
 
 
+def _component_patch_rev(manifest: dict, key: str) -> str:
+    block = manifest.get(key)
+    if not isinstance(block, dict):
+        return ""
+    rev = block.get("hive_patch_rev", "")
+    # null is unset. str(None) is "None", which verify treated as a real rev
+    # and then reported the overlay stale.
+    if rev is None or isinstance(rev, bool):
+        return ""
+    if not isinstance(rev, (str, int, float)):
+        return ""
+    return str(rev).strip()
+
+
 def _spec_kit_patch_rev(manifest: dict) -> str:
-    block = manifest.get("spec_kit")
-    if isinstance(block, dict):
-        return str(block.get("hive_patch_rev", "")).strip()
-    return ""
+    return _component_patch_rev(manifest, "spec_kit")
 
 
 def _continual_learning_patch_rev(manifest: dict) -> str:
-    block = manifest.get("continual_learning")
-    if isinstance(block, dict):
-        return str(block.get("hive_patch_rev", "")).strip()
-    return ""
+    return _component_patch_rev(manifest, "continual_learning")
 
 
 def _read_component_overlay_rev(target: Path, overlay_rel: str) -> str | None:

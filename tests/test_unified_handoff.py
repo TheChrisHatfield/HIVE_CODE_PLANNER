@@ -357,6 +357,16 @@ def test_unified_verify_detects_stale_overlay_when_packaged_unavailable(
     assert any("spec-kit overlay stale" in issue for issue in report.issues)
 
 
+def test_null_patch_rev_is_not_reported_as_stale(tmp_path: Path) -> None:
+    from hive_planner.vendor_sync import _continual_learning_patch_rev, _verify_cl_overlay
+
+    manifest = {"continual_learning": {"hive_patch_rev": None}}
+    assert _continual_learning_patch_rev(manifest) == ""
+    assert _continual_learning_patch_rev({"continual_learning": {"hive_patch_rev": "4"}}) == "4"
+    issues = _verify_cl_overlay(tmp_path, manifest=manifest)
+    assert not any("stale" in issue for issue in issues)
+
+
 def test_unified_verify_headless_requires_workflow_artifact(tmp_path: Path) -> None:
     from hive_planner.agent_handoff import AGENT_HANDOFF_UNIFIED
     from hive_planner.cl_runtime import CL_RUNTIME_HEADLESS, HEADLESS_CL_WORKFLOW_REL
