@@ -6,19 +6,33 @@ from hive_planner.models import NormalizeResult
 from hive_planner.normalizers import EmptySourceError, MissingDependencyError
 
 
+def _shape_texts(shape) -> list[str]:
+    """Text on a shape. A group has no text of its own; its members do."""
+    from pptx.enum.shapes import MSO_SHAPE_TYPE
+
+    if shape.shape_type == MSO_SHAPE_TYPE.GROUP:
+        parts: list[str] = []
+        for child in shape.shapes:
+            parts.extend(_shape_texts(child))
+        return parts
+    if not hasattr(shape, "text"):
+        return []
+    text = shape.text.strip()
+    return [text] if text else []
+
+
 def _slide_text(slide) -> str:
     parts: list[str] = []
+    title = ""
     if slide.shapes.title and slide.shapes.title.text:
-        parts.append(slide.shapes.title.text.strip())
+        title = slide.shapes.title.text.strip()
+        if title:
+            parts.append(title)
     for shape in slide.shapes:
-        if not hasattr(shape, "text"):
-            continue
-        text = shape.text.strip()
-        if not text:
-            continue
-        if slide.shapes.title and text == slide.shapes.title.text.strip():
-            continue
-        parts.append(text)
+        for text in _shape_texts(shape):
+            if title and text == title:
+                continue
+            parts.append(text)
     return "\n".join(parts).strip()
 
 
