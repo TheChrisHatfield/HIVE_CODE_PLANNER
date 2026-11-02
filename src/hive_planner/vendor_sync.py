@@ -279,7 +279,9 @@ def _read_cursor_json_text(path: Path) -> tuple[str, bool]:
         raw = path.read_bytes()
     except OSError:
         return "", True
-    if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+    if raw.startswith((b"\xff\xfe", b"\xfe\xff")) or b"\x00" in raw:
+        # UTF-16 LE without a BOM still has a NUL between characters. Those
+        # bytes decode as UTF-8, so the hook names look missing.
         return "", False
     try:
         return raw.decode("utf-8-sig"), True

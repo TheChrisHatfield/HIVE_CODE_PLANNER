@@ -77,6 +77,26 @@ def test_utf16_project_hooks_are_reported_unreadable(tmp_path: Path) -> None:
     assert ".cursor/hooks.json" in overlay_issues_as_missing(target, None)
 
 
+def test_utf16_le_project_hooks_without_bom_are_reported_unreadable(tmp_path: Path) -> None:
+    from hive_planner.vendor_sync import _verify_cl_overlay
+
+    target = tmp_path / "utf16-hooks-no-bom"
+    hooks = target / ".cursor" / "hooks.json"
+    hooks.parent.mkdir(parents=True)
+    hooks.write_bytes(
+        json.dumps(
+            {
+                "version": 1,
+                "hooks": {"workspaceOpen": [{"command": "py -3.11 .cursor/hooks/hive_workspace_open.py"}]},
+            }
+        ).encode("utf-16-le")
+    )
+
+    issues = _verify_cl_overlay(target)
+    assert any(".cursor/hooks.json is not UTF-8" in issue for issue in issues)
+    assert not any("missing workspaceOpen" in issue for issue in issues)
+
+
 def test_load_manifest_reads_utf16_json(tmp_path: Path) -> None:
     from hive_planner.vendor_sync import VendorSyncError, load_manifest
 
