@@ -175,13 +175,23 @@ def _plugin_tree_present(plugin_root: Path) -> bool:
     )
 
 
+def _read_text(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8-sig")
+    except UnicodeDecodeError:
+        raw = path.read_bytes()
+        if raw.startswith(b"\xff\xfe") or raw.startswith(b"\xfe\xff"):
+            return raw.decode("utf-16")
+        raise
+
+
 def _is_hive_planner_source(root: Path) -> bool:
     pyproject = root / "pyproject.toml"
     if not pyproject.is_file():
         return False
     try:
-        text = pyproject.read_text(encoding="utf-8")
-    except OSError:
+        text = _read_text(pyproject)
+    except (OSError, UnicodeError):
         return False
     return 'name = "hive-planner"' in text
 

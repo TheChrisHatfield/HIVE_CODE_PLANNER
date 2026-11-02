@@ -229,6 +229,37 @@ def test_scan_legacy_deployment_skips_hive_planner_source_repo(tmp_path: Path) -
     assert report.findings == []
 
 
+def test_scan_legacy_deployment_skips_a_utf16_hive_source_repo(tmp_path: Path) -> None:
+    repo = tmp_path / "hive-planner"
+    repo.mkdir()
+    pyproject = repo / "pyproject.toml"
+    pyproject.write_bytes('[project]\nname = "hive-planner"\n'.encode("utf-16"))
+    plugin = repo / MARKETPLACE_CL_REL / ".cursor-plugin"
+    plugin.mkdir(parents=True)
+    (plugin / "plugin.json").write_text('{"name":"continual-learning"}\n', encoding="utf-8")
+
+    report = scan_legacy_deployment(repo)
+
+    assert report.findings == []
+    assert pyproject.read_bytes().startswith(b"\xff\xfe")
+
+
+def test_scan_legacy_deployment_still_scans_an_undecodable_pyproject(tmp_path: Path) -> None:
+    project = tmp_path / "legacy-cl"
+    project.mkdir()
+    pyproject = project / "pyproject.toml"
+    original = b'name = "caf\xe9"\n'
+    pyproject.write_bytes(original)
+    plugin = project / MARKETPLACE_CL_REL / ".cursor-plugin"
+    plugin.mkdir(parents=True)
+    (plugin / "plugin.json").write_text('{"name":"continual-learning"}\n', encoding="utf-8")
+
+    report = scan_legacy_deployment(project)
+
+    assert "marketplace_cl_only" in {item.code for item in report.findings}
+    assert pyproject.read_bytes() == original
+
+
 def test_scan_legacy_deployment_clean_unified_project(tmp_path: Path) -> None:
     source = _hive_source(tmp_path)
     target = tmp_path / "unified-clean"
