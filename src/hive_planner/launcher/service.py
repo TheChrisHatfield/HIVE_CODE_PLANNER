@@ -2243,6 +2243,21 @@ def _cartridge_import_allowed(rel: Path) -> bool:
     return name.endswith(".mdc.seed")
 
 
+def _is_reparse_dir(path: Path) -> bool:
+    """True for a symlink or a Windows junction.
+
+    Junctions are not symlinks. Following one copies files that are not in
+    the cartridge folder.
+    """
+    if path.is_symlink():
+        return True
+    try:
+        attrs = path.lstat().st_file_attributes  # type: ignore[attr-defined]
+    except (AttributeError, OSError):
+        return False
+    return bool(attrs & 0x400)
+
+
 def _cartridge_import_files(root: Path) -> list[Path]:
     """Files under a cartridge folder, without re-entering a directory junction."""
     found: list[Path] = []
@@ -2262,7 +2277,7 @@ def _cartridge_import_files(root: Path) -> list[Path]:
             return
         for path in entries:
             if path.is_dir():
-                if path.is_symlink():
+                if _is_reparse_dir(path):
                     continue
                 scan(path)
                 continue

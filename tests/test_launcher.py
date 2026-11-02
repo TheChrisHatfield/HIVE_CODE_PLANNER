@@ -1222,6 +1222,30 @@ def test_cartridge_import_does_not_loop_on_a_directory_junction(tmp_path: Path) 
     assert not (project / "cartridge" / "again").exists()
 
 
+def test_cartridge_import_skips_a_junction_to_another_folder(tmp_path: Path) -> None:
+    project = _minimal_hive_project(tmp_path / "proj")
+    external = tmp_path / "external-cartridge"
+    external.mkdir()
+    (external / "holistic.md").write_text("# Holistic\n", encoding="utf-8")
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "secret.md").write_text("# Secret\n", encoding="utf-8")
+    link = external / "jump"
+    created = subprocess.run(
+        ["cmd", "/c", "mklink", "/J", str(link), str(outside)],
+        capture_output=True,
+        text=True,
+    )
+    if created.returncode != 0:
+        pytest.skip("directory junction is not permitted")
+
+    result = run_cartridge_import_folder(project, external, promote=False)
+
+    assert result["ok"] is True
+    assert result["written"] == ["holistic.md"]
+    assert not (project / "cartridge" / "secret.md").exists()
+
+
 def test_run_cartridge_import_folder_fails_when_all_files_exist(tmp_path: Path) -> None:
     project = _minimal_hive_project(tmp_path / "proj")
     external = tmp_path / "external-cartridge"
