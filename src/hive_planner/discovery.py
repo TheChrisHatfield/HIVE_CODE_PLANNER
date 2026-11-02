@@ -17,7 +17,19 @@ def content_hash(text: str) -> str:
 
 
 def infer_title(text: str, fallback: str) -> str:
+    """First Markdown heading outside a code fence. A fenced heading is not the title."""
+    from hive_planner.chunker import _closes_fence, _open_fence
+
+    fence = ""
     for line in text.splitlines():
+        if fence:
+            if _closes_fence(line, fence):
+                fence = ""
+            continue
+        opened = _open_fence(line)
+        if opened:
+            fence = opened
+            continue
         stripped = line.strip()
         if stripped.startswith("#"):
             return re.sub(r"^#+\s*", "", stripped).strip() or fallback

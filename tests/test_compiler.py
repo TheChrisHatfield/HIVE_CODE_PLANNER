@@ -92,6 +92,14 @@ def test_normalize_text_markdown_passthrough(tmp_path: Path) -> None:
     assert result.title == "Title"
 
 
+def test_markdown_title_skips_a_heading_inside_a_fence(tmp_path: Path) -> None:
+    md = tmp_path / "note.md"
+    md.write_text("```\n# not a heading\n```\n\n# Real Title\n\nbody\n", encoding="utf-8")
+    result = normalize_text(md)
+    assert result.title == "Real Title"
+    assert result.normalized_body.startswith("```\n")
+
+
 def test_normalize_text_plain_wraps_code_fence(tmp_path: Path) -> None:
     txt = tmp_path / "readme.txt"
     txt.write_text("plain content\n", encoding="utf-8")
