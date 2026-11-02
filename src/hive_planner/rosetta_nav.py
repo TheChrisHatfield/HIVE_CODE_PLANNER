@@ -134,10 +134,23 @@ def inject_after_header(text: str, block: str) -> str:
     return merged
 
 
+def _read_text(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8-sig")
+    except UnicodeDecodeError:
+        raw = path.read_bytes()
+        if raw.startswith(b"\xff\xfe") or raw.startswith(b"\xfe\xff"):
+            return raw.decode("utf-16")
+        raise
+
+
 def ensure_file_rosetta_navigation(path: Path, block: str) -> bool:
     if not path.is_file():
         return False
-    text = path.read_text(encoding="utf-8", errors="replace")
+    try:
+        text = _read_text(path)
+    except (OSError, UnicodeError):
+        return False
     updated = inject_after_header(text, block)
     if updated == text:
         return False
@@ -209,7 +222,11 @@ def missing_handoff_rosetta_navigation(paths, feature: str) -> list[str]:
         path = root.root / rel
         if not path.is_file():
             continue
-        text = path.read_text(encoding="utf-8", errors="replace")
+        try:
+            text = _read_text(path)
+        except (OSError, UnicodeError):
+            missing.append(f"{rel} could not be read")
+            continue
         if not has_rosetta_navigation(text):
             missing.append(f"{rel} missing Rosetta navigation")
     return missing

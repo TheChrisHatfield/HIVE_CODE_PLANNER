@@ -139,6 +139,44 @@ def test_repair_agents_rosetta_section_inserts_anchor(tmp_path: Path) -> None:
     assert "planning.rosetta" in updated
 
 
+def test_ensure_navigation_reads_a_utf16_spec(tmp_path: Path) -> None:
+    from hive_planner.rosetta_nav import ROSETTA_NAV_MARKER, ensure_file_rosetta_navigation
+
+    path = tmp_path / "spec.md"
+    path.write_bytes("# Spec\n\n## Requirements\n\n- keep this\n".encode("utf-16"))
+
+    assert ensure_file_rosetta_navigation(path, spec_navigation_block("demo")) is True
+
+    text = path.read_text(encoding="utf-8")
+    assert "keep this" in text
+    assert ROSETTA_NAV_MARKER in text
+
+
+def test_ensure_navigation_leaves_a_utf16_spec_that_already_has_the_block(tmp_path: Path) -> None:
+    from hive_planner.rosetta_nav import ROSETTA_NAV_MARKER, ensure_file_rosetta_navigation
+
+    path = tmp_path / "spec.md"
+    path.write_bytes(f"# Spec\n\n{ROSETTA_NAV_MARKER}\n\n## Requirements\n".encode("utf-16"))
+    original = path.read_bytes()
+
+    assert ensure_file_rosetta_navigation(path, spec_navigation_block("demo")) is False
+    assert path.read_bytes() == original
+
+
+def test_ensure_navigation_does_not_rewrite_an_undecodable_spec(tmp_path: Path) -> None:
+    from hive_planner.rosetta_nav import ensure_file_rosetta_navigation, missing_handoff_rosetta_navigation
+
+    path = tmp_path / "docs" / "specs" / "demo" / "spec.md"
+    path.parent.mkdir(parents=True)
+    original = b"# caf\xe9\n"
+    path.write_bytes(original)
+
+    assert ensure_file_rosetta_navigation(path, spec_navigation_block("demo")) is False
+    assert path.read_bytes() == original
+    missing = missing_handoff_rosetta_navigation(RepoPaths(root=tmp_path), "demo")
+    assert "docs/specs/demo/spec.md could not be read" in missing
+
+
 def test_inject_agents_rosetta_section_idempotent() -> None:
     base = inject_agents_rosetta_section("# AGENTS\n\n## Active feature\n")
     again = inject_agents_rosetta_section(base)
