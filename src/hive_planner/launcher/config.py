@@ -320,7 +320,11 @@ def save_config(config: LauncherConfig) -> None:
     old_python: str | None = None
     if path.is_file():
         try:
-            old_python = str(json.loads(_read_json_text(path)).get("python_executable") or "")
+            parsed = json.loads(_read_json_text(path))
+            # A JSON array or null has no settings. .get would crash the save
+            # that recovers that file.
+            if isinstance(parsed, dict):
+                old_python = str(parsed.get("python_executable") or "")
         except (OSError, UnicodeError, json.JSONDecodeError):
             old_python = None
     path.parent.mkdir(parents=True, exist_ok=True)
