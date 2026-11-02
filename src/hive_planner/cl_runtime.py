@@ -62,13 +62,21 @@ def continual_learning_artifact_paths(runtime: str) -> tuple[str, ...]:
 
 
 def _read_manifest_text(path: Path) -> str:
+    """Read cl-runtime.json saved as UTF-8 (with or without BOM) or UTF-16.
+
+    UTF-16 LE without a byte-order mark is still the saved runtime. Those
+    bytes are valid UTF-8 because the extra bytes are NULs, so the manifest
+    used to be ignored and the project resolved as the Cursor runtime.
+    """
+    raw = path.read_bytes()
+    if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+        return raw.decode("utf-16")
+    if b"\x00" not in raw:
+        return raw.decode("utf-8-sig")
     try:
-        return path.read_text(encoding="utf-8-sig")
+        return raw.decode("utf-16-le")
     except UnicodeDecodeError:
-        raw = path.read_bytes()
-        if raw.startswith(b"\xff\xfe") or raw.startswith(b"\xfe\xff"):
-            return raw.decode("utf-16")
-        raise
+        return raw.decode("utf-8-sig")
 
 
 def read_cl_runtime_manifest(project_root: Path) -> dict | None:
@@ -135,7 +143,7 @@ def write_cl_runtime_manifest(project_root: Path, runtime: str) -> Path:
     normalized = normalize_cl_runtime(runtime)
     if path.is_file():
         try:
-            current = json.loads(path.read_text(encoding="utf-8-sig"))
+            current = json.loads(_read_manifest_text(path))
         except (OSError, UnicodeError, json.JSONDecodeError):
             current = None
         if isinstance(current, dict) and current.get("runtime") == normalized:

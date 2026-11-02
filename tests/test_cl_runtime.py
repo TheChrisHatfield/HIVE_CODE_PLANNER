@@ -17,6 +17,7 @@ from hive_planner.cl_runtime import (
     requires_cursor_plugin,
     resolve_cl_runtime,
     set_project_cl_runtime,
+    write_cl_runtime_manifest,
 )
 from hive_planner.project_profile import read_project_profile, write_project_profile
 
@@ -54,6 +55,20 @@ def test_utf16_manifest_still_resolves(tmp_path: Path) -> None:
 
     assert resolve_cl_runtime(project) == CL_RUNTIME_HEADLESS
     assert path.read_bytes().startswith(b"\xff\xfe")
+
+
+def test_utf16_le_manifest_without_bom_still_resolves(tmp_path: Path) -> None:
+    project = tmp_path / "app"
+    project.mkdir()
+    path = project / ".hive" / "cl-runtime.json"
+    path.parent.mkdir()
+    path.write_bytes(json.dumps({"runtime": "headless"}).encode("utf-16-le"))
+    before = path.read_bytes()
+
+    assert resolve_cl_runtime(project) == CL_RUNTIME_HEADLESS
+    write_cl_runtime_manifest(project, CL_RUNTIME_HEADLESS)
+
+    assert path.read_bytes() == before
 
 
 def test_unreadable_manifest_uses_the_default_runtime(tmp_path: Path) -> None:
