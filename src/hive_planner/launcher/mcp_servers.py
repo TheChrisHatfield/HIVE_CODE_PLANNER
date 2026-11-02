@@ -48,6 +48,18 @@ def parse_mcp_args(raw: str) -> list[str]:
         raise McpConfigError(str(exc) or "Could not parse args.") from exc
 
 
+def _quote_cmd_part(part: str) -> str:
+    """Quote one cmd token. A trailing backslash must not escape the closing quote."""
+    slashes = 0
+    while part.endswith("\\"):
+        slashes += 1
+        part = part[:-1]
+    quoted = '"' + part.replace('"', '\\"') + '"'
+    if slashes:
+        quoted += "\\" * slashes
+    return quoted
+
+
 def format_mcp_token(text: str) -> str:
     """Quote a token that the shell would split or treat as an operator.
 
@@ -62,7 +74,7 @@ def format_mcp_token(text: str) -> str:
     )
     if "%" not in text:
         if needs_wrap:
-            return '"' + text.replace('"', '\\"') + '"'
+            return _quote_cmd_part(text)
         return text
     if not needs_wrap:
         return text.replace("%", "^%")
@@ -70,7 +82,7 @@ def format_mcp_token(text: str) -> str:
     chunks: list[str] = []
     for index, part in enumerate(parts):
         if part:
-            chunks.append('"' + part.replace('"', '\\"') + '"')
+            chunks.append(_quote_cmd_part(part))
         if index != len(parts) - 1:
             chunks.append("^%")
     return "".join(chunks)

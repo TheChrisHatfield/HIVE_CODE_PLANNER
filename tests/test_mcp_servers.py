@@ -160,6 +160,24 @@ def test_format_mcp_invocation_keeps_percent_signs_literal() -> None:
     assert echoed == r"C:\Users\%USERNAME%\python.exe -m hive_planner"
 
 
+def test_format_mcp_invocation_keeps_a_spaced_percent_path_literal(tmp_path: Path) -> None:
+    import subprocess
+
+    from hive_planner.launcher.mcp_servers import format_mcp_token
+
+    path = r"C:\Program Files\%USERNAME%\python.exe"
+    script = tmp_path / "show.py"
+    script.write_text("import sys\nprint(sys.argv[1])\n", encoding="utf-8")
+    # A string command line is required. A list would be re-quoted and hide the bug.
+    proc = subprocess.run(
+        "cmd /d /c py -3.11 " + format_mcp_token(str(script)) + " " + format_mcp_token(path),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.stdout.strip() == path
+
+
 def test_settings_enable_mcp_writes_the_active_project(tmp_path: Path, monkeypatch) -> None:
     from hive_planner.launcher.app import HivePlannerApp
 
