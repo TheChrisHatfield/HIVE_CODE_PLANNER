@@ -34,6 +34,24 @@ def _iter_blocks(document):
             yield Table(child, parent)
 
 
+def _header_footer_lines(document) -> list[str]:
+    """Header and footer paragraphs are not in the document body."""
+    lines: list[str] = []
+    for section in document.sections:
+        stories = (
+            (section.header, section.header.is_linked_to_previous),
+            (section.footer, section.footer.is_linked_to_previous),
+        )
+        for story, linked in stories:
+            if linked:
+                continue
+            for paragraph in story.paragraphs:
+                text = paragraph.text.strip()
+                if text and text not in lines:
+                    lines.append(text)
+    return lines
+
+
 def _table_lines(table) -> list[str]:
     lines: list[str] = []
     seen: set[int] = set()
@@ -85,6 +103,13 @@ def normalize_docx(file_path: Path) -> NormalizeResult:
             lines.append(f"{'#' * min(level + 1, 6)} {text}")
         else:
             lines.append(text)
+        lines.append("")
+        raw_parts.append(text)
+
+    for text in _header_footer_lines(document):
+        if text in raw_parts:
+            continue
+        lines.append(text)
         lines.append("")
         raw_parts.append(text)
 
