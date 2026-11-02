@@ -128,17 +128,29 @@ _WORKSPACE_OPEN_MARKER = "hive_workspace_open.py"
 
 
 def _read_hooks_json_text(path: Path) -> str:
-    """Read hooks.json saved as UTF-8 (with or without BOM) or UTF-16."""
+    """Read hooks.json saved as UTF-8 (with or without BOM) or UTF-16.
+
+    UTF-16 LE without a byte-order mark decodes as UTF-8 with a null between
+    every character, so deploy used to skip merging workspaceOpen.
+    """
+    raw = path.read_bytes()
+    if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+        return raw.decode("utf-16")
+    text = raw.decode("utf-8-sig")
+    if "\x00" not in text:
+        return text
     try:
-        return path.read_text(encoding="utf-8-sig")
-    except UnicodeDecodeError:
-        return path.read_text(encoding="utf-16")
+        return raw.decode("utf-16-le")
+    except UnicodeError:
+        return text
 
 
 def _hooks_json_is_plain_utf8(path: Path) -> bool:
     """True when Cursor can JSON.parse the file (UTF-8, no BOM)."""
     raw = path.read_bytes()
     if raw.startswith((b"\xef\xbb\xbf", b"\xff\xfe", b"\xfe\xff")):
+        return False
+    if b"\x00" in raw:
         return False
     try:
         raw.decode("utf-8")

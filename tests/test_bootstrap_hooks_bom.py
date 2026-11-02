@@ -73,6 +73,52 @@ def test_utf16_hooks_json_that_already_has_workspace_open_is_rewritten_as_utf8(t
     assert ".cursor/hooks.json" in written
 
 
+def test_utf16_le_hooks_json_without_bom_still_gains_workspace_open(tmp_path: Path) -> None:
+    dest = tmp_path / ".cursor" / "hooks.json"
+    dest.parent.mkdir(parents=True)
+    original = {
+        "version": 1,
+        "hooks": {"sessionStart": [{"command": "echo keep-me"}]},
+    }
+    dest.write_bytes(json.dumps(original).encode("utf-16-le"))
+    written: list[str] = []
+    warnings: list[str] = []
+
+    _ensure_workspace_open_hooks_json(tmp_path, force=False, written=written, warnings=warnings)
+
+    data = json.loads(dest.read_text(encoding="utf-8"))
+    assert warnings == []
+    assert data["hooks"]["sessionStart"][0]["command"] == "echo keep-me"
+    assert "hive_workspace_open.py" in json.dumps(data["hooks"]["workspaceOpen"])
+    assert ".cursor/hooks.json" in written
+    assert b"\x00" not in dest.read_bytes()
+
+
+def test_utf16_le_hooks_json_without_bom_that_already_has_workspace_open_is_rewritten(tmp_path: Path) -> None:
+    dest = tmp_path / ".cursor" / "hooks.json"
+    dest.parent.mkdir(parents=True)
+    original = {
+        "version": 1,
+        "hooks": {
+            "sessionStart": [{"command": "echo keep-me"}],
+            "workspaceOpen": [{"command": "py -3.11 .cursor/hooks/hive_workspace_open.py"}],
+        },
+    }
+    dest.write_bytes(json.dumps(original).encode("utf-16-le"))
+    written: list[str] = []
+    warnings: list[str] = []
+
+    _ensure_workspace_open_hooks_json(tmp_path, force=False, written=written, warnings=warnings)
+
+    raw = dest.read_bytes()
+    assert b"\x00" not in raw
+    data = json.loads(raw.decode("utf-8"))
+    assert warnings == []
+    assert data["hooks"]["sessionStart"][0]["command"] == "echo keep-me"
+    assert "hive_workspace_open.py" in json.dumps(data["hooks"]["workspaceOpen"])
+    assert ".cursor/hooks.json" in written
+
+
 def test_plain_utf8_hooks_json_that_already_has_workspace_open_is_left_alone(tmp_path: Path) -> None:
     dest = tmp_path / ".cursor" / "hooks.json"
     dest.parent.mkdir(parents=True)
