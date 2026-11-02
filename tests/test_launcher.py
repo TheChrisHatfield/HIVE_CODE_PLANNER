@@ -6316,6 +6316,34 @@ def test_load_config_tolerates_null_recent_projects(tmp_path: Path, monkeypatch:
     assert loaded.active_project == str(project.resolve())
 
 
+def test_load_config_skips_a_null_recent_project_entry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import json
+
+    project = tmp_path / "demo"
+    project.mkdir()
+    cfg_dir = tmp_path / "cfg"
+    monkeypatch.setattr("hive_planner.launcher.config.default_config_dir", lambda: cfg_dir)
+    cfg_dir.mkdir()
+    (cfg_dir / "config.json").write_text(
+        json.dumps(
+            {
+                "onboarding_complete": True,
+                "hive_planner_root": str(tmp_path),
+                "active_project": str(tmp_path / "missing"),
+                "recent_projects": [None, str(project)],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    loaded = load_config()
+
+    assert loaded.recent_projects == [str(project.resolve())]
+    assert loaded.active_project == str(project.resolve())
+
+
 def test_load_config_recovers_corrupt_json(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     import json
 

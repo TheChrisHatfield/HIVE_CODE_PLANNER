@@ -267,7 +267,12 @@ def load_config() -> LauncherConfig:
         recent_raw = [recent_raw]
     elif not isinstance(recent_raw, list):
         recent_raw = []
-    recent = [normalize_project_path(p) for p in recent_raw if str(p).strip()]
+    # Null and other non-strings are not paths. str(None) is the folder name "None".
+    recent = [
+        normalize_project_path(item)
+        for item in recent_raw
+        if isinstance(item, str) and item.strip()
+    ]
     profiles_raw = data.get("project_profiles") or {}
     if not isinstance(profiles_raw, dict):
         profiles_raw = {}
