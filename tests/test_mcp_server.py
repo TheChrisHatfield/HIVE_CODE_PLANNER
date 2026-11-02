@@ -292,6 +292,39 @@ def test_call_tool_ping_resolves_code_workspace_file(tmp_path: Path) -> None:
     assert Path(payload["root"]) == folder.resolve()
 
 
+def test_agnostic_observe_rejects_an_unknown_hit_and_keeps_a_real_one(tmp_path: Path) -> None:
+    enabled = call_tool("hive_agnostic_loop_enable", {"root": str(tmp_path)})
+    assert enabled["ok"] is True
+    rejected = call_tool(
+        "hive_agnostic_loop_observe",
+        {"root": str(tmp_path), "reward": "inspect", "hit": "maybe"},
+    )
+    assert rejected["ok"] is False
+    assert "hit" in rejected["error"]
+    policy = tmp_path / ".hive" / "agnostic-loop" / "policy.json"
+    assert not policy.is_file()
+
+    miss = call_tool(
+        "hive_agnostic_loop_observe",
+        {"root": str(tmp_path), "reward": "inspect", "hit": False},
+    )
+    assert miss["ok"] is True
+    assert miss["hit"] is False
+    saved = json.loads(policy.read_text(encoding="utf-8"))
+    assert saved["arms"]["inspect"]["beta"] == 2.0
+    assert saved["observations"] == 1
+
+    hit = call_tool(
+        "hive_agnostic_loop_observe",
+        {"root": str(tmp_path), "reward": "inspect", "hit": "true"},
+    )
+    assert hit["ok"] is True
+    assert hit["hit"] is True
+    saved = json.loads(policy.read_text(encoding="utf-8"))
+    assert saved["arms"]["inspect"]["alpha"] == 2.0
+    assert saved["observations"] == 2
+
+
 def test_agnostic_arm_rejects_boolean_cycles(tmp_path: Path) -> None:
     payload = call_tool(
         "hive_agnostic_loop_arm",

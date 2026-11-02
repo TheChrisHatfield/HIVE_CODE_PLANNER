@@ -235,6 +235,20 @@ def _whole_int(value: object, *, default: int) -> tuple[int | None, str | None]:
     return int(number), None
 
 
+def _strict_bool(value: object) -> tuple[bool | None, str | None]:
+    """Parse a required true/false. An unknown string is not a miss."""
+    if isinstance(value, bool):
+        return value, None
+    if value is None:
+        return None, "is required"
+    text = str(value).strip().lower()
+    if text in {"1", "true", "yes", "on"}:
+        return True, None
+    if text in {"0", "false", "no", "off"}:
+        return False, None
+    return None, "must be true or false"
+
+
 def _optional_str(value: object) -> str | None:
     text = str(value or "").strip()
     return text or None
@@ -432,10 +446,13 @@ def _tool_hive_agnostic_loop_observe(arguments: dict[str, Any]) -> dict[str, Any
         return {"ok": False, "error": "reward is required"}
     if "hit" not in arguments:
         return {"ok": False, "error": "hit is required"}
+    hit, error = _strict_bool(arguments.get("hit"))
+    if error:
+        return {"ok": False, "error": f"hit {error}"}
     return run_project_agnostic_loop_observe(
         _workspace_root(arguments),
         reward,
-        _bool(arguments.get("hit")),
+        hit,
     )
 
 
