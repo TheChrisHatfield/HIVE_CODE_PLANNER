@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
+from hive_planner.chunker import _closes_fence, _open_fence
 from hive_planner.config import RepoPaths, resolve_repo_agents_path
 
 EDITABLE_SECTION = "Durable Workspace Facts"
@@ -161,7 +162,7 @@ def parse_sections(text: str) -> dict[str, str]:
     sections: dict[str, str] = {}
     current_title = ""
     current_lines: list[str] = []
-    in_fence = False
+    fence_marker = ""
 
     def flush() -> None:
         nonlocal current_lines
@@ -178,13 +179,19 @@ def parse_sections(text: str) -> dict[str, str]:
         current_lines = []
 
     for line in text.splitlines():
-        stripped = line.strip()
-        if stripped.startswith("```"):
-            in_fence = not in_fence
+        if fence_marker:
+            if _closes_fence(line, fence_marker):
+                fence_marker = ""
             if current_title:
                 current_lines.append(line)
             continue
-        if not in_fence and line.startswith("## "):
+        opened = _open_fence(line)
+        if opened:
+            fence_marker = opened
+            if current_title:
+                current_lines.append(line)
+            continue
+        if line.startswith("## "):
             flush()
             current_title = line[3:].strip()
             continue
@@ -197,13 +204,18 @@ def parse_sections(text: str) -> dict[str, str]:
 
 def _section_bullets(section_body: str) -> list[tuple[int, str]]:
     bullets: list[tuple[int, str]] = []
-    in_fence = False
+    fence_marker = ""
     for idx, line in enumerate(section_body.splitlines(), start=1):
-        stripped = line.strip()
-        if stripped.startswith("```"):
-            in_fence = not in_fence
+        if fence_marker:
+            if _closes_fence(line, fence_marker):
+                fence_marker = ""
             continue
-        if in_fence or not stripped.startswith("- "):
+        opened = _open_fence(line)
+        if opened:
+            fence_marker = opened
+            continue
+        stripped = line.strip()
+        if not stripped.startswith("- "):
             continue
         bullets.append((idx, stripped[2:].strip()))
     return bullets

@@ -76,6 +76,25 @@ body
     assert sections["Real"] == "body"
 
 
+def test_parse_sections_keeps_a_heading_after_an_indented_fence_line() -> None:
+    text = """## Outside
+
+```
+keep
+    ```
+still
+```
+
+## After
+
+body
+"""
+    sections = parse_sections(text)
+    assert "After" in sections
+    assert sections["After"] == "body"
+    assert "still" in sections["Outside"]
+
+
 def test_parse_sections_appends_duplicate_heading_bodies() -> None:
     text = """## Facts
 
