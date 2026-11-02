@@ -36,6 +36,22 @@ def test_stale_readme_codespec_help_includes_check_pack(tmp_path: Path) -> None:
     assert text.count("## Implementation loop") == 1
 
 
+def test_fenced_implementation_loop_heading_still_gets_codespec_help(tmp_path: Path) -> None:
+    hive = tmp_path / "hive"
+    scripts = hive / "scripts"
+    scripts.mkdir(parents=True)
+    (scripts / "README.md").write_text(
+        "# Guide\n\n```\n## Implementation loop\n```\n\nNo real section.\n",
+        encoding="utf-8",
+    )
+    cfg = LauncherConfig(hive_planner_root=str(hive))
+
+    text = load_user_guide(cfg)
+
+    assert "**Check pack**" in text
+    assert "**Handoff**" in text
+
+
 def test_load_user_guide_uses_builtin_help_when_the_readme_is_not_utf8(tmp_path: Path) -> None:
     hive = tmp_path / "hive"
     scripts = hive / "scripts"

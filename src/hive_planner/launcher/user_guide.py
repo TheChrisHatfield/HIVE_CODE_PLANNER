@@ -182,6 +182,21 @@ def _read_guide_text(path: Path) -> str:
         raise
 
 
+def _marker_outside_fences(text: str, marker: str) -> bool:
+    """True when the marker appears in guide text a reader can see.
+
+    A fenced example of the heading is not the section itself.
+    """
+    fenced = False
+    for line in text.splitlines():
+        if line.strip().startswith("```"):
+            fenced = not fenced
+            continue
+        if not fenced and marker in line:
+            return True
+    return False
+
+
 def load_user_guide(config: LauncherConfig | None = None) -> str:
     path = user_guide_path(config)
     readme_on_disk = path.is_file()
@@ -194,12 +209,12 @@ def load_user_guide(config: LauncherConfig | None = None) -> str:
     if text is None:
         text = _FALLBACK_GUIDE
         readme_on_disk = False
-    if readme_on_disk and UNIFIED_VENDOR_SECTION_MARKER not in text:
+    if readme_on_disk and not _marker_outside_fences(text, UNIFIED_VENDOR_SECTION_MARKER):
         text = text.rstrip() + "\n\n" + unified_vendor_help_text().strip() + "\n"
-    if readme_on_disk and IMPLEMENTATION_LOOP_SECTION_MARKER not in text:
+    if readme_on_disk and not _marker_outside_fences(text, IMPLEMENTATION_LOOP_SECTION_MARKER):
         text = text.rstrip() + "\n\n" + implementation_loop_help_text().strip() + "\n"
-    if readme_on_disk and AGNOSTIC_LOOP_SECTION_MARKER not in text:
+    if readme_on_disk and not _marker_outside_fences(text, AGNOSTIC_LOOP_SECTION_MARKER):
         text = text.rstrip() + "\n\n" + agnostic_loop_help_text().strip() + "\n"
-    if readme_on_disk and AGENT_MCP_SECTION_MARKER not in text:
+    if readme_on_disk and not _marker_outside_fences(text, AGENT_MCP_SECTION_MARKER):
         text = text.rstrip() + "\n\n" + agent_mcp_help_text().strip() + "\n"
     return text
