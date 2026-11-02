@@ -386,3 +386,52 @@ def test_continual_learning_stop_does_not_consume_check_when_notice_missing(tmp_
     saved = json.loads((tmp_path / ".cursor" / "hooks" / "state" / "continual-learning.json").read_text(encoding="utf-8"))
     assert saved["lastRunAtMs"] == 0
     assert saved["turnsSinceLastRun"] == 1
+
+
+def test_continual_learning_stop_keeps_counting_from_a_utf16_state(tmp_path: Path) -> None:
+    transcript = tmp_path / "transcript.jsonl"
+    transcript.write_text("{}\n", encoding="utf-8")
+    state = tmp_path / ".cursor" / "hooks" / "state" / "continual-learning.json"
+    state.parent.mkdir(parents=True)
+    state.write_bytes(
+        json.dumps(
+            {
+                "version": 1,
+                "lastRunAtMs": 0,
+                "turnsSinceLastRun": 4,
+                "lastTranscriptMtimeMs": None,
+                "lastProcessedGenerationId": None,
+                "trialStartedAtMs": None,
+            }
+        ).encode("utf-16")
+    )
+    script = (
+        ROOT
+        / ".cursor"
+        / "plugins"
+        / "hive-continual-learning"
+        / "hooks"
+        / "continual-learning-stop.py"
+    )
+    env = os.environ.copy()
+    env["CONTINUAL_LEARNING_MIN_TURNS"] = "10"
+    result = subprocess.run(
+        [sys.executable, str(script)],
+        input=json.dumps(
+            {
+                "status": "completed",
+                "loop_count": 0,
+                "generation_id": "gen-utf16-state",
+                "transcript_path": str(transcript),
+            }
+        ),
+        text=True,
+        capture_output=True,
+        cwd=str(tmp_path),
+        env=env,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout.strip()) == {}
+    saved = json.loads(state.read_text(encoding="utf-8"))
+    assert saved["turnsSinceLastRun"] == 5
