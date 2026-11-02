@@ -2878,6 +2878,37 @@ def _log_scan_mtime(path: Path) -> float:
         return 0.0
 
 
+def _files_under(root: Path, suffix: str) -> list[Path]:
+    """Files ending in suffix, without following a directory junction."""
+    found: list[Path] = []
+    seen: set[Path] = set()
+    wanted = suffix.lower()
+
+    def scan(current: Path) -> None:
+        try:
+            key = current.resolve()
+        except OSError:
+            return
+        if key in seen:
+            return
+        seen.add(key)
+        try:
+            entries = list(current.iterdir())
+        except OSError:
+            return
+        for path in entries:
+            if path.is_dir():
+                if _is_reparse_dir(path):
+                    continue
+                scan(path)
+                continue
+            if path.is_file() and path.suffix.lower() == wanted:
+                found.append(path)
+
+    scan(root)
+    return found
+
+
 def _cursor_from_logs() -> str | None:
     appdata = os.environ.get("APPDATA", "")
     if not appdata:
@@ -2887,7 +2918,7 @@ def _cursor_from_logs() -> str | None:
         return None
     try:
         log_files = sorted(
-            logs_root.rglob("*.log"),
+            _files_under(logs_root, ".log"),
             key=_log_scan_mtime,
             reverse=True,
         )
@@ -2920,7 +2951,7 @@ def _cursor_from_start_menu_shortcuts() -> str | None:
         if not start_dir.is_dir():
             continue
         try:
-            links = sorted(start_dir.rglob("*.lnk"))
+            links = sorted(_files_under(start_dir, ".lnk"))
         except OSError:
             continue
         for link in links:
