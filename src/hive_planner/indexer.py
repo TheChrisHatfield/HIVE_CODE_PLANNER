@@ -7,12 +7,22 @@ from pathlib import Path
 from hive_planner.models import ChunkIndex, ChunkRecord, DocumentIndex, SourceDocument
 
 
+def _read_json_text(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8-sig")
+    except UnicodeDecodeError:
+        raw = path.read_bytes()
+        if raw.startswith(b"\xff\xfe") or raw.startswith(b"\xfe\xff"):
+            return raw.decode("utf-16")
+        raise
+
+
 def _load_json_list(path: Path, key: str) -> list[dict]:
     if not path.exists():
         return []
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
+        data = json.loads(_read_json_text(path))
+    except (json.JSONDecodeError, OSError, UnicodeError):
         return []
     if not isinstance(data, dict):
         return []

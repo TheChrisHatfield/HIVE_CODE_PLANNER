@@ -237,3 +237,36 @@ def test_emit_source_context_recovers_an_undecodable_manifest(tmp_path: Path) ->
     data = json.loads((paths.cartridge / "manifest.json").read_text(encoding="utf-8"))
     assert data["features"] == ["new-feature"]
     assert "manifest" in outputs
+
+
+def test_load_document_index_reads_utf16(tmp_path: Path) -> None:
+    path = tmp_path / "documents.json"
+    payload = {
+        "documents": [
+            {
+                "doc_id": "abc",
+                "source_path": "context-library/sources/a.md",
+                "format": "md",
+                "title": "A",
+                "content_hash": "h",
+                "category": "reference",
+            }
+        ]
+    }
+    path.write_bytes(json.dumps(payload).encode("utf-16"))
+
+    index = load_document_index(path)
+
+    assert [doc.doc_id for doc in index.documents] == ["abc"]
+    assert path.read_bytes().startswith(b"\xff\xfe")
+
+
+def test_load_document_index_ignores_an_undecodable_file(tmp_path: Path) -> None:
+    path = tmp_path / "documents.json"
+    original = b'{"documents": "caf\xe9"}'
+    path.write_bytes(original)
+
+    index = load_document_index(path)
+
+    assert index.documents == []
+    assert path.read_bytes() == original
