@@ -39,13 +39,23 @@ def _first_content_line(content: str) -> str:
 
 
 def _read_text(path: Path) -> str:
-    try:
+    """Read a Delta file saved as UTF-8 (with or without BOM) or UTF-16.
+
+    UTF-16 LE without a byte-order mark is still the Delta note. Those bytes
+    are valid UTF-8 because the extra bytes are NULs, so the cartridge copy
+    used to be written with a null between every character.
+    """
+    raw = path.read_bytes()
+    if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+        text = raw.decode("utf-16")
+    elif b"\x00" not in raw:
         return path.read_text(encoding="utf-8-sig")
-    except UnicodeDecodeError:
-        raw = path.read_bytes()
-        if raw.startswith(b"\xff\xfe") or raw.startswith(b"\xfe\xff"):
-            return raw.decode("utf-16")
-        raise
+    else:
+        try:
+            text = raw.decode("utf-16-le")
+        except UnicodeDecodeError:
+            return path.read_text(encoding="utf-8-sig")
+    return text.replace("\r\n", "\n").replace("\r", "\n")
 
 
 def _should_skip_existing(target: Path, *, force: bool) -> tuple[bool, str]:

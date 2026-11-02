@@ -128,6 +128,24 @@ def test_sync_reads_a_utf16_delta_source(tmp_path: Path) -> None:
     assert holistic.read_bytes().startswith(b"\xff\xfe")
 
 
+def test_sync_reads_utf16_le_delta_source_without_a_bom(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    paths.ensure_dirs()
+    feature = "cartridge-delta-emit-v1"
+    _write_delta_tree(paths, feature)
+    holistic = paths.root / "docs" / "delta" / "00_holistic.md"
+    holistic.write_bytes("# Holistic\n\nMission alpha\n".encode("utf-16-le"))
+    before = holistic.read_bytes()
+
+    results, _, _ = sync_delta_cartridge(paths, feature)
+
+    copied = (paths.cartridge / "holistic.md").read_text(encoding="utf-8")
+    assert results["holistic"] == "written"
+    assert "Mission alpha" in copied
+    assert "\x00" not in copied
+    assert holistic.read_bytes() == before
+
+
 def test_sync_skips_an_unreadable_cartridge_file(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     paths.ensure_dirs()
