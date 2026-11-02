@@ -176,6 +176,26 @@ def test_discover_source4s_files_in_folder_non_recursive(tmp_path: Path) -> None
     assert [path.name for path in found] == ["top.txt"]
 
 
+def test_discover_walks_a_cloud_reparse_folder_and_skips_a_junction_tag(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    folder = tmp_path / "refs"
+    cloud = folder / "cloud"
+    cloud.mkdir(parents=True)
+    (cloud / "keep.txt").write_text("keep", encoding="utf-8")
+    monkeypatch.setattr(
+        "hive_planner.source4s._has_reparse_attribute",
+        lambda path: path.name == "cloud",
+    )
+
+    monkeypatch.setattr("hive_planner.source4s._reparse_tag", lambda _path: 0x9000001A)
+    found = discover_source4s_files_in_folder(folder)
+    assert [path.name for path in found] == ["keep.txt"]
+
+    monkeypatch.setattr("hive_planner.source4s._reparse_tag", lambda _path: 0xA0000003)
+    assert discover_source4s_files_in_folder(folder) == []
+
+
 def test_discover_source4s_files_does_not_loop_on_a_directory_junction(tmp_path: Path) -> None:
     folder = tmp_path / "notes"
     folder.mkdir()

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -47,19 +48,80 @@ SOURCE4S_DISCOVER_SKIP_DIR_NAMES = {
 _SOURCE4S_DISCOVER_SKIP_DIR_KEYS = {name.casefold() for name in SOURCE4S_DISCOVER_SKIP_DIR_NAMES}
 
 
+_REPARSE_ATTRIBUTE = 0x400
+_REPARSE_TAG_MOUNT_POINT = 0xA0000003
+_REPARSE_TAG_SYMLINK = 0xA000000C
+
+
+def _has_reparse_attribute(path: Path) -> bool:
+    try:
+        attrs = path.lstat().st_file_attributes  # type: ignore[attr-defined]
+    except (AttributeError, OSError):
+        return False
+    return bool(attrs & _REPARSE_ATTRIBUTE)
+
+
+def _reparse_tag(path: Path) -> int | None:
+    """Windows reparse tag, or None when it cannot be read."""
+    if os.name != "nt":
+        return None
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        class _FileTime(ctypes.Structure):
+            _fields_ = [("dwLowDateTime", wintypes.DWORD), ("dwHighDateTime", wintypes.DWORD)]
+
+        class _FindData(ctypes.Structure):
+            _fields_ = [
+                ("dwFileAttributes", wintypes.DWORD),
+                ("ftCreationTime", _FileTime),
+                ("ftLastAccessTime", _FileTime),
+                ("ftLastWriteTime", _FileTime),
+                ("nFileSizeHigh", wintypes.DWORD),
+                ("nFileSizeLow", wintypes.DWORD),
+                ("dwReserved0", wintypes.DWORD),
+                ("dwReserved1", wintypes.DWORD),
+                ("cFileName", wintypes.WCHAR * 260),
+                ("cAlternateFileName", wintypes.WCHAR * 14),
+            ]
+
+        kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+        find_first = kernel.FindFirstFileW
+        find_first.argtypes = [wintypes.LPCWSTR, ctypes.POINTER(_FindData)]
+        find_first.restype = wintypes.HANDLE
+        find_close = kernel.FindClose
+        find_close.argtypes = [wintypes.HANDLE]
+        find_close.restype = wintypes.BOOL
+        data = _FindData()
+        handle = find_first(str(path), ctypes.byref(data))
+        invalid = ctypes.c_void_p(-1).value
+        if handle is None or ctypes.cast(handle, ctypes.c_void_p).value in {None, invalid}:
+            return None
+        try:
+            return int(data.dwReserved0)
+        finally:
+            find_close(handle)
+    except OSError:
+        return None
+
+
 def _is_reparse_dir(path: Path) -> bool:
     """True for a symlink or a Windows junction.
 
     Junctions are not symlinks, so is_symlink() leaves them in the walk.
     Following one lists or copies files that are not in the selected folder.
+    A cloud placeholder also has the reparse attribute, and skipping it hid
+    the text and PDF files inside that folder.
     """
     if path.is_symlink():
         return True
-    try:
-        attrs = path.lstat().st_file_attributes  # type: ignore[attr-defined]
-    except (AttributeError, OSError):
+    if not _has_reparse_attribute(path):
         return False
-    return bool(attrs & 0x400)
+    tag = _reparse_tag(path)
+    if tag is None:
+        return True
+    return tag in {_REPARSE_TAG_MOUNT_POINT, _REPARSE_TAG_SYMLINK}
 
 
 def discover_source4s_files_in_folder(folder: Path, *, recursive: bool = True) -> list[Path]:
