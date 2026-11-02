@@ -39,8 +39,23 @@ def _read_text(path: Path) -> str:
         return path.read_text(encoding="utf-16")
 
 
+def _is_reparse_dir(path: Path) -> bool:
+    """True for a symlink or a Windows junction.
+
+    Junctions are not symlinks, so walking them lists files that are not
+    under the folder being scanned.
+    """
+    if path.is_symlink():
+        return True
+    try:
+        attrs = path.lstat().st_file_attributes  # type: ignore[attr-defined]
+    except (AttributeError, OSError):
+        return False
+    return bool(attrs & 0x400)
+
+
 def _iter_files(root: Path, match) -> list[Path]:
-    """Files under root. A directory junction back into the tree is not walked again."""
+    """Files under root. A directory junction is not walked."""
     found: list[Path] = []
     seen: set[Path] = set()
 
@@ -58,7 +73,7 @@ def _iter_files(root: Path, match) -> list[Path]:
             return
         for path in entries:
             if path.is_dir():
-                if path.is_symlink():
+                if _is_reparse_dir(path):
                     continue
                 scan(path)
                 continue

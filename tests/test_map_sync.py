@@ -106,6 +106,29 @@ def test_discover_src_modules_does_not_loop_on_a_directory_junction(tmp_path: Pa
     assert modules == ["src/hive_planner/foo.py"]
 
 
+def test_discover_src_modules_skips_files_behind_an_outward_junction(tmp_path: Path) -> None:
+    import subprocess
+
+    import pytest
+
+    paths = RepoPaths(root=tmp_path)
+    _write_src_module(paths, "src/hive_planner/foo.py", '"""Foo module."""\n')
+    outside = tmp_path / "not-src"
+    outside.mkdir()
+    (outside / "secret.py").write_text("x = 1\n", encoding="utf-8")
+    link = tmp_path / "src" / "hive_planner" / "linked"
+    created = subprocess.run(
+        ["cmd", "/c", "mklink", "/J", str(link), str(outside)],
+        capture_output=True,
+        text=True,
+    )
+    if created.returncode != 0:
+        pytest.skip("directory junction is not permitted")
+
+    modules = discover_src_modules(paths)
+    assert modules == ["src/hive_planner/foo.py"]
+
+
 def test_sync_preserves_other_src_package_rows(tmp_path: Path) -> None:
     """Existing src/** rows outside rediscovered packages must not be dropped."""
     paths = RepoPaths(root=tmp_path)
