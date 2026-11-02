@@ -541,6 +541,34 @@ def test_bootstrap_example_spec_passes_creation_gates(tmp_path: Path) -> None:
     assert spec_creation_gaps(paths, "example-feature") == []
 
 
+def test_rosetta_repair_does_not_rewrite_an_undecodable_agents_file(tmp_path: Path) -> None:
+    from hive_planner.spec_drift import repair_agents_rosetta_section
+
+    agents = tmp_path / "AGENTS.md"
+    original = b"# caf\xe9\n"
+    agents.write_bytes(original)
+
+    result = repair_agents_rosetta_section(RepoPaths(root=tmp_path))
+
+    assert result.repaired is False
+    assert "could not be read" in result.detail
+    assert agents.read_bytes() == original
+
+
+def test_rosetta_repair_reads_a_utf16_agents_file(tmp_path: Path) -> None:
+    from hive_planner.spec_drift import repair_agents_rosetta_section
+
+    agents = tmp_path / "AGENTS.md"
+    agents.write_bytes("# AGENTS\n\n## Repository root\n\nkeep this heading\n".encode("utf-16"))
+
+    result = repair_agents_rosetta_section(RepoPaths(root=tmp_path))
+
+    text = agents.read_text(encoding="utf-8")
+    assert result.repaired is True
+    assert "keep this heading" in text
+    assert "planning.rosetta" in text
+
+
 def test_utf16_spec_and_tasks_still_pass_creation_gates(tmp_path: Path) -> None:
     from hive_planner.spec_drift import (
         SPEC_CREATION_SPEC_TAIL,

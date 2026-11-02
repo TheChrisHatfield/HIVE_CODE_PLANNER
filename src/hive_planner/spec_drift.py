@@ -19,10 +19,18 @@ def _read_text(path: Path) -> str:
     try:
         return path.read_text(encoding="utf-8-sig")
     except UnicodeDecodeError:
-        try:
-            return path.read_text(encoding="utf-16")
-        except UnicodeError:
-            return path.read_text(encoding="utf-8", errors="replace")
+        raw = path.read_bytes()
+        if raw.startswith(b"\xff\xfe") or raw.startswith(b"\xfe\xff"):
+            return raw.decode("utf-16")
+        raise
+
+
+def _read_saved_text(path: Path) -> str:
+    """Check-only read. An unreadable file stays on disk and counts as empty text."""
+    try:
+        return _read_text(path)
+    except (OSError, UnicodeError):
+        return ""
 
 
 FEATURE_RE = re.compile(r"\*\*([a-z0-9][a-z0-9-]*)\*\*")
@@ -159,7 +167,7 @@ def parse_active_feature(paths: RepoPaths) -> str | None:
     agents_path = paths.root / "AGENTS.md"
     if not agents_path.exists():
         return None
-    sections = parse_sections(_read_text(agents_path))
+    sections = parse_sections(_read_saved_text(agents_path))
     if "Active feature" in sections:
         active_body = sections["Active feature"]
     else:
@@ -230,7 +238,10 @@ def repair_agents_active_feature(paths: RepoPaths, feature: str | None = None) -
     agents_path = paths.root / "AGENTS.md"
     if not agents_path.is_file():
         return AgentsRepairResult(False, detail="AGENTS.md missing")
-    text = _read_text(agents_path)
+    try:
+        text = _read_text(agents_path)
+    except (OSError, UnicodeError):
+        return AgentsRepairResult(False, detail="AGENTS.md could not be read")
     match = _active_feature_section_match(text)
     if not match:
         return AgentsRepairResult(False, detail="Active feature section not found")
@@ -254,7 +265,10 @@ def repair_agents_rosetta_section(paths: RepoPaths) -> AgentsRepairResult:
     agents_path = paths.root / "AGENTS.md"
     if not agents_path.is_file():
         return AgentsRepairResult(False, detail="AGENTS.md missing")
-    text = _read_text(agents_path)
+    try:
+        text = _read_text(agents_path)
+    except (OSError, UnicodeError):
+        return AgentsRepairResult(False, detail="AGENTS.md could not be read")
     if not agents_missing_rosetta_section(text):
         return AgentsRepairResult(False, detail="Rosetta section already present")
     updated = inject_agents_rosetta_section(text)
@@ -447,7 +461,7 @@ def spec_creation_gaps(paths: RepoPaths, feature: str, *, include_active: bool =
     spec_path = paths.root / "docs" / "specs" / feature / "spec.md"
     tasks_path = paths.root / "docs" / "specs" / feature / "tasks.md"
     if spec_path.is_file():
-        spec_text = _read_text(spec_path)
+        spec_text = _read_saved_text(spec_path)
         scenarios = _section_body(spec_text, _USER_SCENARIOS_HEADING)
         assumptions = _section_body(spec_text, _ASSUMPTIONS_HEADING)
         success = _section_body(spec_text, _SUCCESS_HEADING)
@@ -464,7 +478,7 @@ def spec_creation_gaps(paths: RepoPaths, feature: str, *, include_active: bool =
         elif not _success_criteria_filled(success):
             gaps.append("spec.md Success Criteria section has no measurable criterion")
     if tasks_path.is_file():
-        tasks_text = _read_text(tasks_path)
+        tasks_text = _read_saved_text(tasks_path)
         if not _tasks_have_wiring_audit_heading(tasks_text):
             gaps.append("tasks.md missing Integration wiring audit checklist")
     if include_active and parse_active_feature(paths) != feature:
@@ -518,7 +532,7 @@ def check_spec_handoff(paths: RepoPaths, feature: str | None = None) -> SpecHand
         missing.extend(missing_handoff_rosetta_navigation(paths, active))
         missing.extend(spec_creation_gaps(paths, active, include_active=True))
         if agents_path.is_file():
-            agents_text = _read_text(agents_path)
+            agents_text = _read_saved_text(agents_path)
             if agents_missing_rosetta_section(agents_text):
                 missing.append("AGENTS.md missing Planning Rosetta Stone section")
     return SpecHandoffReport(feature=active, ok=not missing, missing=missing)
@@ -528,7 +542,7 @@ def _read_spec_text(paths: RepoPaths, feature: str) -> str:
     spec_path = paths.root / "docs" / "specs" / feature / "spec.md"
     if not spec_path.exists():
         return ""
-    return _read_text(spec_path).lower()
+    return _read_saved_text(spec_path).lower()
 
 
 def _bullet_reflected_in_spec(bullet: str, spec_text: str) -> bool:
@@ -554,7 +568,7 @@ def _collect_agents_facts(paths: RepoPaths) -> list[str]:
     agents_path = paths.root / "AGENTS.md"
     if not agents_path.exists():
         return []
-    sections = parse_sections(_read_text(agents_path))
+    sections = parse_sections(_read_saved_text(agents_path))
     key = _match_section(sections, EDITABLE_SECTION)
     if key is None:
         return []
@@ -595,7 +609,7 @@ def check_memory_spec_drift(
                 spec_actions.append(f"Candidates file not found: {candidate_file}")
         else:
             candidate_bullets = _collect_bullets_from_candidates(
-                _read_text(candidate_file)
+                _read_saved_text(candidate_file)
             )
     agent_bullets = _collect_agents_facts(paths) if include_agents_facts else []
 
