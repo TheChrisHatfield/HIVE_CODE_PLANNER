@@ -27,7 +27,9 @@ class BootstrapState:
 
     @property
     def has_existing_hive_files(self) -> bool:
-        return self.hive_ready or self.has_start_here
+        # A Rosetta Stone by itself is already a Hive planning folder. Linking
+        # must ask before init writes the rest of the scaffold.
+        return self.hive_ready or self.has_partial_hive
 
     @property
     def needs_handoff_repair(self) -> bool:
