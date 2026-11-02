@@ -232,12 +232,24 @@ def emit_rules_seed(
     return status, target, warnings
 
 
+def _read_json_text(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8-sig")
+    except UnicodeDecodeError:
+        raw = path.read_bytes()
+        if raw.startswith(b"\xff\xfe") or raw.startswith(b"\xfe\xff"):
+            return raw.decode("utf-16")
+        raise
+
+
 def _should_skip_source_map(target: Path, *, force: bool) -> tuple[bool, str]:
     if force or not target.exists():
         return False, ""
     try:
-        data = json.loads(target.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
+        data = json.loads(_read_json_text(target))
+    except (json.JSONDecodeError, OSError, UnicodeError):
+        return False, ""
+    if not isinstance(data, dict):
         return False, ""
     if data.get("_manual") is True:
         return True, "manual source map (_manual flag)"

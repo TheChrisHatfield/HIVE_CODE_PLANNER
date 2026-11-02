@@ -308,6 +308,22 @@ def test_source_map_skips_manual_without_force(tmp_path: Path) -> None:
     assert any("Skipped cartridge/mappings/source-map.json" in w for w in warnings)
 
 
+def test_source_map_array_is_replaced(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    paths.ensure_dirs()
+    feature = "cartridge-pack-v2"
+    _write_feature_tree(paths, feature)
+    map_path = paths.cartridge / "mappings" / "source-map.json"
+    map_path.parent.mkdir(parents=True, exist_ok=True)
+    map_path.write_text("[1]\n", encoding="utf-8")
+
+    _, results, _ = emit_cartridge_pack(paths, feature, force=False)
+
+    assert results["source_map"] == "updated"
+    data = json.loads(map_path.read_text(encoding="utf-8"))
+    assert data.get("_auto_sync") is True
+
+
 def test_source_map_auto_sync_updates_on_re_emit(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     paths.ensure_dirs()
