@@ -33,6 +33,30 @@ def test_tooltip_flips_above_the_widget_when_the_bottom_is_cut_off() -> None:
     assert theme._tooltip_origin(100, 1420, 120, 40, 2560, 1440, anchor_top=1400) == (100, 1354)
 
 
+def test_partial_notch_is_handled_once() -> None:
+    scrolled: list[tuple[int, str]] = []
+
+    class Target:
+        def winfo_id(self) -> int:
+            return 7
+
+        def winfo_exists(self) -> bool:
+            return True
+
+        def yview_scroll(self, steps: int, units: str) -> None:
+            scrolled.append((steps, units))
+
+    theme._wheel_bindings[1] = Target()
+    theme._wheel_stack.append(1)
+    event = type("E", (), {"delta": 60})()
+
+    assert theme._dispatch_wheel(event) == "break"
+    assert scrolled == []
+    assert theme._wheel_remainders[7] == 60
+    assert theme._dispatch_wheel(event) == "break"
+    assert scrolled == [(-1, "units")]
+
+
 def test_button_wheel_stops_after_one_line() -> None:
     scrolled: list[tuple[int, str]] = []
 

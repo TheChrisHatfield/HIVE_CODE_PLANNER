@@ -112,11 +112,14 @@ def _dispatch_wheel(event) -> str | None:
         key = target.winfo_id()
     except tk.TclError:
         return None
+    if not hasattr(target, "yview_scroll"):
+        return None
     steps = _wheel_steps(int(getattr(event, "delta", 0) or 0), key)
-    if steps and hasattr(target, "yview_scroll"):
+    if steps:
         target.yview_scroll(steps, "units")
-        return "break"
-    return None
+    # A half notch is still this target's event. Returning None let the
+    # bind-all handler add the same delta again, so one tick moved a line.
+    return "break"
 
 
 def _dispatch_wheel_up(event) -> str | None:
