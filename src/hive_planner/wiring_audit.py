@@ -255,6 +255,8 @@ def check_wiring_audit(
         if age_limit is None:
             raw_limit = payload.get("max_age_hours", DEFAULT_MAX_AGE_HOURS)
             try:
+                if isinstance(raw_limit, bool):
+                    raise ValueError
                 age_limit = int(raw_limit)
             except (TypeError, ValueError):
                 age_limit = DEFAULT_MAX_AGE_HOURS

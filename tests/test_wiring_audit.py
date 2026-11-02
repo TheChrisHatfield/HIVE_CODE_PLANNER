@@ -326,3 +326,21 @@ def test_stale_attestation_fails(tmp_path: Path) -> None:
     report = check_wiring_audit(paths)
     assert not report.ok
     assert any("stale" in item for item in report.missing)
+
+
+def test_json_false_max_age_uses_the_default_window(tmp_path: Path) -> None:
+    import json
+
+    paths = RepoPaths(root=tmp_path)
+    (paths.root / "AGENTS.md").write_text(_minimal_agents("my-feature"), encoding="utf-8")
+    _write_handoff(paths, "my-feature")
+    record_wiring_audit(paths, evidence="pytest -q")
+
+    audit_path = wiring_audit_path(paths)
+    payload = json.loads(audit_path.read_text(encoding="utf-8"))
+    payload["max_age_hours"] = False
+    audit_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    report = check_wiring_audit(paths)
+    assert report.ok
+    assert report.missing == []
