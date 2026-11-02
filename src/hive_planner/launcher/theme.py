@@ -263,14 +263,18 @@ class HoverTooltip:
             pady=6,
         ).pack()
         tip.update_idletasks()
+        area_w = tip.winfo_vrootwidth() or tip.winfo_screenwidth()
+        area_h = tip.winfo_vrootheight() or tip.winfo_screenheight()
         x, y = _tooltip_origin(
             x,
             y,
             tip.winfo_width(),
             tip.winfo_height(),
-            tip.winfo_screenwidth(),
-            tip.winfo_screenheight(),
+            area_w,
+            area_h,
             anchor_top=self.widget.winfo_rooty(),
+            origin_x=tip.winfo_vrootx(),
+            origin_y=tip.winfo_vrooty(),
         )
         tip.wm_geometry(f"+{x}+{y}")
         self.tipwindow = tip
@@ -295,18 +299,22 @@ def _tooltip_origin(
     screen_h: int,
     *,
     anchor_top: int,
+    origin_x: int = 0,
+    origin_y: int = 0,
 ) -> tuple[int, int]:
-    """Keep a tooltip on the screen it opened on.
+    """Keep a tooltip inside the virtual screen rectangle it opened on.
 
-    The right and bottom clamps use the primary screen size. A tip that
-    already starts past that screen is on another monitor, and pulling it
+    screen_w and screen_h are that rectangle's size. A tip that starts
+    outside it is on a monitor this size does not cover, and pulling it
     back parks it away from the control.
     """
-    if x < screen_w and x + width > screen_w - 8:
-        x = max(8, screen_w - width - 8)
-    if y < screen_h and y + height > screen_h - 8:
+    right = origin_x + screen_w
+    bottom = origin_y + screen_h
+    if origin_x <= x < right and x + width > right - 8:
+        x = max(origin_x + 8, right - width - 8)
+    if origin_y <= y < bottom and y + height > bottom - 8:
         above = anchor_top - height - 6
-        if above >= 8:
+        if above >= origin_y + 8:
             y = above
     return x, y
 

@@ -36,6 +36,11 @@ def test_tooltip_flips_above_the_widget_when_the_bottom_is_cut_off() -> None:
 def test_tooltip_stays_beside_a_control_on_another_monitor() -> None:
     assert theme._tooltip_origin(2000, 40, 120, 40, 1920, 1080, anchor_top=20) == (2000, 40)
     assert theme._tooltip_origin(100, 1200, 120, 40, 1920, 1080, anchor_top=1180) == (100, 1200)
+    # The virtual desktop starts left of the primary monitor. A tip at its far
+    # right edge stays on that edge instead of jumping to the primary width.
+    assert theme._tooltip_origin(
+        5750, 40, 200, 40, 8406, 1449, anchor_top=20, origin_x=-2560, origin_y=-9
+    ) == (5638, 40)
 
 
 def test_partial_notch_is_handled_once() -> None:
