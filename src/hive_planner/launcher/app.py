@@ -1336,7 +1336,7 @@ class HivePlannerApp:
             "implloop": "CodeSpec",
             "bughunt": "Bug hunt",
             "agnosticloop": "Agnostic loop",
-            "hivelookit": "Agnostic loop",
+            "hiveloopkit": "Agnostic loop",
         }
         return aliases.get(key)
 

@@ -1682,6 +1682,8 @@ def test_resolved_loop_command_rejects_pairs_from_another_loop() -> None:
     assert HivePlannerApp.normalize_controls_loop("CODESPEC") == "CodeSpec"
     assert HivePlannerApp.normalize_controls_loop("CodeSpec") == "CodeSpec"
     assert HivePlannerApp.normalize_controls_loop("bug hunt") == "Bug hunt"
+    assert HivePlannerApp.normalize_controls_loop("hive loop kit") == "Agnostic loop"
+    assert HivePlannerApp.normalize_controls_loop("agnostic loop") == "Agnostic loop"
 
 
 def test_codespec_install_target_leaves_another_loop_in_place() -> None:
