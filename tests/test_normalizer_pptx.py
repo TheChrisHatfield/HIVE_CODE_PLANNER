@@ -25,6 +25,34 @@ def test_grouped_slide_text_is_indexed(tmp_path: Path) -> None:
     assert "Plain fact" in result.raw_text
 
 
+def test_speaker_notes_are_indexed(tmp_path: Path) -> None:
+    path = tmp_path / "notes.pptx"
+    presentation = Presentation()
+    slide = presentation.slides.add_slide(presentation.slide_layouts[6])
+    box = slide.shapes.add_textbox(Inches(1), Inches(1), Inches(3), Inches(1))
+    box.text_frame.text = "On the slide"
+    slide.notes_slide.notes_text_frame.text = "Speaker line"
+    presentation.save(path)
+
+    result = normalize_pptx(path)
+
+    assert "On the slide" in result.raw_text
+    assert "Speaker line" in result.raw_text
+
+
+def test_notes_only_slide_is_not_empty(tmp_path: Path) -> None:
+    path = tmp_path / "notes-only.pptx"
+    presentation = Presentation()
+    slide = presentation.slides.add_slide(presentation.slide_layouts[6])
+    slide.notes_slide.notes_text_frame.text = "Only notes"
+    presentation.save(path)
+
+    result = normalize_pptx(path)
+
+    assert "Only notes" in result.normalized_body
+    assert "## Slide 1" in result.normalized_body
+
+
 def test_group_only_slide_is_not_empty(tmp_path: Path) -> None:
     path = tmp_path / "group.pptx"
     presentation = Presentation()

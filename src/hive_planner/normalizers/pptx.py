@@ -21,6 +21,16 @@ def _shape_texts(shape) -> list[str]:
     return [text] if text else []
 
 
+def _notes_text(slide) -> str:
+    """Speaker notes live on the notes slide, not in slide.shapes."""
+    if not slide.has_notes_slide:
+        return ""
+    frame = slide.notes_slide.notes_text_frame
+    if frame is None:
+        return ""
+    return frame.text.strip()
+
+
 def _slide_text(slide) -> str:
     parts: list[str] = []
     title = ""
@@ -33,6 +43,9 @@ def _slide_text(slide) -> str:
             if title and text == title:
                 continue
             parts.append(text)
+    notes = _notes_text(slide)
+    if notes and notes not in parts:
+        parts.append(notes)
     return "\n".join(parts).strip()
 
 
