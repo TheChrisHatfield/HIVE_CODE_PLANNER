@@ -63,6 +63,35 @@ def test_resolve_session_contract_skips_whitespace_only_repo_docs(tmp_path: Path
     assert "Planning Rosetta Stone" in resolved.read_text(encoding="utf-8")
 
 
+def test_resolve_session_contract_reads_utf16_repo_docs(tmp_path: Path) -> None:
+    root = tmp_path / "proj"
+    docs = root / "docs"
+    docs.mkdir(parents=True)
+    repo_contract = docs / CONTRACT_FILENAME
+    repo_contract.write_bytes("# repo contract\n".encode("utf-16"))
+
+    resolved = resolve_session_contract_path(root)
+    assert resolved == repo_contract
+    assert load_session_contract_text(repo_root=root).startswith("# repo contract")
+    result = eject_rosetta_cartridge(tmp_path / "exports", repo_root=root, project_name="Demo")
+    assert result.contract_path.read_text(encoding="utf-8").startswith("# repo contract")
+    assert repo_contract.read_bytes().startswith(b"\xff\xfe")
+
+
+def test_resolve_session_contract_skips_an_undecodable_repo_doc(tmp_path: Path) -> None:
+    root = tmp_path / "proj"
+    docs = root / "docs"
+    docs.mkdir(parents=True)
+    repo_contract = docs / CONTRACT_FILENAME
+    original = b"# caf\xe9\n"
+    repo_contract.write_bytes(original)
+
+    resolved = resolve_session_contract_path(root)
+    assert resolved is not None
+    assert "bootstrap_templates" in resolved.as_posix()
+    assert repo_contract.read_bytes() == original
+
+
 def test_resolve_session_contract_falls_back_to_packaged() -> None:
     resolved = resolve_session_contract_path(None)
     assert resolved is not None

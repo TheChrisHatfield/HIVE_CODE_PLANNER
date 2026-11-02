@@ -69,12 +69,22 @@ def _packaged_contract_path() -> Path:
     return Path(__file__).resolve().parent / "bootstrap_templates" / CONTRACT_FILENAME
 
 
+def _read_text(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8-sig")
+    except UnicodeDecodeError:
+        raw = path.read_bytes()
+        if raw.startswith(b"\xff\xfe") or raw.startswith(b"\xfe\xff"):
+            return raw.decode("utf-16")
+        raise
+
+
 def _contract_file_usable(path: Path) -> bool:
     if not path.is_file():
         return False
     try:
-        return bool(path.read_text(encoding="utf-8").strip())
-    except OSError:
+        return bool(_read_text(path).strip())
+    except (OSError, UnicodeError):
         return False
 
 
@@ -96,7 +106,7 @@ def load_session_contract_text(*, repo_root: Path | None = None) -> str:
         raise RosettaEjectError(
             f"Rosetta session contract not found (expected docs/{CONTRACT_FILENAME} or packaged template)"
         )
-    return source.read_text(encoding="utf-8")
+    return _read_text(source)
 
 
 def infer_project_name(repo_root: Path | None = None) -> str:
@@ -150,7 +160,7 @@ def eject_rosetta_cartridge(
     bundle_dir.mkdir(parents=True, exist_ok=True)
 
     contract_path = bundle_dir / CONTRACT_FILENAME
-    contract_path.write_text(source.read_text(encoding="utf-8"), encoding="utf-8", newline="\n")
+    contract_path.write_text(_read_text(source), encoding="utf-8", newline="\n")
 
     prompt_path = bundle_dir / PROMPT_FILENAME
     prompt_path.write_text(build_session_start_prompt(project_name=name), encoding="utf-8", newline="\n")
