@@ -105,12 +105,22 @@ def cosine_similarity(a: list[float], b: list[float]) -> float:
     return dot / (norm_a * norm_b)
 
 
+def _read_json_text(path) -> str:
+    try:
+        return path.read_text(encoding="utf-8-sig")
+    except UnicodeDecodeError:
+        raw = path.read_bytes()
+        if raw.startswith(b"\xff\xfe") or raw.startswith(b"\xfe\xff"):
+            return raw.decode("utf-16")
+        raise
+
+
 def load_embedding_index(path) -> EmbeddingIndex:
     if not path.exists():
         return EmbeddingIndex(model_id=active_model_id())
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
+        data = json.loads(_read_json_text(path))
+    except (json.JSONDecodeError, OSError, UnicodeError):
         return EmbeddingIndex(model_id=active_model_id())
     if not isinstance(data, dict):
         return EmbeddingIndex(model_id=active_model_id())

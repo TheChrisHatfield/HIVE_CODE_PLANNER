@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -122,3 +123,35 @@ def test_ingest_prune_removes_stale_embeddings(tmp_path: Path) -> None:
     report = ingest(paths, embed=False)
     assert report.pruned == 1
     assert load_embedding_index(paths.embedding_index).embeddings == []
+
+
+def test_load_embedding_index_reads_utf16(tmp_path: Path) -> None:
+    path = tmp_path / "embeddings.json"
+    payload = {
+        "model_id": "builtin",
+        "embeddings": [
+            {
+                "chunk_id": "c1",
+                "content_hash": "h",
+                "model_id": "builtin",
+                "vector": [1.0, 0.0],
+            }
+        ],
+    }
+    path.write_bytes(json.dumps(payload).encode("utf-16"))
+
+    index = load_embedding_index(path)
+
+    assert [row.chunk_id for row in index.embeddings] == ["c1"]
+    assert path.read_bytes().startswith(b"\xff\xfe")
+
+
+def test_load_embedding_index_ignores_an_undecodable_file(tmp_path: Path) -> None:
+    path = tmp_path / "embeddings.json"
+    original = b'{"embeddings": "caf\xe9"}'
+    path.write_bytes(original)
+
+    index = load_embedding_index(path)
+
+    assert index.embeddings == []
+    assert path.read_bytes() == original
