@@ -133,6 +133,33 @@ def test_html_normalization(html_dep, tmp_path: Path) -> None:
     assert any("Hello" in c.text for c in chunks)
 
 
+def test_html_reads_utf16(html_dep, tmp_path: Path) -> None:
+    html_path = tmp_path / "page.html"
+    html_path.write_bytes(
+        (
+            "<html><head><title>My Page</title></head>"
+            "<body><p>Body text here.</p></body></html>"
+        ).encode("utf-16")
+    )
+
+    result = normalize_html(html_path)
+
+    assert "My Page" in result.normalized_body
+    assert "Body text here" in result.normalized_body
+    assert html_path.read_bytes().startswith(b"\xff\xfe")
+
+
+def test_html_leaves_an_undecodable_file(html_dep, tmp_path: Path) -> None:
+    html_path = tmp_path / "page.html"
+    original = b"<html><title>caf\xe9</title></html>"
+    html_path.write_bytes(original)
+
+    with pytest.raises(UnicodeError):
+        normalize_html(html_path)
+
+    assert html_path.read_bytes() == original
+
+
 def test_pptx_slide_metadata(pptx_dep, tmp_path: Path) -> None:
     pptx_path = tmp_path / "deck.pptx"
     _make_pptx(pptx_path, ["Intro", "Details"])
