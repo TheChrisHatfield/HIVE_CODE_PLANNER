@@ -31,14 +31,42 @@ def infer_category(relative_path: str) -> str:
     return "reference"
 
 
+def _is_reparse_dir(path: Path) -> bool:
+    """True for a symlink or a Windows junction.
+
+    Junctions are not symlinks, so a recursive glob follows them and lists
+    files that are not in the sources folder.
+    """
+    if path.is_symlink():
+        return True
+    try:
+        attrs = path.lstat().st_file_attributes  # type: ignore[attr-defined]
+    except (AttributeError, OSError):
+        return False
+    return bool(attrs & 0x400)
+
+
 def discover_sources(paths: RepoPaths) -> list[Path]:
-    if not paths.sources.exists():
+    root = paths.sources
+    if not root.exists():
         return []
     found: list[Path] = []
-    for path in sorted(paths.sources.rglob("*")):
-        if path.is_file() and path.suffix.lower() in SUPPORTED_EXTENSIONS:
-            found.append(path)
-    return found
+
+    def scan(current: Path) -> None:
+        try:
+            entries = sorted(current.iterdir())
+        except OSError:
+            return
+        for path in entries:
+            if path.is_dir():
+                if not _is_reparse_dir(path):
+                    scan(path)
+                continue
+            if path.is_file() and path.suffix.lower() in SUPPORTED_EXTENSIONS:
+                found.append(path)
+
+    scan(root)
+    return sorted(found)
 
 
 def relative_source_path(paths: RepoPaths, file_path: Path) -> str:

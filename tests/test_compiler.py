@@ -132,6 +132,29 @@ def test_discover_ignores_unsupported(tmp_path: Path) -> None:
     assert found[0].name == "keep.md"
 
 
+def test_discover_skips_a_junction_to_another_folder(tmp_path: Path) -> None:
+    import subprocess
+
+    sources = tmp_path / "context-library" / "sources"
+    nested = sources / "notes"
+    nested.mkdir(parents=True)
+    (nested / "keep.md").write_text("# Keep\n", encoding="utf-8")
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "secret.md").write_text("# Secret\n", encoding="utf-8")
+    link = sources / "jump"
+    created = subprocess.run(
+        ["cmd", "/c", "mklink", "/J", str(link), str(outside)],
+        capture_output=True,
+        text=True,
+    )
+    if created.returncode != 0:
+        pytest.skip("directory junction is not permitted")
+
+    found = discover_sources(RepoPaths(root=tmp_path))
+    assert [path.name for path in found] == ["keep.md"]
+
+
 def test_ingest_prunes_deleted_sources(tmp_path: Path) -> None:
     sources = tmp_path / "context-library" / "sources"
     sources.mkdir(parents=True)
