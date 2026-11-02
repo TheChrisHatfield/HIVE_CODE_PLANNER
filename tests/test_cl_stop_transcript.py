@@ -29,6 +29,15 @@ def test_utf16_transcript_still_suppresses_the_memory_notice(tmp_path: Path) -> 
         assert module._bug_hunt_in_transcript(str(transcript)) is True
 
 
+def test_plugin_utf16_le_transcript_without_a_bom_still_suppresses_the_notice(tmp_path: Path) -> None:
+    transcript = tmp_path / "chat.jsonl"
+    transcript.write_bytes(
+        '{"role":"user","message":{"content":"bug hunt"}}\n'.encode("utf-16-le")
+    )
+    module = _load(HOOKS[1], "cl_stop_plugin_le")
+    assert module._bug_hunt_in_transcript(str(transcript)) is True
+
+
 def test_undecodable_transcript_does_not_raise(tmp_path: Path) -> None:
     transcript = tmp_path / "chat.jsonl"
     raw = bytearray(b'{"role":"user","message":{"content":"bug hunt"}}\n')

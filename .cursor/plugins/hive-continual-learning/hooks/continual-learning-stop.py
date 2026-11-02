@@ -153,15 +153,29 @@ def _user_message_texts(line: str) -> list[str]:
 
 
 def _read_transcript(path: Path) -> str | None:
-    """Read a chat transcript saved as UTF-8 or UTF-16 with a byte-order mark."""
+    """Read a chat transcript saved as UTF-8 or UTF-16.
+
+    UTF-16 LE without a byte-order mark is still the chat. Those bytes are
+    valid UTF-8 because the extra bytes are NULs, so a bug-hunt chat used to
+    show the memory notice.
+    """
     try:
-        return path.read_text(encoding="utf-8-sig")
-    except UnicodeDecodeError:
         raw = path.read_bytes()
-        if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
-            return raw.decode("utf-16")
-        return None
     except OSError:
+        return None
+    if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+        try:
+            return raw.decode("utf-16")
+        except UnicodeDecodeError:
+            return None
+    if b"\x00" not in raw:
+        try:
+            return raw.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            return None
+    try:
+        return raw.decode("utf-16-le")
+    except UnicodeDecodeError:
         return None
 
 
