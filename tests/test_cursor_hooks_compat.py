@@ -45,6 +45,39 @@ def test_workspace_open_emits_plugin_paths() -> None:
     assert (Path(paths[0]) / ".cursor-plugin" / "plugin.json").is_file()
 
 
+def test_agents_lint_hook_ignores_a_name_that_only_contains_agents(tmp_path: Path) -> None:
+    project = tmp_path / "proj"
+    (project / "docs").mkdir(parents=True)
+    (project / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    (project / "docs" / "planning-rosetta-stone.md").write_text("# rosetta\n", encoding="utf-8")
+    (project / "AGENTS.md").write_text("# nope\n", encoding="utf-8")
+    script = ROOT / ".cursor" / "hooks" / "hive_agents_lint.py"
+
+    skipped = subprocess.run(
+        [sys.executable, str(script)],
+        input=json.dumps({"file_path": str(project / "NOT_AGENTS.md")}),
+        text=True,
+        capture_output=True,
+        cwd=str(project),
+        check=False,
+    )
+    assert skipped.returncode == 0
+    assert json.loads(skipped.stdout.strip()) == {}
+    assert "agents-lint" not in skipped.stderr
+
+    ran = subprocess.run(
+        [sys.executable, str(script)],
+        input=json.dumps({"file_path": str(project / "agents.md")}),
+        text=True,
+        capture_output=True,
+        cwd=str(project),
+        check=False,
+    )
+    assert ran.returncode == 0
+    assert json.loads(ran.stdout.strip()) == {}
+    assert "Missing required section" in ran.stderr
+
+
 def test_cl_plugin_hooks_use_python_not_bun() -> None:
     plugin_hooks = json.loads(
         (ROOT / ".cursor" / "plugins" / "hive-continual-learning" / "hooks" / "hooks.json").read_text(

@@ -20,8 +20,12 @@ def main() -> int:
             payload = json.loads(raw) if raw.strip() else {}
         except json.JSONDecodeError:
             payload = {}
-        file_path = payload.get("file_path") or payload.get("path") or ""
-        if "AGENTS.md" not in str(file_path):
+        file_path = ""
+        if isinstance(payload, dict):
+            file_path = payload.get("file_path") or payload.get("path") or ""
+        # The edited file must be named AGENTS.md. A path that only contains
+        # that text, such as NOT_AGENTS.md, is not this file.
+        if Path(str(file_path)).name.casefold() != "agents.md":
             print(json.dumps({}))
             return 0
 
