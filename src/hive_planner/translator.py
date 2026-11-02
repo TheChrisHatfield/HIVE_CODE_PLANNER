@@ -276,12 +276,25 @@ def _write_draft_markdown(path: Path, title: str, bullets: list[str], cartridge_
     path.write_text(content, encoding="utf-8")
 
 
+def _read_text(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8-sig")
+    except UnicodeDecodeError:
+        raw = path.read_bytes()
+        if raw.startswith(b"\xff\xfe") or raw.startswith(b"\xfe\xff"):
+            return raw.decode("utf-16")
+        raise
+
+
 def _should_skip_manual_cartridge(path: Path, *, force: bool) -> bool:
     if force or not path.exists():
         return False
     from hive_planner.delta_emit import MANUAL_MARKER, _first_content_line
 
-    content = path.read_text(encoding="utf-8", errors="replace")
+    try:
+        content = _read_text(path)
+    except (OSError, UnicodeError):
+        return True
     return _first_content_line(content).startswith(MANUAL_MARKER)
 
 
@@ -294,7 +307,10 @@ def translate_document(
 ) -> TranslatorResult:
     validate_feature_id(feature)
     source = _resolve_input_path(paths, input_path)
-    text = source.read_text(encoding="utf-8", errors="replace")
+    try:
+        text = _read_text(source)
+    except (OSError, UnicodeError) as exc:
+        raise TranslatorError(f"Could not read source as text: {input_path}") from exc
     raw_segments = segment_text(text)
     if not raw_segments:
         raise TranslatorError(f"No segments found in input: {input_path}")

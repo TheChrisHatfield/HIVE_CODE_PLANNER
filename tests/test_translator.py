@@ -116,6 +116,39 @@ def test_translate_writes_only_under_cartridge(tmp_path: Path) -> None:
     assert not (repo / "docs" / "delta").exists() or not any((repo / "docs" / "delta").rglob("*.md"))
 
 
+def test_translate_reads_a_utf16_source(tmp_path: Path) -> None:
+    repo = tmp_path / "repo-utf16"
+    repo.mkdir()
+    (repo / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    (repo / "docs").mkdir()
+    (repo / "docs" / "planning-rosetta-stone.md").write_text("# rosetta\n", encoding="utf-8")
+    input_md = repo / "research.md"
+    input_md.write_bytes("Mission: keep agents aligned with structured context.\n".encode("utf-16"))
+    paths = RepoPaths(root=repo)
+
+    result = translate_document(paths, input_md, "cartridge-translator-v1")
+
+    holistic = (paths.cartridge / "holistic.md").read_text(encoding="utf-8")
+    assert result.status == "ok"
+    assert "Mission" in holistic
+    assert input_md.read_bytes().startswith(b"\xff\xfe")
+
+
+def test_translate_refuses_an_undecodable_source(tmp_path: Path) -> None:
+    repo = tmp_path / "repo-bad"
+    repo.mkdir()
+    input_md = repo / "research.md"
+    original = b"Mission: caf\xe9\n"
+    input_md.write_bytes(original)
+    paths = RepoPaths(root=repo)
+
+    with pytest.raises(TranslatorError, match="Could not read source"):
+        translate_document(paths, input_md, "cartridge-translator-v1")
+
+    assert input_md.read_bytes() == original
+    assert not (paths.cartridge / "holistic.md").exists()
+
+
 def test_reject_segments_excluded_from_output(tmp_path: Path) -> None:
     repo = tmp_path / "repo2"
     repo.mkdir()
