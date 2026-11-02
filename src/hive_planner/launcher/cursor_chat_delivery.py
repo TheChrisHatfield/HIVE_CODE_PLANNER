@@ -214,7 +214,13 @@ def _composer_status(db_path: Path, composer_id: str) -> str:
         return ""
     raw = row[0]
     if isinstance(raw, bytes):
-        raw = raw.decode("utf-8", errors="replace")
+        try:
+            raw = raw.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+                raw = raw.decode("utf-16")
+            else:
+                return ""
     try:
         data = json.loads(raw)
     except (TypeError, json.JSONDecodeError):

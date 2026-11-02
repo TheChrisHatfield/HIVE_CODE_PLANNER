@@ -260,6 +260,22 @@ def test_utf16_loop_state_still_counts_as_already_generating(tmp_path: Path) -> 
     assert not (repo / ".hive" / "controls-execute" / "request.json").exists()
 
 
+def test_utf16_composer_status_still_counts_as_generating(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _install(repo)
+    db = tmp_path / "state.vscdb"
+    storage = _storage(tmp_path / "ws", "ws-a", repo)
+    payload = json.dumps({"status": "generating"}).encode("utf-16")
+    _db(
+        db,
+        [_header("busy", "ws-a", 4, "Hive face")],
+        disks=[("composerData:busy", payload)],
+    )
+    assert _target(db, storage).deliver("Hive face", repo, "bug hunt") == "already_generating"
+    assert not (repo / ".hive" / "controls-execute" / "request.json").exists()
+
+
 def test_archived_and_other_workspace_do_not_win(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
