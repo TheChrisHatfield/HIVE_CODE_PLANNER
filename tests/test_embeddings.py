@@ -146,6 +146,29 @@ def test_load_embedding_index_reads_utf16(tmp_path: Path) -> None:
     assert path.read_bytes().startswith(b"\xff\xfe")
 
 
+def test_load_embedding_index_reads_utf16_le_without_a_bom(tmp_path: Path) -> None:
+    path = tmp_path / "embeddings.json"
+    payload = {
+        "model_id": "builtin",
+        "embeddings": [
+            {
+                "chunk_id": "c1",
+                "content_hash": "h",
+                "model_id": "builtin",
+                "vector": [1.0, 0.0],
+            }
+        ],
+    }
+    path.write_bytes(json.dumps(payload).encode("utf-16-le"))
+    before = path.read_bytes()
+
+    index = load_embedding_index(path)
+
+    assert [row.chunk_id for row in index.embeddings] == ["c1"]
+    assert index.embeddings[0].vector == [1.0, 0.0]
+    assert path.read_bytes() == before
+
+
 def test_load_embedding_index_ignores_an_undecodable_file(tmp_path: Path) -> None:
     path = tmp_path / "embeddings.json"
     original = b'{"embeddings": "caf\xe9"}'
