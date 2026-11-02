@@ -343,6 +343,30 @@ def test_load_document_index_reads_utf16(tmp_path: Path) -> None:
     assert path.read_bytes().startswith(b"\xff\xfe")
 
 
+def test_load_document_index_reads_utf16_le_without_a_bom(tmp_path: Path) -> None:
+    path = tmp_path / "documents.json"
+    payload = {
+        "documents": [
+            {
+                "doc_id": "abc",
+                "source_path": "context-library/sources/a.md",
+                "format": "md",
+                "title": "A",
+                "content_hash": "h",
+                "category": "reference",
+            }
+        ]
+    }
+    path.write_bytes(json.dumps(payload).encode("utf-16-le"))
+    before = path.read_bytes()
+
+    index = load_document_index(path)
+
+    assert [doc.doc_id for doc in index.documents] == ["abc"]
+    assert index.documents[0].title == "A"
+    assert path.read_bytes() == before
+
+
 def test_load_document_index_ignores_an_undecodable_file(tmp_path: Path) -> None:
     path = tmp_path / "documents.json"
     original = b'{"documents": "caf\xe9"}'

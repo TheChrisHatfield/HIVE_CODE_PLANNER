@@ -8,13 +8,21 @@ from hive_planner.models import ChunkIndex, ChunkRecord, DocumentIndex, SourceDo
 
 
 def _read_json_text(path: Path) -> str:
+    """Read an index saved as UTF-8 (with or without BOM) or UTF-16.
+
+    UTF-16 LE without a byte-order mark is still the saved index. Those bytes
+    are valid UTF-8 because the extra bytes are NULs, so ingest used to see
+    no documents and then write that empty index back.
+    """
+    raw = path.read_bytes()
+    if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+        return raw.decode("utf-16")
+    if b"\x00" not in raw:
+        return raw.decode("utf-8-sig")
     try:
-        return path.read_text(encoding="utf-8-sig")
+        return raw.decode("utf-16-le")
     except UnicodeDecodeError:
-        raw = path.read_bytes()
-        if raw.startswith(b"\xff\xfe") or raw.startswith(b"\xfe\xff"):
-            return raw.decode("utf-16")
-        raise
+        return raw.decode("utf-8-sig")
 
 
 def _load_json_list(path: Path, key: str) -> list[dict]:
