@@ -155,9 +155,11 @@ def _load_cartridge_manifest(paths: RepoPaths) -> dict:
     if not manifest_path.is_file():
         return {}
     try:
-        return json.loads(_read_json_text(manifest_path))
+        data = json.loads(_read_json_text(manifest_path))
     except (OSError, UnicodeError, json.JSONDecodeError):
         return {}
+    # A JSON array is not a manifest. Merging it crashed emit.
+    return data if isinstance(data, dict) else {}
 
 
 def _merge_source_context_manifest(existing: dict, patch: dict) -> dict:

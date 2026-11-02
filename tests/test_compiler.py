@@ -239,6 +239,19 @@ def test_emit_source_context_recovers_an_undecodable_manifest(tmp_path: Path) ->
     assert "manifest" in outputs
 
 
+def test_emit_source_context_replaces_a_json_array_manifest(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    paths.ensure_dirs()
+    paths.cartridge.mkdir(parents=True, exist_ok=True)
+    (paths.cartridge / "manifest.json").write_text("[1]\n", encoding="utf-8")
+
+    outputs, _ = emit_source_context(paths, "new-feature")
+
+    data = json.loads((paths.cartridge / "manifest.json").read_text(encoding="utf-8"))
+    assert data["features"] == ["new-feature"]
+    assert "manifest" in outputs
+
+
 def test_load_document_index_reads_utf16(tmp_path: Path) -> None:
     path = tmp_path / "documents.json"
     payload = {
