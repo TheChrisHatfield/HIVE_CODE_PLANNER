@@ -152,14 +152,27 @@ def _user_message_texts(line: str) -> list[str]:
     return texts
 
 
+def _read_transcript(path: Path) -> str | None:
+    """Read a chat transcript saved as UTF-8 or UTF-16 with a byte-order mark."""
+    try:
+        return path.read_text(encoding="utf-8-sig")
+    except UnicodeDecodeError:
+        raw = path.read_bytes()
+        if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+            return raw.decode("utf-16")
+        return None
+    except OSError:
+        return None
+
+
 def _bug_hunt_in_transcript(transcript_path: str | None) -> bool:
     """True when this chat asked to run a bug hunt. The notice must stay off screen."""
     if not isinstance(transcript_path, str) or not transcript_path:
         return False
-    try:
-        lines = Path(transcript_path).read_text(encoding="utf-8", errors="replace").splitlines()
-    except OSError:
+    text = _read_transcript(Path(transcript_path))
+    if text is None:
         return False
+    lines = text.splitlines()
     for line in lines:
         for text in _user_message_texts(line):
             queries = _USER_QUERY.findall(text) or [text]
