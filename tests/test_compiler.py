@@ -89,6 +89,33 @@ def test_normalize_text_plain_wraps_code_fence(tmp_path: Path) -> None:
     assert "plain content" in result.normalized_body
 
 
+def test_ingest_reads_a_utf16_note(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    paths.ensure_dirs()
+    note = paths.sources / "note.md"
+    note.write_bytes("# Title\n\nbody text\n".encode("utf-16"))
+
+    report = ingest(paths)
+
+    assert report.processed == 1
+    assert load_document_index(paths.document_index).documents[0].title == "Title"
+    assert note.read_bytes().startswith(b"\xff\xfe")
+
+
+def test_ingest_skips_an_undecodable_note(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    paths.ensure_dirs()
+    note = paths.sources / "note.md"
+    original = b"# caf\xe9\n"
+    note.write_bytes(original)
+
+    report = ingest(paths)
+
+    assert report.processed == 0
+    assert report.skipped == 1
+    assert note.read_bytes() == original
+
+
 def test_empty_txt_produces_no_chunks(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     paths.ensure_dirs()
