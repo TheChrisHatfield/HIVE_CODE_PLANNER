@@ -295,6 +295,21 @@ def test_emit_source_context_merges_a_utf16_manifest(tmp_path: Path) -> None:
     assert "new-feature" in data["features"]
 
 
+def test_emit_source_context_merges_utf16_le_manifest_without_a_bom(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    paths.ensure_dirs()
+    paths.cartridge.mkdir(parents=True, exist_ok=True)
+    (paths.cartridge / "manifest.json").write_bytes(
+        json.dumps({"schema_version": "cartridge.v1", "features": ["kept-feature"]}).encode("utf-16-le")
+    )
+
+    emit_source_context(paths, "new-feature")
+
+    data = json.loads((paths.cartridge / "manifest.json").read_text(encoding="utf-8"))
+    assert "kept-feature" in data["features"]
+    assert "new-feature" in data["features"]
+
+
 def test_emit_source_context_recovers_an_undecodable_manifest(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     paths.ensure_dirs()

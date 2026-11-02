@@ -143,11 +143,21 @@ def _warn_unembedded_preferred_docs(
 
 
 def _read_json_text(path: Path) -> str:
-    """Read JSON saved as UTF-8 (with or without BOM) or UTF-16."""
+    """Read JSON saved as UTF-8 (with or without BOM) or UTF-16.
+
+    UTF-16 LE without a byte-order mark is still the cartridge manifest.
+    Those bytes are valid UTF-8 because the extra bytes are NULs, so emit
+    used to drop the features already listed and write a new manifest.
+    """
+    raw = path.read_bytes()
+    if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+        return raw.decode("utf-16")
+    if b"\x00" not in raw:
+        return raw.decode("utf-8-sig")
     try:
-        return path.read_text(encoding="utf-8-sig")
+        return raw.decode("utf-16-le")
     except UnicodeDecodeError:
-        return path.read_text(encoding="utf-16")
+        return raw.decode("utf-8-sig")
 
 
 def _load_cartridge_manifest(paths: RepoPaths) -> dict:
