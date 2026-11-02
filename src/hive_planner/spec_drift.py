@@ -11,6 +11,7 @@ from hive_planner.agents_memory import (
     _section_bullets,
     parse_sections,
 )
+from hive_planner.chunker import _closes_fence, _open_fence
 from hive_planner.config import RepoPaths, validate_feature_id
 
 
@@ -52,17 +53,22 @@ def _active_feature_section_match(text: str) -> re.Match[str] | None:
     would rewrite the example and report the feature as set while the real
     section keeps its placeholder.
     """
-    in_fence = False
+    in_fence = ""
     pos = 0
     for line in text.splitlines(keepends=True):
-        if line.strip().startswith("```"):
-            in_fence = not in_fence
+        if in_fence:
+            if _closes_fence(line, in_fence):
+                in_fence = ""
             pos += len(line)
             continue
-        if not in_fence:
-            match = ACTIVE_FEATURE_SECTION_RE.match(text, pos)
-            if match:
-                return match
+        opened = _open_fence(line)
+        if opened:
+            in_fence = opened
+            pos += len(line)
+            continue
+        match = ACTIVE_FEATURE_SECTION_RE.match(text, pos)
+        if match:
+            return match
         pos += len(line)
     return None
 
@@ -387,13 +393,18 @@ def _tasks_have_wiring_audit_heading(tasks_text: str) -> bool:
 def _unfenced_lines(text: str) -> list[tuple[int, str]]:
     """Lines outside fenced code, with the offset of each line in the original text."""
     found: list[tuple[int, str]] = []
-    in_fence = False
+    fence_marker = ""
     pos = 0
     for line in text.splitlines(keepends=True):
-        if line.strip().startswith("```"):
-            in_fence = not in_fence
-        elif not in_fence:
-            found.append((pos, line))
+        if fence_marker:
+            if _closes_fence(line, fence_marker):
+                fence_marker = ""
+        else:
+            opened = _open_fence(line)
+            if opened:
+                fence_marker = opened
+            else:
+                found.append((pos, line))
         pos += len(line)
     return found
 
