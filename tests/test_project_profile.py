@@ -112,6 +112,17 @@ def test_read_project_profile_does_not_treat_an_unknown_flag_string_as_on(tmp_pa
     assert meta.continual_learning_enabled is False
 
 
+def test_read_project_profile_ignores_a_json_array(tmp_path: Path) -> None:
+    project = tmp_path / "demo"
+    project.mkdir()
+    path = project / ".hive" / "project.json"
+    path.parent.mkdir()
+    path.write_text("[]\n", encoding="utf-8")
+
+    assert read_project_profile(project) is None
+    assert path.read_text(encoding="utf-8") == "[]\n"
+
+
 def test_write_project_profile_preserves_created_at_on_update(tmp_path: Path) -> None:
     project = tmp_path / "demo"
     project.mkdir()

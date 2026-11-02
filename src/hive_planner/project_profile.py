@@ -103,6 +103,9 @@ def read_project_profile(project_root: Path) -> ProjectProfile | None:
         data = json.loads(_read_meta_text(path))
     except (OSError, UnicodeError, json.JSONDecodeError):
         return None
+    # A JSON array or null is not a profile. .get would crash the project open.
+    if not isinstance(data, dict):
+        return None
     profile = str(data.get("bootstrap_profile") or "").strip()
     if profile not in BOOTSTRAP_PROFILES:
         return None
