@@ -236,18 +236,34 @@ def resolve_bug_hunt_root(root: Path) -> Path:
     return target
 
 
+def _read_overlay_text(path: Path) -> str:
+    """Read a bug-hunt overlay saved as UTF-8 (with or without BOM) or UTF-16.
+
+    UTF-16 LE without a byte-order mark is still the overlay. Those bytes are
+    valid UTF-8 because the extra bytes are NULs, so the installed command
+    used to contain a null between every character.
+    """
+    raw = path.read_bytes()
+    if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+        text = raw.decode("utf-16")
+    elif b"\x00" not in raw:
+        return raw.decode("utf-8-sig")
+    else:
+        try:
+            text = raw.decode("utf-16-le")
+        except UnicodeDecodeError:
+            return raw.decode("utf-8-sig")
+    return text.replace("\r\n", "\n").replace("\r", "\n")
+
+
 def _read_repo_overlay(root: Path) -> str:
     path = Path(root) / OVERLAY_REL
     if not path.is_file():
         return ""
     try:
-        try:
-            text = path.read_text(encoding="utf-8-sig")
-        except UnicodeDecodeError:
-            text = path.read_text(encoding="utf-16")
+        text = _read_overlay_text(path).strip()
     except (OSError, UnicodeError):
         return ""
-    text = text.strip()
     return f"\n{text}\n" if text else ""
 
 
