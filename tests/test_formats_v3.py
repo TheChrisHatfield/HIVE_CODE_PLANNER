@@ -174,6 +174,31 @@ def test_pptx_slide_metadata(pptx_dep, tmp_path: Path) -> None:
     assert 1 in pages or 2 in pages
 
 
+def test_csv_reads_utf16(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    paths.sources.mkdir(parents=True)
+    csv_path = paths.sources / "data.csv"
+    csv_path.write_bytes("name,value\nalpha,1\n".encode("utf-16"))
+
+    _, body, _ = normalize_document(paths, csv_path)
+
+    assert "alpha" in body
+    assert csv_path.read_bytes().startswith(b"\xff\xfe")
+
+
+def test_csv_leaves_an_undecodable_file(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    paths.sources.mkdir(parents=True)
+    csv_path = paths.sources / "data.csv"
+    original = b"name,value\ncaf\xe9,1\n"
+    csv_path.write_bytes(original)
+
+    with pytest.raises(UnicodeError):
+        normalize_document(paths, csv_path)
+
+    assert csv_path.read_bytes() == original
+
+
 def test_csv_table_format(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     paths.sources.mkdir(parents=True)

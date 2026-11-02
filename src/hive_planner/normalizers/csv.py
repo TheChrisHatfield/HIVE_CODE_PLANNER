@@ -7,10 +7,20 @@ from hive_planner.models import NormalizeResult
 from hive_planner.normalizers import EmptySourceError
 
 
+def _read_text(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8-sig")
+    except UnicodeDecodeError:
+        raw = path.read_bytes()
+        if raw.startswith(b"\xff\xfe") or raw.startswith(b"\xfe\xff"):
+            return raw.decode("utf-16")
+        raise
+
+
 def normalize_csv(file_path: Path) -> NormalizeResult:
     title = file_path.stem.replace("-", " ").title()
     try:
-        raw = file_path.read_text(encoding="utf-8", errors="replace")
+        raw = _read_text(file_path)
     except OSError as exc:
         raise EmptySourceError(f"Could not read CSV: {exc}") from exc
 
