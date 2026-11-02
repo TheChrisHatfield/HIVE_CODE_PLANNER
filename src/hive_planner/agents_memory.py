@@ -13,14 +13,18 @@ APPLY_VERSION = "v2"
 
 
 def _read_text(path: Path) -> str:
-    """Read AGENTS.md or a candidate file saved as UTF-8 (with or without BOM) or UTF-16."""
+    """Read AGENTS.md or a candidate file saved as UTF-8 (with or without BOM) or UTF-16.
+
+    UTF-16 is used only when the file has a byte-order mark. Any other
+    undecodable file raises so apply cannot save a damaged copy.
+    """
     try:
         return path.read_text(encoding="utf-8-sig")
     except UnicodeDecodeError:
-        try:
-            return path.read_text(encoding="utf-16")
-        except UnicodeError:
-            return path.read_text(encoding="utf-8", errors="replace")
+        raw = path.read_bytes()
+        if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+            return raw.decode("utf-16")
+        raise
 
 REQUIRED_SECTIONS = (
     "Repository root",

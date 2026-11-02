@@ -188,6 +188,23 @@ def test_fenced_example_does_not_block_the_same_operational_bullet() -> None:
     assert rejected == []
 
 
+def test_apply_does_not_rewrite_an_unreadable_agents_file(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    text = _minimal_agents().replace("Existing durable fact one.", "Cafe durable fact one.")
+    raw = bytearray(text.encode("ascii"))
+    raw[raw.index(b"Cafe") + 1] = 0xE9
+    agents = paths.root / "AGENTS.md"
+    agents.write_bytes(bytes(raw))
+    before = agents.read_bytes()
+    candidates = paths.root / "candidates.md"
+    candidates.write_text("- Valid operational candidate bullet.\n", encoding="utf-8")
+
+    with pytest.raises(UnicodeError):
+        run_agents_memory(paths, candidates, apply=True)
+
+    assert agents.read_bytes() == before
+
+
 def test_utf16_agents_file_still_has_its_sections(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     (paths.root / "AGENTS.md").write_text(_minimal_agents(), encoding="utf-16")
