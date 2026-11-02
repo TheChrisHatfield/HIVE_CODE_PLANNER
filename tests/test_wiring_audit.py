@@ -16,6 +16,7 @@ from hive_planner.wiring_audit import (
     check_wiring_audit,
     record_wiring_audit,
     wiring_audit_enforced,
+    wiring_audit_path,
 )
 
 
@@ -138,6 +139,36 @@ def test_check_fails_without_attestation(tmp_path: Path) -> None:
     report = check_wiring_audit(paths)
     assert not report.ok
     assert "Missing wiring audit attestation" in report.detail
+
+
+def test_check_reads_a_utf16_attestation(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    (paths.root / "AGENTS.md").write_text(_minimal_agents("my-feature"), encoding="utf-8")
+    _write_handoff(paths, "my-feature")
+    record_wiring_audit(paths, evidence="pytest -q")
+    attestation = wiring_audit_path(paths)
+    attestation.write_bytes(attestation.read_text(encoding="utf-8").encode("utf-16"))
+
+    report = check_wiring_audit(paths)
+
+    assert report.ok
+    assert attestation.read_bytes().startswith(b"\xff\xfe")
+
+
+def test_check_reports_missing_when_attestation_is_not_utf8(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    (paths.root / "AGENTS.md").write_text(_minimal_agents("my-feature"), encoding="utf-8")
+    _write_handoff(paths, "my-feature")
+    attestation = wiring_audit_path(paths)
+    attestation.parent.mkdir(parents=True)
+    original = b'{"feature": "caf\xe9"}'
+    attestation.write_bytes(original)
+
+    report = check_wiring_audit(paths)
+
+    assert not report.ok
+    assert "Missing wiring audit attestation" in report.detail
+    assert attestation.read_bytes() == original
 
 
 def test_check_fails_on_feature_mismatch(tmp_path: Path) -> None:

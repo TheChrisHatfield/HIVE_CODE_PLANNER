@@ -139,12 +139,22 @@ def _tasks_markdown(paths: RepoPaths, feature: str) -> Path | None:
     return path
 
 
+def _read_json_text(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8-sig")
+    except UnicodeDecodeError:
+        raw = path.read_bytes()
+        if raw.startswith(b"\xff\xfe") or raw.startswith(b"\xfe\xff"):
+            return raw.decode("utf-16")
+        raise
+
+
 def _load_attestation(path: Path) -> dict | None:
     if not path.is_file():
         return None
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+        payload = json.loads(_read_json_text(path))
+    except (OSError, json.JSONDecodeError, UnicodeError):
         return None
     return payload if isinstance(payload, dict) else None
 
