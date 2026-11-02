@@ -89,6 +89,15 @@ def test_normalize_text_plain_wraps_code_fence(tmp_path: Path) -> None:
     assert "plain content" in result.normalized_body
 
 
+def test_plain_note_with_backticks_keeps_one_fence(tmp_path: Path) -> None:
+    txt = tmp_path / "readme.txt"
+    txt.write_text("before\n```\nafter\n", encoding="utf-8")
+    result = normalize_text(txt)
+    assert result.normalized_body.startswith("# Readme\n\n````text\n")
+    assert "before\n```\nafter" in result.normalized_body
+    assert result.normalized_body.rstrip().endswith("````")
+
+
 def test_ingest_reads_a_utf16_note(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     paths.ensure_dirs()

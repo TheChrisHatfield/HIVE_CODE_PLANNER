@@ -16,6 +16,14 @@ def _read_text(path: Path) -> str:
         raise
 
 
+def _fence(text: str) -> str:
+    """A fence longer than any backtick run in the note, so the note cannot close it."""
+    fence = "```"
+    while fence in text:
+        fence += "`"
+    return fence
+
+
 def normalize_text(file_path: Path) -> NormalizeResult:
     text = _read_text(file_path)
     fmt = file_path.suffix.lower().lstrip(".")
@@ -24,6 +32,7 @@ def normalize_text(file_path: Path) -> NormalizeResult:
     if fmt == "md":
         normalized_body = text
     else:
-        normalized_body = f"# {title}\n\n```text\n{text}\n```\n"
+        fence = _fence(text)
+        normalized_body = f"# {title}\n\n{fence}text\n{text}\n{fence}\n"
 
     return NormalizeResult(normalized_body=normalized_body, raw_text=text, title=title)
