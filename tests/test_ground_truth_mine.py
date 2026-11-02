@@ -97,6 +97,20 @@ def test_install_keeps_a_utf16_overlay_in_the_prompt(tmp_path: Path) -> None:
     assert overlay.read_bytes().startswith(b"\xff\xfe")
 
 
+def test_install_keeps_a_utf16_le_overlay_without_a_bom(tmp_path: Path) -> None:
+    overlay = tmp_path / ".hive" / "ground-truth-on-mine" / "repo-overlay.md"
+    overlay.parent.mkdir(parents=True)
+    overlay.write_bytes("## This repo\n\nseam_flow.pdf pins the paper.\n".encode("utf-16-le"))
+    before = overlay.read_bytes()
+
+    install_ground_truth_mine(tmp_path)
+
+    packet = (tmp_path / ".hive" / "ground-truth-on-mine" / "AGENT_PROMPT.md").read_text(encoding="utf-8")
+    assert "seam_flow.pdf pins the paper." in packet
+    assert "\x00" not in packet
+    assert overlay.read_bytes() == before
+
+
 def test_install_leaves_an_undecodable_overlay_out_of_the_prompt(tmp_path: Path) -> None:
     overlay = tmp_path / ".hive" / "ground-truth-on-mine" / "repo-overlay.md"
     overlay.parent.mkdir(parents=True)
