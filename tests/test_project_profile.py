@@ -96,6 +96,22 @@ def test_read_project_profile_treats_false_strings_as_off(tmp_path: Path) -> Non
     assert meta.continual_learning_enabled is False
 
 
+def test_read_project_profile_does_not_treat_an_unknown_flag_string_as_on(tmp_path: Path) -> None:
+    project = tmp_path / "demo"
+    project.mkdir()
+    write_project_profile(project, profile="minimal", project_name="Demo", agent_handoff_mode="off")
+    path = project / ".hive" / "project.json"
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload["spec_kit_enabled"] = "disabled"
+    payload["continual_learning_enabled"] = "false"
+    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+    meta = read_project_profile(project)
+    assert meta is not None
+    assert meta.spec_kit_enabled is None
+    assert meta.continual_learning_enabled is False
+
+
 def test_write_project_profile_preserves_created_at_on_update(tmp_path: Path) -> None:
     project = tmp_path / "demo"
     project.mkdir()

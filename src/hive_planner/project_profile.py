@@ -61,7 +61,9 @@ def _read_meta_bool(value: object) -> bool | None:
             return True
         if lowered in {"0", "false", "no", "off"}:
             return False
-    return bool(value)
+        # Any other string is not a true flag. bool("disabled") would be True.
+        return None
+    return None
 
 
 def infer_bootstrap_profile(project_root: Path) -> str:
