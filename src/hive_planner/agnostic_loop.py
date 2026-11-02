@@ -122,7 +122,8 @@ def parse_catalog(data: dict[str, Any]) -> LoopCatalog:
         hooks_raw = body.get("hooks") or ()
         if not isinstance(hooks_raw, (list, tuple)):
             continue
-        hooks = tuple(str(h) for h in hooks_raw if str(h).strip())
+        # null is not a hook. str(None) is "None", which became a real step.
+        hooks = tuple(h.strip() for h in hooks_raw if isinstance(h, str) and h.strip())
         rule = str(body.get("rule") or "Do only this hook's job. Then review and stop.")
         if hooks:
             rewards[str(name)] = (hooks, rule)

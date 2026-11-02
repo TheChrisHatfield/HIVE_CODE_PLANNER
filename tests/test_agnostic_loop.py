@@ -16,6 +16,7 @@ from hive_planner.agnostic_loop import (
     is_agnostic_loop_request,
     missing_agnostic_loop_artifacts,
     observe,
+    parse_catalog,
     parse_open,
     render_kit_entry,
     review,
@@ -77,6 +78,17 @@ def test_catalog_is_generic_not_source_repo_or_hive_work() -> None:
     lowered = blob.lower()
     for phrase in SOURCE_PHRASES:
         assert phrase.lower() not in lowered
+
+
+def test_null_hook_is_not_a_step() -> None:
+    catalog = parse_catalog(
+        {
+            "rewards": {
+                "inspect": {"hooks": ["inspect.00", None, "  ", "inspect.01"]},
+            }
+        }
+    )
+    assert catalog.rewards["inspect"][0] == ("inspect.00", "inspect.01")
 
 
 def test_arm_begin_review_cycle(tmp_path: Path) -> None:
