@@ -68,6 +68,22 @@ def test_indented_fence_line_does_not_hide_the_codespec_section(tmp_path: Path) 
     assert "Already documented." in text
 
 
+def test_load_user_guide_reads_utf16_le_readme_without_bom(tmp_path: Path) -> None:
+    hive = tmp_path / "hive"
+    scripts = hive / "scripts"
+    scripts.mkdir(parents=True)
+    guide = scripts / "README.md"
+    guide.write_bytes("# Legacy guide\n\nNo vendor section yet.\n".encode("utf-16-le"))
+    cfg = LauncherConfig(hive_planner_root=str(hive))
+
+    text = load_user_guide(cfg)
+
+    assert text.startswith("# Legacy guide")
+    assert "\x00" not in text
+    assert "Hive Planner — quick help" not in text
+    assert "## Unified vendor path" in text
+
+
 def test_load_user_guide_uses_builtin_help_when_the_readme_is_not_utf8(tmp_path: Path) -> None:
     hive = tmp_path / "hive"
     scripts = hive / "scripts"

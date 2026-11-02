@@ -170,16 +170,20 @@ def user_guide_path(config: LauncherConfig | None = None) -> Path:
 def _read_guide_text(path: Path) -> str:
     """Read scripts/README.md saved as UTF-8 (with or without BOM) or UTF-16.
 
-    UTF-16 is used only when the file has a byte-order mark. Any other
-    undecodable file raises so the caller can show the built-in help.
+    UTF-16 LE without a byte-order mark decodes as UTF-8 with a null between
+    every character, so Home used to show that garbage instead of the guide.
+    A file that is neither UTF-8 nor UTF-16 still raises so Home can show the
+    built-in help.
     """
-    try:
-        return path.read_text(encoding="utf-8-sig")
-    except UnicodeDecodeError:
-        raw = path.read_bytes()
-        if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
-            return raw.decode("utf-16")
-        raise
+    raw = path.read_bytes()
+    if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+        return raw.decode("utf-16")
+    if b"\x00" not in raw:
+        return raw.decode("utf-8-sig")
+    text = raw.decode("utf-16-le")
+    if "\x00" in text:
+        raise UnicodeError("guide is not UTF-8 or UTF-16 text")
+    return text
 
 
 def _marker_outside_fences(text: str, marker: str) -> bool:
