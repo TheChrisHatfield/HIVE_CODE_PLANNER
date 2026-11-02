@@ -135,13 +135,23 @@ def inject_after_header(text: str, block: str) -> str:
 
 
 def _read_text(path: Path) -> str:
-    try:
+    """Read a handoff file saved as UTF-8 (with or without BOM) or UTF-16.
+
+    UTF-16 LE without a byte-order mark is still the spec. Those bytes are
+    valid UTF-8 because the extra bytes are NULs, so navigation repair used
+    to write the spec back with a null between every character.
+    """
+    raw = path.read_bytes()
+    if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+        text = raw.decode("utf-16")
+    elif b"\x00" not in raw:
         return path.read_text(encoding="utf-8-sig")
-    except UnicodeDecodeError:
-        raw = path.read_bytes()
-        if raw.startswith(b"\xff\xfe") or raw.startswith(b"\xfe\xff"):
-            return raw.decode("utf-16")
-        raise
+    else:
+        try:
+            text = raw.decode("utf-16-le")
+        except UnicodeDecodeError:
+            return path.read_text(encoding="utf-8-sig")
+    return text.replace("\r\n", "\n").replace("\r", "\n")
 
 
 def ensure_file_rosetta_navigation(path: Path, block: str) -> bool:

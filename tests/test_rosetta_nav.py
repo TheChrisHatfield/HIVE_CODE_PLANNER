@@ -163,6 +163,20 @@ def test_ensure_navigation_leaves_a_utf16_spec_that_already_has_the_block(tmp_pa
     assert path.read_bytes() == original
 
 
+def test_ensure_navigation_reads_utf16_le_spec_without_a_bom(tmp_path: Path) -> None:
+    from hive_planner.rosetta_nav import ROSETTA_NAV_MARKER, ensure_file_rosetta_navigation
+
+    path = tmp_path / "spec.md"
+    path.write_bytes("# Spec\n\n## Requirements\n\n- keep this\n".encode("utf-16-le"))
+
+    assert ensure_file_rosetta_navigation(path, spec_navigation_block("demo")) is True
+
+    text = path.read_text(encoding="utf-8")
+    assert "keep this" in text
+    assert "\x00" not in text
+    assert ROSETTA_NAV_MARKER in text
+
+
 def test_ensure_navigation_does_not_rewrite_an_undecodable_spec(tmp_path: Path) -> None:
     from hive_planner.rosetta_nav import ensure_file_rosetta_navigation, missing_handoff_rosetta_navigation
 
