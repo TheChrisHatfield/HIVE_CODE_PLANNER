@@ -286,8 +286,12 @@ def _point_from_json(key: object, value: object) -> tuple[int, int] | None:
     if not isinstance(key, str) or not key.strip() or not isinstance(value, dict):
         return None
     try:
-        x = int(value["x"])
-        y = int(value["y"])
+        x_raw = value["x"]
+        y_raw = value["y"]
+        if isinstance(x_raw, bool) or isinstance(y_raw, bool):
+            return None
+        x = int(x_raw)
+        y = int(y_raw)
     except (KeyError, TypeError, ValueError, OverflowError):
         return None
     if not (-_COORD_LIMIT <= x <= _COORD_LIMIT and -_COORD_LIMIT <= y <= _COORD_LIMIT):

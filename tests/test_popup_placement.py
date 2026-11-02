@@ -122,6 +122,22 @@ def test_utf8_bom_placements_file_still_loads(tmp_path: Path) -> None:
     assert store.get("Load Sources") == (30, 44)
 
 
+def test_json_true_is_not_a_saved_position(tmp_path: Path) -> None:
+    path = tmp_path / "popup-placements.json"
+    path.write_text(
+        json.dumps(
+            {
+                "Add workspace link": {"x": True, "y": 10},
+                "Load Sources": {"x": 1, "y": 0},
+            }
+        ),
+        encoding="utf-8",
+    )
+    store = PlacementStore(path)
+    assert store.get("Add workspace link") is None
+    assert store.get("Load Sources") == (1, 0)
+
+
 def _pump(root, ms: int) -> None:
     root.after(ms, root.quit)
     root.mainloop()
