@@ -53,11 +53,8 @@ def _uri_to_path(uri: str) -> Path | None:
 
 
 def _workspace_folder(workspace_json: Path) -> Path | None:
-    try:
-        data = json.loads(workspace_json.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError):
-        return None
-    if not isinstance(data, dict):
+    data = _read_json_object(workspace_json)
+    if data is None:
         return None
     folder_uri = data.get("folder")
     if isinstance(folder_uri, str) and folder_uri.strip():

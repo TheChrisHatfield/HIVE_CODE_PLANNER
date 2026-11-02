@@ -120,6 +120,22 @@ def test_duplicate_titles_use_later_update(tmp_path: Path) -> None:
     assert seen == {"id": "new", "phrase": "bug hunt"}
 
 
+def test_bom_workspace_json_still_finds_the_chat(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _install(repo)
+    storage = tmp_path / "ws"
+    slot = storage / "ws-a"
+    slot.mkdir(parents=True)
+    payload = json.dumps({"folder": repo.resolve().as_uri()}).encode("utf-8")
+    (slot / "workspace.json").write_bytes(b"\xef\xbb\xbf" + payload)
+    db = tmp_path / "state.vscdb"
+    _db(db, [_header("id", "ws-a", 3, "Chat")])
+
+    assert _target(db, storage, timeout=0.05).deliver("Chat", repo, "bug hunt") == "failed"
+    assert (repo / ".hive" / "controls-execute" / "request.json").is_file()
+
+
 def test_chat_in_a_later_workspace_slot_is_found(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
