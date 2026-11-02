@@ -150,6 +150,31 @@ def test_call_graph_skips_a_file_that_is_not_utf8(tmp_path: Path) -> None:
     assert bad.read_bytes().endswith(b"\xe9'\n")
 
 
+def test_call_graph_skips_a_file_behind_a_junction(tmp_path: Path) -> None:
+    import subprocess
+
+    paths = RepoPaths(root=tmp_path)
+    pkg = paths.root / "src" / "hive_planner"
+    pkg.mkdir(parents=True)
+    (pkg / "good.py").write_text("def kept() -> None:\n    pass\n", encoding="utf-8")
+    outside = tmp_path / "not-src"
+    outside.mkdir()
+    (outside / "secret.py").write_text("def hidden() -> None:\n    pass\n", encoding="utf-8")
+    link = pkg / "linked"
+    created = subprocess.run(
+        ["cmd", "/c", "mklink", "/J", str(link), str(outside)],
+        capture_output=True,
+        text=True,
+    )
+    if created.returncode != 0:
+        pytest.skip("directory junction is not permitted")
+
+    graph = build_package_graph(paths)
+
+    assert "src/hive_planner/good.py" in graph.definitions
+    assert "src/hive_planner/linked/secret.py" not in graph.definitions
+
+
 def test_init_rejects_multiline_project_name(tmp_path: Path) -> None:
     source_root = tmp_path / "hive-planner"
     kit = source_root / "starter-kit"

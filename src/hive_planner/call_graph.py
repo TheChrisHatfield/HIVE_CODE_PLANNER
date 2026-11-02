@@ -105,6 +105,40 @@ def _def_key_for_call(
     return None
 
 
+def _is_reparse_dir(path: Path) -> bool:
+    """True for a symlink or a Windows junction.
+
+    ``Path.rglob`` follows a junction and indexes files that are not in the package.
+    """
+    if path.is_symlink():
+        return True
+    try:
+        attrs = path.lstat().st_file_attributes  # type: ignore[attr-defined]
+    except (AttributeError, OSError):
+        return False
+    return bool(attrs & 0x400)
+
+
+def _python_files(root: Path) -> list[Path]:
+    found: list[Path] = []
+
+    def scan(current: Path) -> None:
+        try:
+            entries = list(current.iterdir())
+        except OSError:
+            return
+        for path in entries:
+            if path.is_dir():
+                if not _is_reparse_dir(path):
+                    scan(path)
+                continue
+            if path.is_file() and path.suffix == ".py":
+                found.append(path)
+
+    scan(root)
+    return sorted(found)
+
+
 def build_package_graph(paths: RepoPaths) -> PackageGraph:
     graph = PackageGraph()
     src_root = paths.root / "src" / "hive_planner"
@@ -112,7 +146,7 @@ def build_package_graph(paths: RepoPaths) -> PackageGraph:
         return graph
 
     parsed: dict[str, tuple[ast.Module, set[str], dict[str, str]]] = {}
-    for py_file in sorted(src_root.rglob("*.py")):
+    for py_file in _python_files(src_root):
         if py_file.name == "__init__.py":
             continue
         repo_path = py_file.relative_to(paths.root).as_posix()
