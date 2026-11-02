@@ -103,6 +103,40 @@ def test_load_latest_skips_corrupt_and_loads_valid(tmp_path: Path) -> None:
     assert loaded.feature == "cartridge-compiler-v2"
 
 
+def test_load_latest_skips_a_json_array_and_loads_the_older_packet(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    packet_dir = paths.root / "docs" / "change-impact" / "impact-packets"
+    packet_dir.mkdir(parents=True)
+    bad = packet_dir / "chg_bad.json"
+    good = packet_dir / "chg_20260101_000000_feature.json"
+    bad.write_text("[]\n", encoding="utf-8")
+    good.write_text(
+        json.dumps(
+            {
+                "packet_id": "chg_20260101_000000_feature",
+                "feature": "cartridge-compiler-v2",
+                "hook_ids": ["change.impact"],
+                "primary": [],
+                "secondary": [],
+                "tertiary": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    import os
+    import time
+
+    time.sleep(0.01)
+    os.utime(bad, (time.time(), time.time() + 10))
+
+    loaded, err = load_latest_impact_packet(paths, "cartridge-compiler-v2")
+    assert err is None
+    assert loaded is not None
+    assert loaded.feature == "cartridge-compiler-v2"
+    assert any("chg_bad.json" in warning for warning in impact_warnings(paths))
+    assert bad.read_text(encoding="utf-8") == "[]\n"
+
+
 def test_impact_dedupes_mapped_tests(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     _setup_feature_spec(paths, "cartridge-compiler-v2")

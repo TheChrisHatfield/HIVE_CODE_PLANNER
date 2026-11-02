@@ -258,6 +258,8 @@ def load_latest_impact_packet(paths: RepoPaths, feature: str | None = None) -> t
     for path in candidates:
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(data, dict):
+                raise TypeError("not an object")
             if feature and data.get("feature") != feature:
                 continue
             packet = ImpactPacket(
@@ -273,7 +275,7 @@ def load_latest_impact_packet(paths: RepoPaths, feature: str | None = None) -> t
                 created_at=data.get("created_at", ""),
             )
             return packet, None
-        except (json.JSONDecodeError, OSError, TypeError, KeyError) as exc:
+        except (json.JSONDecodeError, OSError, UnicodeError, TypeError, KeyError) as exc:
             errors.append(f"Invalid impact packet {path.name}: {exc}")
             continue
     if errors:
@@ -295,7 +297,9 @@ def impact_warnings(paths: RepoPaths, feature: str | None = None) -> list[str]:
     for path in candidates:
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError, TypeError) as exc:
+            if not isinstance(data, dict):
+                raise TypeError("not an object")
+        except (json.JSONDecodeError, OSError, UnicodeError, TypeError) as exc:
             warnings.append(f"Invalid impact packet {path.name}: {exc}")
             continue
         if feature and data.get("feature") != feature:
