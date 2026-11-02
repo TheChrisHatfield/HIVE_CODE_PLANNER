@@ -16,6 +16,8 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
+from hive_planner.chunker import _closes_fence, _open_fence
+
 PACK_1 = "1-pack"
 PACK_4 = "4-pack"
 VALID_PACKS = frozenset({PACK_1, PACK_4})
@@ -364,13 +366,16 @@ def _without_wiring_audit_section(text: str) -> str:
     lines = text.splitlines(keepends=True)
     out: list[str] = []
     in_audit = False
-    in_fence = False
+    fence_marker = ""
     for line in lines:
         stripped = line.lstrip("\ufeff").rstrip("\r\n")
-        if stripped.strip().startswith("```"):
-            in_fence = not in_fence
+        if fence_marker:
+            if _closes_fence(stripped, fence_marker):
+                fence_marker = ""
             continue
-        if in_fence:
+        opened = _open_fence(stripped)
+        if opened:
+            fence_marker = opened
             continue
         if re.match(r"^## .*Integration wiring audit.*$", stripped):
             in_audit = True
@@ -1053,28 +1058,33 @@ def _check_off_task(text: str, task_id: str, body: str) -> str:
     lines = text.splitlines(keepends=True)
     done = False
     in_audit = False
-    in_fence = False
+    fence_marker = ""
     out: list[str] = []
     for line in lines:
         stripped = line.lstrip("\ufeff").rstrip("\r\n")
-        if stripped.strip().startswith("```"):
-            in_fence = not in_fence
+        if fence_marker:
+            if _closes_fence(stripped, fence_marker):
+                fence_marker = ""
             out.append(line)
             continue
-        if not in_fence:
-            if re.match(r"^## .*Integration wiring audit.*$", stripped):
-                in_audit = True
-            elif in_audit and stripped.startswith("## "):
-                in_audit = False
-            if not done and not (in_audit and _is_wiring_checklist_line(stripped)):
-                match = re.match(r"^([ \t]{0,3}- \[ \] )(.+?)(\r?\n)?$", line)
-                if match:
-                    rest = match.group(2).strip()
-                    if _task_token_matches(rest, task_id, body):
-                        nl = match.group(3) or ""
-                        indent = match.group(1)[: len(match.group(1)) - len("- [ ] ")]
-                        line = f"{indent}- [x] {rest}{nl}"
-                        done = True
+        opened = _open_fence(stripped)
+        if opened:
+            fence_marker = opened
+            out.append(line)
+            continue
+        if re.match(r"^## .*Integration wiring audit.*$", stripped):
+            in_audit = True
+        elif in_audit and stripped.startswith("## "):
+            in_audit = False
+        if not done and not (in_audit and _is_wiring_checklist_line(stripped)):
+            match = re.match(r"^([ \t]{0,3}- \[ \] )(.+?)(\r?\n)?$", line)
+            if match:
+                rest = match.group(2).strip()
+                if _task_token_matches(rest, task_id, body):
+                    nl = match.group(3) or ""
+                    indent = match.group(1)[: len(match.group(1)) - len("- [ ] ")]
+                    line = f"{indent}- [x] {rest}{nl}"
+                    done = True
         out.append(line)
     if not done:
         raise CoordinatorError("could not check off the current task", action="commit")

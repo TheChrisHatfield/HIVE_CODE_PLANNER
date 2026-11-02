@@ -570,3 +570,22 @@ def test_fenced_wiring_heading_does_not_hide_the_next_task() -> None:
     assert "- [x] Review the promoted spec" in checked
     assert "- [ ] T099 example only" in checked
     assert _has_open_task_text(checked) is False
+
+
+def test_indented_fence_line_does_not_check_off_an_example() -> None:
+    text = """```
+example
+    ```
+- [ ] T001 example only
+```
+
+## Slice
+
+- [ ] T001 do the real work
+"""
+    task_id, _heading, body = _first_open_task(text)
+    assert task_id == "T001"
+    assert body == "T001 do the real work"
+    checked = _check_off_task(text, task_id, body)
+    assert "- [ ] T001 example only" in checked
+    assert "- [x] T001 do the real work" in checked
