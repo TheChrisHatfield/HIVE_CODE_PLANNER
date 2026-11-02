@@ -54,7 +54,7 @@ def _show_startup_error(message: str, detail: str = "") -> None:
         messagebox.showerror(APP_DISPLAY_NAME, text)
         root.destroy()
     except Exception:
-        pass
+        sys.stderr.write(text + "\n")
     raise SystemExit(1)
 
 
