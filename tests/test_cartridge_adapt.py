@@ -170,3 +170,38 @@ def test_import_standard_layout_adds_draft_banners_when_promoting(tmp_path: Path
     holistic = (project / "cartridge" / "holistic.md").read_text(encoding="utf-8")
     assert "DRAFT" in holistic
     assert result["promote"]["promotions"]["holistic"] in {"written", "updated"}
+
+
+def test_adapt_reads_a_utf16_note(tmp_path: Path) -> None:
+    project = _unified_project(tmp_path / "proj")
+    paths = RepoPaths(root=project)
+    cart = paths.cartridge
+    cart.mkdir(parents=True, exist_ok=True)
+    note = cart / "mission-note.md"
+    note.write_text("# Mission\n\nOur mission is to keep the note.\n", encoding="utf-16")
+
+    result = adapt_cartridge_for_promote(paths, "kept-feature", source_rels=["mission-note.md"])
+
+    body = (cart / "holistic.md").read_text(encoding="utf-8")
+    assert "keep the note" in body
+    assert "\ufffd" not in body
+    assert result.warnings == []
+
+
+def test_adapt_skips_an_undecodable_note(tmp_path: Path) -> None:
+    project = _unified_project(tmp_path / "proj")
+    paths = RepoPaths(root=project)
+    cart = paths.cartridge
+    cart.mkdir(parents=True, exist_ok=True)
+    note = cart / "mission-note.md"
+    raw = bytearray(b"# Cafe note\n")
+    raw[2] = 0xE9
+    note.write_bytes(bytes(raw))
+    before = note.read_bytes()
+
+    result = adapt_cartridge_for_promote(paths, "kept-feature", source_rels=["mission-note.md"])
+
+    assert not (cart / "holistic.md").exists()
+    assert note.read_bytes() == before
+    assert "mission-note.md" in result.skipped
+    assert any("unreadable" in warning for warning in result.warnings)

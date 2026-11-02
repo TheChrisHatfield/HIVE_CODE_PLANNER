@@ -114,6 +114,19 @@ def infer_feature_id(
     raise ValueError("Could not infer feature id — enter a Feature id or add features[] to manifest.json.")
 
 
+def _read_markdown(path: Path) -> str | None:
+    """Read a note as UTF-8 or UTF-16. Unreadable bytes stay unread."""
+    try:
+        return path.read_text(encoding="utf-8-sig")
+    except UnicodeDecodeError:
+        raw = path.read_bytes()
+        if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+            return raw.decode("utf-16")
+        return None
+    except OSError:
+        return None
+
+
 def _filename_layer_hint(filename: str) -> LayerName | None:
     lowered = filename.lower()
     if lowered.endswith(".specseed.md") or ".specseed." in lowered:
@@ -308,7 +321,11 @@ def adapt_cartridge_for_promote(
             continue
 
         mapped = layer_map.get(rel) or layer_map.get(path.name)
-        text = path.read_text(encoding="utf-8", errors="replace")
+        text = _read_markdown(path)
+        if text is None:
+            result.skipped.append(rel)
+            result.warnings.append(f"Skipped (unreadable): {rel}")
+            continue
         if mapped:
             layer = mapped
         elif _is_standard_layer_path(Path(rel)):
