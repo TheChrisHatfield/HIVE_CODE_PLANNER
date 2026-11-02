@@ -118,7 +118,8 @@ def build_package_graph(paths: RepoPaths) -> PackageGraph:
         repo_path = py_file.relative_to(paths.root).as_posix()
         try:
             tree = ast.parse(py_file.read_text(encoding="utf-8"))
-        except (SyntaxError, OSError):
+        except (SyntaxError, OSError, UnicodeError):
+            # One file that is not UTF-8 must not drop the rest of the package.
             continue
         if not isinstance(tree, ast.Module):
             continue

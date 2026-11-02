@@ -135,6 +135,21 @@ def test_call_graph_skips_relative_imports(tmp_path: Path) -> None:
     assert graph.callers.get("src/hive_planner/rel_target.py::helper") is None
 
 
+def test_call_graph_skips_a_file_that_is_not_utf8(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    pkg = paths.root / "src" / "hive_planner"
+    pkg.mkdir(parents=True, exist_ok=True)
+    (pkg / "good.py").write_text("def kept() -> None:\n    pass\n", encoding="utf-8")
+    bad = pkg / "bad.py"
+    bad.write_bytes(b"def cafe() -> str:\n    return 'caf\xe9'\n")
+
+    graph = build_package_graph(paths)
+
+    assert "src/hive_planner/good.py" in graph.definitions
+    assert "src/hive_planner/bad.py" not in graph.definitions
+    assert bad.read_bytes().endswith(b"\xe9'\n")
+
+
 def test_init_rejects_multiline_project_name(tmp_path: Path) -> None:
     source_root = tmp_path / "hive-planner"
     kit = source_root / "starter-kit"
