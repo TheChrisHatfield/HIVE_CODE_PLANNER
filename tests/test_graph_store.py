@@ -190,6 +190,27 @@ def test_offload_appends_utf8_onto_a_utf16_staging_file(tmp_path: Path) -> None:
     assert graph_status(paths)["manifest"]["staging_nodes"] == 2
 
 
+def test_offload_appends_utf8_onto_utf16_le_without_a_bom(tmp_path: Path) -> None:
+    paths = _paths(tmp_path)
+    paths.ensure_shared_memory_dirs()
+    existing = {"id": "n-old", "type": "concept", "label": "Old", "status": "staging"}
+    (paths.shared_memory_staging / "nodes.jsonl").write_bytes(
+        (json.dumps(existing) + "\n").encode("utf-16-le")
+    )
+    incoming = tmp_path / "one.json"
+    incoming.write_text(
+        json.dumps({"nodes": [{"id": "n-new", "type": "concept", "label": "New"}]}),
+        encoding="utf-8",
+    )
+
+    result = offload_from_file(paths, incoming)
+
+    assert result.nodes_written == 1
+    nodes, _, warnings = load_tier(paths, "staging")
+    assert warnings == []
+    assert {n["id"] for n in nodes} == {"n-old", "n-new"}
+
+
 def test_offload_does_not_claim_a_node_when_staging_is_not_utf8(tmp_path: Path) -> None:
     paths = _paths(tmp_path)
     paths.ensure_shared_memory_dirs()

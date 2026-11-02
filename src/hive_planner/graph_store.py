@@ -153,19 +153,32 @@ def _jsonl_path(paths: RepoPaths, tier: Tier, kind: Literal["nodes", "edges"]) -
     return base / f"{kind}.jsonl"
 
 
+def _decode_store_bytes(raw: bytes) -> tuple[str, bool]:
+    """Return the store text and whether it was UTF-16 and must be rewritten.
+
+    UTF-16 LE without a byte-order mark is still valid UTF-8, because the
+    extra bytes are NULs. Appending a UTF-8 row onto that file drops the
+    rows already stored.
+    """
+    if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+        return raw.decode("utf-16"), True
+    text = raw.decode("utf-8-sig")
+    if b"\x00" not in raw:
+        return text, False
+    try:
+        return raw.decode("utf-16-le"), True
+    except UnicodeDecodeError:
+        return text, False
+
+
 def _read_json_text(path: Path) -> str:
     """Read JSON/JSONL saved as UTF-8 (with or without BOM) or UTF-16.
 
-    UTF-16 is used only when the file has a byte-order mark. Any other
-    undecodable file raises so a later append cannot hide new rows inside it.
+    UTF-16 includes a file with a byte-order mark and UTF-16 LE without one.
+    Any other undecodable file raises so a later append cannot hide new rows
+    inside it.
     """
-    try:
-        return path.read_text(encoding="utf-8-sig")
-    except UnicodeDecodeError:
-        raw = path.read_bytes()
-        if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
-            return raw.decode("utf-16")
-        raise
+    return _decode_store_bytes(path.read_bytes())[0]
 
 
 def _read_jsonl(
@@ -213,19 +226,17 @@ def _append_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
     # next read drop or corrupt the rows already there. Rewrite it first.
     if path.is_file():
         raw = path.read_bytes()
-        if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
-            text = raw.decode("utf-16")
+        try:
+            text, rewrite = _decode_store_bytes(raw)
+        except UnicodeDecodeError as exc:
+            raise GraphStoreError(
+                f"Cannot append to {path.name}: file is not UTF-8 or UTF-16"
+            ) from exc
+        if rewrite:
             text = text.replace("\r\n", "\n").replace("\r", "\n")
             if text and not text.endswith("\n"):
                 text += "\n"
             path.write_bytes(text.encode("utf-8"))
-        else:
-            try:
-                raw.decode("utf-8-sig")
-            except UnicodeDecodeError as exc:
-                raise GraphStoreError(
-                    f"Cannot append to {path.name}: file is not UTF-8 or UTF-16"
-                ) from exc
     with path.open("a", encoding="utf-8") as handle:
         for row in rows:
             handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
