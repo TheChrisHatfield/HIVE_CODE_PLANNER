@@ -164,6 +164,25 @@ def test_serve_keeps_running_after_a_bad_frame() -> None:
     assert second["result"] == {}
 
 
+def test_serve_keeps_running_after_a_non_utf8_body() -> None:
+    from hive_planner.mcp_server import serve
+
+    body = b'{"jsonrpc":"2.0","id":1}\xff'
+    bad = f"Content-Length: {len(body)}\r\n\r\n".encode("ascii") + body
+    ping_buf = BytesIO()
+    write_message(ping_buf, {"jsonrpc": "2.0", "id": 9, "method": "ping", "params": {}})
+    stdin = BytesIO(bad + ping_buf.getvalue())
+    stdout = BytesIO()
+    assert serve(stdin, stdout) == 0
+    stdout.seek(0)
+    first = read_message(stdout)
+    second = read_message(stdout)
+    assert first["error"]["code"] == -32700
+    assert "UTF-8" in first["error"]["message"]
+    assert second["id"] == 9
+    assert second["result"] == {}
+
+
 def test_content_length_roundtrip() -> None:
     buf = BytesIO()
     write_message(buf, {"jsonrpc": "2.0", "id": 1, "method": "ping", "params": {}})

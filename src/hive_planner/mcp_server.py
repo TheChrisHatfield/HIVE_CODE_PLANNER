@@ -589,7 +589,11 @@ def read_message(buf) -> dict[str, Any] | None:
     body = buf.read(length)
     if len(body) < length:
         raise ValueError("MCP message body truncated")
-    data = json.loads(body.decode("utf-8"))
+    try:
+        text = body.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ValueError("MCP message body is not UTF-8") from exc
+    data = json.loads(text)
     if not isinstance(data, dict):
         raise ValueError("MCP message must be a JSON object")
     return data
