@@ -111,6 +111,25 @@ def test_ci_check_reads_a_utf16_pyproject(tmp_path: Path) -> None:
     assert pyproject.read_bytes().startswith(b"\xff\xfe")
 
 
+def test_ci_check_reads_utf16_le_pyproject_without_a_bom(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    pyproject = paths.root / "pyproject.toml"
+    pyproject.write_bytes('name = "hive-planner"\n'.encode("utf-16-le"))
+    before = pyproject.read_bytes()
+    _write_agents(paths, _minimal_agents("none"))
+
+    report = run_ci_check(
+        paths,
+        skip_pytest=True,
+        check_map_drift=False,
+        check_roadmap=None,
+        check_spec_kit=False,
+    )
+
+    assert any(step.name == "roadmap-artifacts" for step in report.steps)
+    assert pyproject.read_bytes() == before
+
+
 def test_ci_check_ignores_an_undecodable_pyproject(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     pyproject = paths.root / "pyproject.toml"

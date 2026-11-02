@@ -15,13 +15,21 @@ from hive_planner.spec_drift import check_memory_spec_drift, check_spec_handoff
 
 
 def _read_text(path) -> str:
+    """Read pyproject.toml saved as UTF-8 (with or without BOM) or UTF-16.
+
+    UTF-16 LE without a byte-order mark is still the project file. Those
+    bytes are valid UTF-8 because the extra bytes are NULs, so a Hive source
+    tree used to skip its roadmap check.
+    """
+    raw = path.read_bytes()
+    if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+        return raw.decode("utf-16")
+    if b"\x00" not in raw:
+        return raw.decode("utf-8-sig")
     try:
-        return path.read_text(encoding="utf-8-sig")
+        return raw.decode("utf-16-le")
     except UnicodeDecodeError:
-        raw = path.read_bytes()
-        if raw.startswith(b"\xff\xfe") or raw.startswith(b"\xfe\xff"):
-            return raw.decode("utf-16")
-        raise
+        return raw.decode("utf-8-sig")
 
 
 def _is_hive_planner_source(paths: RepoPaths) -> bool:
