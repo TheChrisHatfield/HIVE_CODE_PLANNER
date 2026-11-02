@@ -62,8 +62,12 @@ def _plugin_name(plugin_root: Path) -> str | None:
         return None
     try:
         data = json.loads(_read_text(plugin_json))
-    except (OSError, json.JSONDecodeError):
+    except (OSError, UnicodeError, json.JSONDecodeError):
         return None
+    # A JSON array or other non-object is not a missing name. Missing names are
+    # removable; this one must be refused instead of crashing .get.
+    if not isinstance(data, dict):
+        return ""
     name = data.get("name")
     return str(name).strip() if name else None
 
