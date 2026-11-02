@@ -86,6 +86,25 @@ def test_discover_src_modules(tmp_path: Path) -> None:
     assert "src/hive_code_planner/app.py" in modules
 
 
+def test_discover_src_modules_walks_a_cloud_reparse_folder(tmp_path: Path) -> None:
+    import pytest
+
+    paths = RepoPaths(root=tmp_path)
+    _write_src_module(paths, "src/hive_planner/cloud/kept.py", "x = 1\n")
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(
+        "hive_planner.map_sync._has_reparse_attribute",
+        lambda path: path.name == "cloud",
+    )
+    monkeypatch.setattr("hive_planner.map_sync._reparse_tag", lambda _path: 0x9000001A)
+    try:
+        assert discover_src_modules(paths) == ["src/hive_planner/cloud/kept.py"]
+        monkeypatch.setattr("hive_planner.map_sync._reparse_tag", lambda _path: 0xA0000003)
+        assert discover_src_modules(paths) == []
+    finally:
+        monkeypatch.undo()
+
+
 def test_discover_src_modules_does_not_loop_on_a_directory_junction(tmp_path: Path) -> None:
     import subprocess
 
