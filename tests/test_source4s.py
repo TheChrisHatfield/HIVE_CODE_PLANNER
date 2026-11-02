@@ -315,6 +315,31 @@ def test_list_source4s_files_does_not_loop_on_a_directory_junction(tmp_path: Pat
     assert source4s_needs_pdf_support(paths, []) is False
 
 
+def test_list_source4s_files_skips_a_junction_to_another_folder(tmp_path: Path) -> None:
+    import subprocess
+
+    paths = RepoPaths(root=tmp_path)
+    paths.ensure_dirs()
+    staged = paths.sources / SOURCE4S_DIR_NAME
+    staged.mkdir(parents=True)
+    (staged / "note.txt").write_text("hi", encoding="utf-8")
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "secret.pdf").write_bytes(b"%PDF")
+    link = staged / "jump"
+    created = subprocess.run(
+        ["cmd", "/c", "mklink", "/J", str(link), str(outside)],
+        capture_output=True,
+        text=True,
+    )
+    if created.returncode != 0:
+        pytest.skip("directory junction is not permitted")
+
+    listed = list_source4s_files(paths)
+    assert listed == ["context-library/sources/source4s/note.txt"]
+    assert [path.name for path in discover_source4s_files_in_folder(staged)] == ["note.txt"]
+
+
 def test_source4s_needs_pdf_support_ignores_a_missing_pdf_path(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     paths.ensure_dirs()

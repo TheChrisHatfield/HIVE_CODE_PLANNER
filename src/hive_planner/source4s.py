@@ -47,6 +47,21 @@ SOURCE4S_DISCOVER_SKIP_DIR_NAMES = {
 _SOURCE4S_DISCOVER_SKIP_DIR_KEYS = {name.casefold() for name in SOURCE4S_DISCOVER_SKIP_DIR_NAMES}
 
 
+def _is_reparse_dir(path: Path) -> bool:
+    """True for a symlink or a Windows junction.
+
+    Junctions are not symlinks, so is_symlink() leaves them in the walk.
+    Following one lists or copies files that are not in the selected folder.
+    """
+    if path.is_symlink():
+        return True
+    try:
+        attrs = path.lstat().st_file_attributes  # type: ignore[attr-defined]
+    except (AttributeError, OSError):
+        return False
+    return bool(attrs & 0x400)
+
+
 def discover_source4s_files_in_folder(folder: Path, *, recursive: bool = True) -> list[Path]:
     """Return .txt/.pdf files under a folder (recursive by default)."""
     root = folder.resolve()
@@ -71,7 +86,7 @@ def discover_source4s_files_in_folder(folder: Path, *, recursive: bool = True) -
             return
         for path in entries:
             if path.is_dir():
-                if recursive:
+                if recursive and not _is_reparse_dir(path):
                     scan_dir(path)
                 continue
             if path.suffix.lower() not in SOURCE4S_EXTENSIONS:
@@ -294,7 +309,7 @@ def _walk_files(root: Path) -> list[Path]:
             return
         for path in entries:
             if path.is_dir():
-                if path.is_symlink():
+                if _is_reparse_dir(path):
                     continue
                 scan(path)
                 continue
