@@ -46,6 +46,16 @@ def _read_env(primary: str, legacy: str) -> str | None:
     return os.environ.get(primary) or os.environ.get(legacy)
 
 
+def _read_state_text(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8-sig")
+    except UnicodeDecodeError:
+        raw = path.read_bytes()
+        if raw.startswith(b"\xff\xfe") or raw.startswith(b"\xfe\xff"):
+            return raw.decode("utf-16")
+        raise
+
+
 def _load_state() -> dict:
     fallback = {
         "version": 1,
@@ -58,7 +68,7 @@ def _load_state() -> dict:
     if not STATE_PATH.exists():
         return fallback
     try:
-        parsed = json.loads(STATE_PATH.read_text(encoding="utf-8"))
+        parsed = json.loads(_read_state_text(STATE_PATH))
         if not isinstance(parsed, dict) or parsed.get("version") != 1:
             return fallback
         return {
@@ -80,7 +90,7 @@ def _load_state() -> dict:
             if isinstance(parsed.get("trialStartedAtMs"), (int, float))
             else None,
         }
-    except (OSError, json.JSONDecodeError, TypeError):
+    except (OSError, UnicodeError, json.JSONDecodeError, TypeError):
         return fallback
 
 
