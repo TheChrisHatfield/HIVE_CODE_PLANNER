@@ -83,6 +83,17 @@ def test_two_store_objects_keep_each_others_titles(tmp_path: Path) -> None:
     assert saved["Load Sources"] == {"x": 30, "y": 40}
 
 
+def test_overflowing_coordinate_is_skipped(tmp_path: Path) -> None:
+    path = tmp_path / "popup-placements.json"
+    path.write_text(
+        '{"Add workspace link": {"x": 1e309, "y": 4}, "Load Sources": {"x": 8, "y": 9}}',
+        encoding="utf-8",
+    )
+    store = PlacementStore(path)
+    assert store.get("Add workspace link") is None
+    assert store.get("Load Sources") == (8, 9)
+
+
 def test_corrupt_file_does_not_raise(tmp_path: Path) -> None:
     path = tmp_path / "popup-placements.json"
     path.write_text("{", encoding="utf-8")

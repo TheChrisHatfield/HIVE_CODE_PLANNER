@@ -288,7 +288,7 @@ def _point_from_json(key: object, value: object) -> tuple[int, int] | None:
     try:
         x = int(value["x"])
         y = int(value["y"])
-    except (KeyError, TypeError, ValueError):
+    except (KeyError, TypeError, ValueError, OverflowError):
         return None
     if not (-_COORD_LIMIT <= x <= _COORD_LIMIT and -_COORD_LIMIT <= y <= _COORD_LIMIT):
         return None
