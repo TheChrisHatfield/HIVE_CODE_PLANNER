@@ -187,6 +187,32 @@ def test_nonfinite_policy_weight_is_reset_and_choose_still_runs(tmp_path: Path) 
     assert saved["observations"] == 4
 
 
+def test_json_true_state_counts_do_not_skip_the_first_hook(tmp_path: Path) -> None:
+    root = tmp_path / "proj"
+    root.mkdir()
+    folder = root / ".hive" / "agnostic-loop"
+    folder.mkdir(parents=True)
+    (folder / "state.json").write_text(
+        json.dumps(
+            {
+                "completed": True,
+                "max_cycles": True,
+                "status": "paused",
+                "hook_index": True,
+                "hook": "inspect.01",
+                "reward": "inspect",
+            }
+        ),
+        encoding="utf-8",
+    )
+    started, code = begin(root)
+    assert code == 0
+    assert started["ok"] is True
+    assert started["hook"] == "inspect.00"
+    assert started["cycle"] == 1
+    assert started["max_cycles"] == 30
+
+
 def test_json_true_observation_count_starts_at_one_after_one_reward(tmp_path: Path) -> None:
     root = tmp_path / "proj"
     root.mkdir()

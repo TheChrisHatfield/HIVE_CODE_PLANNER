@@ -263,6 +263,13 @@ def _fresh_state(root: Path) -> dict[str, Any]:
     }
 
 
+def _json_count(raw: object, default: int) -> int:
+    """A saved cycle count. JSON true is not the number 1."""
+    if isinstance(raw, bool):
+        return default
+    return int(raw or default)
+
+
 def _load_state(root: Path) -> dict[str, Any]:
     path = _state_path(root)
     if not path.is_file():
@@ -274,9 +281,9 @@ def _load_state(root: Path) -> dict[str, Any]:
     if not isinstance(data, dict):
         return _fresh_state(root)
     try:
-        data["completed"] = int(data.get("completed", 0) or 0)
-        data["max_cycles"] = int(data.get("max_cycles") or MAX_CYCLES)
-        data["hook_index"] = int(data.get("hook_index", 0) or 0)
+        data["completed"] = _json_count(data.get("completed", 0), 0)
+        data["max_cycles"] = _json_count(data.get("max_cycles"), MAX_CYCLES)
+        data["hook_index"] = _json_count(data.get("hook_index", 0), 0)
     except (TypeError, ValueError):
         return _fresh_state(root)
     if data["max_cycles"] < 1:
