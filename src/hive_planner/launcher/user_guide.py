@@ -185,14 +185,22 @@ def _read_guide_text(path: Path) -> str:
 def _marker_outside_fences(text: str, marker: str) -> bool:
     """True when the marker appears in guide text a reader can see.
 
-    A fenced example of the heading is not the section itself.
+    A fenced example of the heading is not the section itself. An indented
+    fence line inside that example does not close it.
     """
-    fenced = False
+    from hive_planner.chunker import _closes_fence, _open_fence
+
+    fence_marker = ""
     for line in text.splitlines():
-        if line.strip().startswith("```"):
-            fenced = not fenced
+        if fence_marker:
+            if _closes_fence(line, fence_marker):
+                fence_marker = ""
             continue
-        if not fenced and marker in line:
+        opened = _open_fence(line)
+        if opened:
+            fence_marker = opened
+            continue
+        if marker in line:
             return True
     return False
 

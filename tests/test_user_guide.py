@@ -52,6 +52,22 @@ def test_fenced_implementation_loop_heading_still_gets_codespec_help(tmp_path: P
     assert "**Handoff**" in text
 
 
+def test_indented_fence_line_does_not_hide_the_codespec_section(tmp_path: Path) -> None:
+    hive = tmp_path / "hive"
+    scripts = hive / "scripts"
+    scripts.mkdir(parents=True)
+    (scripts / "README.md").write_text(
+        "# Guide\n\n```\nexample\n    ```\nstill\n```\n\n## Implementation loop\n\nAlready documented.\n",
+        encoding="utf-8",
+    )
+    cfg = LauncherConfig(hive_planner_root=str(hive))
+
+    text = load_user_guide(cfg)
+
+    assert text.count("## Implementation loop") == 1
+    assert "Already documented." in text
+
+
 def test_load_user_guide_uses_builtin_help_when_the_readme_is_not_utf8(tmp_path: Path) -> None:
     hive = tmp_path / "hive"
     scripts = hive / "scripts"
