@@ -4,7 +4,7 @@ import json
 import re
 from pathlib import Path
 
-from hive_planner.agents_memory import EDITABLE_SECTION, parse_sections
+from hive_planner.agents_memory import EDITABLE_SECTION, _read_text, parse_sections
 from hive_planner.config import RepoPaths, validate_feature_id
 from hive_planner.delta_emit import (
     DRAFT_MARKER,
@@ -284,11 +284,16 @@ def validate_pack_completeness(paths: RepoPaths) -> list[str]:
     return missing
 
 
-def _agents_memory_section(paths: RepoPaths) -> str:
+def _agents_memory_section(paths: RepoPaths) -> str | None:
+    """Facts from AGENTS.md. None when the file cannot be read."""
     agents_path = paths.root / "AGENTS.md"
-    if not agents_path.exists():
+    if not agents_path.is_file():
         return ""
-    sections = parse_sections(agents_path.read_text(encoding="utf-8", errors="replace"))
+    try:
+        text = _read_text(agents_path)
+    except (OSError, UnicodeError):
+        return None
+    sections = parse_sections(text)
     for title, body in sections.items():
         if title.startswith(EDITABLE_SECTION):
             return body.strip()
@@ -344,7 +349,10 @@ def emit_cartridge_pack(
 
     memory_target = paths.cartridge / "memory.md"
     memory_facts = _agents_memory_section(paths)
-    if not memory_facts:
+    if memory_facts is None:
+        results["memory"] = "missing"
+        warnings.append("AGENTS.md could not be read for memory.md")
+    elif not memory_facts:
         results["memory"] = "missing"
         warnings.append("AGENTS.md has no Durable Workspace Facts section for memory.md")
     else:

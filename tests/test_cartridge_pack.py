@@ -83,6 +83,43 @@ def test_emit_cartridge_pack_writes_files(tmp_path: Path) -> None:
     assert results["research_summary"] in {"written", "updated"}
 
 
+def test_emit_reads_utf16_agents_facts(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    paths.ensure_dirs()
+    feature = "cartridge-pack-v1"
+    _write_feature_tree(paths, feature)
+    (paths.root / "AGENTS.md").write_text(
+        "# AGENTS\n\n## Durable Workspace Facts\n\n- Keep the utf16 fact.\n",
+        encoding="utf-16",
+    )
+
+    _, results, _warnings = emit_cartridge_pack(paths, feature, force=True)
+
+    memory = (paths.cartridge / "memory.md").read_text(encoding="utf-8")
+    assert "Keep the utf16 fact." in memory
+    assert "\ufffd" not in memory
+    assert results["memory"] == "written"
+
+
+def test_emit_does_not_pack_an_undecodable_agents_file(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    paths.ensure_dirs()
+    feature = "cartridge-pack-v1"
+    _write_feature_tree(paths, feature)
+    agents = paths.root / "AGENTS.md"
+    raw = bytearray(b"# AGENTS\n\n## Durable Workspace Facts\n\n- Cafe fact.\n")
+    raw[2] = 0xE9
+    agents.write_bytes(bytes(raw))
+    before = agents.read_bytes()
+
+    _, results, warnings = emit_cartridge_pack(paths, feature, force=True)
+
+    assert results["memory"] == "missing"
+    assert any("could not be read" in warning for warning in warnings)
+    assert not (paths.cartridge / "memory.md").exists()
+    assert agents.read_bytes() == before
+
+
 def test_research_summary_updates_on_re_emit(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     paths.ensure_dirs()
