@@ -114,6 +114,8 @@ def test_foreground_center_at_the_origin_is_a_real_point() -> None:
     hive_notify = _hive_notify()
     assert hive_notify._foreground_sample(-20, -10, 20, 10) == (0, 0)
     assert hive_notify._foreground_sample(-32000, -32000, -31800, -31900) is None
+    assert hive_notify._foreground_sample(-24000, 40, -21600, 1120) == (-22800, 580)
+    assert hive_notify._foreground_sample(100, -24000, 2020, -21600) == (1060, -22800)
 
 
 def test_popup_sits_on_the_monitor_in_front() -> None:
