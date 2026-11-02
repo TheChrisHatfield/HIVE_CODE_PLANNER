@@ -244,6 +244,24 @@ def write_impact_packet(paths: RepoPaths, packet: ImpactPacket) -> Path:
     return out_path
 
 
+def _read_packet_text(path: Path) -> str:
+    """Read an impact packet saved as UTF-8 (with or without BOM) or UTF-16.
+
+    UTF-16 LE without a byte-order mark is still the packet. Those bytes are
+    valid UTF-8 because the extra bytes are NULs, so ingest used to warn that
+    a readable packet was invalid.
+    """
+    raw = path.read_bytes()
+    if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+        return raw.decode("utf-16")
+    if b"\x00" not in raw:
+        return raw.decode("utf-8-sig")
+    try:
+        return raw.decode("utf-16-le")
+    except UnicodeDecodeError:
+        return raw.decode("utf-8-sig")
+
+
 def load_latest_impact_packet(paths: RepoPaths, feature: str | None = None) -> tuple[ImpactPacket | None, str | None]:
     packet_dir = paths.root / "docs" / "change-impact" / "impact-packets"
     if not packet_dir.exists():
@@ -257,7 +275,7 @@ def load_latest_impact_packet(paths: RepoPaths, feature: str | None = None) -> t
     errors: list[str] = []
     for path in candidates:
         try:
-            data = json.loads(path.read_text(encoding="utf-8"))
+            data = json.loads(_read_packet_text(path))
             if not isinstance(data, dict):
                 raise TypeError("not an object")
             if feature and data.get("feature") != feature:
@@ -296,7 +314,7 @@ def impact_warnings(paths: RepoPaths, feature: str | None = None) -> list[str]:
     )
     for path in candidates:
         try:
-            data = json.loads(path.read_text(encoding="utf-8"))
+            data = json.loads(_read_packet_text(path))
             if not isinstance(data, dict):
                 raise TypeError("not an object")
         except (json.JSONDecodeError, OSError, UnicodeError, TypeError) as exc:

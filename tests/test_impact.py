@@ -137,6 +137,34 @@ def test_load_latest_skips_a_json_array_and_loads_the_older_packet(tmp_path: Pat
     assert bad.read_text(encoding="utf-8") == "[]\n"
 
 
+def test_load_latest_reads_utf16_le_packet_without_a_bom(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    packet_dir = paths.root / "docs" / "change-impact" / "impact-packets"
+    packet_dir.mkdir(parents=True)
+    packet = packet_dir / "chg_20260101_000000_feature.json"
+    packet.write_bytes(
+        json.dumps(
+            {
+                "packet_id": "chg_20260101_000000_feature",
+                "feature": "cartridge-compiler-v2",
+                "hook_ids": ["change.impact"],
+                "primary": [],
+                "secondary": [],
+                "tertiary": [],
+            }
+        ).encode("utf-16-le")
+    )
+    before = packet.read_bytes()
+
+    loaded, err = load_latest_impact_packet(paths, "cartridge-compiler-v2")
+
+    assert err is None
+    assert loaded is not None
+    assert loaded.feature == "cartridge-compiler-v2"
+    assert impact_warnings(paths, "cartridge-compiler-v2") == []
+    assert packet.read_bytes() == before
+
+
 def test_impact_dedupes_mapped_tests(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     _setup_feature_spec(paths, "cartridge-compiler-v2")
