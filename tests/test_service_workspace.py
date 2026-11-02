@@ -83,6 +83,16 @@ def test_utf16_workspace_file_lists_its_folder(tmp_path: Path) -> None:
     assert read_code_workspace_folders(workspace) == [project.resolve()]
 
 
+def test_utf16_le_workspace_without_bom_lists_its_folder(tmp_path: Path) -> None:
+    project = tmp_path / "app"
+    project.mkdir()
+    workspace = tmp_path / "hive.code-workspace"
+    payload = json.dumps({"folders": [{"path": str(project)}]})
+    workspace.write_bytes(payload.encode("utf-16-le"))
+    assert read_code_workspace_folders(workspace) == [project.resolve()]
+    assert workspace_primary_folder(workspace) == project.resolve()
+
+
 def test_home_project_actions_resolve_workspace_folder(tmp_path: Path) -> None:
     workspace = _dead_workspace(tmp_path)
     hive_root = tmp_path / "hive"

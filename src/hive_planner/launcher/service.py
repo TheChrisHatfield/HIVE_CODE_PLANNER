@@ -535,15 +535,30 @@ def is_code_workspace_file(path: Path) -> bool:
 
 
 def _read_workspace_text(workspace_file: Path) -> str | None:
+    """Read a workspace file saved as UTF-8 or UTF-16.
+
+    UTF-16 LE without a byte-order mark still decodes as UTF-8, with a null
+    between every character, so the folder list used to come back empty.
+    """
     try:
-        return workspace_file.read_text(encoding="utf-8-sig")
-    except UnicodeDecodeError:
-        try:
-            return workspace_file.read_text(encoding="utf-16")
-        except (OSError, UnicodeError):
-            return None
+        raw = workspace_file.read_bytes()
     except OSError:
         return None
+    if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+        try:
+            return raw.decode("utf-16")
+        except UnicodeError:
+            return None
+    try:
+        text = raw.decode("utf-8-sig")
+    except UnicodeError:
+        text = ""
+    if "\x00" not in text:
+        return text
+    try:
+        return raw.decode("utf-16-le")
+    except UnicodeError:
+        return text or None
 
 
 def _loads_workspace_json(text: str):
