@@ -78,12 +78,28 @@ def _append_tasks_wiring_audit_if_missing(tasks_path: Path) -> bool:
     if _tasks_have_wiring_audit_heading(text):
         return False
     # An unclosed fence would hide the checklist from the same check that decided
-    # it was missing, so every later promote would append another copy.
-    open_fence = sum(1 for line in text.splitlines() if line.strip().startswith("```")) % 2
-    closer = "\n```\n" if open_fence else ""
+    # it was missing, so every later promote would append another copy. An
+    # indented fence line inside a closed example is not an open fence.
+    closer = "\n```\n" if _fence_left_open(text) else ""
     updated = text.rstrip() + closer + "\n\n" + _tasks_wiring_audit_block()
     tasks_path.write_text(updated, encoding="utf-8")
     return True
+
+
+def _fence_left_open(text: str) -> bool:
+    """True when a fence is still open at the end of the file."""
+    from hive_planner.chunker import _closes_fence, _open_fence
+
+    marker = ""
+    for line in text.splitlines():
+        if marker:
+            if _closes_fence(line, marker):
+                marker = ""
+            continue
+        opened = _open_fence(line)
+        if opened:
+            marker = opened
+    return bool(marker)
 
 
 @dataclass
