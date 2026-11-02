@@ -190,6 +190,27 @@ def test_offload_appends_utf8_onto_a_utf16_staging_file(tmp_path: Path) -> None:
     assert graph_status(paths)["manifest"]["staging_nodes"] == 2
 
 
+def test_offload_does_not_claim_a_node_when_staging_is_not_utf8(tmp_path: Path) -> None:
+    paths = _paths(tmp_path)
+    paths.ensure_shared_memory_dirs()
+    store = paths.shared_memory_staging / "nodes.jsonl"
+    raw = bytearray(b'{"id":"n-old","type":"concept","label":"Cafe"}\n')
+    raw[raw.index(b"a")] = 0xE9
+    store.write_bytes(bytes(raw))
+    before = store.read_bytes()
+    incoming = tmp_path / "one.json"
+    incoming.write_text(
+        json.dumps({"nodes": [{"id": "n-new", "type": "concept", "label": "New"}]}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(GraphStoreError, match="not UTF-8 or UTF-16"):
+        offload_from_file(paths, incoming)
+
+    assert store.read_bytes() == before
+    assert "n-new" not in store.read_bytes().decode("latin-1")
+
+
 def test_offload_appends_staging(tmp_path: Path) -> None:
     paths = _paths(tmp_path)
     result = offload_from_file(paths, FIXTURE)

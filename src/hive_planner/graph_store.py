@@ -154,11 +154,18 @@ def _jsonl_path(paths: RepoPaths, tier: Tier, kind: Literal["nodes", "edges"]) -
 
 
 def _read_json_text(path: Path) -> str:
-    """Read JSON/JSONL saved as UTF-8 (with or without BOM) or UTF-16."""
+    """Read JSON/JSONL saved as UTF-8 (with or without BOM) or UTF-16.
+
+    UTF-16 is used only when the file has a byte-order mark. Any other
+    undecodable file raises so a later append cannot hide new rows inside it.
+    """
     try:
         return path.read_text(encoding="utf-8-sig")
     except UnicodeDecodeError:
-        return path.read_text(encoding="utf-16")
+        raw = path.read_bytes()
+        if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+            return raw.decode("utf-16")
+        raise
 
 
 def _read_jsonl(
@@ -212,6 +219,13 @@ def _append_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
             if text and not text.endswith("\n"):
                 text += "\n"
             path.write_bytes(text.encode("utf-8"))
+        else:
+            try:
+                raw.decode("utf-8-sig")
+            except UnicodeDecodeError as exc:
+                raise GraphStoreError(
+                    f"Cannot append to {path.name}: file is not UTF-8 or UTF-16"
+                ) from exc
     with path.open("a", encoding="utf-8") as handle:
         for row in rows:
             handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
