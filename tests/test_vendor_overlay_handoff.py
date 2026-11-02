@@ -92,3 +92,43 @@ def test_load_manifest_reads_utf16_json(tmp_path: Path) -> None:
     except VendorSyncError:
         return
     raise AssertionError("expected VendorSyncError")
+
+
+def test_overlay_sync_skips_a_file_behind_a_junction(tmp_path: Path) -> None:
+    import subprocess
+
+    import pytest
+
+    from hive_planner.vendor_sync import _sync_overlay_tree
+
+    overlay = tmp_path / "overlay"
+    overlay.mkdir()
+    (overlay / "keep.md").write_text("keep\n", encoding="utf-8")
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "secret.md").write_text("secret\n", encoding="utf-8")
+    link = overlay / "linked"
+    created = subprocess.run(
+        ["cmd", "/c", "mklink", "/J", str(link), str(outside)],
+        capture_output=True,
+        text=True,
+    )
+    if created.returncode != 0:
+        pytest.skip("directory junction is not permitted")
+
+    dest = tmp_path / "dest"
+    target = tmp_path / "project"
+    dest.mkdir()
+    target.mkdir()
+    _sync_overlay_tree(
+        overlay,
+        dest,
+        target,
+        overlay_force=True,
+        refresh_changed=False,
+        refresh_stats=None,
+        written=None,
+    )
+
+    assert (dest / "keep.md").read_text(encoding="utf-8") == "keep\n"
+    assert not (dest / "linked" / "secret.md").exists()

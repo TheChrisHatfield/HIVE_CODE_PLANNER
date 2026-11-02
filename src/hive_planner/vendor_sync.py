@@ -778,6 +778,40 @@ def _write_overlay_patch_rev(target: Path, patch_rev: str) -> None:
     _write_component_overlay_rev(target, SPEC_KIT_OVERLAY_REL, patch_rev)
 
 
+def _is_reparse_dir(path: Path) -> bool:
+    """True for a symlink or a Windows junction.
+
+    A recursive glob follows a junction and copies files that are not in the overlay.
+    """
+    if path.is_symlink():
+        return True
+    try:
+        attrs = path.lstat().st_file_attributes  # type: ignore[attr-defined]
+    except (AttributeError, OSError):
+        return False
+    return bool(attrs & 0x400)
+
+
+def _overlay_files(root: Path) -> list[Path]:
+    found: list[Path] = []
+
+    def scan(current: Path) -> None:
+        try:
+            entries = list(current.iterdir())
+        except OSError:
+            return
+        for path in entries:
+            if path.is_dir():
+                if not _is_reparse_dir(path):
+                    scan(path)
+                continue
+            if path.is_file():
+                found.append(path)
+
+    scan(root)
+    return sorted(found)
+
+
 def _sync_overlay_tree(
     overlay_root: Path,
     dest_root: Path,
@@ -788,7 +822,7 @@ def _sync_overlay_tree(
     refresh_stats: dict | None,
     written: list[str] | None,
 ) -> None:
-    for src in sorted(overlay_root.rglob("*")):
+    for src in _overlay_files(overlay_root):
         if not src.is_file():
             continue
         rel = src.relative_to(overlay_root)
