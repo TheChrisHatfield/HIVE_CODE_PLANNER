@@ -62,9 +62,13 @@ def _foreground_sample(left: int, top: int, right: int, bottom: int) -> tuple[in
     """
     width = right - left
     height = bottom - top
-    if width > 0 and height > 0 and left > -20000 and top > -20000:
-        return left + width // 2, top + height // 2
-    return None
+    if width <= 0 or height <= 0:
+        return None
+    # Minimized windows are parked at the (-32000, -32000) corner. A monitor
+    # that merely starts far left or above the primary display is still real.
+    if left <= -32000 and top <= -32000:
+        return None
+    return left + width // 2, top + height // 2
 
 
 def _foreground_work_area() -> tuple[int, int, int, int] | None:

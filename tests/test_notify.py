@@ -110,6 +110,18 @@ def test_notify_accepts_a_repo_heading_that_starts_with_a_dash(tmp_path: Path, m
     assert json.loads(log.read_text(encoding="utf-8"))["repo"] == heading
 
 
+def test_installed_notice_keeps_a_far_monitor_window() -> None:
+    path = Path(__file__).resolve().parents[1] / ".cursor" / "plugins" / "hive-continual-learning" / "hooks" / "hive_notify.py"
+    spec = importlib.util.spec_from_file_location("hive_notify_plugin_under_test", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert module._foreground_sample(-20, -10, 20, 10) == (0, 0)
+    assert module._foreground_sample(-32000, -32000, -31800, -31900) is None
+    assert module._foreground_sample(-24000, 40, -21600, 1120) == (-22800, 580)
+    assert module._foreground_sample(100, -24000, 2020, -21600) == (1060, -22800)
+
+
 def test_foreground_center_at_the_origin_is_a_real_point() -> None:
     hive_notify = _hive_notify()
     assert hive_notify._foreground_sample(-20, -10, 20, 10) == (0, 0)
