@@ -230,3 +230,39 @@ def test_route_ambiguous_route_spec_labels_as_ambiguous_not_behavioral() -> None
         assert decision.spec_action is not None
         assert "ambiguous candidate" in decision.spec_action
         assert "behavioral bullet" not in decision.spec_action
+
+
+def test_append_keeps_a_utf16_candidate_file(tmp_path: Path) -> None:
+    from hive_planner.memory_routing import _append_behavioral_candidate
+
+    paths = RepoPaths(root=tmp_path)
+    out = paths.root / "docs" / "proposals" / "cl-candidates.md"
+    out.parent.mkdir(parents=True)
+    out.write_text("# Candidates\n\n- Keep this fact.\n", encoding="utf-16")
+
+    _, wrote = _append_behavioral_candidate(paths, "feature-x", "API must return 404 when disabled.")
+
+    text = out.read_text(encoding="utf-8")
+    assert wrote is True
+    assert "Keep this fact." in text
+    assert "API must return 404 when disabled." in text
+    assert "\ufffd" not in text
+
+
+def test_append_does_not_rewrite_an_undecodable_candidate_file(tmp_path: Path) -> None:
+    import pytest
+
+    from hive_planner.memory_routing import _append_behavioral_candidate
+
+    paths = RepoPaths(root=tmp_path)
+    out = paths.root / "docs" / "proposals" / "cl-candidates.md"
+    out.parent.mkdir(parents=True)
+    raw = bytearray(b"# Candidates\n\n- Cafe fact.\n")
+    raw[2] = 0xE9
+    out.write_bytes(bytes(raw))
+    before = out.read_bytes()
+
+    with pytest.raises(ValueError, match="could not be read"):
+        _append_behavioral_candidate(paths, "feature-x", "API must return 404 when disabled.")
+
+    assert out.read_bytes() == before

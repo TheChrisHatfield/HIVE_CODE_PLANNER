@@ -217,6 +217,17 @@ def _bullet_line_in_markdown(bullet: str, content: str) -> bool:
     return False
 
 
+def _read_candidates(path: Path) -> str:
+    """Read cl-candidates.md as UTF-8 or UTF-16. Unreadable bytes are not rewritten."""
+    try:
+        return path.read_text(encoding="utf-8-sig")
+    except UnicodeDecodeError:
+        raw = path.read_bytes()
+        if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+            return raw.decode("utf-16")
+        raise ValueError("docs/proposals/cl-candidates.md could not be read") from None
+
+
 def _append_behavioral_candidate(paths: RepoPaths, feature: str | None, bullet: str) -> tuple[Path, bool]:
     proposals = paths.root / "docs" / "proposals"
     proposals.mkdir(parents=True, exist_ok=True)
@@ -229,7 +240,7 @@ def _append_behavioral_candidate(paths: RepoPaths, feature: str | None, bullet: 
         "",
     ]
     if out.is_file():
-        existing = out.read_text(encoding="utf-8", errors="replace")
+        existing = _read_candidates(out)
         if _bullet_line_in_markdown(bullet, existing):
             return out, False
         out.write_text(existing.rstrip() + "\n" + "\n".join(block), encoding="utf-8", newline="\n")
