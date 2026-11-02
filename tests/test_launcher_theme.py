@@ -33,6 +33,33 @@ def test_tooltip_flips_above_the_widget_when_the_bottom_is_cut_off() -> None:
     assert theme._tooltip_origin(100, 1420, 120, 40, 2560, 1440, anchor_top=1400) == (100, 1354)
 
 
+def test_button_wheel_stops_after_one_line() -> None:
+    scrolled: list[tuple[int, str]] = []
+
+    class Target:
+        def winfo_exists(self) -> bool:
+            return True
+
+        def yview_scroll(self, steps: int, units: str) -> None:
+            scrolled.append((steps, units))
+
+    target = Target()
+    theme._wheel_bindings[1] = target
+    theme._wheel_stack.append(1)
+    event = type("E", (), {})()
+
+    assert theme._dispatch_wheel_up(event) == "break"
+    assert theme._dispatch_wheel_down(event) == "break"
+    assert scrolled == [(-1, "units"), (1, "units")]
+    assert theme._dispatch_wheel_up(type("E", (), {})()) == "break"
+
+
+def test_button_wheel_without_a_target_does_not_stop() -> None:
+    event = type("E", (), {})()
+    assert theme._dispatch_wheel_up(event) is None
+    assert theme._dispatch_wheel_down(event) is None
+
+
 def test_reset_clears_remainders() -> None:
     assert theme._wheel_steps(100, key=1) == 0
     theme.reset_mousewheel_state_for_tests()

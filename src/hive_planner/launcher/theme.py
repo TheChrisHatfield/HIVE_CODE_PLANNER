@@ -123,6 +123,7 @@ def _dispatch_wheel_up(event) -> str | None:
     target = _resolve_wheel_target(event)
     if target is not None and hasattr(target, "yview_scroll"):
         target.yview_scroll(-1, "units")
+        return "break"
     return None
 
 
@@ -130,6 +131,7 @@ def _dispatch_wheel_down(event) -> str | None:
     target = _resolve_wheel_target(event)
     if target is not None and hasattr(target, "yview_scroll"):
         target.yview_scroll(1, "units")
+        return "break"
     return None
 
 
