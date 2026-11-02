@@ -475,6 +475,7 @@ def test_install_merges_a_hooks_file_with_a_bom_or_utf16(tmp_path: Path) -> None
     for encoding, write in (
         ("utf-8-sig", lambda path: path.write_bytes(b"\xef\xbb\xbf" + payload.encode("utf-8"))),
         ("utf-16", lambda path: path.write_text(payload, encoding="utf-16")),
+        ("utf-16-le", lambda path: path.write_bytes(payload.encode("utf-16-le"))),
     ):
         project = tmp_path / encoding
         hooks = project / ".cursor" / "hooks.json"
@@ -730,6 +731,10 @@ def test_utf16_hooks_json_is_not_counted_as_installed(tmp_path: Path) -> None:
     install_bug_hunt(tmp_path, iterations=4)
     hooks = tmp_path / ".cursor" / "hooks.json"
     hooks.write_text(hooks.read_text(encoding="utf-8"), encoding="utf-16")
+    missing = missing_bug_hunt_artifacts(tmp_path)
+    assert any(item.startswith(".cursor/hooks.json#stop:") for item in missing)
+    plain = hooks.read_text(encoding="utf-16")
+    hooks.write_bytes(plain.encode("utf-16-le"))
     missing = missing_bug_hunt_artifacts(tmp_path)
     assert any(item.startswith(".cursor/hooks.json#stop:") for item in missing)
 
