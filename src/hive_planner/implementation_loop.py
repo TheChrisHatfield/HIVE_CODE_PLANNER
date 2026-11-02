@@ -1668,6 +1668,10 @@ def codespec_role_for(root: Path | None, pack_hint: str, action: str) -> str:
         return "coder"
     if current == "reviewer" or stopped == "reviewer":
         return "reviewer"
+    # A checker fail with a question waits on that step. Handoff re-asks the
+    # checker. A fail without a question already set current back to coder.
+    if stopped == "check":
+        return "checker"
     return "coder"
 
 

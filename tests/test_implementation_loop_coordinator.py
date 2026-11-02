@@ -436,6 +436,21 @@ def test_codespec_steps_follow_the_pack_and_mark_a_stop(loop_root: Path) -> None
     assert codespec_role_for(loop_root, PACK_4, "handoff") == "coder"
 
 
+def test_checker_fail_with_question_rehands_the_checker(loop_root: Path) -> None:
+    _install_ready(loop_root)
+    coordinator_start(loop_root, "feature-x")
+    _write_result(loop_root, "T001", "coder", "pass")
+    _write_result(loop_root, "T001", "checker", "fail", question="Which layout?")
+    progress = codespec_progress_text(loop_root, PACK_4)
+    assert "2. Check — stopped" in progress
+    assert "1. Coder — now" not in progress
+    role = codespec_role_for(loop_root, PACK_4, "handoff")
+    assert role == "checker"
+    handed = coordinator_handoff(loop_root, role)
+    assert handed.ok is True
+    assert handed.role == "checker"
+
+
 def test_1pack_steps_name_the_coordinator_pass(loop_root: Path) -> None:
     _install_ready(loop_root, PACK_1)
     coordinator_start(loop_root, "feature-x")
