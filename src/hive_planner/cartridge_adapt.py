@@ -231,6 +231,41 @@ def import_needs_cartridge_adapt(paths: RepoPaths, written: list[str]) -> bool:
     return False
 
 
+def _is_reparse_dir(path: Path) -> bool:
+    """True for a symlink or a Windows junction.
+
+    Junctions are not symlinks, so a recursive glob follows them and adapts
+    markdown that is not in this cartridge.
+    """
+    if path.is_symlink():
+        return True
+    try:
+        attrs = path.lstat().st_file_attributes  # type: ignore[attr-defined]
+    except (AttributeError, OSError):
+        return False
+    return bool(attrs & 0x400)
+
+
+def _markdown_in_cartridge(cart: Path) -> list[Path]:
+    found: list[Path] = []
+
+    def scan(current: Path) -> None:
+        try:
+            entries = sorted(current.iterdir())
+        except OSError:
+            return
+        for path in entries:
+            if path.is_dir():
+                if not _is_reparse_dir(path):
+                    scan(path)
+                continue
+            if path.is_file() and path.suffix.lower() == ".md":
+                found.append(path)
+
+    scan(cart)
+    return sorted(found)
+
+
 def adapt_cartridge_for_promote(
     paths: RepoPaths,
     feature: str,
@@ -252,7 +287,7 @@ def adapt_cartridge_for_promote(
             if path.is_file() and path.suffix.lower() == ".md":
                 candidates.append(path)
     else:
-        candidates = sorted(p for p in cart.rglob("*.md") if p.is_file())
+        candidates = _markdown_in_cartridge(cart)
 
     layer_bodies: dict[LayerName, list[tuple[str, str]]] = {
         "holistic": [],

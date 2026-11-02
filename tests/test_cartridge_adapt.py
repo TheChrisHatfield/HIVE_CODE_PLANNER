@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from hive_planner.cartridge_adapt import (
     adapt_cartridge_for_promote,
     infer_feature_id,
@@ -100,6 +102,32 @@ def test_import_folder_adapts_and_promotes_custom_names(tmp_path: Path) -> None:
     assert (project / "docs" / "delta" / "20_micro" / "hive-dev-v1.md").is_file()
     assert result["promote"]["promotions"]["macro"] in {"written", "updated"}
     assert result["promote"]["promotions"]["micro"] in {"written", "updated"}
+
+
+def test_adapt_skips_markdown_behind_a_junction(tmp_path: Path) -> None:
+    import subprocess
+
+    project = _unified_project(tmp_path / "proj")
+    paths = RepoPaths(root=project)
+    cart = paths.cartridge
+    notes = cart / "notes"
+    notes.mkdir(parents=True)
+    (notes / "HIVE_DEV.md").write_text("# Dev\n\ninside work\n", encoding="utf-8")
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "HIVE_PLANNING.md").write_text("# Plan\n\nOUTSIDE SECRET\n", encoding="utf-8")
+    created = subprocess.run(
+        ["cmd", "/c", "mklink", "/J", str(cart / "jump"), str(outside)],
+        capture_output=True,
+        text=True,
+    )
+    if created.returncode != 0:
+        pytest.skip("directory junction is not permitted")
+
+    result = adapt_cartridge_for_promote(paths, "hive-dev")
+    assert "jump/HIVE_PLANNING.md" not in result.mappings
+    assert not (cart / "macro.md").exists()
+    assert "inside work" in (cart / "micro" / "hive-dev.md").read_text(encoding="utf-8")
 
 
 def test_manifest_layer_map_overrides_classification(tmp_path: Path) -> None:
