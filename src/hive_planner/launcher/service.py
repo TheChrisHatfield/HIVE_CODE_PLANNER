@@ -780,6 +780,10 @@ def pick_hive_bootstrap_target(link_path: Path) -> Path | None:
     if not roots:
         return workspace_primary_folder(link_path)
 
+    best = _best_hive_root(_collect_hive_root_candidates(roots))
+    if best is not None and _hive_root_score(best) > 0:
+        return best
+
     for root in roots:
         if not root.is_dir():
             continue
@@ -788,10 +792,6 @@ def pick_hive_bootstrap_target(link_path: Path) -> Path | None:
                 return root
         except OSError:
             continue
-
-    best = _best_hive_root(_collect_hive_root_candidates(roots))
-    if best is not None and _hive_root_score(best) > 0:
-        return best
 
     for root in roots:
         if not root.is_dir():

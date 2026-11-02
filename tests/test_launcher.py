@@ -379,6 +379,23 @@ def test_file_uri_to_path_keeps_unc_and_wsl_hosts() -> None:
     assert file_uri_to_path("file://localhost/C:/Users/you") == "C:/Users/you"
 
 
+def test_pick_hive_bootstrap_target_prefers_hive_root_over_an_empty_folder(tmp_path: Path) -> None:
+    parent = tmp_path / "workspace"
+    parent.mkdir()
+    empty = parent / "empty"
+    empty.mkdir()
+    project = parent / "project"
+    project.mkdir()
+    (project / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    workspace_file = parent / "app.code-workspace"
+    workspace_file.write_text(
+        json.dumps({"folders": [{"path": "empty"}, {"path": "project"}]}),
+        encoding="utf-8",
+    )
+
+    assert pick_hive_bootstrap_target(workspace_file) == project.resolve()
+
+
 def test_pick_hive_bootstrap_target_skips_multi_root_parent(tmp_path: Path) -> None:
     parent = tmp_path / "HIVE CODE"
     parent.mkdir()
