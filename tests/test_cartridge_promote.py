@@ -75,6 +75,30 @@ def test_promote_reads_a_utf16_draft(tmp_path: Path) -> None:
     assert "# From UTF-16" in promoted
 
 
+def test_promote_does_not_write_a_damaged_copy_of_an_unreadable_draft(tmp_path: Path) -> None:
+    project = _unified_project(tmp_path / "proj")
+    feature = "example-feature"
+    paths = RepoPaths(root=project)
+    holistic = paths.cartridge / "holistic.md"
+    holistic.parent.mkdir(parents=True, exist_ok=True)
+    raw = bytearray(f"{DRAFT_BANNER}\n\n# Cafe\n".encode("ascii"))
+    raw[raw.rindex(ord("a"))] = 0xE9
+    holistic.write_bytes(bytes(raw))
+    before = holistic.read_bytes()
+
+    result = promote_cartridge_drafts(
+        paths,
+        feature,
+        run_spec_drift=False,
+        only_cartridge_paths=[holistic],
+    )
+
+    assert result.promotions["holistic"] == "skipped (unreadable)"
+    assert any("not UTF-8" in warning for warning in result.warnings)
+    assert holistic.read_bytes() == before
+    assert not (project / "docs" / "delta" / "00_holistic.md").exists()
+
+
 def test_promote_skips_stale_draft_layers_not_in_emit_outputs(tmp_path: Path) -> None:
     project = _unified_project(tmp_path / "proj")
     feature = "example-feature"

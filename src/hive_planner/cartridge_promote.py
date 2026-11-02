@@ -39,14 +39,18 @@ PROMOTED_BANNER = f"{PROMOTED_PREFIX} -->"
 
 
 def _read_text(path: Path) -> str:
-    """Read a cartridge or spec file saved as UTF-8 (with or without BOM) or UTF-16."""
+    """Read a cartridge or spec file saved as UTF-8 (with or without BOM) or UTF-16.
+
+    UTF-16 is used only when the file has a byte-order mark. Any other
+    undecodable file raises so promotion cannot write a damaged copy.
+    """
     try:
         return path.read_text(encoding="utf-8-sig")
     except UnicodeDecodeError:
-        try:
-            return path.read_text(encoding="utf-16")
-        except UnicodeError:
-            return path.read_text(encoding="utf-8", errors="replace")
+        raw = path.read_bytes()
+        if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+            return raw.decode("utf-16")
+        raise
 HANDOFF_INCOMPLETE_MSG = (
     "Handoff incomplete — files saved but promotion/spec-drift needs review (see promote output above)."
 )
@@ -135,10 +139,14 @@ def mark_cartridge_layers_draft(
         if not path.is_file():
             results[name] = "skipped (missing)"
             continue
-        if _is_cartridge_draft(path):
-            results[name] = "already draft"
+        try:
+            if _is_cartridge_draft(path):
+                results[name] = "already draft"
+                continue
+            content = _read_text(path)
+        except UnicodeError:
+            results[name] = "skipped (unreadable)"
             continue
-        content = _read_text(path)
         first = _first_content_line(content)
         if first.startswith(MANUAL_MARKER):
             results[name] = "skipped (manual)"
@@ -344,8 +352,14 @@ def _ensure_spec_scaffold(paths: RepoPaths, feature: str) -> dict[str, str]:
             encoding="utf-8",
         )
         results["tasks"] = "written"
-    elif _append_tasks_wiring_audit_if_missing(tasks_path):
-        results["tasks"] = "updated (wiring audit)"
+    else:
+        try:
+            added = _append_tasks_wiring_audit_if_missing(tasks_path)
+        except UnicodeError:
+            results["tasks"] = "skipped (unreadable)"
+        else:
+            if added:
+                results["tasks"] = "updated (wiring audit)"
     return results
 
 
@@ -392,20 +406,33 @@ def promote_cartridge_drafts(
         if not _cartridge_source_emitted(src, allowed_sources):
             result.promotions[name] = "skipped (not emitted)"
             continue
-        status, _path = _promote_to_target(paths, src, dest, force=force)
-        result.promotions[name] = status
-        if status.startswith("skipped") and src.exists() and _is_cartridge_draft(src):
-            result.warnings.append(f"{name}: {status}")
+        try:
+            status, _path = _promote_to_target(paths, src, dest, force=force)
+            result.promotions[name] = status
+            if status.startswith("skipped") and src.exists() and _is_cartridge_draft(src):
+                result.warnings.append(f"{name}: {status}")
+        except UnicodeError:
+            result.promotions[name] = "skipped (unreadable)"
+            result.warnings.append(f"{name}: file is not UTF-8 or UTF-16")
 
     specseed = layer_paths["specseed"]
     spec_path = paths.root / "docs" / "specs" / feature / "spec.md"
     if not _cartridge_source_emitted(specseed, allowed_sources):
         result.promotions["spec"] = "skipped (not emitted)"
-    elif specseed.is_file() and _is_cartridge_draft(specseed):
-        status, promoted = _promote_to_target(paths, specseed, spec_path, force=force)
-        result.promotions["spec"] = status
-        if not promoted and status.startswith("skipped"):
-            result.warnings.append(f"spec: {status}")
+    elif specseed.is_file():
+        try:
+            if _is_cartridge_draft(specseed):
+                status, promoted = _promote_to_target(paths, specseed, spec_path, force=force)
+                result.promotions["spec"] = status
+                if not promoted and status.startswith("skipped"):
+                    result.warnings.append(f"spec: {status}")
+            elif spec_path.exists():
+                result.promotions["spec"] = "skipped (no draft specseed)"
+            else:
+                result.promotions["spec"] = "skipped (missing specseed)"
+        except UnicodeError:
+            result.promotions["spec"] = "skipped (unreadable)"
+            result.warnings.append("spec: file is not UTF-8 or UTF-16")
     elif spec_path.exists():
         result.promotions["spec"] = "skipped (no draft specseed)"
     else:
@@ -414,14 +441,23 @@ def promote_cartridge_drafts(
     memory_path = layer_paths["memory"]
     if not _cartridge_source_emitted(memory_path, allowed_sources):
         result.promotions["memory_candidates"] = "skipped (not emitted)"
-    elif write_memory_candidates and memory_path.is_file() and _is_cartridge_draft(memory_path):
-        bullets = _extract_bullets(_promote_body(memory_path))
-        candidates = _write_memory_candidates(paths, feature, bullets)
-        if candidates:
-            result.promotions["memory_candidates"] = "written"
-            result.candidates_path = candidates.relative_to(paths.root).as_posix()
+    elif write_memory_candidates and memory_path.is_file():
+        try:
+            is_draft = _is_cartridge_draft(memory_path)
+            bullets = _extract_bullets(_promote_body(memory_path)) if is_draft else []
+        except UnicodeError:
+            result.promotions["memory_candidates"] = "skipped (unreadable)"
+            result.warnings.append("memory: file is not UTF-8 or UTF-16")
         else:
-            result.promotions["memory_candidates"] = "skipped (no bullets)"
+            if not is_draft:
+                result.promotions["memory_candidates"] = "skipped (not draft)"
+            else:
+                candidates = _write_memory_candidates(paths, feature, bullets)
+                if candidates:
+                    result.promotions["memory_candidates"] = "written"
+                    result.candidates_path = candidates.relative_to(paths.root).as_posix()
+                else:
+                    result.promotions["memory_candidates"] = "skipped (no bullets)"
     else:
         result.promotions["memory_candidates"] = "skipped (not draft)"
 
