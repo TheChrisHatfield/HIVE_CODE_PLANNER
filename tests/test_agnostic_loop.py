@@ -148,6 +148,33 @@ def test_corrupt_policy_does_not_crash_choose(tmp_path: Path) -> None:
     assert payload["ok"] is True
 
 
+def test_nonfinite_policy_weight_is_reset_and_choose_still_runs(tmp_path: Path) -> None:
+    root = tmp_path / "proj"
+    root.mkdir()
+    folder = root / ".hive" / "agnostic-loop"
+    folder.mkdir(parents=True)
+    names = rewards(root)
+    policy = {
+        "arms": {
+            "inspect": {"alpha": "nan", "beta": 1.0},
+            "fill": {"alpha": 4.0, "beta": 1.0},
+        },
+        "last_reward": "fill",
+        "observations": 3,
+    }
+    (folder / "policy.json").write_text(json.dumps(policy), encoding="utf-8")
+    opens = parse_open(None, names)
+    payload, code = choose(root, opens, sims=8, horizon=2, seed=1)
+    assert code == 0
+    assert payload["ok"] is True
+    hit, code = observe(root, "inspect", True)
+    assert code == 0
+    assert hit["arm"]["alpha"] == 2.0
+    saved = json.loads((folder / "policy.json").read_text(encoding="utf-8"))
+    assert saved["arms"]["fill"]["alpha"] == 4.0
+    assert saved["observations"] == 4
+
+
 def test_observe_and_choose_seed(tmp_path: Path) -> None:
     root = tmp_path / "proj"
     root.mkdir()

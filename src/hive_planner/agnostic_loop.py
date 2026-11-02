@@ -510,9 +510,9 @@ def load_policy(root: Path, names: tuple[str, ...] | None = None) -> dict[str, A
             beta = float(raw.get("beta", 1.0) or 1.0)
         except (TypeError, ValueError):
             alpha, beta = 1.0, 1.0
-        if alpha <= 0:
+        if not math.isfinite(alpha) or alpha <= 0:
             alpha = 1.0
-        if beta <= 0:
+        if not math.isfinite(beta) or beta <= 0:
             beta = 1.0
         arms[name] = {"alpha": alpha, "beta": beta}
     try:
