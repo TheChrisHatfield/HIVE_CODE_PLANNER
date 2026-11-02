@@ -91,10 +91,26 @@ def _validate_install(exe: Path, source: str) -> TesseractInstall | None:
     return TesseractInstall(exe=exe.resolve(), tessdata_dir=tessdata.resolve(), source=source)
 
 
+def _is_reparse_dir(path: Path) -> bool:
+    """True for a symlink or a Windows junction.
+
+    os.walk follows a junction, so a link to another disk would be searched
+    as if those files were on the drive being scanned.
+    """
+    if path.is_symlink():
+        return True
+    try:
+        attrs = path.lstat().st_file_attributes  # type: ignore[attr-defined]
+    except (AttributeError, OSError):
+        return False
+    return bool(attrs & 0x400)
+
+
 def _scan_drive_for_tesseract(drive_root: Path, *, max_depth: int = 4) -> Path | None:
     if not drive_root.is_dir():
         return None
     drive_root = drive_root.resolve()
+    skipped = {"windows", "$recycle.bin", "system volume information"}
     for root, dirs, files in os.walk(drive_root):
         depth = len(Path(root).relative_to(drive_root).parts)
         if depth > max_depth:
@@ -104,7 +120,11 @@ def _scan_drive_for_tesseract(drive_root: Path, *, max_depth: int = 4) -> Path |
             candidate = Path(root) / TESSERACT_EXE_NAME
             if _validate_install(candidate, "d-drive:scan") is not None:
                 return candidate
-        dirs[:] = [name for name in dirs if name.lower() not in {"windows", "$recycle.bin", "system volume information"}]
+        dirs[:] = [
+            name
+            for name in dirs
+            if name.lower() not in skipped and not _is_reparse_dir(Path(root) / name)
+        ]
     return None
 
 

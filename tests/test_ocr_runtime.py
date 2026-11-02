@@ -293,6 +293,30 @@ def test_scan_drive_skips_invalid_tesseract(tmp_path: Path) -> None:
     assert found == (good / "tesseract.exe").resolve()
 
 
+def test_scan_drive_skips_tesseract_behind_a_junction(tmp_path: Path) -> None:
+    import subprocess
+
+    from hive_planner.ocr_runtime import _scan_drive_for_tesseract
+
+    outside = tmp_path / "outside" / "Tesseract-OCR"
+    tessdata = outside / "tessdata"
+    tessdata.mkdir(parents=True)
+    (tessdata / "eng.traineddata").write_bytes(b"x")
+    (outside / "tesseract.exe").write_bytes(b"stub")
+    scan_root = tmp_path / "drive"
+    scan_root.mkdir()
+    link = scan_root / "jump"
+    created = subprocess.run(
+        ["cmd", "/c", "mklink", "/J", str(link), str(outside.parent)],
+        capture_output=True,
+        text=True,
+    )
+    if created.returncode != 0:
+        pytest.skip("directory junction is not permitted")
+
+    assert _scan_drive_for_tesseract(scan_root) is None
+
+
 def test_ensure_ocr_runtime_refreshes_when_cached_install_missing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
