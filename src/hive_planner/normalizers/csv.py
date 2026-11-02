@@ -51,6 +51,9 @@ def normalize_csv(file_path: Path) -> NormalizeResult:
                 raw_parts.append(text)
     else:
         headers = [cell.strip() or f"col{i + 1}" for i, cell in enumerate(rows[0])]
+        width = max(len(row) for row in rows)
+        if len(headers) < width:
+            headers.extend(f"col{i + 1}" for i in range(len(headers), width))
         data_rows = rows[1:] if len(rows) > 1 else []
         if not data_rows:
             for idx, header in enumerate(headers):

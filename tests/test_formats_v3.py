@@ -225,6 +225,16 @@ def test_csv_table_format(tmp_path: Path) -> None:
     assert doc.format == "csv"
 
 
+def test_csv_keeps_a_cell_past_the_header(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    paths.sources.mkdir(parents=True)
+    csv_path = paths.sources / "wide.csv"
+    csv_path.write_text("name,value\nalpha,1,extra\n", encoding="utf-8")
+    _, body, raw = normalize_document(paths, csv_path)
+    assert "| name | value | col3 |" in body
+    assert "extra" in raw
+
+
 def test_csv_escapes_pipe_in_cells(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     paths.sources.mkdir(parents=True)
