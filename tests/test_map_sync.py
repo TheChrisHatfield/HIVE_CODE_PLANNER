@@ -431,6 +431,24 @@ def test_undecodable_test_file_does_not_abort_sync(tmp_path: Path) -> None:
     assert "tests/test_ok.py" in test_map
 
 
+def test_undecodable_project_map_is_not_rewritten(tmp_path: Path) -> None:
+    import pytest
+
+    paths = RepoPaths(root=tmp_path)
+    _write_src_module(paths, "src/hive_planner/emitter.py", "pass\n")
+    project = paths.root / "docs" / "change-impact" / "project-map.md"
+    project.parent.mkdir(parents=True)
+    raw = bytearray(b"# Project Map\n\n| `src/kept.py` | keep me | deps |\n")
+    raw[1] = 0xFF
+    project.write_bytes(bytes(raw))
+    before = project.read_bytes()
+
+    with pytest.raises(UnicodeError):
+        sync_impact_maps(paths)
+
+    assert project.read_bytes() == before
+
+
 def test_sync_keeps_a_note_row_and_the_rows_after_it(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     _write_src_module(paths, "src/hive_planner/emitter.py", "pass\n")

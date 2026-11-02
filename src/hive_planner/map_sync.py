@@ -36,7 +36,10 @@ def _read_text(path: Path) -> str:
     try:
         return path.read_text(encoding="utf-8-sig")
     except UnicodeDecodeError:
-        return path.read_text(encoding="utf-16")
+        raw = path.read_bytes()
+        if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+            return raw.decode("utf-16")
+        raise
 
 
 def _is_reparse_dir(path: Path) -> bool:
