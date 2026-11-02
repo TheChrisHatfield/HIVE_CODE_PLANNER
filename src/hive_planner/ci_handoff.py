@@ -14,13 +14,23 @@ from hive_planner.runtime_paths import is_frozen, is_portable_runtime
 from hive_planner.spec_drift import check_memory_spec_drift, check_spec_handoff
 
 
+def _read_text(path) -> str:
+    try:
+        return path.read_text(encoding="utf-8-sig")
+    except UnicodeDecodeError:
+        raw = path.read_bytes()
+        if raw.startswith(b"\xff\xfe") or raw.startswith(b"\xfe\xff"):
+            return raw.decode("utf-16")
+        raise
+
+
 def _is_hive_planner_source(paths: RepoPaths) -> bool:
     pyproject = paths.root / "pyproject.toml"
     if not pyproject.is_file():
         return False
     try:
-        return 'name = "hive-planner"' in pyproject.read_text(encoding="utf-8")
-    except OSError:
+        return 'name = "hive-planner"' in _read_text(pyproject)
+    except (OSError, UnicodeError):
         return False
 
 

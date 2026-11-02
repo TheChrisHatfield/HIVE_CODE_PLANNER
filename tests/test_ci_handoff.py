@@ -93,6 +93,43 @@ def test_ci_check_auto_skips_pytest_in_frozen_runtime(
     assert "skipped" in pytest_step.detail
 
 
+def test_ci_check_reads_a_utf16_pyproject(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    pyproject = paths.root / "pyproject.toml"
+    pyproject.write_bytes('name = "hive-planner"\n'.encode("utf-16"))
+    _write_agents(paths, _minimal_agents("none"))
+
+    report = run_ci_check(
+        paths,
+        skip_pytest=True,
+        check_map_drift=False,
+        check_roadmap=None,
+        check_spec_kit=False,
+    )
+
+    assert any(step.name == "roadmap-artifacts" for step in report.steps)
+    assert pyproject.read_bytes().startswith(b"\xff\xfe")
+
+
+def test_ci_check_ignores_an_undecodable_pyproject(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    pyproject = paths.root / "pyproject.toml"
+    original = b'name = "caf\xe9"\n'
+    pyproject.write_bytes(original)
+    _write_agents(paths, _minimal_agents("none"))
+
+    report = run_ci_check(
+        paths,
+        skip_pytest=True,
+        check_map_drift=False,
+        check_roadmap=None,
+        check_spec_kit=False,
+    )
+
+    assert not any(step.name == "roadmap-artifacts" for step in report.steps)
+    assert pyproject.read_bytes() == original
+
+
 def test_run_ci_check_skips_roadmap_for_client_projects(tmp_path: Path) -> None:
     from hive_planner.ci_handoff import run_ci_check
     from hive_planner.config import RepoPaths
