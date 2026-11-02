@@ -7,7 +7,12 @@ import sqlite3
 from pathlib import Path
 
 from hive_planner.launcher.chat_target import execute_controls, outcome_text
-from hive_planner.launcher.cursor_chat_delivery import CursorChatTarget, _same_path, _uri_to_path
+from hive_planner.launcher.cursor_chat_delivery import (
+    CursorChatTarget,
+    _same_path,
+    _uri_to_path,
+    workspace_ids_for_repo,
+)
 from hive_planner.launcher.service import file_uri_to_path
 from hive_planner.launcher.cursor_submitter import apply_request
 
@@ -256,6 +261,41 @@ def test_utf16_loop_state_still_counts_as_already_generating(tmp_path: Path) -> 
     state = repo / ".hive" / "bug-hunt"
     state.mkdir(parents=True)
     (state / "continue.json").write_text(json.dumps({"active": True}), encoding="utf-16")
+    assert _target(db, storage).deliver("Hive face", repo, "bug hunt") == "already_generating"
+    assert not (repo / ".hive" / "controls-execute" / "request.json").exists()
+
+
+def test_utf16_le_state_and_workspace_without_bom_still_block_a_second_send(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _install(repo)
+    db = tmp_path / "state.vscdb"
+    storage = tmp_path / "ws"
+    slot = storage / "ws-a"
+    slot.mkdir(parents=True)
+    uri = repo.resolve().as_uri()
+    (slot / "workspace.json").write_bytes(json.dumps({"folder": uri}).encode("utf-16-le"))
+    assert workspace_ids_for_repo(repo, storage) == ["ws-a"]
+    _db(db, [_header("idle", "ws-a", 4, "Hive face")])
+    state = repo / ".hive" / "bug-hunt"
+    state.mkdir(parents=True)
+    (state / "continue.json").write_bytes(json.dumps({"active": True}).encode("utf-16-le"))
+    assert _target(db, storage).deliver("Hive face", repo, "bug hunt") == "already_generating"
+    assert not (repo / ".hive" / "controls-execute" / "request.json").exists()
+
+
+def test_utf16_le_composer_status_without_bom_still_counts_as_generating(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _install(repo)
+    db = tmp_path / "state.vscdb"
+    storage = _storage(tmp_path / "ws", "ws-a", repo)
+    payload = json.dumps({"status": "generating"}).encode("utf-16-le")
+    _db(
+        db,
+        [_header("busy", "ws-a", 4, "Hive face")],
+        disks=[("composerData:busy", payload)],
+    )
     assert _target(db, storage).deliver("Hive face", repo, "bug hunt") == "already_generating"
     assert not (repo / ".hive" / "controls-execute" / "request.json").exists()
 

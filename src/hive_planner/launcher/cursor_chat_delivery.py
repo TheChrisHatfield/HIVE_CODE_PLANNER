@@ -148,16 +148,27 @@ def _titles_match(typed: str, title: str) -> bool:
     return left.casefold() == right.casefold()
 
 
+def _decode_saved_text(raw: bytes) -> str:
+    """UTF-8 (with or without BOM) or UTF-16, including LE without a BOM.
+
+    UTF-16 LE without a BOM is valid UTF-8 with a NUL between characters, so
+    a plain UTF-8 read looks like JSON that will not parse.
+    """
+    if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+        return raw.decode("utf-16")
+    if b"\x00" not in raw:
+        return raw.decode("utf-8-sig")
+    text = raw.decode("utf-16-le")
+    if "\x00" in text:
+        raise UnicodeError("file is not UTF-8 or UTF-16 text")
+    return text
+
+
 def _read_json_object(path: Path) -> dict | None:
     """Read a small JSON object saved as UTF-8 (with or without BOM) or UTF-16."""
     try:
-        text = path.read_text(encoding="utf-8-sig")
-    except UnicodeDecodeError:
-        try:
-            text = path.read_text(encoding="utf-16")
-        except (OSError, UnicodeError):
-            return None
-    except OSError:
+        text = _decode_saved_text(path.read_bytes())
+    except (OSError, UnicodeError):
         return None
     try:
         data = json.loads(text)
@@ -215,12 +226,9 @@ def _composer_status(db_path: Path, composer_id: str) -> str:
     raw = row[0]
     if isinstance(raw, bytes):
         try:
-            raw = raw.decode("utf-8-sig")
-        except UnicodeDecodeError:
-            if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
-                raw = raw.decode("utf-16")
-            else:
-                return ""
+            raw = _decode_saved_text(raw)
+        except UnicodeError:
+            return ""
     try:
         data = json.loads(raw)
     except (TypeError, json.JSONDecodeError):
