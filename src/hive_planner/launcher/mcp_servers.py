@@ -105,6 +105,21 @@ def format_mcp_invocation(command: str, args: list[str] | None = None) -> str:
     return " ".join(parts)
 
 
+def _is_utf16_le_json(raw: bytes) -> bool:
+    """True when the file is UTF-16 LE JSON with no byte-order mark.
+
+    Those bytes are valid UTF-8 because the extra bytes are NULs, so the
+    JSON parse used to report the file as invalid JSON.
+    """
+    if b"\x00" not in raw:
+        return False
+    try:
+        json.loads(raw.decode("utf-16-le"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return False
+    return True
+
+
 def load_mcp_document(root: Path) -> dict[str, Any]:
     path = mcp_config_path(root)
     if not path.is_file():
@@ -114,6 +129,8 @@ def load_mcp_document(root: Path) -> dict[str, Any]:
     except OSError as exc:
         raise McpConfigError(str(exc)) from exc
     bom = raw.startswith(b"\xef\xbb\xbf")
+    if raw.startswith((b"\xff\xfe", b"\xfe\xff")) or _is_utf16_le_json(raw):
+        raise McpConfigError(".cursor/mcp.json is not UTF-8 (save it without UTF-16 encoding)")
     try:
         text = raw.decode("utf-8-sig")
         data = json.loads(text)

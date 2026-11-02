@@ -27,6 +27,23 @@ def test_load_mcp_document_utf16_is_a_user_error(tmp_path: Path) -> None:
         load_mcp_document(tmp_path)
 
 
+def test_load_mcp_document_utf16_le_without_bom_is_a_user_error(tmp_path: Path) -> None:
+    import pytest
+
+    from hive_planner.launcher.mcp_servers import McpConfigError
+
+    cursor = tmp_path / ".cursor"
+    cursor.mkdir()
+    path = cursor / "mcp.json"
+    path.write_bytes(json.dumps({"mcpServers": {"hive-planner": {"command": "hive"}}}).encode("utf-16-le"))
+    before = path.read_bytes()
+
+    with pytest.raises(McpConfigError, match="UTF-16"):
+        load_mcp_document(tmp_path)
+
+    assert path.read_bytes() == before
+
+
 def test_load_mcp_document_accepts_utf8_bom(tmp_path: Path) -> None:
     cursor = tmp_path / ".cursor"
     cursor.mkdir()
