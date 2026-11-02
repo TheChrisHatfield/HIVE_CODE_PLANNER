@@ -33,6 +33,9 @@ def main() -> int:
         lint = lint_agents_md(paths)
         if not drift.ok:
             print("Hive spec-drift-check: review before handoff", file=sys.stderr)
+            if drift.handoff is not None and not drift.handoff.ok:
+                for item in drift.handoff.missing:
+                    print(f"  missing: {item}", file=sys.stderr)
             for item in drift.drift_items:
                 print(f"  drift: {item}", file=sys.stderr)
             for action in drift.spec_actions:

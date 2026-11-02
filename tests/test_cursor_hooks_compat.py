@@ -45,6 +45,29 @@ def test_workspace_open_emits_plugin_paths() -> None:
     assert (Path(paths[0]) / ".cursor-plugin" / "plugin.json").is_file()
 
 
+def test_session_stop_names_a_missing_spec_file(tmp_path: Path) -> None:
+    project = tmp_path / "proj"
+    (project / "docs").mkdir(parents=True)
+    (project / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    (project / "docs" / "planning-rosetta-stone.md").write_text("# rosetta\n", encoding="utf-8")
+    (project / "AGENTS.md").write_text(
+        "# AGENTS\n\n## Active feature\n\n**demo-feature** — test\n",
+        encoding="utf-8",
+    )
+    script = ROOT / ".cursor" / "hooks" / "hive_session_stop.py"
+    result = subprocess.run(
+        [sys.executable, str(script)],
+        input="{}",
+        text=True,
+        capture_output=True,
+        cwd=str(project),
+        check=False,
+    )
+    assert result.returncode == 0
+    assert json.loads(result.stdout.strip()) == {}
+    assert "docs/specs/demo-feature/spec.md" in result.stderr
+
+
 def test_agents_lint_hook_ignores_a_name_that_only_contains_agents(tmp_path: Path) -> None:
     project = tmp_path / "proj"
     (project / "docs").mkdir(parents=True)
