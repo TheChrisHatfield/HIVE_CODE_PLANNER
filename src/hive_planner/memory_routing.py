@@ -46,7 +46,7 @@ class ArmStats:
 
     @classmethod
     def from_dict(cls, data: dict | None) -> ArmStats:
-        if not data:
+        if not isinstance(data, dict):
             return cls()
         return cls(
             successes=float(data.get("successes", 1.0)),
@@ -103,9 +103,11 @@ class RoutingStats:
     @classmethod
     def from_dict(cls, data: dict | None) -> RoutingStats:
         stats = cls()
-        if not data:
+        if not isinstance(data, dict):
             return stats
         arms = data.get("arms") or {}
+        if not isinstance(arms, dict):
+            return stats
         for name, payload in arms.items():
             stats.arms[str(name)] = ArmStats.from_dict(payload)
         return stats
@@ -121,7 +123,7 @@ def load_routing_stats(paths: RepoPaths) -> RoutingStats:
         return RoutingStats()
     try:
         return RoutingStats.from_dict(json.loads(path.read_text(encoding="utf-8")))
-    except (OSError, json.JSONDecodeError, TypeError, ValueError):
+    except (OSError, UnicodeError, json.JSONDecodeError, TypeError, ValueError):
         return RoutingStats()
 
 

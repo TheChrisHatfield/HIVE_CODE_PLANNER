@@ -200,6 +200,18 @@ def test_routing_stats_roundtrip(tmp_path: Path) -> None:
     assert loaded.arm(ARM_SPLIT).successes >= 2.0
 
 
+def test_load_routing_stats_ignores_a_json_array(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    path = paths.root / ".hive" / "memory-routing.json"
+    path.parent.mkdir(parents=True)
+    path.write_text("[1]\n", encoding="utf-8")
+
+    loaded = load_routing_stats(paths)
+
+    assert loaded.arms == {}
+    assert path.read_text(encoding="utf-8") == "[1]\n"
+
+
 def test_route_ambiguous_route_spec_labels_as_ambiguous_not_behavioral() -> None:
     """spec_action for ambiguous→route_spec must say 'ambiguous candidate', not 'behavioral bullet'."""
     import random
