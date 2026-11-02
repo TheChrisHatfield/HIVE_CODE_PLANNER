@@ -819,6 +819,47 @@ def test_staged_pdf_ocr_warnings_reads_utf16_metadata(tmp_path: Path) -> None:
     assert "unresolved" in warnings[0]
 
 
+def test_staged_pdf_ocr_warnings_reads_utf16_le_metadata_without_a_bom(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    paths.ensure_dirs()
+    rel = "context-library/sources/source4s/mixed.pdf"
+    meta_path = paths.normalized_meta / f"{doc_id_for_path(rel)}.json"
+    meta_path.parent.mkdir(parents=True, exist_ok=True)
+    meta_path.write_bytes(
+        json.dumps(
+            {
+                "content_hash": "current-hash",
+                "ocr_unresolved_pages": [2],
+            }
+        ).encode("utf-16-le")
+    )
+    before = meta_path.read_bytes()
+    paths.document_index.parent.mkdir(parents=True, exist_ok=True)
+    paths.document_index.write_text(
+        json.dumps(
+            {
+                "documents": [
+                    {
+                        "doc_id": doc_id_for_path(rel),
+                        "source_path": rel,
+                        "format": "pdf",
+                        "title": "Mixed",
+                        "content_hash": "current-hash",
+                        "category": "source4s",
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    warnings = staged_pdf_ocr_warnings(paths, [rel])
+
+    assert len(warnings) == 1
+    assert "unresolved" in warnings[0]
+    assert meta_path.read_bytes() == before
+
+
 def test_pdf_ocr_quality_warnings_filters_pdf_ocr_messages() -> None:
     warnings = [
         "Skipped (not a file): x",
