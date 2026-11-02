@@ -18,6 +18,37 @@ def _heading_level(style_name: str | None) -> int | None:
     return None
 
 
+def _iter_blocks(document):
+    """Body paragraphs and tables in document order.
+
+    ``document.paragraphs`` skips text that lives only in a table.
+    """
+    from docx.table import Table
+    from docx.text.paragraph import Paragraph
+
+    parent = document
+    for child in document.element.body.iterchildren():
+        if child.tag.endswith("}p"):
+            yield Paragraph(child, parent)
+        elif child.tag.endswith("}tbl"):
+            yield Table(child, parent)
+
+
+def _table_lines(table) -> list[str]:
+    lines: list[str] = []
+    seen: set[int] = set()
+    for row in table.rows:
+        for cell in row.cells:
+            identity = id(cell._tc)
+            if identity in seen:
+                continue
+            seen.add(identity)
+            text = cell.text.strip()
+            if text:
+                lines.append(text)
+    return lines
+
+
 def normalize_docx(file_path: Path) -> NormalizeResult:
     try:
         from docx import Document
@@ -36,11 +67,19 @@ def normalize_docx(file_path: Path) -> NormalizeResult:
     raw_parts: list[str] = []
     has_heading = False
 
-    for paragraph in document.paragraphs:
-        text = paragraph.text.strip()
+    from docx.table import Table
+
+    for block in _iter_blocks(document):
+        if isinstance(block, Table):
+            for text in _table_lines(block):
+                lines.append(text)
+                lines.append("")
+                raw_parts.append(text)
+            continue
+        text = block.text.strip()
         if not text:
             continue
-        level = _heading_level(paragraph.style.name if paragraph.style else None)
+        level = _heading_level(block.style.name if block.style else None)
         if level:
             has_heading = True
             lines.append(f"{'#' * min(level + 1, 6)} {text}")
