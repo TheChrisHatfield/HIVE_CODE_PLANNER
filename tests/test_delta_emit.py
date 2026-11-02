@@ -113,6 +113,39 @@ def test_select_chunks_respects_embedding_model_id() -> None:
     assert selected[0].doc_id == "b"
 
 
+def test_sync_reads_a_utf16_delta_source(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    paths.ensure_dirs()
+    feature = "cartridge-delta-emit-v1"
+    _write_delta_tree(paths, feature)
+    holistic = paths.root / "docs" / "delta" / "00_holistic.md"
+    holistic.write_bytes("# Holistic\n\nMission alpha\n".encode("utf-16"))
+
+    results, _, _ = sync_delta_cartridge(paths, feature)
+
+    assert results["holistic"] == "written"
+    assert "Mission alpha" in (paths.cartridge / "holistic.md").read_text(encoding="utf-8")
+    assert holistic.read_bytes().startswith(b"\xff\xfe")
+
+
+def test_sync_skips_an_unreadable_cartridge_file(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    paths.ensure_dirs()
+    feature = "cartridge-delta-emit-v1"
+    _write_delta_tree(paths, feature)
+    draft = paths.cartridge / "holistic.md"
+    draft.parent.mkdir(parents=True, exist_ok=True)
+    original = b"<!-- DRAFT: caf\xe9 -->\n"
+    draft.write_bytes(original)
+
+    results, _, warnings = sync_delta_cartridge(paths, feature)
+
+    assert results["holistic"].startswith("skipped")
+    assert draft.read_bytes() == original
+    assert any("Skipped cartridge/holistic.md" in warning for warning in warnings)
+    assert results["macro"] == "written"
+
+
 def test_sync_delta_file_missing_source(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     paths.ensure_dirs()

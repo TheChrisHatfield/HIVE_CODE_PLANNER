@@ -38,10 +38,23 @@ def _first_content_line(content: str) -> str:
     return ""
 
 
+def _read_text(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8-sig")
+    except UnicodeDecodeError:
+        raw = path.read_bytes()
+        if raw.startswith(b"\xff\xfe") or raw.startswith(b"\xfe\xff"):
+            return raw.decode("utf-16")
+        raise
+
+
 def _should_skip_existing(target: Path, *, force: bool) -> tuple[bool, str]:
     if force or not target.exists():
         return False, ""
-    content = target.read_text(encoding="utf-8")
+    try:
+        content = _read_text(target)
+    except (OSError, UnicodeError):
+        return True, "unreadable"
     first_line = _first_content_line(content)
     if first_line.startswith(AUTO_SYNC_PREFIX):
         return False, ""
@@ -66,7 +79,10 @@ def sync_delta_file(
     if skip:
         return f"skipped ({reason})", None
 
-    body = _strip_leading_banner(source.read_text(encoding="utf-8"))
+    try:
+        body = _strip_leading_banner(_read_text(source))
+    except (OSError, UnicodeError):
+        return "skipped (unreadable)", None
     banner = _auto_sync_banner(source, paths)
     target.parent.mkdir(parents=True, exist_ok=True)
     status = "updated" if target.exists() else "written"
