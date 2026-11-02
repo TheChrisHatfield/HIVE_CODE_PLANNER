@@ -58,6 +58,47 @@ def test_validate_edge_accepts_string_confidence() -> None:
     assert edge["confidence"] == 0.75
 
 
+def test_offload_rejects_nan_confidence_and_keeps_a_real_edge(tmp_path: Path) -> None:
+    paths = _paths(tmp_path)
+    bad = tmp_path / "nan-edge.json"
+    bad.write_text(
+        json.dumps(
+            {
+                "id": "e-nan",
+                "from": "a",
+                "to": "b",
+                "rel": "supports",
+                "confidence": "nan",
+            }
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(GraphStoreError, match="confidence"):
+        offload_from_file(paths, bad)
+    stored = paths.shared_memory_staging / "edges.jsonl"
+    assert not stored.is_file() or "e-nan" not in stored.read_text(encoding="utf-8")
+
+    good = tmp_path / "ok-edge.json"
+    good.write_text(
+        json.dumps(
+            {
+                "id": "e-ok",
+                "from": "a",
+                "to": "b",
+                "rel": "supports",
+                "confidence": "0.5",
+            }
+        ),
+        encoding="utf-8",
+    )
+    result = offload_from_file(paths, good)
+    assert result.edges_written == 1
+    edges = export_tier(paths, "staging")["edges"]
+    assert len(edges) == 1
+    assert edges[0]["id"] == "e-ok"
+    assert edges[0]["confidence"] == 0.5
+
+
 def test_validate_edge_rejects_non_numeric_string_confidence() -> None:
     with pytest.raises(GraphStoreError, match="confidence"):
         validate_edge(

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -127,6 +128,10 @@ def validate_edge(obj: dict[str, Any], *, default_status: str = "staging") -> di
     if not isinstance(confidence, (int, float)) or isinstance(confidence, bool):
         raise GraphStoreError(f"Edge {edge_id} confidence must be a number")
     confidence_f = float(confidence)
+    # float("nan") is not < 0 and not > 1, but json.dumps writes NaN, which the
+    # next status read skips. The edge would be reported written and then vanish.
+    if not math.isfinite(confidence_f):
+        raise GraphStoreError(f"Edge {edge_id} confidence must be a number")
     if confidence_f < 0.0 or confidence_f > 1.0:
         raise GraphStoreError(f"Edge {edge_id} confidence must be between 0 and 1")
     status = obj.get("status", default_status)
