@@ -548,6 +548,29 @@ def test_migrate_refuses_a_plugin_manifest_that_is_not_an_object(tmp_path: Path)
     assert any("unexpected name" in warning for warning in report.warnings)
 
 
+def test_migrate_refuses_a_plugin_name_that_is_false(tmp_path: Path) -> None:
+    from hive_planner.agent_handoff import AGENT_HANDOFF_UNIFIED
+    from hive_planner.project_profile import write_project_profile
+
+    project = tmp_path / "false-name"
+    project.mkdir()
+    (project / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    (project / "AGENTS.md").write_text(_minimal_agents_with_learned(), encoding="utf-8")
+    write_project_profile(
+        project, profile="minimal", project_name="false-name", agent_handoff_mode=AGENT_HANDOFF_UNIFIED
+    )
+    _write_plugin(project, MARKETPLACE_CL_REL, "continual-learning")
+    _write_plugin(project, CL_OVERLAY_REL, "hive-continual-learning")
+    plugin_json = project / MARKETPLACE_CL_REL / ".cursor-plugin" / "plugin.json"
+    plugin_json.write_text('{"name": false}\n', encoding="utf-8")
+
+    report = migrate_marketplace_cl(RepoPaths(root=project), remove_marketplace_plugin=True)
+
+    assert report.ok is False
+    assert (project / MARKETPLACE_CL_REL).exists()
+    assert any("unexpected name" in warning for warning in report.warnings)
+
+
 def test_migrate_refuses_a_utf16_plugin_with_an_unexpected_name(tmp_path: Path) -> None:
     from hive_planner.agent_handoff import AGENT_HANDOFF_UNIFIED
     from hive_planner.project_profile import write_project_profile

@@ -69,7 +69,11 @@ def _plugin_name(plugin_root: Path) -> str | None:
     if not isinstance(data, dict):
         return ""
     name = data.get("name")
-    return str(name).strip() if name else None
+    # false and 0 are not a missing name. str(False) is "False", and a falsy
+    # value used to be treated as missing, which deleted the tree.
+    if name is None or isinstance(name, str):
+        return str(name).strip() if name else None
+    return ""
 
 
 def marketplace_plugin_tree_present(project_root: Path) -> bool:
