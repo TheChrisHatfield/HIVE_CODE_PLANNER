@@ -46,6 +46,17 @@ def test_chunk_markdown_ignores_headings_in_code_blocks() -> None:
     assert headings == {"Real"}
 
 
+def test_chunk_markdown_keeps_a_heading_after_an_indented_fence_line() -> None:
+    text = "# Real\n\n```\nkeep\n    ```\nstill\n```\n\n# After\n\nvisible\n"
+    chunks = chunk_markdown("abc123", text)
+    headings = {c.heading_path for c in chunks}
+    assert headings == {"Real", "After"}
+    real = next(chunk for chunk in chunks if chunk.heading_path == "Real")
+    assert "still" in real.text
+    after = next(chunk for chunk in chunks if chunk.heading_path == "After")
+    assert "visible" in after.text
+
+
 def test_ingest_keeps_index_when_processing_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     sources = tmp_path / "context-library" / "sources"
     sources.mkdir(parents=True)

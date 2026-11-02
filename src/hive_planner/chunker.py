@@ -35,11 +35,36 @@ def _page_from_heading(heading: str) -> int | None:
     return None
 
 
+_FENCE_LINE = re.compile(r"^( {0,3})(`{3,}|~{3,})(.*)$")
+
+
+def _open_fence(line: str) -> str:
+    """Return the fence marker when line opens a fence. Indented code does not."""
+    match = _FENCE_LINE.match(line)
+    if not match:
+        return ""
+    token = match.group(2)
+    info = match.group(3)
+    if token.startswith("`") and "`" in info:
+        return ""
+    return token
+
+
+def _closes_fence(line: str, marker: str) -> bool:
+    match = _FENCE_LINE.match(line)
+    if not match:
+        return False
+    token = match.group(2)
+    if token[0] != marker[0] or len(token) < len(marker):
+        return False
+    return match.group(3).strip() == ""
+
+
 def _split_markdown_sections(text: str) -> list[tuple[str, str]]:
     sections: list[tuple[str, str]] = []
     heading_stack: list[str] = []
     current_lines: list[str] = []
-    in_fence = False
+    fence_marker = ""
 
     def flush_section() -> None:
         nonlocal current_lines
@@ -50,13 +75,18 @@ def _split_markdown_sections(text: str) -> list[tuple[str, str]]:
         current_lines = []
 
     for line in text.splitlines():
-        stripped = line.strip()
-        if stripped.startswith("```"):
-            in_fence = not in_fence
+        if fence_marker:
+            if _closes_fence(line, fence_marker):
+                fence_marker = ""
+            current_lines.append(line)
+            continue
+        opened = _open_fence(line)
+        if opened:
+            fence_marker = opened
             current_lines.append(line)
             continue
 
-        heading_match = None if in_fence else re.match(r"^(#{1,6})\s+(.*)$", line)
+        heading_match = re.match(r"^(#{1,6})\s+(.*)$", line)
         if heading_match:
             flush_section()
             level = len(heading_match.group(1))
