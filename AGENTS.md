@@ -4,7 +4,7 @@ Durable operating guidance for agentic coding in this repo.
 
 ## Repository root
 
-`d:\DRIVE_DOWNLOADS\HIVE_CODE_PLANNER`
+`<path to your HIVE_CODE_PLANNER checkout>`
 
 ## Planning Rosetta Stone (required anchor)
 
