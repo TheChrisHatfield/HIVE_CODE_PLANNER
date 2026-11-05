@@ -60,7 +60,13 @@ Primary truth drives the immediate task. Secondary governs behavior. Tertiary is
 
 ## Active feature
 
-**controls-execute** — unified Spec Kit + Continual Learning scaffold; replace when real work begins.
+Two lanes may be active at once. Each lane names one feature. A feature that is not listed is not active.
+
+- **bug-hunt** — sampled detector trust and place attention (R9). Open tasks R5/R6 and R9.
+- **controls-execute** — Controls Execute button. Open tasks T004–T009.
+- **implementation-loop** — file-overlap gate. Open task T030.
+
+A lane is ready when its feature is listed here and its own spec, plan, and tasks exist. Listing a lane does not start it. Two lanes that declare the same plan file still need `--allow-overlap` to start. Force feature does not grant that.
 ## Planning source archive
 
 Full thread export (reference only): `docs/HIVE_PLANNING_DEV.md`
@@ -83,7 +89,7 @@ Full thread export (reference only): `docs/HIVE_PLANNING_DEV.md`
 - Cursor 3.x project/plugin hooks must emit JSON on stdout (`additional_context` / `followup_message` / `{}`); plain text causes parse errors. # operational
 - Hive Continual Learning stop hook runs via `py -3.11` (not Bun); `afterFileEdit` matchers use tool types (`Write|TabWrite`), not file paths. # operational
 - Cursor 3.x loads project plugins via `workspaceOpen` `pluginPaths` (see `.cursor/hooks/hive_workspace_open.py`); `.cursor/plugins/` alone is not auto-discovered. # operational
-- Bug hunts: `py -3.11 -m hive_planner bug-hunt` (also `init`, handoff deploy, and Home → Loop controls → Bug hunt Enable) writes `.cursor/commands/bug-hunt.md`, the always-on rule `.cursor/rules/bug-hunt.mdc`, `.hive/bug-hunt/AGENT_PROMPT.md`, and the stop hook `.cursor/hooks/bug_hunt_continue.py` (default 50 iterations). The hook waits the pause written for that run (0 skips the wait) and starts the next pass. Saying bug hunt — or a derivative such as hunt for bugs / start a bug hunt / bung hunt — in any project chat starts the loop. # operational
-- Implementation loop: `py -3.11 -m hive_planner implementation-loop install --pack {1-pack|4-pack}` then `status` / `start` / `handoff` / `check` / `accept` / `commit`. `init` installs it only with `--implementation-loop-pack`. In Cursor chat, **implementation loop** or **code spec** starts the installed command. Controls **Install CodeSpec** installs on the Cursor window in front. # operational
-- Agnostic loop: `py -3.11 -m hive_planner agnostic-loop install` copies the hive-loop-kit (`scripts/agnostic_loop.py`, remap, trajectory-loop.md, lay-footnote skill, catalog.json). Then `rewards` / `arm` / `begin` / `review` / `observe` / `choose` / `status`, or `py -3.11 scripts/agnostic_loop.py`. `init` installs it only with `--agnostic-loop`. Not bug hunt and not implementation-loop. # operational
-- Hive Planner MCP: `py -3.11 -m hive_planner mcp-serve` (portable: `HivePlanner.exe --hive-cli mcp-serve`). Settings → Agent MCP → Enable writes `hive-planner` into the active project's `.cursor/mcp.json`. An agent can then call Hive Planner tools (health check, loops, map sync). Not a third-party MCP editor. # operational
+- Bug hunts: `py -3.11 -m hive_planner bug-hunt` writes the command, rule, packet, and stop hook. The hook waits that run's pause and starts the next pass. # operational
+- Implementation loop: `py -3.11 -m hive_planner implementation-loop install --pack {1-pack|4-pack}` then status, start, handoff, check, accept, and commit. Chat `code spec` starts it. # operational
+- Agnostic loop: `py -3.11 -m hive_planner agnostic-loop install`, then rewards, arm, begin, review, observe, choose, and status. `init` adds it only with `--agnostic-loop`. # operational
+- Hive Planner MCP: `py -3.11 -m hive_planner mcp-serve`. Settings → Agent MCP → Enable writes `hive-planner` into the project's `.cursor/mcp.json`. # operational
