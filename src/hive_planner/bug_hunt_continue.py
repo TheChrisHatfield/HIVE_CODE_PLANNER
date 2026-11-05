@@ -1,12 +1,15 @@
 """Stop hook: wait the bug-hunt pause, then start the next inference pass.
 
-Stdlib only. install_bug_hunt copies this file to `.cursor/hooks/bug_hunt_continue.py`.
+Ranking imports hive_planner.bug_hunt. install_bug_hunt copies this file to
+`.cursor/hooks/bug_hunt_continue.py`.
 Stdout is always JSON (`{}` or `{"followup_message": ...}`).
 """
 
 from __future__ import annotations
 
+import ctypes
 import json
+import os
 import re
 import sys
 import time
@@ -19,10 +22,12 @@ MAX_SLEEP_SECONDS = 9_223_372_036
 FOLLOWUP_MESSAGE = (
     "The bug hunt is still running. This is the next inference pass. "
     "Read .cursor/commands/bug-hunt.md and do one iteration, then end the turn. "
+    "Open the first file in .hive/bug-hunt/rank-pass.json. "
     "Do not ask whether to continue. "
-    "At the end, write .hive/bug-hunt/continue.json using the pause, ceiling, "
-    "committed count, and consecutive-empty count named in that script. "
-    "Set active true unless a stop condition is met. If a stop condition is met, set active false."
+    "At the end, write .hive/bug-hunt/continue.json with file, scenario, outcome, "
+    "and the pause, ceiling, committed count, and consecutive-empty count named in that script. "
+    "Set active true unless a stop condition is met. If a stop condition is met, set active false. "
+    "The stop hook appends the rank row before it treats active false as a stop."
 )
 _ABORT_STATUSES = {"aborted", "cancelled", "canceled", "error"}
 
@@ -75,8 +80,8 @@ def pause_from_script(root: Path) -> int | None:
         if not path.is_file():
             continue
         try:
-            text = path.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError):
+            text = _read_state_text(path)
+        except (OSError, UnicodeError):
             continue
         match = _PAUSE_IN_SCRIPT.search(text)
         if match:
@@ -143,55 +148,299 @@ def find_hunt_root(start: Path | None = None) -> Path:
 def consume_continue(root: Path) -> None:
     """Clear a pending restart so a later stop does not start another pass."""
     path = Path(root) / CONTINUE_REL
-    state = _read_state(path)
-    if not isinstance(state, dict) or not _is_active(state.get("active")):
+    lock = path.with_name(path.name + ".lock")
+    if not path.is_file() or not _acquire_lock(lock):
         return
-    state["active"] = False
-    _write_state(path, state)
+    try:
+        state = _read_state(path)
+        if not isinstance(state, dict):
+            return
+        if not _is_active(state.get("active")) and "resume_pid" not in state:
+            return
+        state["active"] = False
+        state.pop("resume_pid", None)
+        state.pop("resume_deadline", None)
+        _write_state(path, state)
+    finally:
+        _release_lock(lock)
+
+
+def _whole_count(raw: object) -> int | None:
+    """A non-negative whole number. Booleans and fractions are not counts."""
+    if isinstance(raw, bool) or raw is None:
+        return None
+    if isinstance(raw, int):
+        return raw if raw >= 0 else None
+    if isinstance(raw, float):
+        if raw.is_integer() and raw >= 0:
+            return int(raw)
+        return None
+    if isinstance(raw, str):
+        text = raw.strip()
+        if not text:
+            return None
+        try:
+            value = int(text)
+        except ValueError:
+            try:
+                number = float(text)
+            except ValueError:
+                return None
+            if not number.is_integer():
+                return None
+            value = int(number)
+        return value if value >= 0 else None
+    return None
+
+
+_LOCK_STALE_SECONDS = 30
+_RESUME_GRACE_SECONDS = 30
+
+
+def _pid_alive(pid: int) -> bool:
+    if isinstance(pid, bool) or not isinstance(pid, int) or pid <= 0:
+        return False
+    if os.name == "nt":
+        kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+        handle = kernel.OpenProcess(0x1000, False, pid)
+        if handle:
+            kernel.CloseHandle(handle)
+            return True
+        return ctypes.get_last_error() == 5
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+    return True
+
+
+def _lock_abandoned(lock: Path) -> bool:
+    """A lock whose owner is gone can be taken. A live owner keeps it."""
+    try:
+        raw = lock.read_bytes().strip()
+    except OSError:
+        return False
+    try:
+        pid = int(raw)
+    except ValueError:
+        try:
+            age = time.time() - lock.stat().st_mtime
+        except OSError:
+            return False
+        return age >= _LOCK_STALE_SECONDS
+    return not _pid_alive(pid)
+
+
+def _acquire_lock(lock: Path) -> bool:
+    """Exclusive claim. Steal only a lock whose owner is already gone."""
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    me = str(os.getpid()).encode()
+    for _ in range(3):
+        try:
+            fd = os.open(str(lock), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError:
+            if not _lock_abandoned(lock):
+                return False
+            stolen = lock.with_name(f"{lock.name}.steal-{os.getpid()}")
+            try:
+                os.replace(lock, stolen)
+            except OSError:
+                return False
+            try:
+                stolen.unlink()
+            except OSError:
+                pass
+            continue
+        try:
+            os.write(fd, me)
+        finally:
+            os.close(fd)
+        try:
+            current = lock.read_bytes()
+        except OSError:
+            return False
+        if current != me:
+            return False
+        return True
+    return False
+
+
+def _release_lock(lock: Path) -> None:
+    try:
+        if lock.is_file() and lock.read_bytes() != str(os.getpid()).encode():
+            return
+        lock.unlink()
+    except OSError:
+        return
+
+
+def _stop_met(state: dict) -> bool:
+    committed_n = _whole_count(state.get("committed", 0))
+    ceiling_n = _whole_count(state.get("ceiling"))
+    empties_n = _whole_count(state.get("consecutive_empty", 0))
+    ceiling_met = ceiling_n is not None and committed_n is not None and committed_n >= ceiling_n
+    empties_met = empties_n is not None and empties_n >= 2
+    return ceiling_met or empties_met or _is_active(state.get("stop"))
+
+
+def _resume_abandoned(state: dict) -> bool:
+    pid = state.get("resume_pid")
+    if isinstance(pid, bool) or not isinstance(pid, int):
+        return False
+    deadline = state.get("resume_deadline")
+    if isinstance(deadline, (int, float)) and not isinstance(deadline, bool) and time.time() > float(deadline):
+        return True
+    return not _pid_alive(pid)
+
+
+def _fill_pause(root: Path, state: dict) -> None:
+    if "pause_seconds" not in state or _coerce_pause(state.get("pause_seconds")) is None:
+        script_pause = pause_from_script(root)
+        if script_pause is not None:
+            state["pause_seconds"] = script_pause
 
 
 def apply_continue(root: Path, *, sleep) -> dict:
-    """Consume one continue token, wait its pause, and return the next-pass payload."""
+    """Consume one continue token, wait its pause, and return the next-pass payload.
+
+    The token is marked in-progress before the wait so a second hook does not
+    start another pass. If this process dies during the wait, the next hook
+    sees the dead owner and continues. After the wait, a stop or a newer token
+    written in the meantime is left in place and does not get a followup.
+    """
     path = Path(root) / CONTINUE_REL
-    state = _read_state(path)
-    if not isinstance(state, dict) or not _is_active(state.get("active")):
+    lock = path.with_name(path.name + ".lock")
+    if not path.is_file() or not _acquire_lock(lock):
         return {}
-    if "pause_seconds" not in state:
-        script_pause = pause_from_script(root)
-        if script_pause is not None:
-            state["pause_seconds"] = script_pause
-    if _coerce_pause(state.get("pause_seconds", DEFAULT_PAUSE_SECONDS)) is None:
-        script_pause = pause_from_script(root)
-        if script_pause is not None:
-            state["pause_seconds"] = script_pause
-    # The agent should clear the token when a stop condition is met. A crash can
-    # leave active true after the last iteration, so re-check the stop conditions
-    # that the state file itself can prove before waiting for another pass.
-    ceiling = state.get("ceiling")
-    committed = state.get("committed", 0)
-    consecutive_empty = state.get("consecutive_empty", 0)
+    pause = 0
+    payload: dict = {}
     try:
-        ceiling_met = ceiling is not None and int(committed) >= int(ceiling)
-    except (TypeError, ValueError):
-        ceiling_met = False
-    try:
-        empties_met = int(consecutive_empty) >= 2
-    except (TypeError, ValueError):
-        empties_met = False
-    if ceiling_met or empties_met or _is_active(state.get("stop")):
+        state = _read_state(path)
+        if not isinstance(state, dict):
+            return {}
+        abandoned = _resume_abandoned(state)
+        if not _is_active(state.get("active")) and not abandoned:
+            if _stop_met(state):
+                _save_stopped_row(root, state)
+            return {}
+        _fill_pause(root, state)
+        if _stop_met(state):
+            _deactivate_after_rank_row(root, path, state)
+            return {}
+        planned = dict(state)
+        planned["active"] = True
+        pause, payload = plan_continue(planned)
+        if not payload:
+            state["active"] = False
+            state.pop("resume_pid", None)
+            state.pop("resume_deadline", None)
+            _write_state(path, state)
+            return {}
+        if abandoned:
+            pause = 0
         state["active"] = False
+        state["resume_pid"] = os.getpid()
+        state["resume_deadline"] = time.time() + pause + _RESUME_GRACE_SECONDS
         _write_state(path, state)
-        return {}
-    pause, payload = plan_continue(state)
+    finally:
+        _release_lock(lock)
     if not payload:
-        state["active"] = False
-        _write_state(path, state)
         return {}
     if pause > 0:
         sleep(pause)
-    state["active"] = False
-    _write_state(path, state)
+    if not _acquire_lock(lock):
+        return {}
+    try:
+        state = _read_state(path)
+        if not isinstance(state, dict) or state.get("resume_pid") != os.getpid():
+            return {}
+        if _stop_met(state):
+            _deactivate_after_rank_row(root, path, state)
+            return {}
+        state.pop("resume_pid", None)
+        state.pop("resume_deadline", None)
+        payload = _with_rank_queue(root, state, payload)
+        state["active"] = False
+        _write_state(path, state)
+    finally:
+        _release_lock(lock)
     return payload
+
+
+def _deactivate_after_rank_row(root: Path, path: Path, state: dict) -> None:
+    """Append this pass's rank row, then mark the token used so a later hook does not skip the row."""
+    _save_stopped_row(root, state)
+    state["active"] = False
+    state.pop("resume_pid", None)
+    state.pop("resume_deadline", None)
+    _write_state(path, state)
+
+
+def _save_stopped_row(root: Path, state: dict) -> None:
+    """The pass that meets a stop still keeps its outcome row. It does not start another pass."""
+    try:
+        from hive_planner.bug_hunt import save_stopped_outcome
+
+        result = save_stopped_outcome(root, state)
+    except Exception as exc:
+        print(f"[bug_hunt_continue] stop row failed: {exc}", file=sys.stderr)
+        return
+    if result.get("missing_outcome"):
+        print(
+            "[bug_hunt_continue] stop without a valid outcome on continue.json; "
+            "no rank row was appended.",
+            file=sys.stderr,
+        )
+
+
+def _with_rank_queue(root: Path, state: dict, payload: dict) -> dict:
+    """Rebuild, score unopened files, and name the file this pass opens.
+
+    A ranking failure still starts the pass. The draw is not written.
+    """
+    message = payload.get("followup_message")
+    if not isinstance(message, str):
+        return payload
+    try:
+        from hive_planner.bug_hunt import advance_rank_pass
+
+        summary = advance_rank_pass(root, state, fresh=False)
+    except Exception as exc:
+        payload = dict(payload)
+        payload["followup_message"] = (
+            message
+            + f" Rank rebuild failed ({exc}). Read .hive/bug-hunt/rank-pass.json "
+            "or restart the hunt. Do not rebuild the weights yourself."
+        )
+        return payload
+    top = str(summary.get("top") or "")
+    if top:
+        note = (
+            f" Open `{top}` first. The queue is .hive/bug-hunt/rank-pass.json. "
+            "Do not rebuild the weights yourself."
+        )
+    else:
+        note = " The ranker found no qualifying unopened file."
+    payload = dict(payload)
+    payload["followup_message"] = message + note
+    return payload
+
+
+def _prompt_text(raw: str) -> str | None:
+    if not raw.strip():
+        return None
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(parsed, dict) or "status" in parsed:
+        return None
+    prompt = parsed.get("prompt")
+    return prompt if isinstance(prompt, str) else None
 
 
 def _status(raw: str) -> str:
@@ -209,6 +458,17 @@ def _status(raw: str) -> str:
 def main() -> int:
     try:
         raw = sys.stdin.read() if not sys.stdin.isatty() else ""
+        prompt = _prompt_text(raw)
+        if prompt is not None:
+            try:
+                from hive_planner.bug_hunt import advance_rank_pass, is_bug_hunt_request
+
+                if is_bug_hunt_request(prompt):
+                    advance_rank_pass(find_hunt_root(), None, fresh=True)
+            except Exception as exc:
+                print(f"[bug_hunt_continue] hunt start rank failed: {exc}", file=sys.stderr)
+            print(json.dumps({}), flush=True)
+            return 0
         if _status(raw) in _ABORT_STATUSES:
             consume_continue(find_hunt_root())
             print(json.dumps({}), flush=True)
