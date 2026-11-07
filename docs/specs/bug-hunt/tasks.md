@@ -1,62 +1,62 @@
-# Tasks: bug-hunt
-
-<!-- ROSETTA-NAV -->
-
-## Agent navigation (Rosetta Stone)
-
-Load [`docs/planning-rosetta-stone.md`](../../planning-rosetta-stone.md) (`planning.rosetta`) before executing tasks.
-
-- **Spec:** [`spec.md`](./spec.md)
-- **Plan:** [`plan.md`](./plan.md)
-- **Delta micro:** [`bug-hunt.md`](../../delta/20_micro/bug-hunt.md)
-
-- [x] Spec and micro brief
-- [x] `bug_hunt.py` script render and install
-- [x] CLI `bug-hunt`
-- [x] `tests/test_bug_hunt.py`
-- [x] R4 chat-trigger matcher for derivative hunt phrases
-- [x] R3 bootstrap + handoff deploy install
-- [x] R3 Home **Loop controls** → Bug hunt Enable → `run_project_bug_hunt_install`
-- [x] Ranking robustness: NaN-on-read, integer digit strings (`2.0`), skip junk opened entries, case-insensitive cache skip, Signals as a type not a factory, MemoryError on ranking paths, finally-block temp cleanup, persist findings and score on jsonl
-- [x] R5 and R6 rolling ranker: rebuild the six score weights from `.hive/bug-hunt/rank-rows.jsonl`, decay them by row order, and draw one Thompson sample per pass. Replace the fixed slopes in `bug_hunt.py` and the logistic-regression-after-30-rows instruction in the hunt script
-- [x] R9 attention (US4): spec written; implement sibling posteriors in `src/hive_planner/bug_hunt.py` — detector trust and place attention, draws mixed into `rank_queue_score` / `score_unopened` / `advance_rank_pass` and discarded as learning inputs. An audit copy may remain in pass state. No epsilon, no every-Nth, no `FINDINGS_PRESENT_BONUS`, no three-commit rotation. Persist `findings` and final `score` on each jsonl row. Hook copies those from `rank-pass.json`; do not require them on `continue.json`.
-- [x] R9 tests: `tests/test_bug_hunt.py` — empty-on-finding lowers trust vs seed; empty-in-folder lowers that folder vs seed; equal six-score does not force findings-first; residual mismatch widens the next draw; skipped rows do not vote on attention; missing `score`/`findings` keys; root-folder `.`; single-folder queue; append copies queue fields before rewrite; list-shaped findings count as 0; all-missing scores leave `m` at 0.
-- [x] R9 prompt: `render_agent_prompt` and installed hunt script describe rebuild / sample / discard for trust and place attention. Drop the 30-row logistic instruction when R9/R6 land.
-- [x] R10 exploration: add the bounded uncertainty/coverage bonus after the R9 exploit score without changing posterior updates, qualification, or stop rules.
-- [x] R10 attribution: persist versioned attribution on queue rows and selected rank rows, preserve legacy-row compatibility, enforce the 4 KiB row bound, and write non-learning calibration records to `.hive/bug-hunt/calibration.jsonl`.
-- [x] R10 direct override: validate repository containment, symlink resolution, supported source type, file existence, and line range for `requested_file` / `requested_line`; record the override without creating a line-level location or vote.
-- [x] R10 fixtures: add Python and C# candidate fixtures with `ground-truth.json`, 20 fixed seeds, exploit-only comparison, top-10 recall, folder coverage, attribution arithmetic, malformed legacy data, empty queues, and override failures.
-- [x] R10 prompt and hook wiring: carry override metadata, copy valid findings/score/attribution before queue rewrite, and keep audit artifacts outside the learning inputs.
-- [x] R11 recovery state: persist bounded empty-result recovery state, confidence, temporary exclusions, folder coverage, and unused review lenses; validate and replace the state atomically.
-- [ ] R11 recovery controller: after the normal empty threshold, choose a different qualifying branch, scale empty learning by confidence, and stop after three recovery-empty passes, queue exhaustion, ceiling, or a state-write error.
-- [ ] R11 prompt and hook wiring: carry recovery metadata, copy confidence/lens fields before queue rewrite, reset state on real outcomes, and keep lenses, exclusions, coverage, and exploration draws out of learning inputs.
-- [ ] R11 generated artifacts: update `render_agent_prompt`, `.cursor/commands/bug-hunt.md`, `scripts/bug-hunt.md`, and `.hive/bug-hunt/AGENT_PROMPT.md` in the same change as the controller and stop-hook implementation; do not update prompt text independently.
-- [ ] R11 fixtures: cover legacy rows, malformed recovery state, schema bounds and duplicate/path rejection, confidence-weighted empty updates, lens rotation and exhaustion, folder diversion and fallback, reset on real outcomes, crash ordering, atomic-write failure, and recovery stop conditions.
-
-## Active task
-
-**R10 exploration and attribution** — specify and implement the bounded uncertainty/coverage bonus, versioned attribution, calibration audit, and validated direct overrides. R5/R6/R9 ranking and attention are implemented and validated; R10 remains open.
-
-R11 empty-result recovery is specified and queued after R10; it remains documentation-only until its implementation tasks are selected.
-
-## Validation log
-
-```text
-2026-10-20
-- tests/test_bug_hunt.py + bootstrap init + launcher bug_hunt/agent templates: 34 passed
-- hive_planner spec-drift-check --feature bug-hunt: ok
-- Installed command, always-on rule, packet, and scripts/bug-hunt.md into this repo
-2026-11-06
-- `py -3.11 -m pytest tests/test_bug_hunt.py -q`: 241 passed
-- `py -3.11 -m hive_planner spec-drift-check --feature bug-hunt`: ok
-- R5/R6/R9 task state reconciled; R10 remains open pending implementation
-```
-
-## After each implementation task — Integration wiring audit (required)
-
-- [x] Traced caller → handler → core (no layer break)
-- [x] No false success when a sub-step failed or was skipped
-- [x] Integration-level validation evidence attached
-- [x] See `.cursor/rules/integration-wiring-audit.mdc`
-
-Before Continual Learning promotion, run `py -3.11 -m hive_planner spec-drift-check` (see `.hive/spec-kit/WORKFLOW.md`).
+# Tasks: bug-hunt
+
+<!-- ROSETTA-NAV -->
+
+## Agent navigation (Rosetta Stone)
+
+Load [`docs/planning-rosetta-stone.md`](../../planning-rosetta-stone.md) (`planning.rosetta`) before executing tasks.
+
+- **Spec:** [`spec.md`](./spec.md)
+- **Plan:** [`plan.md`](./plan.md)
+- **Delta micro:** [`bug-hunt.md`](../../delta/20_micro/bug-hunt.md)
+
+- [x] Spec and micro brief
+- [x] `bug_hunt.py` script render and install
+- [x] CLI `bug-hunt`
+- [x] `tests/test_bug_hunt.py`
+- [x] R4 chat-trigger matcher for derivative hunt phrases
+- [x] R3 bootstrap + handoff deploy install
+- [x] R3 Home **Loop controls** → Bug hunt Enable → `run_project_bug_hunt_install`
+- [x] Ranking robustness: NaN-on-read, integer digit strings (`2.0`), skip junk opened entries, case-insensitive cache skip, Signals as a type not a factory, MemoryError on ranking paths, finally-block temp cleanup, persist findings and score on jsonl
+- [x] R5 and R6 rolling ranker: rebuild the six score weights from `.hive/bug-hunt/rank-rows.jsonl`, decay them by row order, and draw one Thompson sample per pass. Replace the fixed slopes in `bug_hunt.py` and the logistic-regression-after-30-rows instruction in the hunt script
+- [x] R9 attention (US4): spec written; implement sibling posteriors in `src/hive_planner/bug_hunt.py` — detector trust and place attention, draws mixed into `rank_queue_score` / `score_unopened` / `advance_rank_pass` and discarded as learning inputs. An audit copy may remain in pass state. No epsilon, no every-Nth, no `FINDINGS_PRESENT_BONUS`, no three-commit rotation. Persist `findings` and final `score` on each jsonl row. Hook copies those from `rank-pass.json`; do not require them on `continue.json`.
+- [x] R9 tests: `tests/test_bug_hunt.py` — empty-on-finding lowers trust vs seed; empty-in-folder lowers that folder vs seed; equal six-score does not force findings-first; residual mismatch widens the next draw; skipped rows do not vote on attention; missing `score`/`findings` keys; root-folder `.`; single-folder queue; append copies queue fields before rewrite; list-shaped findings count as 0; all-missing scores leave `m` at 0.
+- [x] R9 prompt: `render_agent_prompt` and installed hunt script describe rebuild / sample / discard for trust and place attention. Drop the 30-row logistic instruction when R9/R6 land.
+- [x] R10 exploration: add the bounded uncertainty/coverage bonus after the R9 exploit score without changing posterior updates, qualification, or stop rules.
+- [x] R10 attribution: persist versioned attribution on queue rows and selected rank rows, preserve legacy-row compatibility, enforce the 4 KiB row bound, and write non-learning calibration records to `.hive/bug-hunt/calibration.jsonl`.
+- [x] R10 direct override: validate repository containment, symlink resolution, supported source type, file existence, and line range for `requested_file` / `requested_line`; record the override without creating a line-level location or vote.
+- [x] R10 fixtures: add Python and C# candidate fixtures with `ground-truth.json`, 20 fixed seeds, exploit-only comparison, top-10 recall, folder coverage, attribution arithmetic, malformed legacy data, empty queues, and override failures.
+- [x] R10 prompt and hook wiring: carry override metadata, copy valid findings/score/attribution before queue rewrite, and keep audit artifacts outside the learning inputs.
+- [x] R11 recovery state: persist bounded empty-result recovery state, confidence, temporary exclusions, folder coverage, and unused review lenses; validate and replace the state atomically.
+- [x] R11 recovery controller: after the normal empty threshold, choose a different qualifying branch, scale empty learning by confidence, and stop after three recovery-empty passes, queue exhaustion, ceiling, or a state-write error.
+- [ ] R11 prompt and hook wiring: carry recovery metadata, copy confidence/lens fields before queue rewrite, reset state on real outcomes, and keep lenses, exclusions, coverage, and exploration draws out of learning inputs.
+- [ ] R11 generated artifacts: update `render_agent_prompt`, `.cursor/commands/bug-hunt.md`, `scripts/bug-hunt.md`, and `.hive/bug-hunt/AGENT_PROMPT.md` in the same change as the controller and stop-hook implementation; do not update prompt text independently.
+- [ ] R11 fixtures: cover legacy rows, malformed recovery state, schema bounds and duplicate/path rejection, confidence-weighted empty updates, lens rotation and exhaustion, folder diversion and fallback, reset on real outcomes, crash ordering, atomic-write failure, and recovery stop conditions.
+
+## Active task
+
+**R10 exploration and attribution** — specify and implement the bounded uncertainty/coverage bonus, versioned attribution, calibration audit, and validated direct overrides. R5/R6/R9 ranking and attention are implemented and validated; R10 remains open.
+
+R11 empty-result recovery is specified and queued after R10; it remains documentation-only until its implementation tasks are selected.
+
+## Validation log
+
+```text
+2026-10-20
+- tests/test_bug_hunt.py + bootstrap init + launcher bug_hunt/agent templates: 34 passed
+- hive_planner spec-drift-check --feature bug-hunt: ok
+- Installed command, always-on rule, packet, and scripts/bug-hunt.md into this repo
+2026-11-06
+- `py -3.11 -m pytest tests/test_bug_hunt.py -q`: 241 passed
+- `py -3.11 -m hive_planner spec-drift-check --feature bug-hunt`: ok
+- R5/R6/R9 task state reconciled; R10 remains open pending implementation
+```
+
+## After each implementation task — Integration wiring audit (required)
+
+- [x] Traced caller → handler → core (no layer break)
+- [x] No false success when a sub-step failed or was skipped
+- [x] Integration-level validation evidence attached
+- [x] See `.cursor/rules/integration-wiring-audit.mdc`
+
+Before Continual Learning promotion, run `py -3.11 -m hive_planner spec-drift-check` (see `.hive/spec-kit/WORKFLOW.md`).
