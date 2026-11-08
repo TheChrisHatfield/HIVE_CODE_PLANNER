@@ -1,7 +1,7 @@
 <!--
 meta:hook_id: integration.cl_spec
 meta:purpose: Continual Learning and Spec Kit integration contract
-meta:status: active
+meta:status: bootstrap
 -->
 
 # Continual Learning + Spec Kit Integration
@@ -26,9 +26,8 @@ Connect Continual Learning memory promotion with Spec Kit behavioral truth so ag
 1. **Behavioral changes** update `docs/specs/<feature>/spec.md` first, then `plan.md` / `tasks.md` if needed.
 2. **Operational learnings** may be proposed to `## Durable Workspace Facts` in `AGENTS.md`.
 3. Complete the **Integration wiring audit** (`.cursor/rules/integration-wiring-audit.mdc`) on validated changes **before** memory promotion.
-4. Continual Learning candidates tagged `# behavioral` or matching behavioral heuristics are **rejected** by `agents-propose` (and auto-routed to `docs/proposals/cl-candidates.md` when `auto_route` is on).
-5. Oversized operational candidates (>240 chars) are **auto-split** and applied; use `--no-auto-route` for strict reject-only behavior.
-6. Run `spec-drift-check` before merging memory proposals or ending a session (when project tooling provides it).
+4. Continual Learning candidates tagged `# behavioral` or matching behavioral heuristics are **rejected** by `agents-propose`.
+5. Run `spec-drift-check` before merging memory proposals or ending a session (when project tooling provides it).
 
 ## Candidate file format
 
@@ -47,22 +46,12 @@ Behavioral lines require a spec update; do not merge them into `AGENTS.md`.
 ```powershell
 py -3.11 -m hive_planner spec-drift-check
 py -3.11 -m hive_planner spec-drift-check --candidates docs/proposals/candidates.md
-py -3.11 -m hive_planner agents-propose --candidates docs/proposals/candidates.md --apply
+py -3.11 -m hive_planner agents-propose --candidates docs/proposals/candidates.md
 py -3.11 -m hive_planner agents-apply --candidates docs/proposals/candidates.md
 py -3.11 -m hive_planner agents-ingest --from path/to/cl-export.txt
 ```
 
-Autonomous routing stats: `.hive/memory-routing.json`.
-## CI
-
-`ci-check` includes:
-
-- `handoff-artifacts` — active feature has `spec.md`, `plan.md`, `tasks.md`, and micro brief
-- `spec-drift` — behavioral bullets in `AGENTS.md` are reflected in active spec (heuristic)
-
 ## Related
 
-- [context-handoff-and-automation.md](./context-handoff-and-automation.md)
-- [unified-handoff-upstream-forks.md](./unified-handoff-upstream-forks.md) — Stage 9 vendored Spec Kit + CL forks, pin manifest, `vendor-sync`, bootstrap deploy paths
-- [../starter-kit/spec-kit-agent-integration.md](../starter-kit/spec-kit-agent-integration.md)
-- Hook `spec.flow` in [planning-rosetta-stone.md](./planning-rosetta-stone.md)
+- [spec-kit-agent-integration.md](./spec-kit-agent-integration.md)
+- [docs/planning-rosetta-stone.md](./docs/planning-rosetta-stone.md)

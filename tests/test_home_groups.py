@@ -20,6 +20,16 @@ def test_default_groups_cover_every_home_action() -> None:
     assert [group["title"] for group in groups] == ["Project", "Loops", "Sources", "Memory", "Setup"]
     assert "Loop controls" == HOME_ACTIONS["loop_controls"]["label"]
     assert "CodeSpec" == HOME_ACTIONS["codespec"]["label"]
+    assert "Update" == HOME_ACTIONS["update_repo"]["label"]
+    tooltip = HOME_ACTIONS["update_repo"]["tooltip"]
+    assert "example spec" in tooltip
+    assert "example plan" in tooltip
+    assert "example tasks" in tooltip
+    assert "example micro file" in tooltip
+    assert "candidates template" in tooltip
+    assert "customized project files" not in tooltip
+    project = next(group for group in groups if group["id"] == "project")
+    assert "update_repo" in project["actions"]
 
 
 def test_normalize_drops_unknown_and_appends_missing() -> None:

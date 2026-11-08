@@ -27,10 +27,20 @@ HOME_ACTIONS: dict[str, dict[str, Any]] = {
         "primary": False,
         "tooltip": "Copy planning and memory tools into your project so AI agents can follow your workflow.",
     },
+    "update_repo": {
+        "label": "Update",
+        "primary": False,
+        "tooltip": "Compare the linked project to this Hive Planner. Recopy Hive-owned files that differ, and leave matching files in place. These customized seeds stay: example spec, example plan, example tasks, example micro file, and the candidates template.",
+    },
     "load_cartridge": {
         "label": "Load cartridge…",
         "primary": False,
         "tooltip": "Open the dialog to add reference files, turn a research note into drafts, or import a cartridge folder.",
+    },
+    "features": {
+        "label": "Features…",
+        "primary": False,
+        "tooltip": "View existing feature lanes, select the active lane, or add a new feature lane.",
     },
     "explore": {
         "label": "Open in Explorer",
@@ -50,7 +60,7 @@ HOME_ACTIONS: dict[str, dict[str, Any]] = {
     "load_sources": {
         "label": "Load Sources…",
         "primary": False,
-        "tooltip": "Add PDF or text files (notes, papers, specs) for AI agents to reference while planning.",
+        "tooltip": "Add PDF, text, or markdown files—or a public GitHub repository—for AI agents to reference while planning.",
     },
     "wiring_check": {
         "label": "Check wiring audit",
@@ -103,7 +113,9 @@ DEFAULT_HOME_GROUPS: list[dict[str, Any]] = [
             "open_cursor",
             "map_sync",
             "deploy_handoff",
+            "update_repo",
             "load_cartridge",
+            "features",
             "explore",
         ],
     },

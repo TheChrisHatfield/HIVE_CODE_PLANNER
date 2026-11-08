@@ -903,3 +903,105 @@ def test_ci_unified_vendor_on_hive_source_repo() -> None:
     assert "unified-vendor" in step_names
     vendor_step = next(s for s in report.steps if s.name == "unified-vendor")
     assert vendor_step.ok is True
+
+
+def test_refresh_changed_updates_only_overlay_files_that_differ(tmp_path: Path) -> None:
+    from hive_planner.vendor_sync import deploy_spec_kit_overlay, packaged_spec_kit_overlay_path
+
+    source = tmp_path / "hive"
+    source.mkdir()
+    vendor = source / "vendor"
+    vendor.mkdir()
+    (vendor / "manifest.json").write_text(
+        json.dumps(
+            {
+                "schema": MANIFEST_SCHEMA,
+                "spec_kit": {"upstream": "u", "path": "p", "ref": "abc", "hive_patch_rev": "1"},
+                "continual_learning": {"upstream": "u", "path": "p", "ref": "def", "hive_patch_rev": "1"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    project = tmp_path / "project"
+    project.mkdir()
+    deploy_spec_kit_overlay(source, project)
+    tasks_rel = ".hive/spec-kit/templates/tasks-template.md"
+    tasks_dest = project / tasks_rel
+    assert tasks_dest.is_file()
+    original = tasks_dest.read_text(encoding="utf-8")
+    tasks_dest.write_text("# stale overlay\n", encoding="utf-8")
+    overlay_src = packaged_spec_kit_overlay_path()
+    other_rel = None
+    for src in overlay_src.rglob("*"):
+        if not src.is_file():
+            continue
+        rel = ".hive/spec-kit/" + src.relative_to(overlay_src).as_posix()
+        if rel != tasks_rel and (project / rel).is_file():
+            other_rel = rel
+            break
+    assert other_rel is not None
+    other_before = (project / other_rel).read_bytes()
+    written: list[str] = []
+    stats: dict = {"unchanged": 0}
+    deploy_spec_kit_overlay(
+        source,
+        project,
+        refresh_changed=True,
+        written=written,
+        refresh_stats=stats,
+    )
+    assert tasks_dest.read_text(encoding="utf-8") == original
+    assert tasks_rel in written
+    assert other_rel not in written
+    assert (project / other_rel).read_bytes() == other_before
+    assert stats["unchanged"] > 0
+
+
+def test_refresh_keeps_customized_seed_and_rewrites_a_changed_hive_file(tmp_path: Path) -> None:
+    from hive_planner.bootstrap import _copy_file, _write_text
+
+    target = tmp_path / "proj"
+    target.mkdir()
+    seed = "docs/specs/example-feature/spec.md"
+    written: list[str] = []
+    stats: dict = {}
+    _write_text(
+        target,
+        seed,
+        "# template\n",
+        force=False,
+        written=written,
+        refresh_changed=True,
+        preserve_if_present=True,
+        refresh_stats=stats,
+    )
+    assert seed in written
+    (target / seed).write_text("# mine\n", encoding="utf-8")
+    written.clear()
+    _write_text(
+        target,
+        seed,
+        "# template\n",
+        force=False,
+        written=written,
+        refresh_changed=True,
+        preserve_if_present=True,
+        refresh_stats=stats,
+    )
+    assert (target / seed).read_text(encoding="utf-8") == "# mine\n"
+    assert seed not in written
+    assert seed in stats["kept"]
+
+    src = tmp_path / "rule.mdc"
+    src.write_text("new\n", encoding="utf-8")
+    rel = ".cursor/rules/architecture.mdc"
+    dest = target / rel
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text("old\n", encoding="utf-8")
+    _copy_file(src, target, rel, force=False, written=written, refresh_changed=True, refresh_stats=stats)
+    assert dest.read_text(encoding="utf-8") == "new\n"
+    assert rel in written
+    second: list[str] = []
+    _copy_file(src, target, rel, force=False, written=second, refresh_changed=True, refresh_stats=stats)
+    assert second == []
+    assert stats["unchanged"] >= 1

@@ -20,23 +20,26 @@ LAVD resize scheduler — virtual deadlines plus Thompson sampling for resize un
 
 | In scope | Out of scope |
 |----------|--------------|
-| Four unit kinds with fixed latency sensitivity | Editing launcher `<Configure>` handlers |
-| Virtual deadline from sensitivity | Linux sched_ext / `scx_lavd` |
-| Chunk plan and Thompson order for optional units | Android |
-| Beta update from observed hitch cost | Persisting posteriors |
+| Four unit kinds with fixed latency sensitivity | Linux sched_ext / `scx_lavd` |
+| Virtual deadline from sensitivity | Android |
+| One-unit default chunk budget so deadlines hold not-due work | Persisting posteriors |
+| Per-kind hitch update | |
+| Launcher enqueue and one deadline pump | |
 
-**Files:** `src/hive_planner/lavd_resize.py`, `tests/test_lavd_resize.py`
+**Files:** `src/hive_planner/lavd_resize.py`, `src/hive_planner/launcher/app.py`, `tests/test_lavd_resize.py`, `tests/test_schedule_label_wrap.py`
 
 ## Acceptance Criteria
 
-- [ ] One pending unit per kind; a repeat enqueue keeps the earlier deadline
-- [ ] Due units run first, even when they exceed the chunk budget
-- [ ] Optional units follow a seeded Thompson draw and stop when the budget is spent
-- [ ] Hitch above the limit increments beta for the kinds that ran; a clean chunk increments alpha
+- [x] One pending unit per kind; a repeat enqueue keeps the earlier deadline
+- [x] Default budget runs the earliest due unit and leaves the others queued
+- [x] Optional units follow a seeded Thompson draw and stop when the budget is spent
+- [x] Each kind that ran updates from its own hitch; a kind that did not run stays put
+- [x] Launcher canvas, sash, wrap, and scrollbar jobs enqueue through the scheduler
 
 ## Validation
 
 ```powershell
-py -3.11 -m pytest tests/test_lavd_resize.py -v
+py -3.11 -m pytest tests/test_lavd_resize.py tests/test_schedule_label_wrap.py -q
+py -3.11 -m pytest tests/test_launcher.py -q -k "scrollable_canvas or flush_scroll"
 py -3.11 -m hive_planner spec-drift-check --feature lavd-resize-scheduler
 ```

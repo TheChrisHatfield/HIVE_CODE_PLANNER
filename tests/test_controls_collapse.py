@@ -123,6 +123,87 @@ def test_collapse_hides_result_and_steps_lines() -> None:
     assert last.packed == 1
 
 
+def test_selecting_bug_hunt_opens_its_settings_when_the_block_is_folded() -> None:
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    ceiling = _Widget()
+    pause = _Widget()
+    other = _Widget()
+    settings = _Widget()
+
+    class _Var:
+        def __init__(self, value: str) -> None:
+            self.value = value
+
+        def get(self) -> str:
+            return self.value
+
+        def set(self, value: str) -> None:
+            self.value = value
+
+    inst = {
+        "collapsed": _Bool(True),
+        "settings": settings,
+        "last_label": _Widget(),
+        "collapse_btn": _Widget(),
+        "loop": _Var("Bug hunt"),
+        "rows": {"fix_ceiling": ceiling, "pause_seconds": pause, "pack": other},
+        "_loop_last": "CodeSpec",
+    }
+    app._sync_controls_command_choices = lambda current=None: None  # type: ignore[method-assign]
+    app._refresh_codespec_steps = lambda current, **_k: None  # type: ignore[method-assign]
+    app._on_controls_instance_loop_changed(inst)
+    assert HivePlannerApp.controls_instance_collapsed(inst) is False
+    assert settings.packed >= 1
+    assert ceiling.packed >= 1
+    assert pause.packed >= 1
+    assert other.forgotten >= 1
+
+
+def test_bug_hunt_focus_loss_does_not_reopen_a_folded_block() -> None:
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    settings = _Widget()
+
+    class _Var:
+        def __init__(self, value: str) -> None:
+            self.value = value
+
+        def get(self) -> str:
+            return self.value
+
+        def set(self, value: str) -> None:
+            self.value = value
+
+    inst = {
+        "collapsed": _Bool(True),
+        "settings": settings,
+        "last_label": _Widget(),
+        "collapse_btn": _Widget(),
+        "loop": _Var("Bug hunt"),
+        "rows": {},
+        "_loop_last": "Bug hunt",
+    }
+    app._sync_controls_command_choices = lambda current=None: None  # type: ignore[method-assign]
+    app._refresh_codespec_steps = lambda current, **_k: None  # type: ignore[method-assign]
+    app._on_controls_instance_loop_changed(inst)
+    assert HivePlannerApp.controls_instance_collapsed(inst) is True
+    assert settings.packed == 0
+
+
+def test_new_bug_hunt_block_shows_pause_of_ten() -> None:
+    import tkinter as tk
+
+    root = tk.Tk()
+    root.withdraw()
+    try:
+        app = HivePlannerApp.__new__(HivePlannerApp)
+        app._active_feature_label = lambda: ""  # type: ignore[method-assign]
+        inst = app._new_controls_instance_vars()
+        assert inst["bug_pause"].get() == "10"
+        assert inst["bug_iterations"].get() == "50"
+    finally:
+        root.destroy()
+
+
 def test_reveal_codespec_expands_without_scroll_canvas() -> None:
     app = HivePlannerApp.__new__(HivePlannerApp)
     inst = {

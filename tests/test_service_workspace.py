@@ -11,6 +11,7 @@ from hive_planner.launcher.service import (
     run_cartridge_load_sources,
     run_cartridge_translate,
     run_deploy_agent_handoff,
+    run_update_linked_repo,
     run_set_cl_runtime,
     run_source4s_upload,
     workspace_primary_folder,
@@ -109,3 +110,28 @@ def test_home_project_actions_resolve_workspace_folder(tmp_path: Path) -> None:
         assert result["ok"] is False
         assert "folder" in str(result.get("error") or "").lower()
     assert cl_runtime_status_label(workspace) == "\u2014"
+
+
+def test_update_linked_repo_compares_files_instead_of_forcing_a_full_copy(monkeypatch, tmp_path: Path) -> None:
+    import hive_planner.launcher.service as service
+
+    captured: dict = {}
+
+    def _fake(project_root, *, hive_planner_root, force=False, cl_runtime=None, refresh_changed=False):
+        captured["project_root"] = project_root
+        captured["hive_planner_root"] = hive_planner_root
+        captured["force"] = force
+        captured["cl_runtime"] = cl_runtime
+        captured["refresh_changed"] = refresh_changed
+        return {"ok": True}
+
+    monkeypatch.setattr(service, "run_deploy_agent_handoff", _fake)
+    project = tmp_path / "app"
+    hive = tmp_path / "hive"
+    result = service.run_update_linked_repo(project, hive_planner_root=hive, cl_runtime="cursor")
+    assert result["ok"] is True
+    assert captured["force"] is False
+    assert captured["refresh_changed"] is True
+    assert captured["project_root"] == project
+    assert captured["hive_planner_root"] == hive
+    assert captured["cl_runtime"] == "cursor"

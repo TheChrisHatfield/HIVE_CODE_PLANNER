@@ -65,7 +65,7 @@ Settings **Agent MCP → Enable** writes `hive-planner` into the active project'
 
 Before editing code:
 
-- identify the active feature and task
+- identify the active feature and task (first `**id**` under `AGENTS.md` **Active feature** is the default for blank CodeSpec and wiring-audit)
 - map it to one or more `HOOK_ID` values from the Rosetta Stone
 - identify primary, secondary, and tertiary change implications
 - confirm which files define execution truth for the current task

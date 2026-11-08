@@ -1,9 +1,9 @@
 {
   "version": 1,
-  "feature": "lavd-resize-scheduler",
-  "recorded_at": "2026-10-28T15:30:05.533567+00:00",
-  "evidence": "py -3.11 -m pytest tests/test_lavd_resize.py -v \u2014 7 passed",
-  "summary": "enqueue -> plan_chunk -> observe; due units first; Thompson fills leftover budget; hitch updates only kinds that ran",
+  "feature": "bug-hunt",
+  "recorded_at": "2026-11-07T04:09:53.876740+00:00",
+  "evidence": "rank rows -> supplied learned seed -> rebuild_mean finite fallback -> Thompson draw -> score_unopened; 242 bug-hunt tests passed",
+  "summary": "ML ranker preserves learned seeds on malformed extreme residual updates and continues through normal ranking flow.",
   "max_age_hours": 168,
   "checks": {
     "trace_verified": true,

@@ -209,7 +209,7 @@ Question: <what to mine, or leave blank for the active feature's open unknowns>"
 
 Start the project's continuous bug-hunt loop now. Read @.cursor/commands/bug-hunt.md (or @scripts/bug-hunt.md if the command is missing) and do the first iteration in this turn, then end the turn.
 
-One iteration is one inference pass. After the outcome row, write the continue file named in the script and end the turn. The stop hook waits the script's pause: a positive number of seconds is not skippable, and 0 means it does not wait. Then the hook starts the next inference pass. Do not ask whether to continue. Enable, the fix ceiling, and Pause seconds live on a Controls block (Home → Loop controls, Bug hunt). Leave Pause seconds blank for 10. Enter 0 to skip the wait. The fix ceiling field defaults to 50. Do not explain how to invoke the command.""",
+One iteration is one inference pass. Write the continue file named in the script (`file`, `scenario`, `outcome`) and end the turn. The stop hook appends the rank row from that continue file. The stop hook waits the script's pause: a positive number of seconds is not skippable, and 0 means it does not wait. Then the hook starts the next inference pass. Do not ask whether to continue. Enable, the fix ceiling, and Pause seconds live on a Controls block (Home → Loop controls, Bug hunt). The Pause seconds box starts at 10. Clearing it still means 10. Enter 0 to skip the wait. The fix ceiling field defaults to 50. Do not explain how to invoke the command.""",
         ),
         AgentPromptTemplate(
             id="change.implementation_loop",

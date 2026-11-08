@@ -1074,8 +1074,23 @@ def deploy_unified_vendor_artifacts(
             if warnings is not None:
                 warnings.append(message)
         try:
+            profile_path = target / ".hive" / "project.json"
+            try:
+                profile_before = profile_path.read_bytes() if profile_path.is_file() else None
+            except OSError:
+                profile_before = None
             set_project_cl_runtime(target, runtime)
-            if written is not None and ".hive/project.json" not in written:
+            try:
+                profile_after = profile_path.read_bytes() if profile_path.is_file() else None
+            except OSError:
+                profile_after = None
+            # Scaffold already counted an unchanged profile. Listing it here
+            # made a headless Update report project.json as rewritten.
+            if (
+                written is not None
+                and profile_before != profile_after
+                and ".hive/project.json" not in written
+            ):
                 written.append(".hive/project.json")
         except ValueError:
             if warnings is not None:

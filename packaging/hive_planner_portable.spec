@@ -25,8 +25,10 @@ datas = [
     (str(pkg / "bootstrap_templates"), "hive_planner/bootstrap_templates"),
     (str(pkg / "vendor_templates"), "hive_planner/vendor_templates"),
     (str(pkg / "bug_hunt_continue.py"), "hive_planner"),
+    (str(pkg / "sandbox_rank_detect.py"), "hive_planner"),
     (str(pkg / "agnostic_loop.py"), "hive_planner"),
     (str(root / "scripts" / "README.md"), "scripts"),
+    (str(root / "scripts" / "sandbox_rank_detect.py"), "scripts"),
     (str(root / "scripts" / "assets" / "HivePlanner.ico"), "scripts/assets"),
 ] + pymupdf_datas + fitz_datas
 
@@ -49,6 +51,9 @@ a = Analysis(
     datas=datas,
     hiddenimports=[
         "hive_planner",
+        "hive_planner.bug_hunt",
+        "hive_planner.bug_hunt_continue",
+        "hive_planner.sandbox_rank_detect",
         "hive_planner.cli",
         "hive_planner.launcher",
         "hive_planner.launcher.app",

@@ -6,11 +6,11 @@ You coordinate the coding loop for a finished Hive spec. Python owns `tasks.md` 
 
 1. Run `py -3.11 -m hive_planner implementation-loop start --feature <feature>`. If it exits 2, report the blocked reason and stop.
 2. Load `docs/specs/<feature>/spec.md`, `plan.md`, and `tasks.md`.
-3. Unrelated dirty paths: start already blocked unless the human passed `--allow-dirty`. Do not stash or discard unrelated changes.
+3. Unrelated dirty paths are classified by scope and confidence. Feature-scoped paths are baseline; high/medium confidence starts automatically, while low-confidence executable or configuration dirt requires `--allow-dirty`. Do not stash or discard changes. Declared file overlap blocks start unless the human passed `--allow-overlap`. `--force-feature` and `--allow-dirty` do not skip that overlap block.
 
 ## One task
 
-Before each delegated pass run `implementation-loop handoff --role <role>`. Python writes `handoff.md` and increments `round_trips`. After the coder (or 1-pack implement) returns, run `implementation-loop check` — Python runs `build`, `test:quick`, and the wiring audit when enforced, then appends the checker `result.md` entry. After each role, run `implementation-loop accept --role <role>`.
+Before each delegated pass run `implementation-loop handoff --role <role>`. Python writes `handoff.md` and increments `round_trips`. After the coder (or 1-pack implement) returns, run `implementation-loop check` — Python runs `build`, `test:quick`, and the wiring audit when enforced, then appends the checker `result.md` entry. If check fails, read `.hive/implementation-loop/blocker.json`; repairable blockers go to the coder for a bounded repair/check cycle, while unknown or high-risk blockers are escalated. After each role, run `implementation-loop accept --role <role>`.
 
 The pass **appends** to `.hive/implementation-loop/result.md`. Each entry has `task`, `role`, `outcome`, `evidence`, and `question` (when `outcome` is `fail`). Do not overwrite earlier role entries for this task.
 
@@ -22,7 +22,7 @@ Do not edit `AGENTS.md`.
 
 Python checks `round_trips` on each `handoff`, including a re-handoff after a human answer. At 10, `handoff` exits 2 unless the human passed `--continue-after-cap`. The count resets to `0` on `commit`.
 
-A role `fail` with `question` set: ask the human, then re-hand the same role (one round trip). Checker or reviewer `fail` without a question returns to the coder, then checker, then reviewer. `needs-sign-off` pauses; do not start the coder.
+A role `fail` with `question` set: ask the human, then re-hand the same role (one round trip). Checker or reviewer `fail` without a question returns to the coder, then checker, then reviewer. Repairable checker blockers are limited to four cycles and use a nine-second independent-pass pause when configured. `needs-sign-off` pauses; do not start the coder.
 
 ## Git
 
@@ -48,6 +48,6 @@ When a feature reaches `status: complete`, append `YYYY-MM-DD | completed=N | fe
 
 If the code would change what the product does, stop. Set `status` to `blocked`, leave the diff uncommitted, and ask the human to update `spec.md` first.
 
-## 4-pack duties
+## 1-pack duties
 
-Delegate to `coder.md` and `reviewer.md` as separate Cursor passes. Do not implement or review yourself. After the coder, run `implementation-loop check` (Python checker infrastructure). Call `handoff`, then `accept`, then `commit`.
+You implement and review yourself. You do not delegate to coder, checker, or reviewer files. Call `implementation-loop check` for the checker result, write the reviewer `result.md` entry, then run `implementation-loop commit`.

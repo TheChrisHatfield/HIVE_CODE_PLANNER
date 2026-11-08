@@ -20,7 +20,6 @@ def main() -> int:
         if project_dir:
             root = Path(project_dir)
         else:
-            # hooks.json runs from project root; this file lives at .cursor/hooks/
             root = Path(__file__).resolve().parents[2]
 
         plugin = root / ".cursor" / "plugins" / "hive-continual-learning"

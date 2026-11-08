@@ -8,10 +8,34 @@
     ],
     "sessionStart": [
       {
+        "command": "py -3.11 .cursor/hooks/prediction_memory_recall.py --memory docs/specs/bug-hunt/TEMP-prediction-memory.md",
+        "timeout": 30
+      },
+      {
         "command": "py -3.11 .cursor/hooks/hive_session_start.py"
       }
     ],
+    "beforeSubmitPrompt": [
+      {
+        "command": "py -3.11 .cursor/hooks/prediction_memory_recall.py --memory docs/specs/bug-hunt/TEMP-prediction-memory.md",
+        "timeout": 30
+      },
+      {
+        "command": "py -3.11 .cursor/hooks/bug_hunt_continue.py",
+        "timeout": 86400
+      }
+    ],
+    "sessionEnd": [
+      {
+        "command": "py -3.11 .cursor/hooks/prediction_bug_hunt_call_end.py",
+        "timeout": 60
+      }
+    ],
     "stop": [
+      {
+        "command": "py -3.11 .cursor/hooks/prediction_bug_hunt_call_end.py",
+        "timeout": 60
+      },
       {
         "command": "py -3.11 .cursor/hooks/hive_session_stop.py"
       },

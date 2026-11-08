@@ -167,30 +167,125 @@ class SpecDriftReport:
         }
 
 
+def _line_outside_html_comment(line: str, in_comment: bool) -> tuple[str, bool]:
+    """Return the visible part of a line and whether a comment continues."""
+    if in_comment:
+        end = line.find("-->")
+        if end == -1:
+            return "", True
+        line = line[end + 3 :]
+    visible: list[str] = []
+    while line:
+        start = line.find("<!--")
+        if start == -1:
+            visible.append(line)
+            break
+        visible.append(line[:start])
+        end = line.find("-->", start + 4)
+        if end == -1:
+            return "".join(visible), True
+        line = line[end + 3 :]
+    return "".join(visible), False
+
+
+def parse_features_from_active_body(active_body: str) -> list[str]:
+    found: list[str] = []
+    fence = ""
+    in_comment = False
+    for line in active_body.splitlines():
+        if fence:
+            if _closes_fence(line, fence):
+                fence = ""
+            continue
+        visible, in_comment = _line_outside_html_comment(line, in_comment)
+        if in_comment and not visible:
+            continue
+        opened = _open_fence(visible)
+        if opened:
+            fence = opened
+            continue
+        for feature in FEATURE_RE.findall(visible):
+            if feature.lower() in PLACEHOLDER_FEATURES or feature in found:
+                continue
+            found.append(feature)
+    return found
+
+
+def _with_listed_lane(body: str, target: str) -> str:
+    """Insert a lane bullet where a later read still sees it.
+
+    A bullet placed after an unclosed fence stays inside that fence, so the
+    repair reports success while the new id is ignored.
+    """
+    lines = body.splitlines(keepends=True)
+    fence = ""
+    fence_at: int | None = None
+    for index, line in enumerate(lines):
+        if fence:
+            if _closes_fence(line, fence):
+                fence = ""
+                fence_at = None
+            continue
+        opened = _open_fence(line)
+        if opened:
+            fence = opened
+            fence_at = index
+    insert_at = fence_at if fence and fence_at is not None else len(lines)
+    newline = "\r\n" if "\r\n" in body else "\n"
+    bullet = f"- **{target}** — listed lane.{newline}"
+    if insert_at > 0 and not lines[insert_at - 1].endswith(("\n", "\r")):
+        lines[insert_at - 1] += newline
+    lines.insert(insert_at, bullet)
+    return "".join(lines)
+
+
 def parse_feature_from_active_body(active_body: str) -> str | None:
-    match = FEATURE_RE.search(active_body)
-    if not match:
-        return None
-    feature = match.group(1)
-    if feature.lower() in PLACEHOLDER_FEATURES:
-        return None
-    return feature
+    found = parse_features_from_active_body(active_body)
+    return found[0] if found else None
+
+
+def _active_feature_body(paths: RepoPaths) -> str:
+    agents_path = paths.root / "AGENTS.md"
+    if not agents_path.exists():
+        return ""
+    sections = parse_sections(_read_saved_text(agents_path))
+    if "Active feature" in sections:
+        return sections["Active feature"]
+    for title, body in sections.items():
+        if _heading_continues(title, "Active feature"):
+            return body
+    return ""
+
+
+def parse_active_features(paths: RepoPaths) -> list[str]:
+    return parse_features_from_active_body(_active_feature_body(paths))
+
+
+def list_project_features(paths: RepoPaths) -> list[str]:
+    """Return active lanes plus valid feature folders available in the project."""
+    active = parse_active_features(paths)
+    specs_root = paths.root / "docs" / "specs"
+    try:
+        discovered = {
+            child.name
+            for child in specs_root.iterdir()
+            if child.is_dir()
+        }
+    except OSError:
+        discovered = set()
+    valid_discovered: set[str] = set()
+    for feature in discovered:
+        try:
+            validate_feature_id(feature)
+        except ValueError:
+            continue
+        valid_discovered.add(feature)
+    return active + sorted(valid_discovered.difference(active))
 
 
 def parse_active_feature(paths: RepoPaths) -> str | None:
-    agents_path = paths.root / "AGENTS.md"
-    if not agents_path.exists():
-        return None
-    sections = parse_sections(_read_saved_text(agents_path))
-    if "Active feature" in sections:
-        active_body = sections["Active feature"]
-    else:
-        active_body = ""
-        for title, body in sections.items():
-            if _heading_continues(title, "Active feature"):
-                active_body = body
-                break
-    return parse_feature_from_active_body(active_body)
+    found = parse_active_features(paths)
+    return found[0] if found else None
 
 
 @dataclass
@@ -238,12 +333,17 @@ def infer_repairable_active_feature(paths: RepoPaths) -> str | None:
     return None
 
 
-def repair_agents_active_feature(paths: RepoPaths, feature: str | None = None) -> AgentsRepairResult:
-    current = parse_active_feature(paths)
+def repair_agents_active_feature(
+    paths: RepoPaths,
+    feature: str | None = None,
+    *,
+    preserve_existing: bool = False,
+) -> AgentsRepairResult:
+    listed = parse_active_features(paths)
     if feature:
-        # Same feature id already present — preserve custom Active feature notes.
-        if current == feature:
-            return AgentsRepairResult(False, feature=current, detail="already set")
+        # Any listed lane is already active. Do not replace the section and drop the others.
+        if feature in listed:
+            return AgentsRepairResult(False, feature=feature, detail="already set")
         target = feature
     else:
         target = infer_repairable_active_feature(paths)
@@ -262,6 +362,13 @@ def repair_agents_active_feature(paths: RepoPaths, feature: str | None = None) -
     from hive_planner.agent_handoff import AGENT_HANDOFF_UNIFIED, resolve_agent_handoff_mode
 
     unified = resolve_agent_handoff_mode(paths.root) == AGENT_HANDOFF_UNIFIED
+    if len(listed) > 1 or (preserve_existing and listed):
+        updated = text[: match.start(2)] + _with_listed_lane(match.group(2), target) + text[match.end(2) :]
+        try:
+            agents_path.write_text(updated, encoding="utf-8", newline="\n")
+        except OSError as exc:
+            return AgentsRepairResult(False, feature=target, detail=str(exc))
+        return AgentsRepairResult(True, feature=target, detail=f"added Active feature lane {target}")
     new_body = bootstrap_active_feature_body(target, unified=unified)
     if match.group(2).strip() == new_body:
         return AgentsRepairResult(False, feature=target, detail="already correct")
@@ -271,6 +378,12 @@ def repair_agents_active_feature(paths: RepoPaths, feature: str | None = None) -
     except OSError as exc:
         return AgentsRepairResult(False, feature=target, detail=str(exc))
     return AgentsRepairResult(True, feature=target, detail=f"set Active feature to {target}")
+
+
+def add_agents_active_feature(paths: RepoPaths, feature: str) -> AgentsRepairResult:
+    """Add a feature lane without replacing the project's current active lane."""
+    validate_feature_id(feature)
+    return repair_agents_active_feature(paths, feature, preserve_existing=True)
 
 
 def repair_agents_rosetta_section(paths: RepoPaths) -> AgentsRepairResult:
@@ -500,8 +613,9 @@ def spec_creation_gaps(paths: RepoPaths, feature: str, *, include_active: bool =
         tasks_text = _read_saved_text(tasks_path)
         if not _tasks_have_wiring_audit_heading(tasks_text):
             gaps.append("tasks.md missing Integration wiring audit checklist")
-    if include_active and parse_active_feature(paths) != feature:
-        current = parse_active_feature(paths) or "unset"
+    if include_active and feature not in parse_active_features(paths):
+        listed = parse_active_features(paths)
+        current = ", ".join(listed) if listed else "unset"
         gaps.append(f"AGENTS.md active feature is {current}, not {feature}")
     return gaps
 

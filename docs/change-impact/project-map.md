@@ -11,10 +11,11 @@ Manual v1 map of modules → dependencies. Use `impact-sync-maps` to merge new s
 | `src/hive_planner/__main__.py` |   main   | (auto-sync) |
 | `src/hive_planner/agent_handoff.py` | Unified Spec Kit + Continual Learning deployment profile (symbiotic pair). | (auto-sync) |
 | `src/hive_planner/agents_memory.py` | AGENTS.md lint/propose | `agents-memory-ci-v1` |
-| `src/hive_planner/bootstrap.py` | bootstrap | (auto-sync) |
-| `src/hive_planner/bug_hunt.py` | Chat-triggered find/fix/commit loop install | `docs/specs/bug-hunt` |
-| `src/hive_planner/implementation_loop.py` | Post-spec coding loop install and readiness | `docs/specs/implementation-loop` |
 | `src/hive_planner/agnostic_loop.py` | hive-loop-kit install + pause-cycle chooser | `docs/specs/agnostic-loop` |
+| `src/hive_planner/bootstrap.py` | bootstrap | (auto-sync) |
+| `src/hive_planner/bootstrap_templates/.cursor/hooks/hive_workspace_open.py` | Cursor workspaceOpen hook — register Hive project-local plugins. | (auto-sync) |
+| `src/hive_planner/bug_hunt.py` | Chat-triggered find/fix/commit loop install | `docs/specs/bug-hunt` |
+| `src/hive_planner/bug_hunt_continue.py` | Stop hook: wait the bug-hunt pause, then start the next inference pass. | (auto-sync) |
 | `src/hive_planner/call_graph.py` | call graph | (auto-sync) |
 | `src/hive_planner/cartridge_adapt.py` | Adapt custom-named cartridge imports into promotable Hive layout. | (auto-sync) |
 | `src/hive_planner/cartridge_pack.py` | cartridge pack | (auto-sync) |
@@ -31,19 +32,27 @@ Manual v1 map of modules → dependencies. Use `impact-sync-maps` to merge new s
 | `src/hive_planner/emitter.py` | Cartridge emit | `context.cartridge` |
 | `src/hive_planner/format_deps.py` | Optional format dependencies (PDF, etc.) for ingest and Load Sources. | (auto-sync) |
 | `src/hive_planner/frozen_entry.py` | PyInstaller entrypoint — GUI by default; CLI via subcommand or --hive-cli. | (auto-sync) |
+| `src/hive_planner/graph_store.py` | Shared graph memory stores (hook: memory.shared_graph, representation.graph_nati | (auto-sync) |
+| `src/hive_planner/ground_truth_mine.py` | Ground-truth mine agent script (hook: planning.rosetta). | (auto-sync) |
 | `src/hive_planner/impact.py` | Impact packets | `change-impact-v1` |
+| `src/hive_planner/implementation_loop.py` | Post-spec coding loop install and readiness | `docs/specs/implementation-loop` |
 | `src/hive_planner/indexer.py` | JSON indexes | `context.metadata` |
 | `src/hive_planner/launcher/__main__.py` |   main   | (auto-sync) |
 | `src/hive_planner/launcher/agent_prompt_templates.py` | agent prompt templates | (auto-sync) |
 | `src/hive_planner/launcher/app.py` | app | (auto-sync) |
 | `src/hive_planner/launcher/bootstrap_state.py` | Bootstrap detection for linked Cursor workspaces. | (auto-sync) |
+| `src/hive_planner/launcher/chat_target.py` | Chat-target adapter: resolve a display name and deliver one phrase. | (auto-sync) |
 | `src/hive_planner/launcher/config.py` | config | (auto-sync) |
 | `src/hive_planner/launcher/console_win.py` | console win | (auto-sync) |
+| `src/hive_planner/launcher/cursor_chat_delivery.py` | Resolve a Cursor composer header and ask the in-workbench submitter to send a ph | (auto-sync) |
+| `src/hive_planner/launcher/cursor_submitter/__main__.py` | Do not run this from Hive to submit a chat. | (auto-sync) |
+| `src/hive_planner/launcher/home_groups.py` | Home action groups: headings, saved order, and arrange-mode moves. | (auto-sync) |
 | `src/hive_planner/launcher/mcp_servers.py` | Cursor `.cursor/mcp.json` hive-planner enable. | `workflow.tools` |
 | `src/hive_planner/launcher/popup_placement.py` | Dialog windows reopen at their last screen position. | `workflow.tools` |
 | `src/hive_planner/launcher/service.py` | service | (auto-sync) |
 | `src/hive_planner/launcher/theme.py` | theme | (auto-sync) |
 | `src/hive_planner/launcher/user_guide.py` | user guide | (auto-sync) |
+| `src/hive_planner/lavd_resize.py` | Resize-chunk scheduler: virtual deadlines plus Thompson sampling. | (auto-sync) |
 | `src/hive_planner/map_sync.py` | map sync | (auto-sync) |
 | `src/hive_planner/mcp_server.py` | Stdio MCP so a Cursor agent can call Hive Planner. | `workflow.tools` |
 | `src/hive_planner/memory_routing.py` | Autonomous memory candidate routing — split, route, Thompson-sample arms. | (auto-sync) |
@@ -55,6 +64,7 @@ Manual v1 map of modules → dependencies. Use `impact-sync-maps` to merge new s
 | `src/hive_planner/normalizers/pdf.py` | PDF normalize | `cartridge-compiler-v2` |
 | `src/hive_planner/normalizers/pptx.py` | pptx | (auto-sync) |
 | `src/hive_planner/normalizers/text.py` | text | (auto-sync) |
+| `src/hive_planner/notify.py` | Desktop notices that do not enter an IDE chat. | (auto-sync) |
 | `src/hive_planner/ocr_runtime.py` | Portable Tesseract OCR runtime for image-only PDF sources. | (auto-sync) |
 | `src/hive_planner/pipeline.py` | Ingest orchestration | `cartridge-compiler-v2` |
 | `src/hive_planner/portable_runtime.py` | Portable / frozen runtime — self-contained Spec Kit + Continual Learning deploy. | (auto-sync) |
@@ -63,8 +73,11 @@ Manual v1 map of modules → dependencies. Use `impact-sync-maps` to merge new s
 | `src/hive_planner/rosetta_eject.py` | Export Rosetta Stone planning session contract for external AI tools (Gemini, Pe | (auto-sync) |
 | `src/hive_planner/rosetta_nav.py` | Rosetta Stone navigation blocks for agent handoff artifacts. | (auto-sync) |
 | `src/hive_planner/runtime_paths.py` | Frozen / portable path resolution for standalone Hive Planner builds. | (auto-sync) |
+| `src/hive_planner/sandbox_rank_detect.py` | Read-only bug detector. Emits rank-rows.jsonl lines for H drive repos. | (auto-sync) |
 | `src/hive_planner/source4s.py` | Source4s — upload txt/pdf reference files for cartridge-linked agent retrieval. | (auto-sync) |
 | `src/hive_planner/spec_drift.py` | spec drift | (auto-sync) |
 | `src/hive_planner/translator.py` | Rule-based cartridge drafts | `cartridge-translator-v1` |
 | `src/hive_planner/vendor_sync.py` | Vendor manifest and unified upstream pin verification (Stage 9). | (auto-sync) |
+| `src/hive_planner/vendor_templates/continual-learning/hooks/continual-learning-stop.py` | Cursor stop hook for Hive continual-learning (Python runtime). | (auto-sync) |
+| `src/hive_planner/vendor_templates/continual-learning/hooks/hive_notify.py` | IDE-agnostic Hive Planner popup. | (auto-sync) |
 | `src/hive_planner/wiring_audit.py` | Machine-enforceable Integration wiring audit attestation (CL pre-flight gate). | (auto-sync) |

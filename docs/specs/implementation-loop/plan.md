@@ -28,7 +28,15 @@ Mirror bug hunt: the durable behavior lives in Python-rendered markdown, and the
 
 Pack templates live in `src/hive_planner/implementation_loop.py` (or a package directory of the same name if the role texts are long). They are Hive texts adapted from agentic-loops, with the MIT notice copied to `.hive/implementation-loop/NOTICE` on install. Do not vendor `.github/copilot-instructions.md` or the persona files.
 
-The 4-pack command tells the agent to launch coder and reviewer as separate Cursor agent passes. Python writes the handoff, runs `check`, counts round trips, accepts `result.md`, and commits. The 1-pack command tells the agent to implement and review in its own passes, call Python `check` for the checker result, then call the same Python `commit` gate.
+The 4-pack command tells the agent to launch coder and reviewer as separate Cursor agent passes. Python writes the handoff, runs `check`, diagnoses repairable checker blockers, counts round trips, accepts `result.md`, and commits. The 1-pack command tells the agent to implement and review in its own passes, call Python `check` for the checker result, then call the same Python `commit` gate.
+
+Dirty-scope start uses a bounded evidence preflight. Declared overlap and
+sensitive hard-risk paths remain fail-closed. Workspace infrastructure paths
+(`.cursor/**`, `.github/**`, package manifests, and `pyproject.toml`) are
+reviewable risk: when they are unrelated, baseline-isolated, and the configured
+`test:quick` command passes, the coordinator may auto-start at medium
+confidence. Failed or unavailable preflight still requires explicit
+`--allow-dirty`.
 
 Command discovery at install scans, in order, `pyproject.toml`, `Makefile` / `Justfile` / `Taskfile`, `package.json` scripts, then `.github/workflows`. It fills only commands it can point at an existing script and does not overwrite a value already found. Hive defaults apply when `pyproject` exposes pytest and `hive_planner ci-check` is importable from the target. `push` is `true` only when `git remote` shows `origin`.
 
@@ -38,7 +46,7 @@ State and command files are created once. Later installs must not reset round tr
 
 | File | Change |
 |------|--------|
-| `src/hive_planner/implementation_loop.py` | Render, install, readiness, trigger matcher, command discovery, coordinator gates |
+| `src/hive_planner/implementation_loop.py` | Render, install, readiness, trigger matcher, command discovery, coordinator gates, bounded blocker diagnosis |
 | `src/hive_planner/cli.py` | `implementation-loop install`, `status`, `start`, `handoff`, `check`, `accept`, `commit` |
 | `src/hive_planner/bootstrap.py` | Optional `--implementation-loop-pack` |
 | `src/hive_planner/launcher/service.py` | Home wrappers for install plus status/start/handoff/check/accept/commit |
@@ -76,6 +84,15 @@ py -3.11 -m hive_planner spec-drift-check --feature implementation-loop
 ```
 
 Wiring audit for the implementation task: trace CLI and Home to `install_implementation_loop`, trace Home Loop buttons to the same coordinator functions as the CLI, trace the start rule to the command, and trace the command to `implementation-loop status`. Helper-only string tests are not enough; status must run against a temp repo fixture.
+
+Dirty-gate audit: trace start through scope classification, hard-risk detection,
+quick-test preflight, confidence result, and baseline isolation. Prove that
+direct overlap and failed preflight still block while unrelated non-overlapping
+dirty paths can proceed only with passing evidence.
+
+Blocker audit: trace checker command failure → deterministic diagnosis → bounded
+runtime blocker record → coder handoff → checker rerun. Unrecognized or
+high-risk failures must remain human-escalated.
 
 ## Risks
 

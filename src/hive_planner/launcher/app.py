@@ -3,10 +3,12 @@ from __future__ import annotations
 import os
 import sys
 import threading
+import time
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, scrolledtext, simpledialog, ttk
 
+from hive_planner.lavd_resize import ResizeScheduler
 from hive_planner.launcher.bootstrap_state import (
     BootstrapState,
     LinkBootstrapChoice,
@@ -47,6 +49,7 @@ from hive_planner.launcher.service import (
     run_agents_memory_finalize_apply,
     run_agents_memory_propose,
     run_deploy_agent_handoff,
+    run_update_linked_repo,
     run_portable_bootstrap,
     run_install,
     run_legacy_deployment_scan,
@@ -186,30 +189,171 @@ class HivePlannerApp:
             return max(1, widget_height // line_height)
         return max(1, fallback)
 
-    @staticmethod
-    def _schedule_label_wrap(widget, labels, width: int, pending: dict, *, delay_ms: int = 80) -> None:
-        """Debounce wraplength. A too-narrow width cancels a wide wrap still waiting."""
+    def _resize_now_ms(self) -> float:
+        clock = getattr(self, "_resize_clock", None)
+        if clock is not None:
+            return float(clock())
+        return time.monotonic() * 1000.0
 
-        def cancel() -> None:
-            token = pending.get("id")
-            if token is None:
-                return
-            try:
-                widget.after_cancel(token)
-            except tk.TclError:
-                pass
-            pending["id"] = None
+    def _ensure_resize_scheduler(self) -> ResizeScheduler:
+        scheduler = getattr(self, "_resize_scheduler", None)
+        if scheduler is None:
+            scheduler = ResizeScheduler()
+            self._resize_scheduler = scheduler
+        if not hasattr(self, "_resize_slots"):
+            self._resize_slots = {}
+        if not hasattr(self, "_resize_pump_job"):
+            self._resize_pump_job = None
+        if not hasattr(self, "_resize_in_chunk"):
+            self._resize_in_chunk = False
+        return scheduler
 
-        if width <= 40:
-            cancel()
-            pending["width"] = width
+    def _resize_after_target(self):
+        root = getattr(self, "root", None)
+        if root is not None:
+            return root
+        return getattr(self, "_resize_after_host", None)
+
+    def _cancel_resize_pump(self) -> None:
+        job = getattr(self, "_resize_pump_job", None)
+        self._resize_pump_job = None
+        if job is None:
             return
-        if width == pending.get("width"):
+        host = self._resize_after_target()
+        if host is None:
+            return
+        try:
+            host.after_cancel(job)
+        except tk.TclError:
+            return
+
+    def _arm_resize_pump(self) -> None:
+        """Wake at the next virtual deadline. One timer serves every resize kind."""
+        scheduler = self._ensure_resize_scheduler()
+        nxt = scheduler.next_deadline_ms()
+        if nxt is None:
+            self._cancel_resize_pump()
+            return
+        host = self._resize_after_target()
+        if host is None:
+            return
+        remaining = nxt - self._resize_now_ms()
+        # Truncating the delay wakes the pump before the deadline. Nothing is
+        # due yet, so Thompson sampling can run a later job and leave the
+        # earlier one queued. Ceil waits until the deadline. A due chunk still
+        # uses a 1 ms timer so it leaves the Configure idle handler.
+        if remaining <= 0:
+            delay = 1
+        else:
+            delay = int(remaining)
+            if remaining > delay:
+                delay += 1
+        self._cancel_resize_pump()
+        try:
+            self._resize_pump_job = host.after(delay, self._run_resize_chunk)
+        except tk.TclError:
+            self._resize_pump_job = None
+
+    def _run_resize_chunk(self) -> None:
+        """Run the chunk that is due now and record each kind's own hitch."""
+        self._resize_pump_job = None
+        scheduler = self._ensure_resize_scheduler()
+        self._resize_in_chunk = True
+        try:
+            kinds = scheduler.plan_chunk(self._resize_now_ms())
+            hitches: dict[str, float] = {}
+            for kind in kinds:
+                payload = scheduler.ran_payload(kind)
+                self._resize_payload_failed = False
+                self._resize_last_error = None
+                started_clock = getattr(self, "_resize_hitch_clock", None)
+                clock = started_clock if started_clock is not None else time.perf_counter
+                started = float(clock())
+                if callable(payload):
+                    try:
+                        payload()
+                    except tk.TclError as exc:
+                        self._resize_note_payload_failure(exc)
+                if self._resize_payload_failed:
+                    hitches[kind] = scheduler.hitch_limit_ms + 1.0
+                else:
+                    hitches[kind] = (float(clock()) - started) * 1000.0
+                self._resize_payload_failed = False
+            if kinds:
+                scheduler.observe(hitches)
+        finally:
+            self._resize_in_chunk = False
+            self._arm_resize_pump()
+
+    def _resize_note_payload_failure(self, exc: BaseException) -> None:
+        """Remember a failed resize payload so its hitch is not counted as clean."""
+        self._resize_payload_failed = True
+        self._resize_last_error = exc
+
+    def _resize_put(self, kind: str, key: str, work) -> None:
+        """Coalesce one callback under a resize kind and arm the scheduler."""
+        scheduler = self._ensure_resize_scheduler()
+        slots = self._resize_slots.setdefault(kind, {})
+        slots[key] = work
+
+        def run(kind: str = kind) -> None:
+            current = dict(self._resize_slots.get(kind, {}))
+            for slot_key, fn in current.items():
+                slots_now = self._resize_slots.get(kind, {})
+                if slots_now.get(slot_key) is not fn:
+                    continue
+                slots_now.pop(slot_key, None)
+                fn()
+
+        scheduler.enqueue(kind, run, now_ms=self._resize_now_ms())
+        if not self._resize_in_chunk:
+            self._arm_resize_pump()
+
+    def _resize_drop(self, kind: str, key: str) -> None:
+        """Remove one coalesced callback. Drop the kind when nothing remains."""
+        scheduler = self._ensure_resize_scheduler()
+        slots = self._resize_slots.setdefault(kind, {})
+        slots.pop(key, None)
+        if not slots:
+            scheduler.cancel(kind)
+            if not self._resize_in_chunk:
+                self._arm_resize_pump()
+            return
+
+        def run(kind: str = kind) -> None:
+            current = dict(self._resize_slots.get(kind, {}))
+            for slot_key, fn in current.items():
+                slots_now = self._resize_slots.get(kind, {})
+                if slots_now.get(slot_key) is not fn:
+                    continue
+                slots_now.pop(slot_key, None)
+                fn()
+
+        scheduler.enqueue(kind, run, now_ms=self._resize_now_ms())
+        if not self._resize_in_chunk:
+            self._arm_resize_pump()
+
+    def _schedule_label_wrap(self, widget, labels, width: int, pending: dict, *, delay_ms: int = 80) -> None:
+        """Queue wraplength through the resize scheduler.
+
+        ``delay_ms`` is unused. The kind's virtual deadline decides when the
+        wrap runs. A too-narrow width cancels a wide wrap still waiting.
+        """
+        del delay_ms
+        if getattr(self, "root", None) is None and getattr(self, "_resize_after_host", None) is None:
+            self._resize_after_host = widget
+        key = str(pending.setdefault("key", id(pending)))
+        if width <= 40:
+            pending["width"] = width
+            pending["id"] = None
+            self._resize_drop("label_rewrap", key)
+            return
+        if width == pending.get("width") and pending.get("id") is not None:
             return
         pending["width"] = width
-        cancel()
+        pending["id"] = key
 
-        def apply(width=width) -> None:
+        def apply(width: int = width) -> None:
             pending["id"] = None
             for label in labels:
                 try:
@@ -218,13 +362,14 @@ class HivePlannerApp:
                 except tk.TclError:
                     return
 
-        try:
-            pending["id"] = widget.after(delay_ms, apply)
-        except tk.TclError:
-            pending["id"] = None
+        self._resize_put("label_rewrap", key, apply)
 
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
+        self._resize_scheduler = ResizeScheduler()
+        self._resize_slots: dict[str, dict[str, object]] = {}
+        self._resize_pump_job = None
+        self._resize_in_chunk = False
         install_popup_memory(root)
         self.config = load_config()
         self.setup = get_setup_status(self.config)
@@ -583,6 +728,9 @@ class HivePlannerApp:
         canvas = getattr(self, "_home_canvas", None)
         if canvas is None or not self._home_scroll_y:
             return
+        flush = getattr(canvas, "_hive_flush_scroll_layout", None)
+        if flush is not None:
+            flush()
         try:
             if canvas.winfo_exists():
                 canvas.yview_moveto(self._home_scroll_y)
@@ -770,6 +918,87 @@ class HivePlannerApp:
         self._home_scroll_y = saved_scroll
         self._restore_dashboard_view()
 
+    def _bind_scrolling_canvas(
+        self,
+        canvas: tk.Canvas,
+        inner: tk.Frame,
+        window_id: int,
+        *,
+        drag_pause_ms: int = 80,
+    ) -> None:
+        """Queue canvas width and scroll-region work on the resize scheduler.
+
+        Tk fires ``<Configure>`` continuously while a border or sash moves.
+        The handler only stores the latest size. ``canvas_redraw`` runs on the
+        scheduler clock. Scroll restore still flushes immediately.
+        """
+        del drag_pause_ms
+        state = {"width": 0, "applying": False}
+        slot = f"canvas:{id(canvas)}"
+        if getattr(self, "root", None) is None and getattr(self, "_resize_after_host", None) is None:
+            self._resize_after_host = canvas
+
+        def _apply_width() -> None:
+            state["applying"] = True
+            try:
+                width = int(state["width"])
+                if width > 0:
+                    canvas.itemconfig(window_id, width=width)
+                    canvas.update_idletasks()
+                bounds = canvas.bbox("all")
+                if bounds is not None:
+                    canvas.configure(scrollregion=bounds)
+            except tk.TclError:
+                return
+            finally:
+                state["applying"] = False
+
+        def _apply_scroll() -> None:
+            if state["applying"]:
+                return
+            try:
+                canvas.configure(scrollregion=canvas.bbox("all"))
+            except tk.TclError:
+                return
+
+        def _flush() -> None:
+            """Apply a pending drag layout now. Scroll restore cannot wait on the deadline."""
+            if state["applying"]:
+                return
+            self._resize_drop("canvas_redraw", slot)
+            if int(state["width"] or 0) > 0:
+                _apply_width()
+            else:
+                _apply_scroll()
+
+        canvas._hive_flush_scroll_layout = _flush  # type: ignore[attr-defined]
+
+        def _enqueue() -> None:
+            def apply() -> None:
+                if int(state["width"] or 0) > 0:
+                    _apply_width()
+                else:
+                    _apply_scroll()
+
+            self._resize_put("canvas_redraw", slot, apply)
+
+        def _on_width(event) -> None:
+            if state["applying"]:
+                return
+            try:
+                state["width"] = int(event.width)
+            except (tk.TclError, TypeError, ValueError):
+                return
+            _enqueue()
+
+        def _on_scroll(_event=None) -> None:
+            if state["applying"]:
+                return
+            _enqueue()
+
+        inner.bind("<Configure>", _on_scroll)
+        canvas.bind("<Configure>", _on_width)
+
     def _scrollable_tab(self, parent: tk.Frame) -> tuple[tk.Frame, tk.Canvas]:
         canvas = tk.Canvas(parent, bg=COLORS["bg"], highlightthickness=0)
         scrollbar = ttk.Scrollbar(parent, orient="vertical", command=canvas.yview)
@@ -779,15 +1008,7 @@ class HivePlannerApp:
         bind_mousewheel(scrollbar, target=canvas)
         inner = tk.Frame(canvas, bg=COLORS["bg"])
         window_id = canvas.create_window((0, 0), window=inner, anchor="nw")
-
-        def _sync_scroll(_event=None) -> None:
-            canvas.configure(scrollregion=canvas.bbox("all"))
-
-        def _sync_width(event) -> None:
-            canvas.itemconfig(window_id, width=event.width)
-
-        inner.bind("<Configure>", _sync_scroll)
-        canvas.bind("<Configure>", _sync_width)
+        self._bind_scrolling_canvas(canvas, inner, window_id)
         return inner, canvas
 
     _PAGE_WHEEL_SKIP = (tk.Listbox, tk.Text, scrolledtext.ScrolledText, tk.Scrollbar)
@@ -1040,6 +1261,138 @@ class HivePlannerApp:
         self._restore_home_log_history()
         self._pending_home_log.clear()
 
+    def _on_features(self) -> None:
+        root = self._active_linked_root()
+        if not root:
+            messagebox.showwarning("No project", "Link a workspace first (Projects tab).")
+            return
+        from hive_planner.config import RepoPaths
+        from hive_planner.spec_drift import (
+            add_agents_active_feature,
+            list_project_features,
+            repair_agents_active_feature,
+        )
+
+        dialog = self._dialog()
+        dialog.title("Features")
+        dialog.configure(bg=COLORS["bg"])
+        dialog.transient(self.root)
+        dialog.grab_set()
+        dialog.geometry("520x300")
+        dialog.minsize(480, 260)
+
+        parent = tk.Frame(dialog, bg=COLORS["bg"])
+        parent.pack(fill="both", expand=True, padx=16, pady=16)
+        feature_card = card(parent)
+        card_title(feature_card, "Features")
+        tk.Label(
+            feature_card,
+            text=(
+                f"Active project: {Path(root).name}\n"
+                "Select an existing feature or add a new feature lane for this project."
+            ),
+            bg=COLORS["card"],
+            fg=COLORS["muted"],
+            font=FONT_SUBTITLE,
+            wraplength=480,
+            justify="left",
+        ).pack(anchor="w", padx=12, pady=(0, 8))
+        row = tk.Frame(feature_card, bg=COLORS["card"])
+        row.pack(fill="x", padx=12, pady=(0, 10))
+        feature_var = tk.StringVar()
+        selector = ttk.Combobox(row, textvariable=feature_var, state="readonly", width=30)
+        selector.pack(side="left", fill="x", expand=True)
+        new_feature_var = tk.StringVar()
+        new_feature_row = tk.Frame(feature_card, bg=COLORS["card"])
+        new_feature_row.pack(fill="x", padx=12, pady=(0, 10))
+        tk.Label(
+            new_feature_row,
+            text="New feature",
+            width=12,
+            anchor="w",
+            bg=COLORS["card"],
+            fg=COLORS["fg"],
+            font=FONT,
+        ).pack(side="left")
+        tk.Entry(
+            new_feature_row,
+            textvariable=new_feature_var,
+            font=FONT,
+            bg=COLORS["secondary"],
+            fg=COLORS["fg"],
+        ).pack(side="left", fill="x", expand=True)
+
+        def refresh_features() -> None:
+            try:
+                choices = list_project_features(RepoPaths(root=root))
+            except (OSError, UnicodeError, ValueError, TypeError):
+                choices = []
+            selector.configure(values=choices)
+            active = self._active_feature_label()
+            if active in choices:
+                feature_var.set(active)
+            elif choices:
+                feature_var.set(choices[0])
+            else:
+                feature_var.set("")
+            set_active.configure(state="normal" if choices else "disabled")
+
+        def set_active_feature() -> None:
+            selected = feature_var.get().strip()
+            if not selected:
+                return
+            result = repair_agents_active_feature(RepoPaths(root=root), selected)
+            self._queue_home_log(
+                f"Feature '{selected}' {'selected' if result.repaired else 'not changed'}: {result.detail}"
+            )
+            self._refresh_home_dashboard()
+            refresh_features()
+
+        def add_new_feature() -> None:
+            selected = new_feature_var.get().strip()
+            if not selected:
+                return
+            try:
+                validate_feature_id(selected)
+            except ValueError as exc:
+                messagebox.showerror("Invalid feature", str(exc), parent=self.root)
+                return
+            result = add_agents_active_feature(RepoPaths(root=root), selected)
+            self._queue_home_log(
+                f"Feature '{selected}' {'added' if result.repaired else 'not changed'}: {result.detail}"
+            )
+            new_feature_var.set("")
+            self._refresh_home_dashboard()
+            refresh_features()
+
+        set_active = secondary_button(
+            row,
+            "Set active",
+            set_active_feature,
+            tooltip="Add the selected feature lane to the project's active feature list.",
+        )
+        secondary_button(
+            new_feature_row,
+            "Add feature",
+            add_new_feature,
+            tooltip="Add a new feature lane to the linked project's active feature list.",
+        )
+        secondary_button(
+            row,
+            "Refresh",
+            refresh_features,
+            tooltip="Reload the feature list from the linked project's AGENTS.md.",
+        )
+        refresh_features()
+        action_row = tk.Frame(parent, bg=COLORS["bg"])
+        action_row.pack(fill="x", pady=(8, 0))
+        secondary_button(
+            action_row,
+            "Close",
+            dialog.destroy,
+            tooltip="Close the feature list.",
+        )
+
     def _home_action_command(self, action_id: str):
         # Home still shows these labels via HOME_ACTIONS: "Loop controls", "CodeSpec".
         return {
@@ -1047,11 +1400,15 @@ class HivePlannerApp:
             "open_cursor": self._on_open_cursor,
             "map_sync": self._on_map_sync,
             "deploy_handoff": self._on_deploy_agent_handoff,
+            "update_repo": self._on_update_linked_repo,
             "load_cartridge": self._on_load_cartridge,
             "explore": self._on_explore,
             "loop_controls": self._on_open_loop_controls,
             "codespec": self._on_open_codespec,
-            "load_sources": self._on_load_sources,
+            # Use the unified document loader for both Sources entry points.
+            # The legacy source4s dialog does not expose GitHub repositories.
+            "load_sources": self._on_load_cartridge,
+            "features": self._on_features,
             "wiring_check": self._on_wiring_audit_check,
             "wiring_record": self._on_wiring_audit_record,
             "promote_memory": self._on_agents_propose,
@@ -1293,11 +1650,12 @@ class HivePlannerApp:
     # One sentence per setting row.
     CONTROLS_SETTING_TIPS = {
         "fix_ceiling": "How many bug fixes to make before stopping. Enter a number from 1 to 200.",
-        "pause_seconds": "Seconds to wait between passes. Leave blank for 10. Enter 0 to skip the wait. The next pass still starts. A number above 0 cannot be skipped.",
+        "pause_seconds": "Seconds to wait between passes. The box starts at 10. Enter 0 to skip the wait. Clearing the box still means 10. The next pass still starts. A number above 0 cannot be skipped.",
         "pack": "1-pack does the task in a single pass. 4-pack splits it into coding, checking, and review.",
         "feature": "Which feature to code. Leave blank to use the feature already set for this project.",
         "dirty": "Start even when other files in the project have uncommitted changes.",
         "force": "Start anyway if the loop is stuck, or switch to this feature while another one is running.",
+        "overlap": "Starts even when this feature and the feature already in the loop declare the same files.",
         "cap": "Allows another handoff after this loop has already handed off 10 times.",
         "reward": "The job type to set or score, such as inspect or fill.",
         "cycles": "How many times to repeat that job.",
@@ -1319,7 +1677,7 @@ class HivePlannerApp:
     # Settings each Controls block shows. Keys match row ids built in _mount_controls_instance.
     CONTROLS_LOOP_SETTINGS = {
         "Bug hunt": ("fix_ceiling", "pause_seconds"),
-        "CodeSpec": ("pack", "feature", "dirty", "force", "cap"),
+        "CodeSpec": ("pack", "feature", "dirty", "force", "overlap", "cap"),
         "Agnostic loop": ("reward", "cycles", "note", "open", "sims", "horizon", "seed", "arm"),
     }
 
@@ -1401,19 +1759,22 @@ class HivePlannerApp:
         self._bind_page_wheel(body, canvas)
 
     def _new_controls_instance_vars(self) -> dict:
-        from hive_planner.bug_hunt import DEFAULT_ITERATIONS
+        from hive_planner.bug_hunt import DEFAULT_ITERATIONS, DEFAULT_PAUSE_SECONDS
         from hive_planner.implementation_loop import PACK_1
 
         feature = self._active_feature_label() if hasattr(self, "_active_feature_label") else ""
         return {
             "loop": tk.StringVar(value="CodeSpec"),
             "command": tk.StringVar(value="Status"),
+            "tab_name": tk.StringVar(value=""),
+            "execute_outcome": tk.StringVar(value=""),
             "bug_iterations": tk.StringVar(value=str(DEFAULT_ITERATIONS)),
-            "bug_pause": tk.StringVar(value=""),
+            "bug_pause": tk.StringVar(value=str(DEFAULT_PAUSE_SECONDS)),
             "impl_pack": tk.StringVar(value=PACK_1),
             "impl_feature": tk.StringVar(value="" if feature in ("", "—") else feature),
             "impl_allow_dirty": tk.BooleanVar(value=False),
             "impl_force_feature": tk.BooleanVar(value=False),
+            "impl_allow_overlap": tk.BooleanVar(value=False),
             "impl_continue_cap": tk.BooleanVar(value=False),
             "agn_reward": tk.StringVar(value="inspect"),
             "agn_cycles": tk.StringVar(value="1"),
@@ -1442,6 +1803,7 @@ class HivePlannerApp:
         self.controls_impl_feature = inst["impl_feature"]
         self.controls_impl_allow_dirty = inst["impl_allow_dirty"]
         self.controls_impl_force_feature = inst["impl_force_feature"]
+        self.controls_impl_allow_overlap = inst["impl_allow_overlap"]
         self.controls_impl_continue_cap = inst["impl_continue_cap"]
         self.controls_agn_reward = inst["agn_reward"]
         self.controls_agn_cycles = inst["agn_cycles"]
@@ -1473,7 +1835,7 @@ class HivePlannerApp:
             header,
             "▾",
             lambda current=inst: self._on_toggle_controls_collapse(current),
-            tooltip="Fold or unfold the settings. Loop, Command, and Run stay visible.",
+            tooltip="Fold or unfold the settings. Loop, Command, the tab name, Run, and Execute stay visible.",
         )
         tk.Label(header, text="Loop", width=10, anchor="w", bg=COLORS["card"], fg=COLORS["fg"], font=FONT).pack(side="left")
         loop_box = ttk.Combobox(
@@ -1516,6 +1878,20 @@ class HivePlannerApp:
             "<<ComboboxSelected>>",
             lambda _event, current=inst: self._refresh_controls_choice_tips(current),
         )
+        tk.Label(header, text="Tab", width=6, anchor="w", bg=COLORS["card"], fg=COLORS["fg"], font=FONT).pack(side="left")
+        if "tab_name" not in inst:
+            inst["tab_name"] = tk.StringVar(value="")
+        tab_entry = tk.Entry(
+            header,
+            textvariable=inst["tab_name"],
+            width=22,
+            bg=COLORS["card"],
+            fg=COLORS["fg"],
+            insertbackground=COLORS["fg"],
+            font=FONT,
+        )
+        tab_entry.pack(side="left", padx=(0, 8))
+        inst["tab_entry"] = tab_entry
         actions = tk.Frame(frame, bg=COLORS["card"])
         actions.pack(fill="x", padx=8, pady=(4, 0))
         inst["remove_btn"] = secondary_button(
@@ -1530,6 +1906,21 @@ class HivePlannerApp:
             lambda current=inst: self._on_controls_instance_run(current),
             tooltip="Run the command selected above on the project at the top.",
         )
+        primary_button(
+            actions,
+            "Execute",
+            lambda current=inst: self._on_controls_execute(current),
+            tooltip="Send this loop's start phrase into the named chat. The command above does not change the phrase.",
+        )
+        if "execute_outcome" not in inst:
+            inst["execute_outcome"] = tk.StringVar(value="")
+        tk.Label(
+            actions,
+            textvariable=inst["execute_outcome"],
+            bg=COLORS["card"],
+            fg=COLORS["fg"],
+            font=FONT,
+        ).pack(side="left", padx=(8, 0))
         if "last" not in inst:
             inst["last"] = tk.StringVar(value="")
         last_label = tk.Label(
@@ -1589,6 +1980,12 @@ class HivePlannerApp:
                 "Force feature",
                 inst["impl_force_feature"],
                 self.CONTROLS_SETTING_TIPS["force"],
+            ),
+            "overlap": self._controls_check_row(
+                settings,
+                "Allow overlap",
+                inst["impl_allow_overlap"],
+                self.CONTROLS_SETTING_TIPS["overlap"],
             ),
             "cap": self._controls_check_row(
                 settings,
@@ -1713,6 +2110,7 @@ class HivePlannerApp:
             "feature",
             "dirty",
             "force",
+            "overlap",
             "cap",
             "reward",
             "cycles",
@@ -1887,8 +2285,42 @@ class HivePlannerApp:
                 pass
         inst["_loop_last"] = chosen
         self._sync_controls_command_choices(inst)
-        self._apply_controls_instance_settings(inst)
+        # Opening is for the switch onto Bug hunt. A later focus loss must not
+        # unfold a block the user has folded again.
+        if chosen == "Bug hunt" and previous != "Bug hunt":
+            self._set_controls_instance_collapsed(inst, False)
+        else:
+            self._apply_controls_instance_settings(inst)
         self._refresh_codespec_steps(inst)
+
+    def _show_execute_outcome(self, inst: dict, outcome: str) -> None:
+        from hive_planner.launcher.chat_target import outcome_text
+
+        text = outcome_text(outcome)
+        if "execute_outcome" not in inst:
+            inst["execute_outcome"] = tk.StringVar(value="")
+        inst["execute_outcome"].set(text)
+        if "last" not in inst:
+            inst["last"] = tk.StringVar(value="")
+        inst["last"].set(text)
+
+    def _on_controls_execute(self, inst: dict) -> None:
+        from hive_planner.launcher.chat_target import execute_controls
+        from hive_planner.launcher.cursor_chat_delivery import CursorChatTarget
+        from hive_planner.launcher.service import linked_install_directory
+
+        self._alias_primary_controls_instance(inst)
+        link = self._require_active_link()
+        if link is None:
+            return
+        repo, error = linked_install_directory(link)
+        loop = self.normalize_controls_loop(str(inst["loop"].get())) or ""
+        name = str(inst.get("tab_name").get()) if inst.get("tab_name") is not None else ""
+        if error or repo is None:
+            self._show_execute_outcome(inst, "failed")
+            return
+        outcome = execute_controls(loop, name, repo, CursorChatTarget())
+        self._show_execute_outcome(inst, outcome)
 
     def _on_controls_instance_run(self, inst: dict) -> None:
         self._alias_primary_controls_instance(inst)
@@ -2049,6 +2481,9 @@ class HivePlannerApp:
         try:
             if not canvas.winfo_exists() or not frame.winfo_exists():
                 return
+            flush = getattr(canvas, "_hive_flush_scroll_layout", None)
+            if flush is not None:
+                flush()
             canvas.update_idletasks()
             y = 0
             widget = frame
@@ -2351,7 +2786,7 @@ class HivePlannerApp:
         self.recent_list.pack(side="left", fill="both", expand=True)
         self.recent_scroll.config(command=self.recent_list.yview)
         self.recent_list.bind("<Double-Button-1>", self._on_recent_double_click)
-        self.recent_list.bind("<Configure>", lambda _event: self._sync_recent_scrollbar(), add="+")
+        self.recent_list.bind("<Configure>", lambda _event: self._schedule_recent_scrollbar(), add="+")
         bind_mousewheel(self.recent_scroll, target=self.recent_list)
         bind_mousewheel(recent_list_frame, target=self.recent_list)
         bind_mousewheel(self.recent_list)
@@ -2774,6 +3209,15 @@ class HivePlannerApp:
             self.recent_list.see(select_index)
 
     def _sync_projects_top_scroll(self, _event=None) -> None:
+        """Queue the form scrollbar on the resize scheduler."""
+        canvas = getattr(self, "_projects_top_canvas", None)
+        if canvas is None:
+            return
+        if getattr(self, "root", None) is None and getattr(self, "_resize_after_host", None) is None:
+            self._resize_after_host = canvas
+        self._resize_put("scrollbar_pack", "projects_top", self._apply_projects_top_scroll)
+
+    def _apply_projects_top_scroll(self) -> None:
         """Hide the form scrollbar until that pane is actually shorter than the form."""
         if getattr(self, "_projects_top_scroll_busy", False):
             return
@@ -2790,7 +3234,8 @@ class HivePlannerApp:
                 bar.pack(side="right", fill="y", before=canvas)
             elif not needs and mapped:
                 bar.pack_forget()
-        except tk.TclError:
+        except tk.TclError as exc:
+            self._resize_note_payload_failure(exc)
             return
         finally:
             self._projects_top_scroll_busy = False
@@ -2798,13 +3243,11 @@ class HivePlannerApp:
     def _place_projects_split_once(self, _event=None) -> None:
         """Queue the sash move. Placing it inside Configure is overwritten by layout."""
         split = getattr(self, "projects_split", None)
-        if split is None or getattr(self, "_projects_split_place_queued", False):
+        if split is None:
             return
-        self._projects_split_place_queued = True
-        try:
-            split.after_idle(self._apply_projects_split_sash)
-        except tk.TclError:
-            self._projects_split_place_queued = False
+        if getattr(self, "root", None) is None and getattr(self, "_resize_after_host", None) is None:
+            self._resize_after_host = split
+        self._resize_put("split_reposition", "projects", self._apply_projects_split_sash)
 
     def _apply_projects_split_sash(self) -> None:
         self._projects_split_place_queued = False
@@ -2851,14 +3294,27 @@ class HivePlannerApp:
         self._sync_recent_scrollbar()
 
     def _sync_recent_scrollbar(self) -> None:
-        if self._recent_list_needs_scroll():
-            if not self.recent_scroll.winfo_ismapped():
-                self.recent_scroll.pack(side="right", fill="y")
-            self.recent_list.configure(yscrollcommand=self.recent_scroll.set)
-        else:
-            self.recent_scroll.pack_forget()
-            self.recent_list.configure(yscrollcommand=lambda *_args: None)
-            self.recent_list.yview_moveto(0)
+        try:
+            if self._recent_list_needs_scroll():
+                if not self.recent_scroll.winfo_ismapped():
+                    self.recent_scroll.pack(side="right", fill="y")
+                self.recent_list.configure(yscrollcommand=self.recent_scroll.set)
+            else:
+                self.recent_scroll.pack_forget()
+                self.recent_list.configure(yscrollcommand=lambda *_args: None)
+                self.recent_list.yview_moveto(0)
+        except tk.TclError as exc:
+            self._resize_note_payload_failure(exc)
+            return
+
+    def _schedule_recent_scrollbar(self) -> None:
+        """Queue the recent-list scrollbar on the resize scheduler."""
+        widget = getattr(self, "recent_list", None)
+        if widget is None:
+            return
+        if getattr(self, "root", None) is None and getattr(self, "_resize_after_host", None) is None:
+            self._resize_after_host = widget
+        self._resize_put("scrollbar_pack", "recent", self._sync_recent_scrollbar)
 
     def _selected_recent_path(self) -> Path | None:
         selection = self.recent_list.curselection()
@@ -4062,10 +4518,11 @@ class HivePlannerApp:
         raw = str(self.controls_bug_iterations.get() if hasattr(self, "controls_bug_iterations") else "").strip()
         try:
             return parse_iterations(raw)
-        except BugHuntError:
+        except BugHuntError as exc:
+            detail = str(exc).replace("iterations", "the fix ceiling")
             messagebox.showwarning(
-                "Iterations",
-                f"Iterations must be a whole number between {MIN_ITERATIONS} and {MAX_ITERATIONS}.",
+                "Fix ceiling",
+                f"{detail}. Enter a whole number from {MIN_ITERATIONS} to {MAX_ITERATIONS}.",
             )
             return None
 
@@ -4075,10 +4532,10 @@ class HivePlannerApp:
         raw = str(self.controls_bug_pause.get() if hasattr(self, "controls_bug_pause") else "").strip()
         try:
             return parse_pause_seconds(raw)
-        except BugHuntError:
+        except BugHuntError as exc:
             messagebox.showwarning(
                 "Pause seconds",
-                "Pause seconds must be a whole number. Leave it blank for 10, or enter 0 to skip the wait.",
+                f"Pause seconds: {exc}. The box starts at 10, and clearing it still means 10. Enter 0 to skip the wait.",
             )
             return None
 
@@ -4111,7 +4568,7 @@ class HivePlannerApp:
         pause_note = "no wait" if pause == 0 else f"{pause}s pause"
         files_note = f"{count} file(s)" if count else "already current"
         message = (
-            f"Bug hunt enabled ({files_note}, {iterations} iterations, {pause_note}). "
+            f"Bug hunt enabled ({files_note}, {iterations} committed fixes, {pause_note}). "
             "In any Cursor chat on this project, say bug hunt — or hunt for bugs / start a bug hunt."
         )
         self._queue_home_log(message)
@@ -4304,9 +4761,10 @@ class HivePlannerApp:
             return
 
     def _codespec_pack_hint(self, inst: dict | None = None) -> str:
+        source = inst if inst is not None else None
         variable = None
-        if inst is not None:
-            variable = inst.get("impl_pack")
+        if source is not None:
+            variable = source.get("impl_pack")
         elif hasattr(self, "controls_impl_pack"):
             variable = self.controls_impl_pack
         if variable is None:
@@ -4387,6 +4845,16 @@ class HivePlannerApp:
         dirty = result.get("dirty") or []
         if dirty:
             parts.append("dirty=" + ", ".join(str(item) for item in dirty))
+        for key in ("feature_scope", "related_dirty", "unrelated_dirty"):
+            values = result.get(key) or []
+            if values:
+                parts.append(key + "=" + ", ".join(str(item) for item in values))
+        for key in ("dirty_confidence", "dirty_confidence_tier", "dirty_auto_start"):
+            if key in result:
+                parts.append(f"{key}={result.get(key)}")
+        reasons = result.get("dirty_confidence_reasons") or []
+        if reasons:
+            parts.append("dirty_confidence_reasons=" + ", ".join(str(item) for item in reasons))
         err = result.get("error")
         if err and result.get("blocked_reason") != err:
             parts.append(str(err))
@@ -4482,13 +4950,21 @@ class HivePlannerApp:
             feature = self._controls_feature_value()
             allow_dirty = bool(self.controls_impl_allow_dirty.get()) if hasattr(self, "controls_impl_allow_dirty") else False
             force_feature = bool(self.controls_impl_force_feature.get()) if hasattr(self, "controls_impl_force_feature") else False
+            allow_overlap = bool(self.controls_impl_allow_overlap.get()) if hasattr(self, "controls_impl_allow_overlap") else False
         else:
             feature = self._ask_loop_feature()
             if feature is None:
                 return
             allow_dirty = False
             force_feature = False
-        self._run_loop_start(link, feature, allow_dirty=allow_dirty, force_feature=force_feature)
+            allow_overlap = False
+        self._run_loop_start(
+            link,
+            feature,
+            allow_dirty=allow_dirty,
+            force_feature=force_feature,
+            allow_overlap=allow_overlap,
+        )
 
     def _run_loop_start(
         self,
@@ -4497,6 +4973,7 @@ class HivePlannerApp:
         *,
         allow_dirty: bool,
         force_feature: bool,
+        allow_overlap: bool = False,
         controls_instance: dict | None = None,
     ) -> None:
         if controls_instance is None:
@@ -4506,16 +4983,18 @@ class HivePlannerApp:
             "feature": feature,
             "allow_dirty": allow_dirty,
             "force_feature": force_feature,
+            "allow_overlap": allow_overlap,
             "controls_instance": controls_instance,
         }
         self._loop_start_ctx = ctx
         self._start_home_action("Starting CodeSpec…")
         self._run_bg(
-            lambda r=link, f=feature, d=allow_dirty, ff=force_feature: run_project_implementation_loop_start(
+            lambda r=link, f=feature, d=allow_dirty, ff=force_feature, ov=allow_overlap: run_project_implementation_loop_start(
                 r,
                 f or None,
                 allow_dirty=d,
                 force_feature=ff,
+                allow_overlap=ov,
             ),
             self._project_done_callback(
                 "Implementation loop start",
@@ -4528,14 +5007,24 @@ class HivePlannerApp:
             ctx = getattr(self, "_loop_start_ctx", None) or {}
         if self._is_bg_error(result) or result.get("ok") is not True:
             err = str(result.get("error") or result.get("blocked_reason") or "")
-            if "unrelated dirty" in err and not ctx.get("allow_dirty"):
-                dirty = result.get("dirty") or []
+            if (
+                ("unrelated dirty" in err or "low-confidence dirty" in err)
+                and not ctx.get("allow_dirty")
+            ):
+                dirty = result.get("unrelated_dirty") or result.get("dirty") or []
+                related = result.get("related_dirty") or []
                 extra = ""
+                if related:
+                    extra += "\n\nFeature-scoped dirty files:\n" + "\n".join(
+                        str(path) for path in related[:12]
+                    )
+                    if len(related) > 12:
+                        extra += f"\n(+{len(related) - 12} more)"
                 if dirty:
                     listed = "\n".join(str(path) for path in dirty[:12])
                     if len(dirty) > 12:
                         listed += f"\n(+{len(dirty) - 12} more)"
-                    extra = f"\n\n{listed}"
+                    extra += f"\n\nOther dirty files:\n{listed}"
                 if messagebox.askyesno(
                     "Unrelated dirty files",
                     "Unrelated dirty paths block start. Continue anyway (same as --allow-dirty)?"
@@ -4549,6 +5038,7 @@ class HivePlannerApp:
                             ctx.get("feature") or "",
                             allow_dirty=True,
                             force_feature=bool(ctx.get("force_feature")),
+                            allow_overlap=bool(ctx.get("allow_overlap")),
                             controls_instance=ctx.get("controls_instance"),
                         )
                         return
@@ -4565,6 +5055,7 @@ class HivePlannerApp:
                             ctx.get("feature") or "",
                             allow_dirty=bool(ctx.get("allow_dirty")),
                             force_feature=True,
+                            allow_overlap=bool(ctx.get("allow_overlap")),
                             controls_instance=ctx.get("controls_instance"),
                         )
                         return
@@ -4931,6 +5422,19 @@ class HivePlannerApp:
                 cl_runtime=rt,
             ),
             self._project_done_callback("Agent handoff deployment", self._deploy_handoff_done),
+        )
+
+    def _on_update_linked_repo(self) -> None:
+        root = self._active_linked_root()
+        if not root:
+            messagebox.showwarning("No project", "Link a workspace first.")
+            return
+        cfg = load_config()
+        self._start_home_action("Comparing the linked project to this Hive Planner…")
+        hive_root = cfg.normalized_hive_root()
+        self._run_bg(
+            lambda r=root, h=hive_root: run_update_linked_repo(r, hive_planner_root=h),
+            self._project_done_callback("Project update", self._deploy_handoff_done),
         )
 
     def _on_load_sources(self) -> None:
@@ -5426,15 +5930,7 @@ class HivePlannerApp:
         canvas.pack(side="left", fill="both", expand=True)
         body = tk.Frame(canvas, bg=COLORS["bg"])
         body_window = canvas.create_window((0, 0), window=body, anchor="nw")
-
-        def _sync_body_scroll(_event=None) -> None:
-            canvas.configure(scrollregion=canvas.bbox("all"))
-
-        def _sync_body_width(event) -> None:
-            canvas.itemconfig(body_window, width=event.width)
-
-        body.bind("<Configure>", _sync_body_scroll)
-        canvas.bind("<Configure>", _sync_body_width)
+        self._bind_scrolling_canvas(canvas, body, body_window)
         bind_mousewheel(canvas, target=canvas)
         bind_mousewheel(body, target=canvas)
 
@@ -5720,12 +6216,17 @@ class HivePlannerApp:
             sync_promote_controls()
             mode = mode_var.get()
             if mode == "sources":
+                for entry in github_url_entries:
+                    entry.configure(state="normal")
                 embed_cb.configure(state="normal")
                 mode_hint_var.set(
                     "Reference files are copied into your project library and linked for AI search. "
                     "Turn on Improve AI search quality when adding new documents."
                 )
             elif mode == "translate":
+                for entry, url_var in zip(github_url_entries, github_url_vars):
+                    entry.configure(state="disabled")
+                    url_var.set("")
                 embed_cb.configure(state="disabled")
                 embed_var.set(False)
                 mode_hint_var.set(
@@ -5733,6 +6234,9 @@ class HivePlannerApp:
                     "It does not add the file to your searchable library — use Add reference files for that."
                 )
             else:
+                for entry, url_var in zip(github_url_entries, github_url_vars):
+                    entry.configure(state="disabled")
+                    url_var.set("")
                 embed_cb.configure(state="disabled")
                 embed_var.set(False)
                 mode_hint_var.set(
@@ -5742,7 +6246,6 @@ class HivePlannerApp:
 
         promote_var.trace_add("write", sync_mode_hints)
         mode_var.trace_add("write", sync_mode_hints)
-        sync_mode_hints()
 
         def sync_import_controls(*_args: object) -> None:
             if mode_var.get() == "import":
@@ -5774,8 +6277,80 @@ class HivePlannerApp:
         selection_label.pack(anchor="w", padx=16, pady=(0, 4))
         attach_hover_tooltip(
             selection_label,
-            "Shows the file or folder you picked with Browse. Required before you can bring documents into the project.",
+            "Shows the file or folder you picked with Browse. Sources can also be loaded from the optional GitHub URL.",
         )
+
+        github_rows = tk.Frame(body, bg=COLORS["bg"])
+        github_rows.pack(fill="x", padx=16, pady=(4, 8))
+        github_url_vars: list[tk.StringVar] = []
+        github_url_entries: list[tk.Entry] = []
+
+        def add_github_url_row(*_args: object) -> None:
+            row = tk.Frame(github_rows, bg=COLORS["bg"])
+            row.pack(fill="x", pady=(0, 4))
+            tk.Label(
+                row,
+                text="GitHub URL" if not github_url_vars else "",
+                width=12,
+                anchor="w",
+                bg=COLORS["bg"],
+                fg=COLORS["fg"],
+                font=FONT,
+            ).pack(side="left", anchor="n")
+            url_var = tk.StringVar()
+            entry = tk.Entry(
+                row,
+                textvariable=url_var,
+                font=FONT,
+                bg=COLORS["card"],
+                fg=COLORS["fg"],
+            )
+            entry.pack(side="left", fill="x", expand=True)
+            attach_hover_tooltip(
+                entry,
+                "Optional public repository URL, for example https://github.com/org/repo. "
+                "Supported source files are downloaded and indexed with your selected files.",
+            )
+            if github_url_vars:
+                remove_button = secondary_button(
+                    row,
+                    "Remove",
+                    lambda: remove_github_url_row(row, url_var, entry),
+                    tooltip="Remove this GitHub repository from the load.",
+                )
+                remove_button.pack(side="left", padx=(4, 0))
+            github_url_vars.append(url_var)
+            github_url_entries.append(entry)
+
+        def remove_github_url_row(
+            row: tk.Frame,
+            url_var: tk.StringVar,
+            entry: tk.Entry,
+        ) -> None:
+            if len(github_url_vars) <= 1:
+                return
+            github_url_vars.remove(url_var)
+            github_url_entries.remove(entry)
+            row.destroy()
+
+        add_github_url_row()
+        secondary_button(
+            body,
+            "Add GitHub link",
+            add_github_url_row,
+            tooltip="Add another public GitHub repository URL to load in the same operation.",
+        )
+        sync_mode_hints()
+        tk.Label(
+            body,
+            text="Optional: add a public GitHub repository instead of, or in addition to, local files.",
+            bg=COLORS["bg"],
+            fg=COLORS["muted"],
+            font=FONT_SUBTITLE,
+            wraplength=480,
+            justify="left",
+        ).pack(anchor="w", padx=16, pady=(0, 4))
+        sync_mode_hints()
 
         selected_files: list[Path] = []
         selected_folder: Path | None = None
@@ -5864,8 +6439,13 @@ class HivePlannerApp:
             if mode == "import" and not selected_folder:
                 messagebox.showwarning("Nothing selected", "Choose a cartridge folder first.", parent=dialog)
                 return
-            if mode == "sources" and not selected_files:
-                messagebox.showwarning("Nothing selected", "Choose one or more source files first.", parent=dialog)
+            github_urls = [var.get().strip() for var in github_url_vars if var.get().strip()]
+            if mode == "sources" and not selected_files and not github_urls:
+                messagebox.showwarning(
+                    "Nothing selected",
+                    "Choose one or more source files or enter a GitHub repository URL first.",
+                    parent=dialog,
+                )
                 return
             if mode == "translate" and not selected_files:
                 messagebox.showwarning("Nothing selected", "Choose a research markdown file first.", parent=dialog)
@@ -5901,14 +6481,16 @@ class HivePlannerApp:
 
             dialog.destroy()
             if mode == "sources":
+                source_count = len(selected_files) + len(github_urls)
                 self._start_home_action(
-                    f"Loading {len(selected_files)} source file(s) and emitting cartridge for '{feature}'…",
+                    f"Loading {source_count} source input(s) and emitting cartridge for '{feature}'…",
                 )
                 self._run_bg(
                     lambda: run_cartridge_load_sources(
                         root,
                         selected_files,
                         do_feature,
+                        github_urls=github_urls,
                         embed=embed_var.get(),
                         promote=do_promote,
                         force_promote=do_force,
@@ -6102,8 +6684,9 @@ class HivePlannerApp:
                 self._queue_home_log(self._result_detail(result))
             count = len(result.get("files_written", []))
             if count:
+                action = "update" if result.get("refresh_changed") else "deploy"
                 self._queue_home_log(
-                    f"Partial deploy — {count} file(s) written; unified handoff still incomplete."
+                    f"Partial {action} — {count} file(s) written; unified handoff still incomplete."
                 )
             repair = result.get("repair")
             if repair:
@@ -6120,14 +6703,49 @@ class HivePlannerApp:
                 self._queue_home_log(f"Warning: {warning}")
             for hint in result.get("hints", []):
                 self._queue_home_log(f"Tip: {hint}")
+            kept = result.get("files_kept") or []
+            if kept:
+                self._queue_home_log(f"Kept {len(kept)} customized seed file(s).")
+                for rel in kept:
+                    self._queue_home_log(f"  kept: {rel}")
             self._refresh_home_dashboard()
             return
         count = len(result.get("files_written", []))
         runtime = result.get("cl_runtime", "")
-        self._queue_home_log(
-            f"Agent handoff deployed ({count} file(s)). Mode: {result.get('agent_handoff_mode', 'unified')}"
-            + (f", cl_runtime={runtime}." if runtime else ".")
-        )
+        if result.get("refresh_changed"):
+            updated = result.get("files_written") or []
+            kept = result.get("files_kept") or []
+            unchanged = int(result.get("files_unchanged") or 0)
+            repaired = bool(result.get("repair")) or bool(result.get("rosetta_repair"))
+            if updated:
+                self._queue_home_log(
+                    f"Updated {len(updated)} file(s) that differed from this Hive Planner."
+                )
+                for rel in updated:
+                    self._queue_home_log(f"  updated: {rel}")
+            elif kept and not repaired:
+                self._queue_home_log(
+                    "No Hive-owned files differed. Customized seeds were left in place."
+                )
+            elif kept:
+                self._queue_home_log("Customized seeds were left in place.")
+            elif repaired:
+                self._queue_home_log(
+                    "Copied files already matched. Navigation or AGENTS.md was repaired."
+                )
+            else:
+                self._queue_home_log("Linked project already matches this Hive Planner.")
+            if unchanged:
+                self._queue_home_log(f"Left {unchanged} file(s) unchanged (already the same).")
+            if kept:
+                self._queue_home_log(f"Kept {len(kept)} customized seed file(s).")
+                for rel in kept:
+                    self._queue_home_log(f"  kept: {rel}")
+        else:
+            self._queue_home_log(
+                f"Agent handoff deployed ({count} file(s)). Mode: {result.get('agent_handoff_mode', 'unified')}"
+                + (f", cl_runtime={runtime}." if runtime else ".")
+            )
         repair = result.get("repair")
         if repair:
             self._queue_home_log(f"Repaired AGENTS.md — {repair.get('detail', 'updated')}.")
@@ -7564,6 +8182,9 @@ class HivePlannerApp:
 
 
 def run_app() -> None:
+    from hive_planner.portable_runtime import clear_stale_tk_library_env
+
+    clear_stale_tk_library_env()
     root = tk.Tk()
     HivePlannerApp(root)
     root.mainloop()

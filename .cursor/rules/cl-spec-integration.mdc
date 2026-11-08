@@ -5,13 +5,12 @@ alwaysApply: true
 
 # CL + Spec Kit Integration
 
-**Hook:** `integration.cl_spec`, `spec.flow`, `memory.agents_md`
+**Hook:** `integration.cl_spec`, `spec.flow`, `memory.agents_md`, `integration.wiring_audit`
 
 - `AGENTS.md` stores **operational** facts (commands, paths, conventions), not product behavior.
-- Behavioral changes (APIs, acceptance criteria, requirements) belong in `docs/specs/<feature>/spec.md` first.
-- Do not promote Continual Learning bullets that describe **what the system must do** into `AGENTS.md`.
+- Behavioral changes (APIs, acceptance criteria, requirements) belong in the active `spec.md` first.
+- Do not promote Continual Learning bullets that describe **what the system must do** into durable memory.
 - Before memory promotion, complete the **Integration wiring audit** (`.cursor/rules/integration-wiring-audit.mdc`).
-- Before ending a session with memory updates, run `py -3.11 -m hive_planner spec-drift-check`.
-- If `agents-propose` rejects a candidate as behavioral, update the active spec before retrying.
+- If a propose/ingest step rejects a candidate as behavioral, update the active spec before retrying.
 
-See [docs/cl-spec-integration.md](../docs/cl-spec-integration.md).
+See project `docs/cl-spec-integration.md` or equivalent integration doc when present.

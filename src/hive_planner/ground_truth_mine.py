@@ -141,9 +141,9 @@ A trained network fits a distribution. Read the stones and cartridges the same w
 ## Sources, in this order
 
 1. **Prior (bootstrap, not evidence).** `docs/planning-rosetta-stone.md`, `AGENTS.md`, the active feature named there or in `.hive/project.json`, `docs/delta/20_micro/<feature>.md`, and `docs/specs/<feature>/spec.md`. Use only the slices the question needs.
-2. **Stones (index, not the body).** Search `context-library/sources/imported/` for the note that maps each cartridge file to its own Rosetta Stone. A cut-off at the end of a file is an export boundary.
+2. **Stones (index, not the body).** Search `context-library/sources/imported/` and organized sources under `context-library/sources/github/` for the note that maps each cartridge file to its own Rosetta Stone. A cut-off at the end of a file is an export boundary.
 3. **Cartridges (the conversation).** The file the stone names, at the span the stone names. Do not treat a stage banner as the hook map.
-4. **PDFs (paper distribution).** `context-library/indexes/document-index.json` and the files under `context-library/sources/`. Start with the paper the question is about. Reference repos stay external evidence. They do not raise empirical fidelity by themselves.
+4. **PDFs and staged repositories (paper distribution).** `context-library/indexes/document-index.json` and the files under `context-library/sources/`, including `context-library/sources/github/`. Start with the source the question is about. A staged repository is indexed evidence; it does not raise empirical fidelity by itself.
 
 Repo-specific pins, when this project has them, are appended below. Edit `.hive/ground-truth-on-mine/repo-overlay.md` and refresh with `py -3.11 -m hive_planner ground-truth-on-mine`.
 

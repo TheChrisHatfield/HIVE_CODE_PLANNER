@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import io
 import inspect
 import json
 from pathlib import Path
 from unittest.mock import patch
 import subprocess
 import sys
+import zipfile
 
 import pytest
 
@@ -113,6 +115,7 @@ from hive_planner.launcher.service import (
     run_cartridge_load_sources,
     run_cartridge_translate,
     run_deploy_agent_handoff,
+    run_update_linked_repo,
     cartridge_load_needs_feature,
     cartridge_load_will_promote,
     summarize_project,
@@ -1024,6 +1027,187 @@ def test_run_cartridge_load_sources_copies_ingests_and_emits(tmp_path: Path) -> 
     assert "mark_draft" not in result
 
 
+def test_run_cartridge_load_sources_accepts_github_source_url(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project = _minimal_hive_project(tmp_path / "proj")
+
+    def fake_download(_url: str, destination: Path) -> list[Path]:
+        downloaded = destination / "repository" / "reference-main" / "docs" / "README.md"
+        downloaded.parent.mkdir(parents=True)
+        downloaded.write_text("# GitHub reference\n", encoding="utf-8")
+        return [downloaded]
+
+    monkeypatch.setattr(
+        "hive_planner.launcher.service.download_github_source_files",
+        fake_download,
+    )
+
+    result = run_cartridge_load_sources(
+        project,
+        [],
+        "my-feature",
+        github_url="https://github.com/example/reference",
+    )
+
+    assert result["ok"] is True
+    assert result["copied"] == [
+        "context-library/sources/github/example/reference/docs/README.md"
+    ]
+    assert (
+        project / "context-library" / "sources" / "github" / "example" / "reference" / "docs" / "README.md"
+    ).is_file()
+    document_index = json.loads(
+        (project / "context-library" / "indexes" / "document-index.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert any(
+        document.get("source_path") == "context-library/sources/github/example/reference/docs/README.md"
+        for document in document_index["documents"]
+    )
+
+
+def test_run_cartridge_load_sources_accepts_multiple_github_urls(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project = _minimal_hive_project(tmp_path / "proj")
+
+    def fake_download(url: str, destination: Path) -> list[Path]:
+        repository = url.rsplit("/", 1)[-1]
+        downloaded = destination / "repository" / f"{repository}-main" / "README.md"
+        downloaded.parent.mkdir(parents=True)
+        downloaded.write_text(f"# {repository}\n", encoding="utf-8")
+        return [downloaded]
+
+    monkeypatch.setattr(
+        "hive_planner.launcher.service.download_github_source_files",
+        fake_download,
+    )
+
+    result = run_cartridge_load_sources(
+        project,
+        [],
+        "my-feature",
+        github_urls=[
+            "https://github.com/example/first",
+            "https://github.com/example/second",
+        ],
+    )
+
+    assert result["ok"] is True
+    assert sorted(result["copied"]) == [
+        "context-library/sources/github/example/first/README.md",
+        "context-library/sources/github/example/second/README.md",
+    ]
+
+
+def test_run_cartridge_load_sources_rejects_missing_source_inputs(tmp_path: Path) -> None:
+    project = _minimal_hive_project(tmp_path / "proj")
+
+    result = run_cartridge_load_sources(project, [], "my-feature")
+
+    assert result == {
+        "ok": False,
+        "error": "Choose source files or enter a GitHub repository URL.",
+    }
+
+
+def test_download_github_source_files_extracts_supported_files(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from hive_planner.launcher import service
+
+    archive_buffer = io.BytesIO()
+    with zipfile.ZipFile(archive_buffer, "w") as archive:
+        archive.writestr("reference-main/README.md", "# Reference\n")
+        archive.writestr("reference-main/notes.txt", "notes")
+        archive.writestr("reference-main/.github/workflow.md", "skip")
+    responses = [
+        json.dumps({"default_branch": "main"}).encode("utf-8"),
+        archive_buffer.getvalue(),
+    ]
+
+    class _Response:
+        def __init__(self, payload: bytes) -> None:
+            self.payload = payload
+            self.position = 0
+
+        def __enter__(self) -> "_Response":
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def read(self, _limit: int = -1) -> bytes:
+            if _limit < 0:
+                chunk = self.payload[self.position :]
+                self.position = len(self.payload)
+                return chunk
+            chunk = self.payload[self.position : self.position + _limit]
+            self.position += len(chunk)
+            return chunk
+
+    monkeypatch.setattr(
+        "urllib.request.urlopen",
+        lambda *_args, **_kwargs: _Response(responses.pop(0)),
+    )
+
+    files = service.download_github_source_files(
+        "https://github.com/example/reference",
+        tmp_path / "github",
+    )
+
+    assert {path.name for path in files} == {"README.md", "notes.txt"}
+    assert (tmp_path / "github" / "repository" / "reference-main" / "README.md").is_file()
+
+
+def test_download_github_source_files_rejects_extraction_bomb(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from hive_planner.launcher import service
+
+    archive_buffer = io.BytesIO()
+    with zipfile.ZipFile(archive_buffer, "w") as archive:
+        archive.writestr("reference-main/notes.txt", "1234")
+    responses = [
+        json.dumps({"default_branch": "main"}).encode("utf-8"),
+        archive_buffer.getvalue(),
+    ]
+
+    class _Response:
+        def __init__(self, payload: bytes) -> None:
+            self.payload = payload
+            self.position = 0
+
+        def __enter__(self) -> "_Response":
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def read(self, _limit: int = -1) -> bytes:
+            if _limit < 0:
+                chunk = self.payload[self.position :]
+                self.position = len(self.payload)
+                return chunk
+            chunk = self.payload[self.position : self.position + _limit]
+            self.position += len(chunk)
+            return chunk
+
+    monkeypatch.setattr(
+        "urllib.request.urlopen",
+        lambda *_args, **_kwargs: _Response(responses.pop(0)),
+    )
+    monkeypatch.setattr(service, "GITHUB_ARCHIVE_MAX_EXTRACTED_BYTES", 3)
+
+    with pytest.raises(ValueError, match="extraction limit"):
+        service.download_github_source_files(
+            "https://github.com/example/reference",
+            tmp_path / "github",
+        )
+
+
 def test_run_cartridge_load_sources_warns_when_staged_chunks_unembedded(tmp_path: Path) -> None:
     project = _minimal_hive_project(tmp_path / "proj")
     source = tmp_path / "lavd-cpu-research.md"
@@ -1450,6 +1634,51 @@ def _hive_planner_source(tmp_path: Path) -> Path:
     (root / "docs").mkdir(parents=True)
     (root / "docs" / "cl-spec-integration.md").write_text("# CL\n", encoding="utf-8")
     return root
+
+
+def test_update_leaves_customized_example_tasks_and_lists_it_kept(tmp_path: Path) -> None:
+    hive_root = _hive_planner_source(tmp_path)
+    project = _minimal_hive_project(tmp_path / "proj")
+    tasks = project / "docs" / "specs" / "example-feature" / "tasks.md"
+    tasks.parent.mkdir(parents=True)
+    custom = "# Custom tasks\n\nThis project replaced the example.\n"
+    tasks.write_text(custom, encoding="utf-8")
+
+    result = run_update_linked_repo(project, hive_planner_root=hive_root)
+
+    rel = "docs/specs/example-feature/tasks.md"
+    assert tasks.read_text(encoding="utf-8") == custom
+    assert rel not in (result.get("files_written") or [])
+    assert rel in (result.get("files_kept") or [])
+
+
+def test_headless_update_does_not_list_unchanged_project_json(tmp_path: Path) -> None:
+    hive_root = _hive_planner_source(tmp_path)
+    project = _minimal_hive_project(tmp_path / "proj")
+
+    first = run_update_linked_repo(project, hive_planner_root=hive_root, cl_runtime="headless")
+    assert first.get("ok") is True or first.get("error")
+    profile = (project / ".hive" / "project.json").read_bytes()
+
+    second = run_update_linked_repo(project, hive_planner_root=hive_root, cl_runtime="headless")
+
+    assert (project / ".hive" / "project.json").read_bytes() == profile
+    assert ".hive/project.json" not in (second.get("files_written") or [])
+
+
+def test_deploy_still_appends_wiring_audit_when_example_tasks_lack_it(tmp_path: Path) -> None:
+    from hive_planner.cartridge_promote import TASKS_WIRING_AUDIT_HEADING
+
+    hive_root = _hive_planner_source(tmp_path)
+    project = _minimal_hive_project(tmp_path / "proj")
+    tasks = project / "docs" / "specs" / "example-feature" / "tasks.md"
+    tasks.parent.mkdir(parents=True)
+    tasks.write_text("# Custom tasks\n\nNo checklist yet.\n", encoding="utf-8")
+
+    result = run_deploy_agent_handoff(project, hive_planner_root=hive_root, force=False)
+
+    assert TASKS_WIRING_AUDIT_HEADING in tasks.read_text(encoding="utf-8")
+    assert "docs/specs/example-feature/tasks.md" in (result.get("files_written") or [])
 
 
 def test_run_deploy_agent_handoff_ok_when_unified_complete(tmp_path: Path) -> None:
@@ -2104,6 +2333,8 @@ def test_bug_hunt_install_done_logs_chat_trigger() -> None:
         {"ok": True, "files_written": [], "iterations": 50, "pause_seconds": 10}
     )
     assert any("already current" in line for line in lines)
+    assert any("50 committed fixes" in line for line in lines)
+    assert any("10s pause" in line for line in lines)
     assert not any("0 file(s)" in line for line in lines)
 
 
@@ -2139,6 +2370,57 @@ def test_on_bug_hunt_install_sends_workspace_link_to_service(
     assert sent == [workspace]
     assert any("folder" in line.lower() for line in lines)
     assert not any("Bug hunt enabled" in line for line in lines)
+
+
+def test_on_update_linked_repo_sends_active_project_to_update_service(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    project = tmp_path / "linked-project"
+    hive_root = tmp_path / "hive-planner"
+    config = LauncherConfig(
+        active_project=str(project),
+        hive_planner_root=str(hive_root),
+    )
+    sent: dict[str, object] = {}
+    lines: list[str] = []
+
+    monkeypatch.setattr("hive_planner.launcher.app.load_config", lambda: config)
+    monkeypatch.setattr(
+        "hive_planner.launcher.app.resolve_linked_project_root",
+        lambda _path: project,
+    )
+
+    def fake_update(root: Path, *, hive_planner_root: Path) -> dict:
+        sent["project_root"] = root
+        sent["hive_planner_root"] = hive_planner_root
+        return {"ok": True, "refresh_changed": True, "files_written": []}
+
+    monkeypatch.setattr("hive_planner.launcher.app.run_update_linked_repo", fake_update)
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app.config = config
+    app._start_home_action = lambda message: lines.append(str(message))  # type: ignore[method-assign]
+    app._queue_home_log = lambda message: lines.append(str(message))  # type: ignore[method-assign]
+    app._refresh_home_dashboard = lambda **_kwargs: None  # type: ignore[method-assign]
+    app._project_done_callback = lambda _label, on_done: on_done  # type: ignore[method-assign]
+    app._run_bg = lambda work, done: done(work())  # type: ignore[method-assign]
+
+    app._on_update_linked_repo()
+
+    assert sent == {
+        "project_root": project,
+        "hive_planner_root": hive_root.resolve(),
+    }
+    assert any("Comparing the linked project" in line for line in lines)
+
+
+def test_sources_home_action_opens_unified_loader_with_github_support() -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+
+    assert app._home_action_command("load_sources") == app._on_load_cartridge
 
 
 def test_sync_controls_command_choices_without_command_var() -> None:
@@ -2213,6 +2495,7 @@ def test_on_bug_hunt_install_rejects_out_of_range_iterations(monkeypatch: pytest
     assert started == []
     assert shown
     assert "1" in shown[0][1] and "200" in shown[0][1]
+    assert "iterations" not in shown[0][1].lower()
 
 
 def test_controls_iterations_accept_a_whole_decimal(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -2253,6 +2536,7 @@ def test_controls_pause_blank_is_ten_zero_skips_and_garbage_warns(
     app.controls_bug_pause = type("Var", (), {"get": lambda self: "-3"})()
     assert app._controls_bug_hunt_pause() is None
     assert shown and "Pause seconds" in shown[0][0]
+    assert "0 or greater" in shown[0][1]
 
 
 def test_on_bug_hunt_install_warns_when_no_project(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -2403,10 +2687,102 @@ def test_deploy_handoff_done_logs_partial_work_when_validation_fails() -> None:
 
     joined = "\n".join(app._pending_home_log)
     assert "Partial deploy" in joined
+    assert "Partial update" not in joined
     assert "missing: docs/cl-spec-integration.md" in joined
     assert "template warning" in joined
     assert "Rosetta navigation" in joined
     assert "Agent handoff deployed" not in joined
+
+
+def test_deploy_handoff_done_logs_partial_update_when_refresh_fails() -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app._pending_home_log = []
+    app._refresh_home_dashboard = lambda **_k: None  # type: ignore[method-assign]
+
+    app._deploy_handoff_done(
+        {
+            "ok": False,
+            "refresh_changed": True,
+            "error": "Unified handoff incomplete",
+            "files_written": ["docs/cl-spec-integration.md"],
+            "files_kept": ["docs/specs/example-feature/tasks.md"],
+        }
+    )
+
+    joined = "\n".join(app._pending_home_log)
+    assert "Partial update" in joined
+    assert "Partial deploy" not in joined
+    assert "Kept 1 customized seed file(s)." in joined
+    assert "kept: docs/specs/example-feature/tasks.md" in joined
+
+
+def test_deploy_handoff_done_does_not_call_kept_files_a_match() -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app._pending_home_log = []
+    app._refresh_home_dashboard = lambda **_k: None  # type: ignore[method-assign]
+
+    app._deploy_handoff_done(
+        {
+            "ok": True,
+            "refresh_changed": True,
+            "files_written": [],
+            "files_kept": ["docs/specs/example-feature/tasks.md"],
+            "files_unchanged": 3,
+        }
+    )
+
+    joined = "\n".join(app._pending_home_log)
+    assert "already matches" not in joined
+    assert "No Hive-owned files differed. Customized seeds were left in place." in joined
+    assert "kept: docs/specs/example-feature/tasks.md" in joined
+    assert "Left 3 file(s) unchanged" in joined
+
+
+def test_deploy_handoff_done_does_not_call_repaired_files_a_match() -> None:
+    from hive_planner.launcher.app import HivePlannerApp
+
+    app = HivePlannerApp.__new__(HivePlannerApp)
+    app._pending_home_log = []
+    app._refresh_home_dashboard = lambda **_k: None  # type: ignore[method-assign]
+
+    app._deploy_handoff_done(
+        {
+            "ok": True,
+            "refresh_changed": True,
+            "files_written": [],
+            "files_kept": [],
+            "files_unchanged": 2,
+            "rosetta_repair": {
+                "detail": "patched navigation in 1 handoff file(s)",
+                "patched": ["docs/delta/00_holistic.md"],
+            },
+        }
+    )
+
+    joined = "\n".join(app._pending_home_log)
+    assert "already matches" not in joined
+    assert "Navigation or AGENTS.md was repaired." in joined
+    assert "patched: docs/delta/00_holistic.md" in joined
+
+    app._pending_home_log.clear()
+    app._deploy_handoff_done(
+        {
+            "ok": True,
+            "refresh_changed": True,
+            "files_written": [],
+            "rosetta_repair": {
+                "detail": "added Planning Rosetta Stone section to AGENTS.md",
+                "patched": [],
+            },
+        }
+    )
+    joined = "\n".join(app._pending_home_log)
+    assert "already matches" not in joined
+    assert "Navigation or AGENTS.md was repaired." in joined
 
 
 def test_create_done_repairs_agents_after_success(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -2660,20 +3036,14 @@ def test_run_deploy_agent_handoff_includes_vendor_hints_when_incomplete(
     assert any("Verify vendor pins" in hint for hint in result["hints"])
 
 
-def test_load_user_guide_falls_back_when_readme_not_utf8(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from hive_planner.launcher import user_guide as user_guide_mod
+def test_load_user_guide_falls_back_when_readme_not_utf8(tmp_path: Path) -> None:
     from hive_planner.launcher.user_guide import load_user_guide
 
     hive = tmp_path / "hive"
     scripts = hive / "scripts"
     scripts.mkdir(parents=True)
-    (scripts / "README.md").write_bytes(b"\xff\xfe")
+    (scripts / "README.md").write_bytes(b"\xff")
     cfg = LauncherConfig(hive_planner_root=str(hive))
-
-    def _raise_unicode(_self: Path, *_args, **_kwargs) -> str:
-        raise UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid start byte")
-
-    monkeypatch.setattr(user_guide_mod.Path, "read_text", _raise_unicode)
 
     text = load_user_guide(cfg)
 
@@ -2692,10 +3062,10 @@ def test_load_user_guide_falls_back_when_readme_unreadable(tmp_path: Path, monke
     guide.write_text("# unreadable\n", encoding="utf-8")
     cfg = LauncherConfig(hive_planner_root=str(hive))
 
-    def _raise_oserror(_self: Path, *_args, **_kwargs) -> str:
+    def _raise_oserror(_self: Path, *_args, **_kwargs) -> bytes:
         raise OSError("permission denied")
 
-    monkeypatch.setattr(user_guide_mod.Path, "read_text", _raise_oserror)
+    monkeypatch.setattr(user_guide_mod.Path, "read_bytes", _raise_oserror)
 
     text = load_user_guide(cfg)
 
@@ -2853,8 +3223,12 @@ def test_bug_hunt_prompt_template_keeps_the_loop_moving() -> None:
     assert found is not None
     assert found.prompt.lstrip().startswith("bug hunt")
     assert "Do not ask whether to continue" in found.prompt
+    assert "After the outcome row" not in found.prompt
+    assert "stop hook appends the rank row" in found.prompt
     assert "The stop hook waits the script's pause" in found.prompt
     assert "Enter 0 to skip the wait" in found.prompt
+    assert "The Pause seconds box starts at 10" in found.prompt
+    assert "Leave Pause seconds blank" not in found.prompt
     assert "@.cursor/commands/bug-hunt.md" in found.prompt
     assert "Pause seconds live on a Controls block" in found.prompt
 
@@ -2868,11 +3242,24 @@ def test_format_loop_gate_includes_dirty_paths() -> None:
             "ok": False,
             "error": "unrelated dirty paths block start",
             "dirty": ["notes.txt", "scratch.py"],
+            "feature_scope": ["src/bug_hunt.py"],
+            "related_dirty": ["src/bug_hunt.py"],
+            "unrelated_dirty": ["notes.txt", "scratch.py"],
+            "dirty_confidence": 0.25,
+            "dirty_confidence_tier": "low",
+            "dirty_confidence_reasons": ["human approval is required"],
+            "dirty_auto_start": False,
         }
     )
     assert "ok=False" in text
     assert "notes.txt" in text
     assert "scratch.py" in text
+    assert "feature_scope=src/bug_hunt.py" in text
+    assert "related_dirty=src/bug_hunt.py" in text
+    assert "unrelated_dirty=notes.txt, scratch.py" in text
+    assert "dirty_confidence=0.25" in text
+    assert "dirty_confidence_tier=low" in text
+    assert "dirty_auto_start=False" in text
     assert "unrelated dirty" in text
 
 
@@ -4942,10 +5329,12 @@ def test_bind_mousewheel_scrolls_on_enter_and_unbinds_on_destroy() -> None:
     handlers["<Enter>"](None)
     assert _dispatch_wheel(type("E", (), {"delta": 120})()) == "break"
     assert scrolled == [-1]
-    assert _dispatch_wheel(type("E", (), {"delta": 0})()) is None
+    # A zero or partial notch still belongs to this target. Returning None
+    # lets the bind-all handler apply the same delta a second time.
+    assert _dispatch_wheel(type("E", (), {"delta": 0})()) == "break"
     assert scrolled == [-1]
-    assert _dispatch_wheel(type("E", (), {"delta": 40})()) is None
-    assert _dispatch_wheel(type("E", (), {"delta": 40})()) is None
+    assert _dispatch_wheel(type("E", (), {"delta": 40})()) == "break"
+    assert _dispatch_wheel(type("E", (), {"delta": 40})()) == "break"
     assert _dispatch_wheel(type("E", (), {"delta": 40})()) == "break"
     assert scrolled == [-1, -1]
 
@@ -6683,6 +7072,123 @@ def test_console_available_on_windows_only() -> None:
     from hive_planner.launcher import console_win
 
     assert console_win.console_available() == (sys.platform == "win32")
+
+
+def _steady_hitch_clock(step_s: float):
+    """A hitch clock that advances a fixed amount on every read."""
+    state = {"t": 0.0}
+
+    def clock() -> float:
+        state["t"] += step_s
+        return state["t"]
+
+    return clock
+
+
+def test_scrollable_canvas_applies_on_the_scheduler_tick(monkeypatch) -> None:
+    import tkinter as tk
+
+    from hive_planner.launcher.app import HivePlannerApp
+
+    original = HivePlannerApp._run_resize_chunk
+    held: dict = {}
+
+    def hold(self) -> None:
+        held["app"] = self
+
+    monkeypatch.setattr(HivePlannerApp, "_run_resize_chunk", hold)
+    root = tk.Tk()
+    try:
+        root.attributes("-alpha", 0)
+    except tk.TclError:
+        root.withdraw()
+    root.geometry("200x160")
+    try:
+        app = HivePlannerApp.__new__(HivePlannerApp)
+        app._resize_hitch_clock = _steady_hitch_clock(0.001)
+        parent = tk.Frame(root)
+        parent.pack(fill="both", expand=True)
+        inner, canvas = app._scrollable_tab(parent)
+        window_id = canvas.find_all()[0]
+        root.update()
+        root.geometry("480x160")
+        root.update()
+        assert int(canvas.itemcget(window_id, "width") or 0) != canvas.winfo_width()
+        assert held["app"] is app
+        assert app._resize_scheduler.deadline("canvas_redraw") is not None
+        original(app)
+        assert int(canvas.itemcget(window_id, "width")) == canvas.winfo_width()
+        assert canvas.winfo_width() >= 400
+        assert app._resize_scheduler.posterior("canvas_redraw") == (2.0, 1.0)
+        assert inner.winfo_exists()
+    finally:
+        root.destroy()
+
+
+def test_slow_canvas_hitch_counts_as_a_miss(monkeypatch) -> None:
+    import tkinter as tk
+
+    from hive_planner.launcher.app import HivePlannerApp
+
+    original = HivePlannerApp._run_resize_chunk
+
+    def hold(self) -> None:
+        return None
+
+    monkeypatch.setattr(HivePlannerApp, "_run_resize_chunk", hold)
+    root = tk.Tk()
+    try:
+        root.attributes("-alpha", 0)
+    except tk.TclError:
+        root.withdraw()
+    root.geometry("200x160")
+    try:
+        app = HivePlannerApp.__new__(HivePlannerApp)
+        app._resize_hitch_clock = _steady_hitch_clock(0.020)
+        parent = tk.Frame(root)
+        parent.pack(fill="both", expand=True)
+        _inner, canvas = app._scrollable_tab(parent)
+        window_id = canvas.find_all()[0]
+        root.update()
+        root.geometry("480x160")
+        root.update()
+        original(app)
+        assert int(canvas.itemcget(window_id, "width")) == canvas.winfo_width()
+        assert app._resize_scheduler.posterior("canvas_redraw") == (1.0, 2.0)
+    finally:
+        root.destroy()
+
+
+def test_flush_scroll_layout_applies_the_paused_width(monkeypatch) -> None:
+    import tkinter as tk
+
+    from hive_planner.launcher.app import HivePlannerApp
+
+    def hold(self) -> None:
+        return None
+
+    monkeypatch.setattr(HivePlannerApp, "_run_resize_chunk", hold)
+    root = tk.Tk()
+    try:
+        root.attributes("-alpha", 0)
+    except tk.TclError:
+        root.withdraw()
+    root.geometry("200x160")
+    try:
+        app = HivePlannerApp.__new__(HivePlannerApp)
+        parent = tk.Frame(root)
+        parent.pack(fill="both", expand=True)
+        _inner, canvas = app._scrollable_tab(parent)
+        window_id = canvas.find_all()[0]
+        root.update()
+        root.geometry("480x160")
+        root.update()
+        assert int(canvas.itemcget(window_id, "width") or 0) != canvas.winfo_width()
+        canvas._hive_flush_scroll_layout()
+        assert int(canvas.itemcget(window_id, "width")) == canvas.winfo_width()
+        assert canvas.winfo_width() >= 400
+    finally:
+        root.destroy()
 
 
 def test_attach_hover_tooltip_binds_widget_events() -> None:

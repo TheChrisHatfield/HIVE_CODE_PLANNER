@@ -143,7 +143,7 @@ The button calls one interface: resolve a display name inside the active repo, d
 
 Start and feature switch go through the implementation loop's file-overlap gate ([implementation-loop R11](../implementation-loop/spec.md)). The paths this feature declares are the File targets table in [plan.md](./plan.md). A shared path with the feature already in the loop blocks start until Controls **Allow overlap** is checked. Force feature and Allow dirty start do not clear that block.
 
-Those declared paths do not intersect lavd-resize-scheduler's paths (`src/hive_planner/lavd_resize.py`, `tests/test_lavd_resize.py`). This gate would not have stopped the switch off that blocked loop. The blocked status and the dirty tree remain separate gates.
+Those declared paths share `src/hive_planner/launcher/app.py` with lavd-resize-scheduler. A switch between these two features stops on that file until overlap is allowed. The blocked status and the dirty tree remain separate gates.
 
 ## Decisions that close the earlier holes
 

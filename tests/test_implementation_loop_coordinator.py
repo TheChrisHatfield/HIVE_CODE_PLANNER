@@ -22,7 +22,9 @@ from hive_planner.implementation_loop import (
     _open_or_reuse_pull_request,
     _retrospective_due,
     _check_off_task,
+    _is_repo_root_agents_md,
     _last_outcome,
+    _plan_file_targets,
     _push_enabled,
     _gh,
     _git as loop_git,
@@ -35,6 +37,7 @@ from hive_planner.implementation_loop import (
     codespec_step_states,
     coordinator_handoff,
     coordinator_start,
+    diagnose_checker_blocker,
     install_implementation_loop,
     parse_result_entries,
     render_cursor_command,
@@ -138,17 +141,129 @@ def test_start_rejects_invalid_feature_id(loop_root: Path) -> None:
         coordinator_start(loop_root, "../secret")
 
 
-def test_start_blocks_unrelated_dirty(loop_root: Path) -> None:
+def test_start_auto_allows_unrelated_dirty_after_preflight(loop_root: Path) -> None:
     _install_ready(loop_root)
-    (loop_root / "notes.txt").write_text("dirt\n", encoding="utf-8")
-    with pytest.raises(CoordinatorError, match="unrelated dirty") as exc:
+    (loop_root / "scratch.py").write_text("dirt\n", encoding="utf-8")
+    started = coordinator_start(loop_root, "feature-x")
+    assert started.dirty_confidence == 0.85
+    assert started.dirty_confidence_tier == "medium"
+    assert started.dirty_auto_start is True
+    assert started.unrelated_dirty == ["scratch.py"]
+    assert "test:quick preflight passed" in started.dirty_confidence_reasons
+
+
+def test_start_blocks_unrelated_dirty_after_failed_preflight(loop_root: Path) -> None:
+    _install_ready(loop_root)
+    (loop_root / "scratch.py").write_text("dirt\n", encoding="utf-8")
+    commands_path = loop_root / ".hive/implementation-loop/commands.json"
+    commands = json.loads(commands_path.read_text(encoding="utf-8"))
+    commands["test:quick"] = "cmd /c exit 3"
+    commands_path.write_text(json.dumps(commands), encoding="utf-8")
+    with pytest.raises(CoordinatorError, match="low-confidence dirty") as exc:
         coordinator_start(loop_root, "feature-x")
-    assert "notes.txt" in exc.value.fields.get("dirty", [])
+    assert exc.value.fields["dirty_confidence"] == 0.25
+    assert exc.value.fields["dirty_confidence_tier"] == "low"
+    assert exc.value.fields["dirty_auto_start"] is False
+    assert "test:quick preflight failed or was unavailable" in exc.value.fields["dirty_confidence_reasons"]
+
+
+def test_start_auto_allows_documentation_only_dirty(loop_root: Path) -> None:
+    _install_ready(loop_root)
+    (loop_root / "notes.md").write_text("documentation\n", encoding="utf-8")
+
+    started = coordinator_start(loop_root, "feature-x")
+
+    assert started.ok is True
+    assert started.dirty_confidence == 0.85
+    assert started.dirty_confidence_tier == "medium"
+    assert started.dirty_auto_start is True
+    assert started.unrelated_dirty == ["notes.md"]
+
+
+def test_plan_file_targets_splits_multiple_backtick_paths(loop_root: Path) -> None:
+    plan = loop_root / "docs" / "specs" / "feature-x" / "plan.md"
+    plan.write_text(
+        "# plan\n\n## File targets\n\n"
+        "| File | Change |\n|------|--------|\n"
+        "| `src/one.py`, `src/two.py`, and `.cursor/hooks.json` | runtime |\n",
+        encoding="utf-8",
+    )
+
+    assert _plan_file_targets(loop_root, "feature-x") == [
+        "src/one.py",
+        "src/two.py",
+        ".cursor/hooks.json",
+    ]
+
+
+def test_start_auto_allows_unrelated_agent_configuration_after_preflight(loop_root: Path) -> None:
+    _install_ready(loop_root)
+    (loop_root / ".cursor" / "commands").mkdir(parents=True, exist_ok=True)
+    (loop_root / ".cursor" / "commands" / "changed.md").write_text(
+        "agent instructions\n", encoding="utf-8"
+    )
+
+    started = coordinator_start(loop_root, "feature-x")
+
+    assert started.dirty_confidence_tier == "medium"
+    assert started.dirty_auto_start is True
+    assert ".cursor/commands/changed.md" in started.unrelated_dirty
+
+
+def test_start_still_blocks_secret_dirty_path(loop_root: Path) -> None:
+    _install_ready(loop_root)
+    (loop_root / ".env").write_text("TOKEN=redacted\n", encoding="utf-8")
+
+    with pytest.raises(CoordinatorError, match="low-confidence dirty") as exc:
+        coordinator_start(loop_root, "feature-x")
+
+    assert exc.value.fields["dirty_confidence_tier"] == "low"
+    assert ".env" in exc.value.fields["unrelated_dirty"]
+
+
+def test_start_still_blocks_destructive_configuration_dirty_path(loop_root: Path) -> None:
+    _install_ready(loop_root)
+    (loop_root / "production.yml").write_text("delete: false\n", encoding="utf-8")
+
+    with pytest.raises(CoordinatorError, match="low-confidence dirty"):
+        coordinator_start(loop_root, "feature-x")
+
+
+def test_start_keeps_root_agents_case_insensitive_hard_risk(loop_root: Path) -> None:
+    _install_ready(loop_root)
+    agents = loop_root / "AGENTS.md"
+    agents.write_text(agents.read_text(encoding="utf-8") + "\nchange\n", encoding="utf-8")
+
+    with pytest.raises(CoordinatorError, match="low-confidence dirty") as exc:
+        coordinator_start(loop_root, "feature-x")
+
+    assert exc.value.fields["dirty_confidence_tier"] == "low"
+    assert "agents.md" in [path.casefold() for path in exc.value.fields["unrelated_dirty"]]
+
+
+def test_start_allows_dirty_declared_feature_target(loop_root: Path) -> None:
+    _install_ready(loop_root)
+    (loop_root / "docs/specs/feature-x/plan.md").write_text(
+        "# plan\n\n## File targets\n\n| File | Change |\n|------|--------|\n"
+        "| `src/ok.py` | implement |\n",
+        encoding="utf-8",
+    )
+    (loop_root / "src").mkdir()
+    (loop_root / "src/ok.py").write_text("already edited\n", encoding="utf-8")
+
+    started = coordinator_start(loop_root, "feature-x")
+
+    assert started.ok is True
+    state = json.loads((loop_root / ".hive/implementation-loop/state.json").read_text(encoding="utf-8"))
+    assert "src/ok.py" in state["baseline_dirty"]
+    assert "src/ok.py" in started.related_dirty
+    assert "src/ok.py" in started.feature_scope
+    assert started.unrelated_dirty == []
 
 
 def test_start_allow_dirty_and_handoff_cap(loop_root: Path) -> None:
     _install_ready(loop_root)
-    (loop_root / "notes.txt").write_text("dirt\n", encoding="utf-8")
+    (loop_root / "scratch.py").write_text("dirt\n", encoding="utf-8")
     started = coordinator_start(loop_root, "feature-x", allow_dirty=True)
     assert started.ok is True
     assert started.task == "T001"
@@ -161,6 +276,90 @@ def test_start_allow_dirty_and_handoff_cap(loop_root: Path) -> None:
         coordinator_handoff(loop_root, "coder")
     again = coordinator_handoff(loop_root, "coder", continue_after_cap=True)
     assert again.round_trips == 11
+
+
+def _ready_feature(root: Path, feature: str, plan: str, task: str = "T001 other work") -> None:
+    from hive_planner.spec_drift import SPEC_CREATION_SPEC_TAIL, SPEC_CREATION_TASKS_TAIL
+
+    spec = root / "docs" / "specs" / feature
+    spec.mkdir(parents=True, exist_ok=True)
+    (spec / "spec.md").write_text("# spec\n" + SPEC_CREATION_SPEC_TAIL, encoding="utf-8")
+    (spec / "plan.md").write_text(plan, encoding="utf-8")
+    (spec / "tasks.md").write_text(
+        f"# tasks\n\n## Slice\n\n- [ ] {task}\n" + SPEC_CREATION_TASKS_TAIL,
+        encoding="utf-8",
+    )
+    (root / "docs" / "delta" / "20_micro" / f"{feature}.md").write_text("# micro\n", encoding="utf-8")
+    (root / "AGENTS.md").write_text(f"# AGENTS\n\n## Active feature\n\n**{feature}**\n", encoding="utf-8")
+
+
+def test_start_blocks_declared_file_overlap(loop_root: Path) -> None:
+    _install_ready(loop_root)
+    (loop_root / "docs/specs/feature-x/plan.md").write_text(
+        "# plan\n\n## File targets\n\n| File | Change |\n|------|--------|\n| `src/shared.py` | both |\n",
+        encoding="utf-8",
+    )
+    coordinator_start(loop_root, "feature-x", allow_dirty=True)
+    before = (loop_root / ".hive/implementation-loop/state.json").read_text(encoding="utf-8")
+    _ready_feature(
+        loop_root,
+        "feature-y",
+        "# plan\n\n## File targets\n\n| File | Change |\n|------|--------|\n| src/shared.py | same |\n| `.hive/skip.json` | ignored |\n",
+    )
+    with pytest.raises(CoordinatorError, match="declared file overlap") as exc:
+        coordinator_start(loop_root, "feature-y", allow_dirty=True, force_feature=True)
+    assert exc.value.fields.get("overlap") == ["src/shared.py"]
+    assert "dirty" not in exc.value.fields
+    assert (loop_root / ".hive/implementation-loop/state.json").read_text(encoding="utf-8") == before
+
+    started = coordinator_start(
+        loop_root,
+        "feature-y",
+        allow_dirty=True,
+        force_feature=True,
+        allow_overlap=True,
+    )
+    assert started.ok is True
+    assert started.feature == "feature-y"
+
+
+def test_start_blocks_overlap_when_plan_is_utf16_le_without_bom(loop_root: Path) -> None:
+    _install_ready(loop_root)
+    (loop_root / "docs/specs/feature-x/plan.md").write_text(
+        "# plan\n\n## File targets\n\n| File | Change |\n|------|--------|\n| `src/shared.py` | both |\n",
+        encoding="utf-8",
+    )
+    coordinator_start(loop_root, "feature-x", allow_dirty=True)
+    _ready_feature(
+        loop_root,
+        "feature-y",
+        "# plan\n\n## File targets\n\n| File | Change |\n|------|--------|\n| src/shared.py | same |\n",
+    )
+    plan = loop_root / "docs/specs/feature-y/plan.md"
+    plan.write_bytes(plan.read_bytes().decode("utf-8").encode("utf-16-le"))
+    with pytest.raises(CoordinatorError, match="declared file overlap"):
+        coordinator_start(loop_root, "feature-y", allow_dirty=True, force_feature=True)
+
+
+def test_start_overlap_directory_prefix_and_hive_ignored(loop_root: Path) -> None:
+    _install_ready(loop_root)
+    (loop_root / "docs/specs/feature-x/plan.md").write_text(
+        "# plan\n\n## File targets\n\n| File | Change |\n|------|--------|\n| `src/pkg/` | tree |\n| `.hive/state.json` | skip |\n",
+        encoding="utf-8",
+    )
+    coordinator_start(loop_root, "feature-x", allow_dirty=True)
+    _ready_feature(
+        loop_root,
+        "feature-y",
+        "# plan\n\n## File targets\n\n| File | Change |\n|------|--------|\n| `Src/Pkg/Mod.py` | child |\n| `.hive/state.json` | skip |\n",
+    )
+    if sys.platform == "win32":
+        with pytest.raises(CoordinatorError, match="declared file overlap") as exc:
+            coordinator_start(loop_root, "feature-y", force_feature=True, allow_dirty=True)
+        assert exc.value.fields.get("overlap") == ["Src/Pkg/Mod.py"]
+    else:
+        started = coordinator_start(loop_root, "feature-y", force_feature=True, allow_dirty=True)
+        assert started.ok is True
 
 
 def test_start_force_feature_resets_result_when_task_id_matches(loop_root: Path) -> None:
@@ -220,6 +419,43 @@ def test_commit_refuses_when_current_task_already_checked(loop_root: Path) -> No
     with pytest.raises(CoordinatorError, match="not an open checkbox"):
         coordinator_commit(loop_root)
     assert "- [ ] T002 later" in tasks.read_text(encoding="utf-8")
+
+
+def test_is_repo_root_agents_md_ignores_nested_copies() -> None:
+    assert _is_repo_root_agents_md("AGENTS.md") is True
+    assert _is_repo_root_agents_md("./AGENTS.md") is True
+    assert _is_repo_root_agents_md(".cursor/plugins/hive-continual-learning/AGENTS.md") is False
+    assert _is_repo_root_agents_md("docs/AGENTS.md") is False
+    assert _is_repo_root_agents_md("AGENTS.md.bak") is False
+
+
+def test_commit_blocks_dirty_root_agents_md(loop_root: Path) -> None:
+    _install_ready(loop_root)
+    coordinator_start(loop_root, "feature-x")
+    (loop_root / "src").mkdir()
+    (loop_root / "src" / "ok.py").write_text("x = 1\n", encoding="utf-8")
+    _pass_roles_to_reviewer(loop_root)
+    _write_result(loop_root, "T001", "reviewer", "pass")
+    coordinator_accept(loop_root, "reviewer")
+    agents = loop_root / "AGENTS.md"
+    agents.write_text(agents.read_text(encoding="utf-8") + "\n- extra\n", encoding="utf-8")
+    with pytest.raises(CoordinatorError, match="AGENTS.md is dirty"):
+        coordinator_commit(loop_root)
+
+
+def test_commit_allows_nested_plugin_agents_md(loop_root: Path) -> None:
+    _install_ready(loop_root)
+    coordinator_start(loop_root, "feature-x")
+    (loop_root / "src").mkdir()
+    (loop_root / "src" / "ok.py").write_text("x = 1\n", encoding="utf-8")
+    _pass_roles_to_reviewer(loop_root)
+    _write_result(loop_root, "T001", "reviewer", "pass")
+    coordinator_accept(loop_root, "reviewer")
+    nested = loop_root / ".cursor" / "plugins" / "hive-continual-learning" / "AGENTS.md"
+    nested.parent.mkdir(parents=True)
+    nested.write_text("# plugin notes\n", encoding="utf-8")
+    report = coordinator_commit(loop_root)
+    assert report.ok is True
 
 
 def test_commit_checks_off_current_task_not_first_open(loop_root: Path) -> None:
@@ -1002,6 +1238,113 @@ def test_check_appends_fail_when_build_exits_nonzero(loop_root: Path) -> None:
         (loop_root / ".hive/implementation-loop/result.md").read_text(encoding="utf-8")
     )
     assert _last_outcome(entries, "T001", "checker") == "fail"
+
+
+def test_checker_diagnoses_repairable_blocker_and_handoff_carries_it(
+    loop_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _install_ready(loop_root)
+    monkeypatch.setattr("hive_planner.implementation_loop.time.sleep", lambda _seconds: None)
+    monkeypatch.setattr(
+        "hive_planner.implementation_loop._run_named_command",
+        lambda _root, key: subprocess.CompletedProcess(
+            [key], 1, stdout="", stderr="TypeError: got an unexpected keyword argument"
+        ),
+    )
+    coordinator_start(loop_root, "feature-x")
+    coordinator_handoff(loop_root, "coder")
+    _write_result(loop_root, "T001", "coder", "pass")
+    coordinator_accept(loop_root, "coder")
+
+    report = coordinator_check(loop_root)
+    assert report.ok is False
+    assert report.blocker["class"] == "interface-mismatch"
+    assert report.blocker["repairable"] is True
+    blocker_path = loop_root / ".hive/implementation-loop/blocker.json"
+    assert json.loads(blocker_path.read_text(encoding="utf-8"))["attempt"] == 1
+
+    coordinator_accept(loop_root, "checker")
+    handoff = coordinator_handoff(loop_root, "coder")
+    assert handoff.ok is True
+    handoff_text = (loop_root / ".hive/implementation-loop/handoff.md").read_text(encoding="utf-8")
+    assert "blocker_class: interface-mismatch" in handoff_text
+    assert "blocker_pause_seconds: 9" in handoff_text
+
+
+def test_checker_diagnosis_fails_closed_for_unknown_errors() -> None:
+    diagnosis = diagnose_checker_blocker("AssertionError: product behavior differs")
+    assert diagnosis["repairable"] is False
+    assert diagnosis["class"] == "unrecognized-checker-failure"
+
+
+def test_blocker_evidence_redacts_credentials() -> None:
+    from hive_planner.implementation_loop import _redact_blocker_evidence
+
+    safe = _redact_blocker_evidence("Authorization: Bearer abc123 token=xyz password: secret")
+    assert "abc123" not in safe
+    assert "xyz" not in safe
+    assert "secret" not in safe
+    assert "<redacted>" in safe
+
+
+def test_one_pack_repair_returns_to_coordinator(loop_root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _install_ready(loop_root, PACK_1)
+    monkeypatch.setattr("hive_planner.implementation_loop.time.sleep", lambda _seconds: None)
+    monkeypatch.setattr(
+        "hive_planner.implementation_loop._run_named_command",
+        lambda _root, key: subprocess.CompletedProcess(
+            [key], 1, stdout="", stderr="TypeError: got an unexpected keyword argument"
+        ),
+    )
+    coordinator_start(loop_root, "feature-x")
+    report = coordinator_check(loop_root)
+    assert report.ok is False
+    assert report.next_role == "coordinator"
+    coordinator_accept(loop_root, "checker")
+    handoff = coordinator_handoff(loop_root, "coordinator")
+    assert handoff.ok is True
+    assert "blocker_class: interface-mismatch" in (
+        loop_root / ".hive/implementation-loop/handoff.md"
+    ).read_text(encoding="utf-8")
+
+
+def test_stale_blocker_is_not_attached_to_new_task(loop_root: Path) -> None:
+    _install_ready(loop_root, PACK_1)
+    coordinator_start(loop_root, "feature-x")
+    blocker_path = loop_root / ".hive/implementation-loop/blocker.json"
+    blocker_path.write_text(
+        json.dumps({"feature": "other", "task": "T999", "repairable": True}),
+        encoding="utf-8",
+    )
+    handoff = coordinator_handoff(loop_root, "coordinator")
+    assert handoff.ok is True
+    assert "blocker_class:" not in (
+        loop_root / ".hive/implementation-loop/handoff.md"
+    ).read_text(encoding="utf-8")
+
+
+def test_malformed_blocker_pause_is_bounded(
+    loop_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _install_ready(loop_root, PACK_1)
+    pauses: list[int] = []
+    monkeypatch.setattr("hive_planner.implementation_loop.time.sleep", pauses.append)
+    coordinator_start(loop_root, "feature-x")
+    (loop_root / ".hive/implementation-loop/blocker.json").write_text(
+        json.dumps(
+            {
+                "feature": "feature-x",
+                "task": "T001",
+                "repairable": True,
+                "attempt": 1,
+                "max_attempts": 4,
+                "pause_seconds": 10**100,
+            }
+        ),
+        encoding="utf-8",
+    )
+    coordinator_handoff(loop_root, "coordinator")
+    assert pauses == [9]
 
 
 def test_check_appends_fail_when_build_command_missing(loop_root: Path) -> None:

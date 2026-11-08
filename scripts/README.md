@@ -84,7 +84,7 @@ Buttons sit in titled groups. **Arrange groups** (or **Settings → Arrange Home
 | **Open in Cursor** | Opens the active project in Cursor. |
 | **Sync impact maps** | Refreshes the files that list which source files and tests a planning change touches. |
 | **Deploy agent handoff** | Copies Spec Kit and Continual Learning into the project (`.hive/spec-kit/`, `.cursor/plugins/hive-continual-learning/`, `.hive/upstream-pins.json`). Refreshes overlays only when the patch rev changes. |
-| **Update** | After you update Hive Planner, compares the linked project to this Hive Planner and recopies only planning tools that differ. Matching files and your customized project files stay in place. |
+| **Update** | After you update Hive Planner, compares the linked project to this Hive Planner and recopies Hive-owned files that differ. Matching files stay. Customized seeds that stay are the example spec, example plan, example tasks, example micro file, and the candidates template. |
 | **Load cartridge…** | Add reference docs, turn a research note into a draft cartridge, or import a cartridge folder. |
 | **Load Sources…** | Copy `.txt` and `.pdf` files into the project so agents can search them. Image-only PDFs are read with Tesseract when it is installed. |
 | **Open in Explorer** | Opens the project folder in File Explorer. |
@@ -114,7 +114,7 @@ Controls runs on the active project. Each block is one loop.
 | Loop | What it is for | Commands | Fields on that block |
 |------|----------------|----------|----------------------|
 | **Bug hunt** | Finds and fixes bugs in the project, then commits locally. Saying **bug hunt** in Cursor chat starts it after Enable. | Enable, Check install | Fix ceiling (1–200 committed fixes; default 50). Pause seconds (blank is 10; 0 skips the wait). The stop hook waits, then starts the next pass |
-| **CodeSpec** | Codes the open tasks in a finished spec, one task at a time. It does not write the spec. | Enable, Check pack, Status, Start, Handoff, Check, Accept, Commit | Pack, feature id, allow dirty start, force feature, continue after cap. A step list shows the pack order and where it stopped. |
+| **CodeSpec** | Codes the open tasks in a finished spec, one task at a time. It does not write the spec. | Enable, Check pack, Status, Start, Handoff, Check, Accept, Commit | Pack, feature id (blank uses the first `AGENTS.md` **Active feature**, currently **bug-hunt**), allow dirty start, force feature, continue after cap. A step list shows the pack order and where it stopped. |
 | **Agnostic loop** | Picks the next small slice of work and pauses for a review. This is not a bug hunt and it does not code a spec. | Enable, Check install, Rewards, Status, Arm, Begin, Review, Observe hit, Observe miss, Choose | Reward, cycles, review note, open counts, sims, horizon, seed, arm after choose |
 
 The result for that block shows on the block. Home **Output** gets a copy.

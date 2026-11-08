@@ -64,12 +64,22 @@ def _copy_cl_spec_integration_doc(
     force: bool,
     written: list[str],
     warnings: list[str],
+    refresh_changed: bool = False,
+    refresh_stats: dict | None = None,
 ) -> None:
     source = _cl_spec_integration_doc_path(source_paths.root)
     if source is None:
         warnings.append("Missing docs/cl-spec-integration.md — not copied")
         return
-    _copy_file(source, target, "docs/cl-spec-integration.md", force=force, written=written)
+    _copy_file(
+        source,
+        target,
+        "docs/cl-spec-integration.md",
+        force=force,
+        written=written,
+        refresh_changed=refresh_changed,
+        refresh_stats=refresh_stats,
+    )
     if not (target / "docs" / "cl-spec-integration.md").is_file():
         warnings.append("Missing docs/cl-spec-integration.md — not copied")
 
@@ -111,10 +121,20 @@ def _copy_bootstrap_rules(
     warnings: list[str],
     spec_kit: bool,
     continual_learning: bool,
+    refresh_changed: bool = False,
+    refresh_stats: dict | None = None,
 ) -> None:
     for rule_name in _bootstrap_rule_names(spec_kit=spec_kit, continual_learning=continual_learning):
         source = _rule_template_path(source_paths, rule_name)
-        _copy_file(source, target, f".cursor/rules/{rule_name}", force=force, written=written)
+        _copy_file(
+            source,
+            target,
+            f".cursor/rules/{rule_name}",
+            force=force,
+            written=written,
+            refresh_changed=refresh_changed,
+            refresh_stats=refresh_stats,
+        )
         if not (target / ".cursor/rules" / rule_name).exists():
             warnings.append(f"Missing rule template {rule_name} — not copied")
 
@@ -219,6 +239,8 @@ def _copy_cursor_workspace_plugin_hooks(
     force: bool,
     written: list[str],
     warnings: list[str],
+    refresh_changed: bool = False,
+    refresh_stats: dict | None = None,
 ) -> None:
     """Deploy workspaceOpen so Cursor 3.x loads `.cursor/plugins/hive-continual-learning`."""
     templates = _cursor_hooks_template_dir()
@@ -230,6 +252,8 @@ def _copy_cursor_workspace_plugin_hooks(
         ".cursor/hooks/hive_workspace_open.py",
         force=force,
         written=written,
+        refresh_changed=refresh_changed,
+        refresh_stats=refresh_stats,
     )
     if not (target / ".cursor" / "hooks.json").is_file():
         warnings.append("Missing Cursor workspaceOpen hooks.json — plugin may not load on Cursor 3.x")
@@ -300,26 +324,105 @@ def _install_agnostic_loop_artifacts(
             written.append(rel)
 
 
-def _write_text(target: Path, rel: str, content: str, *, force: bool, written: list[str]) -> None:
-    path = target / rel
-    if path.exists() and not force:
+def _note_refresh_unchanged(stats: dict | None) -> None:
+    if stats is not None:
+        stats["unchanged"] = int(stats.get("unchanged", 0)) + 1
+
+
+def _note_refresh_kept(stats: dict | None, rel: str) -> None:
+    if stats is None:
         return
+    kept = stats.setdefault("kept", [])
+    if rel not in kept:
+        kept.append(rel)
+
+
+def _text_matches(path: Path, content: str) -> bool:
+    if not path.is_file():
+        return False
+    try:
+        current = path.read_text(encoding="utf-8").replace("\r\n", "\n")
+    except (OSError, UnicodeError):
+        return False
+    return current == content.replace("\r\n", "\n")
+
+
+def _bytes_match(source: Path, dest: Path) -> bool:
+    try:
+        return dest.is_file() and source.read_bytes() == dest.read_bytes()
+    except OSError:
+        return False
+
+
+def _write_text(
+    target: Path,
+    rel: str,
+    content: str,
+    *,
+    force: bool,
+    written: list[str],
+    refresh_changed: bool = False,
+    preserve_if_present: bool = False,
+    refresh_stats: dict | None = None,
+) -> None:
+    path = target / rel
+    if path.exists() and preserve_if_present and not force:
+        if _text_matches(path, content):
+            _note_refresh_unchanged(refresh_stats)
+        else:
+            _note_refresh_kept(refresh_stats, rel)
+        return
+    if path.exists() and not force:
+        if refresh_changed and _text_matches(path, content):
+            _note_refresh_unchanged(refresh_stats)
+            return
+        if not refresh_changed:
+            return
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
     written.append(rel)
 
 
-def _copy_file(source: Path, target: Path, rel: str, *, force: bool, written: list[str]) -> None:
+def _copy_file(
+    source: Path,
+    target: Path,
+    rel: str,
+    *,
+    force: bool,
+    written: list[str],
+    refresh_changed: bool = False,
+    preserve_if_present: bool = False,
+    refresh_stats: dict | None = None,
+) -> None:
     if not source.is_file():
         return
     dest = target / rel
-    if dest.exists() and not force:
-        return
     if source.resolve() == dest.resolve():
         return
+    if dest.exists() and preserve_if_present and not force:
+        if _bytes_match(source, dest):
+            _note_refresh_unchanged(refresh_stats)
+        else:
+            _note_refresh_kept(refresh_stats, rel)
+        return
+    if dest.exists() and not force:
+        if refresh_changed and _bytes_match(source, dest):
+            _note_refresh_unchanged(refresh_stats)
+            return
+        if not refresh_changed:
+            return
     dest.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(source, dest)
     written.append(rel)
+
+
+_PROJECT_SEED_FILES = (
+    "docs/delta/20_micro/example-feature.md",
+    "docs/specs/example-feature/spec.md",
+    "docs/specs/example-feature/plan.md",
+    "docs/specs/example-feature/tasks.md",
+    "docs/proposals/candidates-template.md",
+)
 
 
 def _start_here(project_name: str) -> str:
@@ -1146,6 +1249,8 @@ def deploy_agent_handoff_scaffold(
     project_name: str | None = None,
     force: bool = False,
     cl_runtime: str | None = None,
+    refresh_changed: bool = False,
+    refresh_stats: dict | None = None,
 ) -> tuple[list[str], list[str]]:
     """Deploy unified Spec Kit + Continual Learning artifacts into an existing Hive project."""
     from hive_planner.agent_handoff import AGENT_HANDOFF_UNIFIED, apply_agent_handoff_mode
@@ -1168,9 +1273,26 @@ def deploy_agent_handoff_scaffold(
         ("docs/proposals/candidates-template.md", _candidates_template()),
     ]
     for rel, content in templates:
-        _write_text(target, rel, content, force=force, written=written)
+        _write_text(
+            target,
+            rel,
+            content,
+            force=force,
+            written=written,
+            refresh_changed=refresh_changed,
+            preserve_if_present=refresh_changed and rel in _PROJECT_SEED_FILES,
+            refresh_stats=refresh_stats,
+        )
     kit = _starter_kit_dir(source_paths.root)
-    _copy_file(kit / "spec-kit-agent-integration.md", target, "spec-kit-agent-integration.md", force=force, written=written)
+    _copy_file(
+        kit / "spec-kit-agent-integration.md",
+        target,
+        "spec-kit-agent-integration.md",
+        force=force,
+        written=written,
+        refresh_changed=refresh_changed,
+        refresh_stats=refresh_stats,
+    )
     if not (target / "spec-kit-agent-integration.md").is_file():
         warnings.append("Missing starter-kit/spec-kit-agent-integration.md — not copied")
     _copy_cl_spec_integration_doc(
@@ -1179,6 +1301,8 @@ def deploy_agent_handoff_scaffold(
         force=force,
         written=written,
         warnings=warnings,
+        refresh_changed=refresh_changed,
+        refresh_stats=refresh_stats,
     )
     _copy_bootstrap_rules(
         source_paths,
@@ -1188,14 +1312,24 @@ def deploy_agent_handoff_scaffold(
         warnings=warnings,
         spec_kit=True,
         continual_learning=True,
+        refresh_changed=refresh_changed,
+        refresh_stats=refresh_stats,
     )
-    from hive_planner.cartridge_promote import _append_tasks_wiring_audit_if_missing
+    # Update (refresh_changed) must leave a customized example tasks file
+    # alone. Deploy still adds the wiring-audit checklist when it is missing.
+    if not refresh_changed:
+        from hive_planner.cartridge_promote import _append_tasks_wiring_audit_if_missing
 
-    example_tasks = target / "docs" / "specs" / "example-feature" / "tasks.md"
-    if _append_tasks_wiring_audit_if_missing(example_tasks):
-        rel = "docs/specs/example-feature/tasks.md"
-        if rel not in written:
-            written.append(rel)
+        example_tasks = target / "docs" / "specs" / "example-feature" / "tasks.md"
+        if _append_tasks_wiring_audit_if_missing(example_tasks):
+            rel = "docs/specs/example-feature/tasks.md"
+            if rel not in written:
+                written.append(rel)
+    profile_path = target / ".hive" / "project.json"
+    try:
+        profile_before = profile_path.read_bytes() if profile_path.is_file() else None
+    except OSError:
+        profile_before = None
     existing = read_project_profile(target)
     apply_agent_handoff_mode(
         target,
@@ -1209,7 +1343,6 @@ def deploy_agent_handoff_scaffold(
             set_project_cl_source(target, "vendored")
         except ValueError:
             pass
-    written.append(".hive/project.json")
     from hive_planner.cl_runtime import set_project_cl_runtime
     from hive_planner.vendor_sync import deploy_unified_vendor_artifacts
 
@@ -1217,6 +1350,14 @@ def deploy_agent_handoff_scaffold(
         set_project_cl_runtime(target, resolved_cl_runtime)
     except ValueError:
         pass
+    try:
+        profile_after = profile_path.read_bytes() if profile_path.is_file() else None
+    except OSError:
+        profile_after = None
+    if refresh_changed and profile_before == profile_after:
+        _note_refresh_unchanged(refresh_stats)
+    else:
+        written.append(".hive/project.json")
     deploy_unified_vendor_artifacts(
         source_paths.root,
         target,
@@ -1224,13 +1365,19 @@ def deploy_agent_handoff_scaffold(
         written=written,
         warnings=warnings,
         cl_runtime=resolved_cl_runtime,
+        refresh_changed=refresh_changed,
+        refresh_stats=refresh_stats,
     )
     if requires_cursor_plugin(resolved_cl_runtime):
+        # Vendor overlay deploy already copied these hooks and counted them.
+        # A second stats pass made Update's unchanged total count the hook twice.
         _copy_cursor_workspace_plugin_hooks(
             target,
             force=force,
             written=written,
             warnings=warnings,
+            refresh_changed=refresh_changed,
+            refresh_stats=None,
         )
     _install_bug_hunt_artifacts(target, force=force, written=written, warnings=warnings)
     return sorted(set(written)), warnings

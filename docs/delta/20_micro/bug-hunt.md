@@ -26,8 +26,9 @@ Bug hunt — install the continuous find / fix / self-review / local-commit scri
 | Iteration count 1–200, default 50 | |
 | Pause seconds: blank or omitted is 10, `0` skips the wait, any positive whole number is the wait | |
 | Stop hook consumes `.hive/bug-hunt/continue.json`, waits, and starts the next pass | |
+| R9 attention: sampled detector trust and place attention in the same rebuild/draw/discard loop as the six weights; R10 adds bounded uncertainty/coverage exploration, versioned attribution, calibration audit, and direct file/line overrides | Epsilon-greedy, every-Nth exploration, fixed findings bonus as a wall, unvalidated path or line overrides |
 
-**Files:** `src/hive_planner/bug_hunt.py`, `src/hive_planner/cli.py`, `src/hive_planner/bootstrap.py`, `src/hive_planner/launcher/app.py`, `src/hive_planner/launcher/service.py`, `tests/test_bug_hunt.py`, `.cursor/rules/bug-hunt.mdc`
+**Files:** `src/hive_planner/bug_hunt.py`, `src/hive_planner/bug_hunt_continue.py`, `src/hive_planner/cli.py`, `src/hive_planner/bootstrap.py`, `src/hive_planner/launcher/app.py`, `src/hive_planner/launcher/service.py`, `tests/test_bug_hunt.py`, `.cursor/rules/bug-hunt.mdc`, `.cursor/hooks/bug_hunt_continue.py`
 
 ## Acceptance Criteria
 

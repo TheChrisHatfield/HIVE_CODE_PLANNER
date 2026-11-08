@@ -14,7 +14,9 @@ from hive_planner.spec_drift import (
     check_spec_handoff,
     classify_bullet,
     parse_active_feature,
+    parse_active_features,
     repair_agents_active_feature,
+    spec_creation_gaps,
 )
 
 
@@ -316,6 +318,123 @@ def test_parse_active_feature(tmp_path: Path) -> None:
     paths = RepoPaths(root=tmp_path)
     (paths.root / "AGENTS.md").write_text(_minimal_agents("git-handoff-ci-v1"), encoding="utf-8")
     assert parse_active_feature(paths) == "git-handoff-ci-v1"
+
+
+def test_listed_lanes_are_both_active(tmp_path: Path) -> None:
+    from hive_planner.spec_drift import SPEC_CREATION_SPEC_TAIL, SPEC_CREATION_TASKS_TAIL
+
+    paths = RepoPaths(root=tmp_path)
+    (paths.root / "AGENTS.md").write_text(
+        "# AGENTS.md\n\n## Active feature\n\n"
+        "- **controls-execute** — lane\n"
+        "- **implementation-loop** — lane\n",
+        encoding="utf-8",
+    )
+    assert parse_active_feature(paths) == "controls-execute"
+    assert parse_active_features(paths) == ["controls-execute", "implementation-loop"]
+    for feature in ("controls-execute", "implementation-loop"):
+        spec_dir = paths.root / "docs" / "specs" / feature
+        spec_dir.mkdir(parents=True)
+        (spec_dir / "spec.md").write_text("# Spec\n" + SPEC_CREATION_SPEC_TAIL, encoding="utf-8")
+        (spec_dir / "tasks.md").write_text("# Tasks\n" + SPEC_CREATION_TASKS_TAIL, encoding="utf-8")
+    assert spec_creation_gaps(paths, "implementation-loop") == []
+    assert spec_creation_gaps(paths, "other-feature") == [
+        "AGENTS.md active feature is controls-execute, implementation-loop, not other-feature"
+    ]
+    repair = repair_agents_active_feature(paths, "implementation-loop")
+    assert repair.repaired is False
+    assert repair.detail == "already set"
+    added = repair_agents_active_feature(paths, "other-feature")
+    text = (paths.root / "AGENTS.md").read_text(encoding="utf-8")
+    assert added.repaired is True
+    assert "**controls-execute**" in text
+    assert "**implementation-loop**" in text
+    assert "**other-feature**" in text
+
+
+def test_add_agents_active_feature_preserves_single_existing_lane(tmp_path: Path) -> None:
+    from hive_planner.spec_drift import add_agents_active_feature
+
+    paths = RepoPaths(root=tmp_path)
+    (paths.root / "AGENTS.md").write_text(
+        "# AGENTS.md\n\n## Active feature\n\n- **current-feature** — current\n",
+        encoding="utf-8",
+    )
+
+    result = add_agents_active_feature(paths, "new-feature")
+
+    assert result.repaired is True
+    assert parse_active_features(paths) == ["current-feature", "new-feature"]
+
+
+def test_list_project_features_includes_inactive_spec_folders(tmp_path: Path) -> None:
+    from hive_planner.spec_drift import list_project_features
+
+    paths = RepoPaths(root=tmp_path)
+    (paths.root / "AGENTS.md").write_text(
+        "# AGENTS.md\n\n## Active feature\n\n- **active-lane** — current\n",
+        encoding="utf-8",
+    )
+    specs_root = paths.root / "docs" / "specs"
+    for feature in ("zeta-feature", "alpha-feature", "bad_feature"):
+        (specs_root / feature).mkdir(parents=True, exist_ok=True)
+
+    assert list_project_features(paths) == [
+        "active-lane",
+        "alpha-feature",
+        "zeta-feature",
+    ]
+
+
+def test_fenced_ids_inside_the_active_section_are_not_lanes(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    (paths.root / "AGENTS.md").write_text(
+        "# AGENTS.md\n\n## Active feature\n\n"
+        "- **controls-execute** — lane\n\n"
+        "```markdown\n"
+        "- **example-feature** — sample\n"
+        "- **other-feature** — sample\n"
+        "```\n",
+        encoding="utf-8",
+    )
+    assert parse_active_features(paths) == ["controls-execute"]
+    replaced = repair_agents_active_feature(paths, "kept-feature")
+    assert replaced.repaired is True
+    assert parse_active_feature(paths) == "kept-feature"
+    assert "example-feature" not in parse_active_features(paths)
+
+
+def test_commented_feature_id_is_not_a_lane(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    (paths.root / "AGENTS.md").write_text(
+        "# AGENTS.md\n\n## Active feature\n\n"
+        "- **controls-execute** — lane\n"
+        "<!-- - **implementation-loop** — retired -->\n"
+        "<!--\n"
+        "- **other-feature** — retired\n"
+        "-->\n",
+        encoding="utf-8",
+    )
+    assert parse_active_features(paths) == ["controls-execute"]
+
+
+def test_appended_lane_stays_outside_an_unclosed_fence(tmp_path: Path) -> None:
+    paths = RepoPaths(root=tmp_path)
+    (paths.root / "AGENTS.md").write_text(
+        "# AGENTS.md\n\n## Active feature\n\n"
+        "- **controls-execute** — lane\n"
+        "- **implementation-loop** — lane\n\n"
+        "```markdown\n"
+        "- **example-feature** — sample\n"
+        "## Next\n",
+        encoding="utf-8",
+    )
+    added = repair_agents_active_feature(paths, "other-feature")
+    text = (paths.root / "AGENTS.md").read_text(encoding="utf-8")
+    assert added.repaired is True
+    assert "other-feature" in parse_active_features(paths)
+    assert "example-feature" not in parse_active_features(paths)
+    assert text.index("**other-feature**") < text.index("```markdown")
 
 
 def test_empty_active_feature_does_not_take_the_id_from_notes(tmp_path: Path) -> None:

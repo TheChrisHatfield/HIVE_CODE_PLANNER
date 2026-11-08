@@ -65,7 +65,8 @@ Load [`docs/planning-rosetta-stone.md`](../../planning-rosetta-stone.md) (`plann
 
 ## Phase 9 — File overlap
 
-- [ ] T030 Before `start` or a feature switch, block when the incoming feature and `state.feature` declare the same plan file target. `--allow-overlap` is the only override. Controls CodeSpec gains **Allow overlap**, unchecked, and Force feature does not set it
+- [ ] T030 Before `start` or a feature switch, block when the incoming feature and `state.feature` declare the same plan file target. `--allow-overlap` is the only override. Controls CodeSpec gains **Allow overlap**, unchecked, and Force feature does not set it. Add bounded checker-blocker diagnosis and coder repair handoff without bypassing gates. Add evidence-based dirty-scope preflight so non-overlapping dirty paths can auto-start only after safe quick-check evidence.
+- [ ] T031 Refine dirty-scope sensitivity: classify unrelated workspace infrastructure (`.cursor/**`, `.github/**`, `pyproject.toml`, and package manifests) as reviewable risk that can auto-start after a passing bounded preflight and baseline isolation; keep secrets, authentication, destructive configuration, unresolved commands, and root `AGENTS.md` fail-closed. Record both categories and add regression coverage.
 
 ## Active task
 

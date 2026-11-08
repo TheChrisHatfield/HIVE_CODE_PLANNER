@@ -11,6 +11,7 @@ import re
 import shlex
 import subprocess
 import sys
+import time
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
@@ -54,7 +55,13 @@ SOFTWARE.
 
 RETROSPECTIVE_HEADER = "# implementation-loop retrospective log — count only date lines\n"
 ROUND_TRIP_CAP = 10
+DIRTY_AUTO_START_THRESHOLD = 0.8
+DIRTY_PREFLIGHT_TIMEOUT_SECONDS = 300
 COMMIT_ROLES = ("checker", "reviewer")
+BLOCKER_REPAIR_CYCLE_LIMIT = 4
+BLOCKER_PAUSE_SECONDS = 9
+MAX_BLOCKER_PAUSE_SECONDS = 300
+BLOCKER_PATH = LOOP_DIR / "blocker.json"
 GIT_IDENTITY = {
     "GIT_AUTHOR_NAME": "Hive implementation-loop",
     "GIT_AUTHOR_EMAIL": "implementation-loop@hive.local",
@@ -211,11 +218,21 @@ class ReadinessReport:
 
 
 def _read_text(path: Path) -> str:
-    """Read a loop file saved as UTF-8 (with or without BOM) or UTF-16."""
+    """Read a loop file saved as UTF-8 (with or without BOM) or UTF-16.
+
+    UTF-16 LE without a byte-order mark decodes as UTF-8 with a null between
+    every character, so a plan table read that way used to look empty.
+    """
+    raw = path.read_bytes()
+    if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+        return raw.decode("utf-16")
+    text = raw.decode("utf-8-sig")
+    if "\x00" not in text:
+        return text
     try:
-        return path.read_text(encoding="utf-8-sig")
-    except UnicodeDecodeError:
-        return path.read_text(encoding="utf-16")
+        return raw.decode("utf-16-le")
+    except UnicodeError:
+        return text
 
 
 def _read_json(path: Path) -> dict[str, Any] | None:
@@ -541,6 +558,7 @@ Do not merge, push to trunk, force-push, or deploy.
 def render_role_coordinator(pack: str) -> str:
     validate_pack(pack)
     solo = pack == PACK_1
+    repair_role = "coordinator" if solo else "coder"
     lines = [
         "# Implementation loop coordinator",
         "",
@@ -550,11 +568,11 @@ def render_role_coordinator(pack: str) -> str:
         "",
         "1. Run `py -3.11 -m hive_planner implementation-loop start --feature <feature>`. If it exits 2, report the blocked reason and stop.",
         "2. Load `docs/specs/<feature>/spec.md`, `plan.md`, and `tasks.md`.",
-        "3. Unrelated dirty paths: start already blocked unless the human passed `--allow-dirty`. Do not stash or discard unrelated changes.",
+        "3. Unrelated dirty paths are classified by scope and confidence. Feature-scoped paths are baseline; high/medium confidence starts automatically, while low-confidence executable or configuration dirt requires `--allow-dirty`. Do not stash or discard changes. Declared file overlap blocks start unless the human passed `--allow-overlap`. `--force-feature` and `--allow-dirty` do not skip that overlap block.",
         "",
         "## One task",
         "",
-        "Before each delegated pass run `implementation-loop handoff --role <role>`. Python writes `handoff.md` and increments `round_trips`. After the coder (or 1-pack implement) returns, run `implementation-loop check` — Python runs `build`, `test:quick`, and the wiring audit when enforced, then appends the checker `result.md` entry. After each role, run `implementation-loop accept --role <role>`.",
+        f"Before each delegated pass run `implementation-loop handoff --role <role>`. Python writes `handoff.md` and increments `round_trips`. After the coder (or 1-pack implement) returns, run `implementation-loop check` — Python runs `build`, `test:quick`, and the wiring audit when enforced, then appends the checker `result.md` entry. If check fails, read `.hive/implementation-loop/blocker.json`; repairable blockers go to the {repair_role} for a bounded repair/check cycle, while unknown or high-risk blockers are escalated. After each role, run `implementation-loop accept --role <role>`.",
         "",
         "The pass **appends** to `.hive/implementation-loop/result.md`. Each entry has `task`, `role`, `outcome`, `evidence`, and `question` (when `outcome` is `fail`). Do not overwrite earlier role entries for this task.",
         "",
@@ -566,7 +584,7 @@ def render_role_coordinator(pack: str) -> str:
         "",
         "Python checks `round_trips` on each `handoff`, including a re-handoff after a human answer. At 10, `handoff` exits 2 unless the human passed `--continue-after-cap`. The count resets to `0` on `commit`.",
         "",
-        "A role `fail` with `question` set: ask the human, then re-hand the same role (one round trip). Checker or reviewer `fail` without a question returns to the coder, then checker, then reviewer. `needs-sign-off` pauses; do not start the coder.",
+        f"A role `fail` with `question` set: ask the human, then re-hand the same role (one round trip). Checker or reviewer `fail` without a question returns to the {repair_role}, then checker, then reviewer. Repairable checker blockers are limited to four cycles and enforce a nine-second independent-pass pause. `needs-sign-off` pauses; do not start the {repair_role}.",
         "",
         "## Git",
         "",
@@ -883,9 +901,17 @@ class CoordinatorReport:
     round_trips: int = 0
     blocked_reason: str = ""
     dirty: list[str] = field(default_factory=list)
+    feature_scope: list[str] = field(default_factory=list)
+    related_dirty: list[str] = field(default_factory=list)
+    unrelated_dirty: list[str] = field(default_factory=list)
+    dirty_confidence: float = 1.0
+    dirty_confidence_tier: str = "high"
+    dirty_confidence_reasons: list[str] = field(default_factory=list)
+    dirty_auto_start: bool = True
     commit: str = ""
     next_role: str = ""
     pr_url: str = ""
+    blocker: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -897,9 +923,17 @@ class CoordinatorReport:
             "round_trips": self.round_trips,
             "blocked_reason": self.blocked_reason,
             "dirty": self.dirty,
+            "feature_scope": self.feature_scope,
+            "related_dirty": self.related_dirty,
+            "unrelated_dirty": self.unrelated_dirty,
+            "dirty_confidence": self.dirty_confidence,
+            "dirty_confidence_tier": self.dirty_confidence_tier,
+            "dirty_confidence_reasons": self.dirty_confidence_reasons,
+            "dirty_auto_start": self.dirty_auto_start,
             "commit": self.commit,
             "next_role": self.next_role,
             "pr_url": self.pr_url,
+            "blocker": self.blocker,
         }
 
 
@@ -976,6 +1010,14 @@ def _dirty_paths(root: Path) -> list[str]:
     return paths
 
 
+def _is_repo_root_agents_md(path: str) -> bool:
+    """True only for the checkout's durable-memory AGENTS.md, not plugin copies."""
+    posix = str(path).replace("\\", "/").strip().strip('"')
+    while posix.startswith("./"):
+        posix = posix[2:]
+    return posix == "AGENTS.md"
+
+
 def _paths_for_commit(root: Path, feature: str, baseline: list[str]) -> list[str]:
     now = _unrelated_dirty(_dirty_paths(root))
     baseline_set = set(baseline)
@@ -996,6 +1038,140 @@ def _unrelated_dirty(paths: list[str]) -> list[str]:
             continue
         unrelated.append(posix)
     return unrelated
+
+
+def _feature_scope(root: Path, feature: str) -> list[str]:
+    """Return the feature-owned docs and declared implementation targets."""
+    feature_docs = [
+        f"docs/specs/{feature}/spec.md",
+        f"docs/specs/{feature}/plan.md",
+        f"docs/specs/{feature}/tasks.md",
+    ]
+    scope = feature_docs + _plan_file_targets(root, feature)
+    return list(dict.fromkeys(scope))
+
+
+def _feature_related_dirty(root: Path, feature: str, paths: list[str]) -> tuple[list[str], list[str]]:
+    """Split non-runtime dirty paths by the feature's declared plan targets."""
+    targets = _feature_scope(root, feature)
+    related: list[str] = []
+    unrelated: list[str] = []
+    for path in paths:
+        if any(_targets_overlap(path, target) for target in targets):
+            related.append(path)
+        else:
+            unrelated.append(path)
+    return related, unrelated
+
+
+def _is_documentation_dirty(path: str) -> bool:
+    """Return whether a dirty path is safe to auto-start around."""
+    normalized = path.replace("\\", "/").casefold()
+    if normalized == "agents.md" or normalized == "start_here.md" or normalized.startswith(
+        (".cursor/", ".github/")
+    ):
+        return False
+    suffix = Path(normalized).suffix
+    return suffix in {".md", ".mdx", ".rst", ".txt", ".adoc", ".log"}
+
+
+def _is_hard_risk_dirty(path: str) -> bool:
+    """Return whether a dirty path must remain human-approved."""
+    normalized = path.replace("\\", "/").casefold()
+    if normalized == "agents.md":
+        return True
+    name_parts = set(normalized.split("/"))
+    hard_names = {
+        ".env",
+        ".gitconfig",
+        "credentials",
+        "credential",
+        "secrets",
+        "secret",
+        "tokens",
+        "token",
+        "private",
+    }
+    if bool(name_parts & hard_names) or normalized.endswith((".pem", ".key", ".p12", ".pfx")):
+        return True
+    config_suffixes = (".cfg", ".conf", ".ini", ".json", ".tf", ".tfvars", ".toml", ".yml", ".yaml")
+    destructive_names = {"deploy", "deployment", "prod", "production", "terraform"}
+    stem_parts = set(re.split(r"[-_.]", Path(normalized).stem.casefold()))
+    return Path(normalized).suffix in config_suffixes and bool(
+        (name_parts | stem_parts) & destructive_names
+    )
+
+
+def _assess_dirty_scope(
+    root: Path, feature: str
+) -> tuple[list[str], list[str], float, str, list[str], bool]:
+    """Classify dirty paths using hard-risk and quick-check evidence."""
+    dirty = _unrelated_dirty(_dirty_paths(root))
+    related, unrelated = _feature_related_dirty(root, feature, dirty)
+    if not unrelated:
+        confidence = 1.0
+        return (
+            related,
+            unrelated,
+            confidence,
+            "high",
+            ["all dirty paths are feature-scoped or runtime"],
+            confidence >= DIRTY_AUTO_START_THRESHOLD,
+        )
+    risky = [path for path in unrelated if not _is_documentation_dirty(path)]
+    if not risky:
+        confidence = 0.85
+        return (
+            related,
+            unrelated,
+            confidence,
+            "medium",
+            ["outside dirty paths are documentation-only", "commit isolation excludes baseline paths"],
+            confidence >= DIRTY_AUTO_START_THRESHOLD,
+        )
+    hard_risk = [path for path in risky if _is_hard_risk_dirty(path)]
+    if hard_risk:
+        return (
+            related,
+            unrelated,
+            0.25,
+            "low",
+            [
+                "hard-risk dirty paths require human approval",
+                f"hard-risk paths: {', '.join(hard_risk)}",
+            ],
+            False,
+        )
+    preflight = _run_named_command(
+        root,
+        "test:quick",
+        timeout_seconds=DIRTY_PREFLIGHT_TIMEOUT_SECONDS,
+    )
+    if preflight.returncode == 0:
+        return (
+            related,
+            unrelated,
+            0.85,
+            "medium",
+            [
+                "unrelated executable paths have no hard-risk markers",
+                "test:quick preflight passed",
+                "commit isolation excludes baseline paths",
+            ],
+            True,
+        )
+    confidence = 0.25
+    return (
+        related,
+        unrelated,
+        confidence,
+        "low",
+        [
+            "test:quick preflight failed or was unavailable",
+            "human approval is required",
+        ],
+        confidence >= DIRTY_AUTO_START_THRESHOLD,
+    )
 
 
 def _parse_open_task_line(line: str, heading: str) -> tuple[str, str, str] | None:
@@ -1363,6 +1539,118 @@ def _open_or_reuse_pull_request(root: Path, state: LoopState, feature: str) -> s
     return ""
 
 
+def diagnose_checker_blocker(evidence: str) -> dict[str, Any]:
+    """Classify common checker failures without changing product code."""
+    text = str(evidence or "")
+    lowered = text.casefold()
+    if "unexpected keyword argument" in lowered or "takes" in lowered and "argument" in lowered:
+        return {
+            "class": "interface-mismatch",
+            "confidence": 0.98,
+            "repairable": True,
+            "next_action": "coder: inspect the caller and callee signatures, then add the smallest compatible fix",
+        }
+    if "modulenotfounderror" in lowered or "no module named" in lowered:
+        return {
+            "class": "missing-test-fixture",
+            "confidence": 0.94,
+            "repairable": True,
+            "next_action": "coder: verify the dependency is declared or restore the scoped test fixture",
+        }
+    if "generated" in lowered and (
+        "stale" in lowered or "out of date" in lowered or "out-of-date" in lowered
+    ):
+        return {
+            "class": "stale-generated-artifact",
+            "confidence": 0.9,
+            "repairable": True,
+            "next_action": "coder: regenerate only the declared artifact and rerun the checker",
+        }
+    return {
+        "class": "unrecognized-checker-failure",
+        "confidence": 0.0,
+        "repairable": False,
+        "next_action": "human: inspect the failure before any repair",
+    }
+
+
+def _redact_blocker_evidence(evidence: str) -> str:
+    text = str(evidence or "").replace("\n", " ").replace("\r", " ").strip()
+    text = re.sub(
+        r"(?i)\b(password|passwd|secret|token|api[_-]?key|authorization)\b"
+        r"(\s*[:=]\s*|\s+)(bearer\s+)?\S+",
+        r"\1=<redacted>",
+        text,
+    )
+    return text[:400]
+
+
+def _load_blocker(
+    root: Path,
+    *,
+    feature: str = "",
+    task: str = "",
+) -> dict[str, Any]:
+    path = root / BLOCKER_PATH
+    if not path.is_file():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError, MemoryError):
+        return {}
+    if not isinstance(payload, dict):
+        return {}
+    if feature and payload.get("feature") != feature:
+        return {}
+    if task and payload.get("task") != task:
+        return {}
+    return payload
+
+
+def _save_blocker(root: Path, state: LoopState, diagnosis: dict[str, Any], evidence: str) -> dict[str, Any]:
+    prior = _load_blocker(root, feature=state.feature, task=state.current_task)
+    try:
+        attempt = int(prior.get("attempt", 0)) + 1
+    except (TypeError, ValueError, OverflowError):
+        attempt = 1
+    bounded_evidence = _redact_blocker_evidence(evidence)
+    blocker = {
+        "feature": state.feature,
+        "task": state.current_task,
+        "attempt": attempt,
+        "max_attempts": BLOCKER_REPAIR_CYCLE_LIMIT,
+        "pause_seconds": BLOCKER_PAUSE_SECONDS,
+        "class": diagnosis.get("class", "unrecognized-checker-failure"),
+        "confidence": diagnosis.get("confidence", 0.0),
+        "repairable": bool(diagnosis.get("repairable")),
+        "next_action": diagnosis.get("next_action", "human: inspect the failure before any repair"),
+        "evidence": bounded_evidence,
+    }
+    if attempt >= BLOCKER_REPAIR_CYCLE_LIMIT:
+        blocker["repairable"] = False
+        blocker["next_action"] = "human: repair cycle limit reached; inspect the remaining failure"
+    try:
+        _write_json(root / BLOCKER_PATH, blocker)
+    except OSError as exc:
+        raise CoordinatorError(
+            f"cannot write {BLOCKER_PATH.as_posix()}: {exc}",
+            action="check",
+            feature=state.feature,
+            task=state.current_task,
+        ) from exc
+    return blocker
+
+
+def _clear_blocker(root: Path) -> None:
+    try:
+        (root / BLOCKER_PATH).unlink(missing_ok=True)
+    except OSError as exc:
+        raise CoordinatorError(
+            f"cannot clear {BLOCKER_PATH.as_posix()}: {exc}",
+            action="check",
+        ) from exc
+
+
 def _write_handoff(root: Path, state: LoopState, role: str, heading: str, body: str) -> None:
     feature = state.feature
     task = state.current_task
@@ -1381,6 +1669,20 @@ def _write_handoff(root: Path, state: LoopState, role: str, heading: str, body: 
             "",
         ]
     )
+    blocker = _load_blocker(root, feature=feature, task=task)
+    if role in {"coder", "coordinator"} and blocker:
+        text = text.rstrip() + "\n" + "\n".join(
+            [
+                "blocker_class: " + str(blocker.get("class") or "unknown"),
+                "blocker_confidence: " + str(blocker.get("confidence", 0.0)),
+                "blocker_attempt: "
+                + f"{blocker.get('attempt', 0)}/{blocker.get('max_attempts', BLOCKER_REPAIR_CYCLE_LIMIT)}",
+                "blocker_pause_seconds: " + str(blocker.get("pause_seconds", BLOCKER_PAUSE_SECONDS)),
+                "blocker_next_action: " + str(blocker.get("next_action") or ""),
+                "blocker_evidence: " + str(blocker.get("evidence") or ""),
+                "",
+            ]
+        )
     try:
         (_loop_dir(root) / "handoff.md").write_text(text, encoding="utf-8")
     except OSError as exc:
@@ -1685,12 +1987,100 @@ def codespec_role_for(root: Path | None, pack_hint: str, action: str) -> str:
     return "coder"
 
 
+def _plan_file_targets(root: Path, feature: str) -> list[str]:
+    """Path column of `## File targets` in the feature plan. Missing table is empty."""
+    if not feature:
+        return []
+    path = root / "docs" / "specs" / feature / "plan.md"
+    if not path.is_file():
+        return []
+    try:
+        lines = _read_text(path).splitlines()
+    except (OSError, UnicodeError):
+        return []
+    in_section = False
+    found: list[str] = []
+    for line in lines:
+        if line.startswith("## "):
+            if in_section:
+                break
+            in_section = line[3:].strip() == "File targets"
+            continue
+        if not in_section or not line.startswith("|"):
+            continue
+        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+        if not cells:
+            continue
+        raw = cells[0].strip()
+        if not raw:
+            continue
+        targets = re.findall(r"`([^`]+)`", raw)
+        if not targets:
+            targets = [raw.strip("`").strip()]
+        for target in targets:
+            normalized = target.replace("\\", "/").strip()
+            if not normalized or normalized.casefold() == "file" or set(normalized) <= set("-: "):
+                continue
+            found.append(normalized)
+    return found
+
+
+def _target_compare_key(path: str) -> str:
+    key = path.strip().replace("\\", "/")
+    while key.startswith("./"):
+        key = key[2:]
+    if sys.platform == "win32":
+        key = key.casefold()
+    return key
+
+
+def _target_ignored(key: str) -> bool:
+    return key == ".hive" or key.startswith(".hive/")
+
+
+def _targets_overlap(left: str, right: str) -> bool:
+    a = _target_compare_key(left)
+    b = _target_compare_key(right)
+    if not a or not b or _target_ignored(a) or _target_ignored(b):
+        return False
+    if a == b:
+        return True
+    if a.endswith("/") and (b.startswith(a) or b + "/" == a):
+        return True
+    if b.endswith("/") and (a.startswith(b) or a + "/" == b):
+        return True
+    return False
+
+
+def file_target_overlap(root: Path, incoming: str, current: str) -> list[str]:
+    """Shared plan file targets. Directory rows cover that directory and everything under it."""
+    shared: list[str] = []
+    seen: set[str] = set()
+    for item in _plan_file_targets(root, incoming):
+        for other in _plan_file_targets(root, current):
+            if not _targets_overlap(item, other):
+                continue
+            witness = item
+            if item.endswith("/") and not other.endswith("/"):
+                witness = other
+            elif item.endswith("/") and other.endswith("/") and len(_target_compare_key(other)) > len(
+                _target_compare_key(item)
+            ):
+                witness = other
+            key = _target_compare_key(witness).rstrip("/")
+            if key not in seen:
+                seen.add(key)
+                shared.append(witness.strip().strip("`"))
+    return shared
+
+
 def coordinator_start(
     root: Path,
     feature: str,
     *,
     allow_dirty: bool = False,
     force_feature: bool = False,
+    allow_overlap: bool = False,
 ) -> CoordinatorReport:
     root = root.resolve()
     feature = _validate_feature_id(feature, "start")
@@ -1703,6 +2093,16 @@ def coordinator_start(
             action="start",
             feature=feature,
         )
+
+    if state.feature and state.feature != feature and not allow_overlap:
+        shared = file_target_overlap(root, feature, state.feature)
+        if shared:
+            raise CoordinatorError(
+                "declared file overlap blocks start: " + ", ".join(shared),
+                action="start",
+                feature=feature,
+                overlap=shared,
+            )
 
     if report_ready.blocked_reason == "complete" and report_ready.ready:
         state.status = "complete"
@@ -1740,13 +2140,24 @@ def coordinator_start(
             feature=feature,
         )
 
-    unrelated = _unrelated_dirty(_dirty_paths(root))
-    if unrelated and not allow_dirty:
+    scope = _feature_scope(root, feature)
+    related, unrelated, confidence, confidence_tier, confidence_reasons, auto_start = _assess_dirty_scope(
+        root, feature
+    )
+    dirty = related + [path for path in unrelated if path not in related]
+    if not auto_start and not allow_dirty:
         raise CoordinatorError(
-            "unrelated dirty paths block start",
+            "low-confidence dirty paths block start",
             action="start",
             feature=feature,
             dirty=unrelated,
+            feature_scope=scope,
+            related_dirty=related,
+            unrelated_dirty=unrelated,
+            dirty_confidence=confidence,
+            dirty_confidence_tier=confidence_tier,
+            dirty_confidence_reasons=confidence_reasons,
+            dirty_auto_start=auto_start,
         )
 
     tasks_text = _read_feature_tasks(root, feature, "start")
@@ -1759,10 +2170,14 @@ def coordinator_start(
     state.status = "running"
     state.current_task = current
     state.slice_signoff = "continue"
-    state.baseline_dirty = list(unrelated)
+    # Product paths are pre-existing work and are excluded from this loop's
+    # commit; the active feature's plan/tasks remain intentional commit inputs
+    # because the coordinator checks them off and carries the spec handoff.
+    state.baseline_dirty = list(dirty)
     if previous_task != current or previous_feature != feature:
         state.round_trips = 0
         _reset_result(root, current)
+        _clear_blocker(root)
     _save_state(root, state)
     return CoordinatorReport(
         ok=True,
@@ -1771,6 +2186,13 @@ def coordinator_start(
         task=current,
         round_trips=state.round_trips,
         dirty=unrelated if allow_dirty else [],
+        feature_scope=scope,
+        related_dirty=related,
+        unrelated_dirty=unrelated,
+        dirty_confidence=confidence,
+        dirty_confidence_tier=confidence_tier,
+        dirty_confidence_reasons=confidence_reasons,
+        dirty_auto_start=auto_start,
         next_role="coordinator" if state.pack == PACK_1 else "coder",
     )
 
@@ -1800,6 +2222,32 @@ def coordinator_handoff(
 
     entries = parse_result_entries(_read_result_text(root, "handoff"))
     task = state.current_task
+    blocker = _load_blocker(root, feature=state.feature, task=task)
+    repair_role = "coordinator" if pack == PACK_1 else "coder"
+    if role == repair_role and blocker:
+        try:
+            exhausted = int(blocker.get("attempt", 0)) >= int(
+                blocker.get("max_attempts", BLOCKER_REPAIR_CYCLE_LIMIT)
+            )
+        except (TypeError, ValueError, OverflowError):
+            exhausted = True
+        if not blocker.get("repairable") or exhausted:
+            raise CoordinatorError(
+                "checker blocker requires human review before another repair pass",
+                action="handoff",
+                feature=state.feature,
+                task=task,
+                role=role,
+                blocker=blocker,
+            )
+        try:
+            pause_seconds = int(blocker.get("pause_seconds", BLOCKER_PAUSE_SECONDS))
+        except (TypeError, ValueError, OverflowError):
+            pause_seconds = BLOCKER_PAUSE_SECONDS
+        if pause_seconds < 0 or pause_seconds > MAX_BLOCKER_PAUSE_SECONDS:
+            pause_seconds = BLOCKER_PAUSE_SECONDS
+        if pause_seconds > 0:
+            time.sleep(pause_seconds)
     if pack == PACK_4:
         last_reviewer = _last_outcome(entries, task, "reviewer")
         last_checker = _last_outcome(entries, task, "checker")
@@ -1919,11 +2367,21 @@ def coordinator_check(root: Path) -> CoordinatorReport:
 
     steps: list[str] = []
     outcome = "pass"
+    blocker: dict[str, Any] = {}
     for key in ("build", "test:quick"):
         proc = _run_named_command(root, key)
         steps.append(_evidence_line(key, proc))
         if proc.returncode != 0:
             outcome = "fail"
+            raw_evidence = "\n".join((proc.stdout or "", proc.stderr or ""))
+            diagnosis = diagnose_checker_blocker(raw_evidence)
+            blocker = _save_blocker(root, state, diagnosis, raw_evidence)
+            steps.append(
+                "blocker="
+                + f"{blocker['class']} confidence={blocker['confidence']} "
+                + f"repairable={str(blocker['repairable']).lower()} "
+                + f"attempt={blocker['attempt']}/{blocker['max_attempts']}"
+            )
             break
     if outcome == "pass":
         wiring = _checker_wiring_audit_step(root, state.feature)
@@ -1932,6 +2390,10 @@ def coordinator_check(root: Path) -> CoordinatorReport:
             steps.append(line)
             if not ok:
                 outcome = "fail"
+                diagnosis = diagnose_checker_blocker(line)
+                blocker = _save_blocker(root, state, diagnosis, line)
+    if outcome == "pass":
+        _clear_blocker(root)
 
     _append_result_entry(root, task, "checker", outcome, "; ".join(steps), action="check")
     failed = outcome == "fail"
@@ -1943,7 +2405,12 @@ def coordinator_check(root: Path) -> CoordinatorReport:
         role="checker",
         round_trips=state.round_trips,
         blocked_reason="fail" if failed else "",
-        next_role="coder" if failed else "checker",
+        next_role=(
+            ("coordinator" if pack == PACK_1 else "coder")
+            if failed
+            else "checker"
+        ),
+        blocker=blocker,
     )
 
 
@@ -2002,7 +2469,12 @@ def _push_enabled(commands: dict[str, Any] | None) -> bool:
     return False
 
 
-def _run_named_command(root: Path, key: str) -> subprocess.CompletedProcess[str]:
+def _run_named_command(
+    root: Path,
+    key: str,
+    *,
+    timeout_seconds: int | None = None,
+) -> subprocess.CompletedProcess[str]:
     try:
         commands = _read_existing_json_object(_loop_dir(root) / "commands.json", "commands.json") or {}
     except ValueError as exc:
@@ -2032,6 +2504,14 @@ def _run_named_command(root: Path, key: str) -> subprocess.CompletedProcess[str]
             text=True,
             encoding="utf-8",
             errors="replace",
+            timeout=timeout_seconds,
+        )
+    except subprocess.TimeoutExpired as exc:
+        return subprocess.CompletedProcess(
+            args,
+            124,
+            stdout=str(exc.stdout or ""),
+            stderr=f"{key} timed out after {timeout_seconds} seconds",
         )
     except OSError as exc:
         name = args[0] if args else raw
@@ -2104,7 +2584,7 @@ def coordinator_commit(root: Path) -> CoordinatorReport:
             )
 
     dirty = _dirty_paths(root)
-    if any(p == "AGENTS.md" or p.endswith("/AGENTS.md") for p in dirty):
+    if any(_is_repo_root_agents_md(p) for p in dirty):
         raise CoordinatorError("AGENTS.md is dirty — commit blocked", action="commit", feature=feature, task=current)
 
     # Validate commands.json before checking off the task or committing: a parse

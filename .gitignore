@@ -42,3 +42,7 @@ vendor/tesseract/
 
 # Generated Windows shortcut (machine-specific paths; run CreateHivePlannerShortcut.ps1)
 scripts/HivePlanner.lnk
+.hive/bug-hunt/place-local.json
+.hive/bug-hunt/place-local.pending.json
+.hive/bug-hunt/donors.json
+!.hive/bug-hunt/slope-windows.json

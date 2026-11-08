@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+import sys
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -170,3 +172,79 @@ def ensure_portable_runtime(app_root: Path, *, force: bool = False) -> PortableR
         files_written=written,
         warnings=warnings,
     )
+
+
+def _tk_marker_usable(folder: Path, marker: str) -> bool:
+    path = folder / marker
+    try:
+        if not path.is_file() or path.stat().st_size <= 0:
+            return False
+        with path.open("rb") as handle:
+            if not handle.read(1):
+                return False
+        return True
+    except OSError:
+        return False
+
+
+def _tk_env_inside_meipass(folder: Path) -> bool:
+    if not getattr(sys, "frozen", False):
+        return False
+    meipass = getattr(sys, "_MEIPASS", None)
+    if not meipass:
+        return False
+    try:
+        folder.resolve().relative_to(Path(meipass).resolve())
+    except (OSError, ValueError):
+        return False
+    return True
+
+
+def _frozen_tk_dir(key: str) -> Path | None:
+    if not getattr(sys, "frozen", False):
+        return None
+    meipass = getattr(sys, "_MEIPASS", None)
+    if not meipass:
+        return None
+    try:
+        root = Path(meipass).resolve()
+        folder = (root / ("_tcl_data" if key == "TCL_LIBRARY" else "_tk_data")).resolve()
+        folder.relative_to(root)
+    except (OSError, ValueError):
+        return None
+    marker = "init.tcl" if key == "TCL_LIBRARY" else "tk.tcl"
+    return folder if _tk_marker_usable(folder, marker) else None
+
+
+def clear_stale_tk_library_env() -> list[str]:
+    """Drop TCL_LIBRARY/TK_LIBRARY when they point at an unusable portable tree.
+
+    HivePlannerPortable can leave those variables in the user environment. CPython
+    tkinter then looks there first and fails even when Python's own tcl8.6 works.
+    Frozen portable keeps a readable bundled tree, or retargets sys._MEIPASS.
+    """
+    frozen = bool(getattr(sys, "frozen", False))
+    dropped: list[str] = []
+    for key, marker in (("TCL_LIBRARY", "init.tcl"), ("TK_LIBRARY", "tk.tcl")):
+        raw = os.environ.get(key)
+        if not raw or "\x00" in raw or raw.startswith(("\\\\", "//")):
+            if raw:
+                os.environ.pop(key, None)
+                dropped.append(key)
+            continue
+        folder = Path(raw)
+        usable = _tk_marker_usable(folder, marker)
+        portable = "hiveplannerportable" in raw.replace("\\", "/").casefold()
+        if frozen:
+            keep = usable and _tk_env_inside_meipass(folder)
+        else:
+            keep = usable and not portable
+        if keep:
+            continue
+        os.environ.pop(key, None)
+        dropped.append(key)
+        if frozen:
+            fallback = _frozen_tk_dir(key)
+            if fallback is not None:
+                os.environ[key] = str(fallback)
+    return dropped

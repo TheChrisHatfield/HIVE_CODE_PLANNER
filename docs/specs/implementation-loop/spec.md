@@ -86,6 +86,7 @@ The agent must not commit, increment round trips, or write the handoff by hand. 
 - `.hive/implementation-loop/commands.json` has non-empty `build`, `test:quick`, and `test:full`.
 - The current Git branch is not trunk.
 - Pack is `1-pack` or `4-pack`.
+- The feature id is one of the `**feature-id**` names under `## Active feature` in `AGENTS.md`. More than one name may be listed. A listed name is active. A name that is not listed blocks readiness. Same-file plan targets still block `start` unless `--allow-overlap` is set. `--force-feature` does not set it.
 
 Trunk is `git symbolic-ref --short refs/remotes/origin/HEAD` when that ref exists. Strip a leading `origin/` so `origin/main` matches branch `main`. Otherwise trunk is `main` if that branch exists, else `master`.
 
@@ -177,7 +178,7 @@ The coordinator commits on the current non-trunk branch after a task passes. The
 
 Commit the task's product files, `tasks.md`, and any approved `plan.md` edit. Leave `.hive/implementation-loop/` runtime files unstaged.
 
-Unrelated dirty paths at loop **start** block until the human chooses. Paths under `.hive/implementation-loop/` and paths this task touched are expected dirt. The loop does not stash or discard unrelated changes.
+At loop **start**, paths declared in the feature plan's `## File targets` table are treated as feature-scoped baseline work and do not block. The coordinator computes a deterministic dirty-scope confidence: `1.0/high` when no outside paths are dirty, `0.85/medium` when outside paths are documentation-only, and `0.25/low` when outside paths include executable source, tests, configuration, hooks, or package files. High and medium confidence start automatically; low confidence waits for the human's `--allow-dirty` choice. The result reports the score, tier, reasons, and both dirty groups. Paths under `.hive/implementation-loop/` are expected runtime dirt. The loop does not stash or discard any changes. Pre-existing product dirt is excluded from the task commit; the active feature's `plan.md` and `tasks.md` remain intentional commit inputs.
 
 When `origin` exists and `commands.json` has `"push": true` (the install default when `origin` exists), the coordinator pushes that branch. The first pushed task opens one pull request for the feature when `gh` can see a GitHub remote. Later task commits update that same pull request. The PR URL is stored in `state.json`.
 
@@ -233,11 +234,11 @@ Python enforces coordinator rules. It does not edit product code and does not wr
 
 | Command | Does |
 |---------|------|
-| `implementation-loop start --feature <id>` | Readiness must be ready. Unrelated dirty paths block (`--allow-dirty` after the human chooses). Paths under `.hive/` are expected dirt. Declared file overlap with the feature already in the loop blocks (`--allow-overlap` after the human agrees). `--force-feature` and `--allow-dirty` do not skip that overlap block. Sets `status` to `running`, `feature`, `branch`, and `current_task` to the first open checkbox. A different running feature blocks unless `--force-feature`. `status` `blocked` (push or slice `test:full` failure) blocks start unless `--force-feature` after the human agrees. When every box is already checked, sets `complete`, appends the retrospective line if missing, and does not start work. |
+| `implementation-loop start --feature <id>` | Readiness must be ready. Dirty paths declared in the feature plan's `## File targets` table, plus that feature's spec/plan/tasks files, are accepted as baseline. The JSON result identifies `feature_scope`, `related_dirty`, `unrelated_dirty`, `dirty_confidence`, `dirty_confidence_tier`, `dirty_confidence_reasons`, and `dirty_auto_start`. High/medium confidence starts automatically; low confidence blocks until `--allow-dirty` is chosen. Paths under `.hive/` are expected dirt. Declared file overlap with the feature already in the loop blocks (`--allow-overlap` after the human agrees). `--force-feature` and `--allow-dirty` do not skip that overlap block. Sets `status` to `running`, `feature`, `branch`, and `current_task` to the first open checkbox. A different running feature blocks unless `--force-feature`. `status` `blocked` (push or slice `test:full` failure) blocks start unless `--force-feature` after the human agrees. When every box is already checked, sets `complete`, appends the retrospective line if missing, and does not start work. |
 | `implementation-loop handoff --role <role>` | Writes `handoff.md` for the **current** task (not merely the first open checkbox). Replaces `result.md` on the first coder/coordinator handoff of a task. Increments `round_trips`. At 10, blocks unless `--continue-after-cap`. The role name is not rejected for belonging to the other pack (role names are case-insensitive). Checker requires last coder `pass`. Reviewer requires last checker `pass` **after** the last coder (a recode invalidates the previous checker). Checker or reviewer `fail` without `question` requires the next handoff to be `coder`; after that coder result, checker then reviewer are allowed again. A `fail` with `question` re-hands the same role. Checker or reviewer `needs-sign-off` forbids a coder handoff. Current branch must match `state.branch`. Detached `HEAD` is not a branch. Feature comes from `state.json`. Controls passes the role for the step on the CodeSpec block. |
 | `implementation-loop check` | Runs the checker infrastructure for the current task. 4-pack: last coder outcome must be `pass`; checker or reviewer `fail` without `question` still returns to the coder first. 1-pack: loop must be running. Runs `build`, then `test:quick`, then `wiring-audit check` when that project enforces the audit. Appends a checker `result.md` entry (`pass` or `fail`) with command evidence. `ok` is false and the CLI exits 2 when the checker outcome is `fail` (the entry is still written). Does not increment `round_trips`, does not edit product code, and does not write a reviewer entry. Then `accept --role checker` as today. |
 | `implementation-loop accept --role <role>` | Passes only when `result.md` has an entry for this task and role with `outcome` `pass`, `fail`, or `needs-sign-off`. Missing is a failed pass (exit 2). A role is not rejected for belonging to the other pack. `needs-sign-off` sets `slice_signoff`. Checker or reviewer `fail` without `question` sets `next_role` to `coder`. A `fail` with `question` sets `next_role` to the same role. Controls accepts the latest result for the current task. |
-| `implementation-loop commit` | Refuses when the current branch is trunk or is not `state.branch`. Requires last checker and last reviewer `pass` for the current task. In 4-pack, that checker `pass` must be after the last coder, and that reviewer `pass` after the last checker. Blocks on `Assumption: unresolved`, `needs-sign-off`, or a dirty `AGENTS.md`. Checks off the **current** task, commits new product files plus `tasks.md` and changed `plan.md`, leaves `.hive/` unstaged, skips paths dirty at `start` and tool caches, resets `round_trips` to 0. If `git add` or `git commit` fails, restore the previous `tasks.md` checkbox and do not keep a partial checkoff. Message is `implementation-loop <feature> <task-id-or-slug>`. Does not merge, force-push, or push to trunk. When `push` is true and `origin` exists, pushes the current branch; on failure keeps the commit, sets `blocked`, does not advance `current_task`, and does not retry. After the first successful push, if `pr_url` is empty, run `gh pr create` when `gh` is available; store the URL in `state.json`. If `gh` is missing, leave `pr_url` empty and do not raise. Slice-end `test:full` failure (including a missing executable or a malformed command string) keeps the commit, sets `blocked`, and does not advance `current_task` or append a retrospective line. `handoff` and `accept` treat role names as case-insensitive. Advance to the next task (or `complete`) only after push and slice `test:full` succeed. When completed-feature count is at least 5 more than `last_retrospective_n`, write `docs/proposals/implementation-loop-candidates.md` if missing (`# operational` and `# behavioral`), set `last_retrospective_n`, and set `next_role` to `retrospective`. |
+| `implementation-loop commit` | Refuses when the current branch is trunk or is not `state.branch`. Requires last checker and last reviewer `pass` for the current task. In 4-pack, that checker `pass` must be after the last coder, and that reviewer `pass` after the last checker. Blocks on `Assumption: unresolved`, `needs-sign-off`, or a dirty repo-root `AGENTS.md` (not a nested copy such as the continual-learning plugin file). Checks off the **current** task, commits new product files plus `tasks.md` and changed `plan.md`, leaves `.hive/` unstaged, skips paths dirty at `start` and tool caches, resets `round_trips` to 0. If `git add` or `git commit` fails, restore the previous `tasks.md` checkbox and do not keep a partial checkoff. Message is `implementation-loop <feature> <task-id-or-slug>`. Does not merge, force-push, or push to trunk. When `push` is true and `origin` exists, pushes the current branch; on failure keeps the commit, sets `blocked`, does not advance `current_task`, and does not retry. After the first successful push, if `pr_url` is empty, run `gh pr create` when `gh` is available; store the URL in `state.json`. If `gh` is missing, leave `pr_url` empty and do not raise. Slice-end `test:full` failure (including a missing executable or a malformed command string) keeps the commit, sets `blocked`, and does not advance `current_task` or append a retrospective line. `handoff` and `accept` treat role names as case-insensitive. Advance to the next task (or `complete`) only after push and slice `test:full` succeed. When completed-feature count is at least 5 more than `last_retrospective_n`, write `docs/proposals/implementation-loop-candidates.md` if missing (`# operational` and `# behavioral`), set `last_retrospective_n`, and set `next_role` to `retrospective`. |
 
 ### R11 — File overlap before start or switch
 
@@ -255,6 +256,55 @@ Exit `0` on success. Exit `2` on a gate block. JSON stdout includes `ok`, `actio
 
 Installed coordinator and command text tell the agent to call these commands. The agent still runs coder and reviewer passes. Python runs the checker command gates and appends the checker `result.md` entry.
 
+### R12 — Bounded blocker diagnosis and repair handoff
+
+When `implementation-loop check` fails, the coordinator diagnoses the checker
+evidence before returning control to the user. Diagnosis is deterministic and
+bounded; it does not bypass a gate or edit product code.
+
+- Repairable classes include incompatible local signatures, missing test/module
+  fixtures, and stale generated artifacts. The report includes class,
+  confidence, evidence, and the smallest next action.
+- A repairable blocker writes runtime-only
+  `.hive/implementation-loop/blocker.json`; the next coder handoff carries
+  that diagnosis. In 1-pack the coordinator performs that repair pass; in
+  4-pack the coder does. The coordinator enforces the nine-second pause before
+  the repair handoff, then the checker runs again.
+- Authentication, secrets, destructive operations, unrelated product changes,
+  ambiguous behavior, and unrecognized failures remain human-escalated.
+- A task allows at most four repair/check cycles. Each cycle is independent
+  and waits nine seconds before the repair handoff. A pass never auto-commits.
+- A blocker is resolved only when the normal checker and wiring audit pass.
+  The record is cleared only after that pass. A record whose feature or task
+  does not match the current loop is ignored and cleared on the next task.
+
+### R13 — Evidence-based dirty-scope preflight
+
+The dirty-tree gate must distinguish a declared file conflict from unrelated
+work that can be validated safely. Direct overlap with a feature target remains
+a hard block handled by R11. For unrelated paths, `start` runs the configured
+`test:quick` command as a bounded preflight when the command is available.
+
+- A passing preflight may raise the dirty-scope result to `medium` and allow
+  automatic start when no hard-risk path is present.
+- Workspace infrastructure paths such as `.cursor/**`, `.github/**`,
+  `pyproject.toml`, and package manifests are reviewable risk, not automatic
+  hard blocks. When they are unrelated to the feature, a passing bounded
+  `test:quick` preflight and baseline isolation may raise the result to
+  `medium` and allow start. The result names those paths separately so the
+  coordinator and later commit cannot mistake them for feature changes.
+- A failed, missing, malformed, or timed-out preflight remains `low` and
+  requires explicit `--allow-dirty`.
+- Root `AGENTS.md`, authentication or secret material, destructive-operation
+  configuration, and unresolved command errors remain hard-risk paths and are
+  never auto-approved by the preflight.
+- The result records the dirty-path categories, preflight command and outcome,
+  and the reason for the decision. It does not stage, discard, or rewrite
+  unrelated files.
+- Each decision and its eventual checker outcome may be retained as runtime
+  evidence for future calibration, but no learned result may override R11 or
+  the hard-risk list.
+
 ## State
 
 `.hive/implementation-loop/state.json`:
@@ -271,6 +321,7 @@ Installed coordinator and command text tell the agent to call these commands. Th
 | `slice_signoff` | `continue` or `needs-sign-off` |
 | `baseline_dirty` | Paths that were dirty at `start` (not under `.hive/`). `commit` does not stage these except `tasks.md` / `plan.md` |
 | `last_retrospective_n` | Completed-feature count at the last retrospective stub |
+| `blocker` | Latest bounded checker diagnosis, or empty when none is pending |
 
 `.hive/implementation-loop/commands.json`:
 

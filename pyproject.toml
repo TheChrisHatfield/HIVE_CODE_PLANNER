@@ -27,6 +27,7 @@ hive-planner = "hive_planner.cli:main"
 hive-planner-ui = "hive_planner.launcher.__main__:main"
 
 [tool.setuptools.packages.find]
+# CHAT_HISTORY/ is a development-only export, not source and not build input.
 where = ["src"]
 
 [tool.setuptools.package-data]

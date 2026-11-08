@@ -16,9 +16,18 @@ import time
 from pathlib import Path
 
 CONTINUE_REL = Path(".hive") / "bug-hunt" / "continue.json"
+RECOVERY_REL = Path(".hive") / "bug-hunt" / "recovery.json"
 DEFAULT_PAUSE_SECONDS = 10
 # time.sleep overflows past about 292 years, so a pause beyond this is a typo.
 MAX_SLEEP_SECONDS = 9_223_372_036
+RECOVERY_LENSES = (
+    "ui-event",
+    "configuration",
+    "wiring",
+    "persistence",
+    "error-reporting",
+    "test-contract",
+)
 FOLLOWUP_MESSAGE = (
     "The bug hunt is still running. This is the next inference pass. "
     "Read .cursor/commands/bug-hunt.md and do one iteration, then end the turn. "
@@ -132,6 +141,172 @@ def _write_state(path: Path, state: dict) -> None:
     tmp = path.with_name(path.name + ".tmp")
     tmp.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
     tmp.replace(path)
+
+
+def _empty_recovery() -> dict:
+    return {
+        "phase": "idle",
+        "attempts": 0,
+        "empty_streak": 0,
+        "excluded_locations": [],
+        "excluded_folders": [],
+        "lenses_used": [],
+        "coverage_by_folder": {},
+        "last_empty_confidence": 1.0,
+    }
+
+
+def _read_recovery(root: Path) -> dict:
+    path = Path(root) / RECOVERY_REL
+    if not path.is_file():
+        return _empty_recovery()
+    try:
+        value = json.loads(_read_state_text(path))
+    except (OSError, UnicodeError, json.JSONDecodeError, MemoryError, RecursionError):
+        return _empty_recovery()
+    if not isinstance(value, dict):
+        return _empty_recovery()
+    locations = value.get("excluded_locations", [])
+    folders = value.get("excluded_folders", [])
+    lenses = value.get("lenses_used", [])
+    coverage = value.get("coverage_by_folder", {})
+    attempts = value.get("attempts")
+    streak = value.get("empty_streak")
+    confidence = value.get("last_empty_confidence", 1.0)
+    try:
+        confidence = float(confidence)
+    except (TypeError, ValueError, OverflowError):
+        return _empty_recovery()
+    valid = (
+        value.get("phase") in {"idle", "recovery"}
+        and isinstance(attempts, int) and not isinstance(attempts, bool) and 0 <= attempts <= 3
+        and isinstance(streak, int) and not isinstance(streak, bool) and 0 <= streak <= 3
+        and isinstance(locations, list) and len(locations) <= 128
+        and isinstance(folders, list) and len(folders) <= 64
+        and isinstance(lenses, list) and len(lenses) <= 6
+        and isinstance(coverage, dict) and len(coverage) <= 64
+        and 0.0 <= confidence <= 1.0
+        and all(isinstance(item, str) and item and not item.startswith(("/", "\\")) and ":" not in item and ".." not in item.replace("\\", "/").split("/") for item in locations)
+        and len({item.casefold() for item in locations}) == len(locations)
+        and all(isinstance(item, str) and item for item in folders)
+        and len({item.casefold() for item in folders}) == len(folders)
+        and all(item in RECOVERY_LENSES for item in lenses)
+        and len(set(lenses)) == len(lenses)
+        and all(
+            isinstance(key, str)
+            and key
+            and "/" not in key
+            and "\\" not in key
+            and ":" not in key
+            and ".." not in key
+            and isinstance(item, int)
+            and not isinstance(item, bool)
+            and item in (0, 1)
+            for key, item in coverage.items()
+        )
+    )
+    if not valid:
+        return _empty_recovery()
+    return {
+        "phase": value["phase"],
+        "attempts": attempts,
+        "empty_streak": streak,
+        "excluded_locations": list(locations),
+        "excluded_folders": list(folders),
+        "lenses_used": list(lenses),
+        "coverage_by_folder": dict(coverage),
+        "last_empty_confidence": confidence,
+    }
+
+
+def _write_recovery(root: Path, state: dict) -> None:
+    path = Path(root) / RECOVERY_REL
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
+    tmp.replace(path)
+
+
+def _queue_has_candidate(root: Path, current_file: str = "") -> bool:
+    path = Path(root) / Path(".hive") / "bug-hunt" / "rank-pass.json"
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError, MemoryError, RecursionError):
+        return False
+    if not isinstance(payload, dict) or not isinstance(payload.get("queue"), list):
+        return False
+    wanted = current_file.replace("\\", "/").casefold()
+    for item in payload["queue"]:
+        if not isinstance(item, dict):
+            continue
+        rel = str(item.get("file") or "").replace("\\", "/").casefold()
+        signals = item.get("signals")
+        if not isinstance(signals, dict):
+            signals = {}
+        try:
+            signal_present = any(
+                float(signals.get(key, 0) or 0) != 0
+                for key in ("recent_fix_commits", "thin_test", "wiring_hop", "dead_setting", "reverted", "split_stores")
+            )
+        except (TypeError, ValueError, OverflowError):
+            signal_present = False
+        if rel and rel != wanted and (bool(item.get("findings")) or signal_present):
+            return True
+    return False
+
+
+def _record_recovery_after_append(root: Path, state: dict) -> tuple[dict, bool]:
+    recovery = _read_recovery(root)
+    outcome = str(state.get("outcome") or "").strip().casefold()
+    rel = str(state.get("file") or "").replace("\\", "/").lstrip("./")
+    folder = rel.split("/", 1)[0] if "/" in rel else "."
+    if outcome in {"committed", "skipped", "review-failed"}:
+        recovery = _empty_recovery()
+    elif outcome == "empty":
+        raw_confidence = state.get("empty_confidence", 1.0)
+        try:
+            confidence = float(raw_confidence)
+        except (TypeError, ValueError, OverflowError):
+            confidence = 1.0
+        if confidence != confidence or confidence in (float("inf"), float("-inf")):
+            confidence = 1.0
+        confidence = min(1.0, max(0.0, confidence))
+        lens = state.get("recovery_lens")
+        if recovery["phase"] == "recovery":
+            recovery["attempts"] += 1
+            recovery["empty_streak"] += 1
+        else:
+            try:
+                consecutive_empty = int(state.get("consecutive_empty", 0) or 0)
+            except (TypeError, ValueError, OverflowError):
+                consecutive_empty = 0
+        if recovery["phase"] != "recovery" and consecutive_empty >= 2 and _queue_has_candidate(root, rel):
+            recovery["phase"] = "recovery"
+            recovery["attempts"] = 0
+            recovery["empty_streak"] = 0
+        if recovery["phase"] == "recovery":
+            if rel and rel.casefold() not in {item.casefold() for item in recovery["excluded_locations"]}:
+                recovery["excluded_locations"].append(rel)
+            if folder.casefold() not in {item.casefold() for item in recovery["excluded_folders"]}:
+                recovery["excluded_folders"].append(folder)
+            if isinstance(lens, str) and lens in RECOVERY_LENSES and lens not in recovery["lenses_used"]:
+                recovery["lenses_used"].append(lens)
+            recovery["coverage_by_folder"][folder] = 1
+        recovery["last_empty_confidence"] = confidence
+        terminal = recovery["attempts"] >= 3 or not _queue_has_candidate(root, rel)
+        if terminal:
+            recovery = _empty_recovery()
+        else:
+            terminal = False
+    else:
+        return recovery, True
+    try:
+        _write_recovery(root, recovery)
+    except (OSError, ValueError, TypeError, MemoryError) as exc:
+        return {"phase": "error", "error": str(exc)}, False
+    if outcome == "empty" and terminal:
+        recovery["terminal"] = True
+    return recovery, True
 
 
 def find_hunt_root(start: Path | None = None) -> Path:
@@ -278,12 +453,22 @@ def _release_lock(lock: Path) -> None:
         return
 
 
-def _stop_met(state: dict) -> bool:
+def _stop_met(root: Path, state: dict) -> bool:
     committed_n = _whole_count(state.get("committed", 0))
     ceiling_n = _whole_count(state.get("ceiling"))
     empties_n = _whole_count(state.get("consecutive_empty", 0))
     ceiling_met = ceiling_n is not None and committed_n is not None and committed_n >= ceiling_n
-    empties_met = empties_n is not None and empties_n >= 2
+    recovery = _read_recovery(root)
+    if recovery.get("phase") == "recovery":
+        empties_met = recovery.get("attempts", 0) >= 3 or not _queue_has_candidate(
+            root, str(state.get("file") or "")
+        )
+    else:
+        empties_met = (
+            empties_n is not None
+            and empties_n >= 2
+            and not _queue_has_candidate(root, str(state.get("file") or ""))
+        )
     return ceiling_met or empties_met or _is_active(state.get("stop"))
 
 
@@ -324,11 +509,11 @@ def apply_continue(root: Path, *, sleep) -> dict:
             return {}
         abandoned = _resume_abandoned(state)
         if not _is_active(state.get("active")) and not abandoned:
-            if _stop_met(state):
+            if _stop_met(root, state):
                 _save_stopped_row(root, state)
             return {}
         _fill_pause(root, state)
-        if _stop_met(state):
+        if _stop_met(root, state):
             _deactivate_after_rank_row(root, path, state)
             return {}
         planned = dict(state)
@@ -358,7 +543,7 @@ def apply_continue(root: Path, *, sleep) -> dict:
         state = _read_state(path)
         if not isinstance(state, dict) or state.get("resume_pid") != os.getpid():
             return {}
-        if _stop_met(state):
+        if _stop_met(root, state):
             _deactivate_after_rank_row(root, path, state)
             return {}
         state.pop("resume_pid", None)
@@ -389,12 +574,18 @@ def _save_stopped_row(root: Path, state: dict) -> None:
     except Exception as exc:
         print(f"[bug_hunt_continue] stop row failed: {exc}", file=sys.stderr)
         return
-    if result.get("missing_outcome"):
+    if result.get("missing_outcome") and not result.get("appended"):
         print(
-            "[bug_hunt_continue] stop without a valid outcome on continue.json; "
-            "no rank row was appended.",
+            "[bug_hunt_continue] stop row was not written.",
             file=sys.stderr,
         )
+    if result.get("appended") and str(state.get("outcome") or "").strip().casefold() in {
+        "committed",
+        "skipped",
+        "empty",
+        "review-failed",
+    }:
+        _record_recovery_after_append(root, state)
 
 
 def _with_rank_queue(root: Path, state: dict, payload: dict) -> dict:
@@ -417,6 +608,45 @@ def _with_rank_queue(root: Path, state: dict, payload: dict) -> dict:
             "or restart the hunt. Do not rebuild the weights yourself."
         )
         return payload
+    if summary.get("appended"):
+        recovery, ok = _record_recovery_after_append(root, state)
+        if not ok:
+            state["_recovery_write_failed"] = True
+            state["active"] = False
+            payload = dict(payload)
+            payload["followup_message"] = (
+                message + " Recovery state could not be written; the hunt is stopped."
+            )
+            return payload
+        if recovery.get("phase") == "recovery":
+            try:
+                summary = advance_rank_pass(root, state, fresh=False)
+            except Exception as exc:
+                payload = dict(payload)
+                payload["followup_message"] = (
+                    message + f" Recovery queue rebuild failed ({exc}); the hunt is stopped."
+                )
+                state["active"] = False
+                return payload
+        if recovery.get("terminal"):
+            state["active"] = False
+            payload = dict(payload)
+            payload["followup_message"] = message + " Recovery is exhausted; the hunt is stopped."
+            return payload
+        if recovery.get("phase") == "idle" and (
+            str(state.get("outcome") or "").casefold() == "empty"
+            and int(state.get("consecutive_empty", 0) or 0) >= 2
+            and not _queue_has_candidate(root, str(state.get("file") or ""))
+        ):
+            state["active"] = False
+            payload = dict(payload)
+            payload["followup_message"] = message + " Recovery is exhausted; the hunt is stopped."
+            return payload
+        if recovery.get("phase") == "idle" and int(recovery.get("attempts", 0)) >= 3:
+            state["active"] = False
+            payload = dict(payload)
+            payload["followup_message"] = message + " Recovery reached its three-empty limit; the hunt is stopped."
+            return payload
     top = str(summary.get("top") or "")
     if top:
         note = (

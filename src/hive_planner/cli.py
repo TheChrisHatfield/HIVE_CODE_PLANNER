@@ -304,6 +304,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     notify_parser.add_argument("--title", default="HIVE Planner")
     notify_parser.add_argument("--body", required=True)
+    notify_parser.add_argument("--repo", default="", help="Repo heading shown on the notice")
     notify_parser.add_argument("--seconds", type=int, default=12)
 
     translate_parser = sub.add_parser("translate", help="Rule-based cartridge draft translation")
@@ -505,6 +506,13 @@ def main(argv: list[str] | None = None) -> int:
         help="Print the script and do not write files",
     )
 
+    from hive_planner.bug_hunt import (
+        DEFAULT_ITERATIONS,
+        DEFAULT_PAUSE_SECONDS,
+        MAX_ITERATIONS,
+        MIN_ITERATIONS,
+    )
+
     bug_hunt = sub.add_parser(
         "bug-hunt",
         help="Install the continuous bug-hunt agent script (hook: change.bugfix_mode)",
@@ -512,20 +520,38 @@ def main(argv: list[str] | None = None) -> int:
     bug_hunt.add_argument(
         "--iterations",
         type=_iterations_arg,
-        default=50,
-        help="How many reviewed local commits the script aims for (1-200, default 50)",
+        default=DEFAULT_ITERATIONS,
+        help=(
+            "Committed fixes before the hunt stops "
+            f"({MIN_ITERATIONS}-{MAX_ITERATIONS}, default {DEFAULT_ITERATIONS})"
+        ),
     )
     bug_hunt.add_argument(
         "--pause-seconds",
         type=_pause_seconds_arg,
-        default=10,
-        help="Seconds between inference passes (0 skips the wait and the next pass still starts, default 10)",
+        default=DEFAULT_PAUSE_SECONDS,
+        help=(
+            "Seconds between passes. 0 skips the wait and the next pass still starts. "
+            f"Default {DEFAULT_PAUSE_SECONDS}."
+        ),
     )
     bug_hunt.add_argument(
         "--print",
         dest="print_only",
         action="store_true",
         help="Print the script and do not write files",
+    )
+    bug_hunt_commit = sub.add_parser(
+        "bug-hunt-commit",
+        help="Commit one bug-hunt fix without including unrelated edits in the same files",
+    )
+    bug_hunt_commit.add_argument("--message", required=True, help="Commit message")
+    bug_hunt_commit.add_argument(
+        "--snapshot",
+        action="append",
+        required=True,
+        metavar="PATH=SNAPSHOT",
+        help="Repo-relative file and the copy saved before this fix edited it",
     )
 
     impl_loop = sub.add_parser(
@@ -564,6 +590,11 @@ def main(argv: list[str] | None = None) -> int:
         "--force-feature",
         action="store_true",
         help="Switch from a different running feature, or continue after status blocked",
+    )
+    impl_start.add_argument(
+        "--allow-overlap",
+        action="store_true",
+        help="Continue when this feature and the feature already in the loop declare the same files",
     )
     impl_handoff = impl_sub.add_parser("handoff", help="Write handoff.md and increment round_trips")
     impl_handoff.add_argument(
@@ -655,7 +686,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "notify":
         from hive_planner.notify import failure_message, notify
 
-        if not notify(args.title, args.body, seconds=args.seconds):
+        if not notify(args.title, args.body, seconds=args.seconds, repo=args.repo or None):
             print(failure_message(), file=sys.stderr)
             return 1
         print(json.dumps({"ok": True, "title": args.title}))
@@ -1289,6 +1320,24 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(installed.to_dict(), indent=2))
         return 0
 
+    if args.command == "bug-hunt-commit":
+        from hive_planner.bug_hunt import BugHuntError, commit_isolated_fix
+
+        keyed: dict[str, Path] = {}
+        for item in args.snapshot:
+            rel, sep, snap = str(item).partition("=")
+            if not sep or not rel or not snap:
+                print("Error: --snapshot must be PATH=SNAPSHOT", file=sys.stderr)
+                return 1
+            keyed[rel] = Path(snap)
+        try:
+            result = commit_isolated_fix(root, message=args.message, snapshots=keyed)
+        except (BugHuntError, OSError) as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        print(json.dumps(result, indent=2))
+        return 0 if result.get("ok") else 1
+
     if args.command == "bug-hunt":
         from hive_planner.bug_hunt import (
             BugHuntError,
@@ -1365,6 +1414,7 @@ def main(argv: list[str] | None = None) -> int:
                     args.feature,
                     allow_dirty=args.allow_dirty,
                     force_feature=args.force_feature,
+                    allow_overlap=args.allow_overlap,
                 )
             elif args.implementation_loop_command == "handoff":
                 role = (args.role or "").strip().lower()

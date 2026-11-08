@@ -173,12 +173,18 @@ def ensure_handoff_rosetta_navigation(
     feature: str,
     *,
     promoted_layers: set[str] | None = None,
+    skip: set[str] | None = None,
 ) -> list[str]:
-    """Patch promoted handoff files with Rosetta navigation when missing."""
+    """Patch promoted handoff files with Rosetta navigation when missing.
+
+    ``skip`` holds repo-relative paths Update must not rewrite, including a
+    customized example tasks file that was left in place.
+    """
     from hive_planner.config import RepoPaths
 
     root: RepoPaths = paths
     patched: list[str] = []
+    skipped = skip or set()
     layers = promoted_layers or set()
     spec_dir = root.root / "docs" / "specs" / feature
     checks: list[tuple[Path, str]] = [
@@ -195,8 +201,11 @@ def ensure_handoff_rosetta_navigation(
     if "macro" in layers:
         checks.append((root.root / "docs" / "delta" / "10_macro.md", delta_layer_navigation_block("macro")))
     for path, block in checks:
+        rel = path.relative_to(root.root).as_posix()
+        if rel in skipped:
+            continue
         if ensure_file_rosetta_navigation(path, block):
-            patched.append(path.relative_to(root.root).as_posix())
+            patched.append(rel)
     return patched
 
 

@@ -7,12 +7,16 @@ import re
 import shlex
 import shutil
 import sqlite3
+import stat
 import subprocess
 import sys
+import tempfile
+import urllib.request
+import zipfile
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from urllib.parse import unquote, urlparse
+from urllib.parse import quote, unquote, urlparse
 
 from hive_planner.bootstrap import BootstrapError, init_project
 from hive_planner.ci_handoff import run_ci_check
@@ -23,6 +27,10 @@ from hive_planner.map_sync import sync_impact_maps
 from hive_planner.pipeline import ingest
 from hive_planner.project_profile import read_project_profile
 from hive_planner.spec_drift import parse_active_feature, repair_agents_active_feature
+
+GITHUB_ARCHIVE_MAX_BYTES = 2 * 1024 * 1024 * 1024
+GITHUB_ARCHIVE_MAX_EXTRACTED_BYTES = 10 * 1024 * 1024 * 1024
+GITHUB_ARCHIVE_MAX_FILES = 100_000
 
 
 @dataclass
@@ -1626,9 +1634,10 @@ def run_deploy_agent_handoff(
     hive_planner_root: Path,
     force: bool = False,
     cl_runtime: str | None = None,
+    refresh_changed: bool = False,
 ) -> dict:
     from hive_planner.agent_handoff import validate_unified_handoff
-    from hive_planner.bootstrap import BootstrapError, deploy_agent_handoff_scaffold
+    from hive_planner.bootstrap import BootstrapError, _PROJECT_SEED_FILES, deploy_agent_handoff_scaffold
     from hive_planner.cl_runtime import normalize_cl_runtime, resolve_cl_runtime
     from hive_planner.rosetta_nav import DEPLOY_HANDOFF_NAV_LAYERS, ensure_handoff_rosetta_navigation
     from hive_planner.spec_drift import BOOTSTRAP_DEFAULT_FEATURE, repair_agents_rosetta_section
@@ -1641,12 +1650,15 @@ def run_deploy_agent_handoff(
         return {"ok": False, "error": summary.detail}
     resolved_runtime = normalize_cl_runtime(cl_runtime or resolve_cl_runtime(target))
     paths = RepoPaths(root=hive_planner_root.resolve())
+    refresh_stats: dict = {"unchanged": 0, "kept": []}
     try:
         written, warnings = deploy_agent_handoff_scaffold(
             paths,
             target,
             force=force,
             cl_runtime=resolved_runtime,
+            refresh_changed=refresh_changed,
+            refresh_stats=refresh_stats if refresh_changed else None,
         )
     except BootstrapError as exc:
         return {"ok": False, "error": str(exc)}
@@ -1657,6 +1669,7 @@ def run_deploy_agent_handoff(
         target_paths,
         BOOTSTRAP_DEFAULT_FEATURE,
         promoted_layers=set(DEPLOY_HANDOFF_NAV_LAYERS),
+        skip=set(_PROJECT_SEED_FILES) if refresh_changed else None,
     )
     handoff = validate_unified_handoff(target)
     payload = {
@@ -1666,6 +1679,10 @@ def run_deploy_agent_handoff(
         "agent_handoff_mode": "unified",
         "cl_runtime": resolved_runtime,
     }
+    if refresh_changed:
+        payload["refresh_changed"] = True
+        payload["files_kept"] = list(refresh_stats.get("kept") or [])
+        payload["files_unchanged"] = int(refresh_stats.get("unchanged") or 0)
     if not handoff.complete:
         payload["error"] = f"Unified handoff incomplete — missing: {', '.join(handoff.missing)}"
         payload["handoff"] = {
@@ -1691,6 +1708,28 @@ def run_deploy_agent_handoff(
             "patched": patched,
         }
     return payload
+
+
+def run_update_linked_repo(
+    project_root: Path,
+    *,
+    hive_planner_root: Path,
+    cl_runtime: str | None = None,
+) -> dict:
+    """Refresh an existing project from the current Hive Planner tree.
+
+    Copy Hive-owned files only when their contents differ. Leave matching
+    files alone, and leave customized project seeds (example specs and the
+    candidates template) in place. Deploy agent handoff still refreshes
+    overlays only when the patch rev changes.
+    """
+    return run_deploy_agent_handoff(
+        project_root,
+        hive_planner_root=hive_planner_root,
+        force=False,
+        cl_runtime=cl_runtime,
+        refresh_changed=True,
+    )
 
 
 def run_project_bug_hunt_install(
@@ -2303,8 +2342,14 @@ def _cartridge_import_files(root: Path) -> list[Path]:
     return sorted(found)
 
 
-def _stage_context_sources(paths: RepoPaths, source_files: list[Path]) -> tuple[list[str], list[str]]:
-    dest_dir = paths.sources / "imported"
+def _stage_context_sources(
+    paths: RepoPaths,
+    source_files: list[Path],
+    *,
+    destination_subdir: Path = Path("imported"),
+    preserve_root: Path | None = None,
+) -> tuple[list[str], list[str]]:
+    dest_dir = paths.sources / destination_subdir
     dest_dir.mkdir(parents=True, exist_ok=True)
     copied: list[str] = []
     warnings: list[str] = []
@@ -2316,17 +2361,125 @@ def _stage_context_sources(paths: RepoPaths, source_files: list[Path]) -> tuple[
         if src.suffix.lower() not in SUPPORTED_EXTENSIONS:
             warnings.append(f"Skipped (unsupported type): {src.name}")
             continue
-        dest = dest_dir / src.name
+        if preserve_root is None:
+            relative = Path(src.name)
+        else:
+            try:
+                relative = src.relative_to(preserve_root)
+            except ValueError:
+                relative = Path(src.name)
+            if len(relative.parts) > 1:
+                relative = Path(*relative.parts[1:])
+        dest = dest_dir / relative
+        dest.parent.mkdir(parents=True, exist_ok=True)
         if dest.exists():
             stem = dest.stem
             suffix = dest.suffix
             counter = 2
             while dest.exists():
-                dest = dest_dir / f"{stem}-{counter}{suffix}"
+                dest = dest.with_name(f"{stem}-{counter}{suffix}")
                 counter += 1
         shutil.copy2(src, dest)
         copied.append(dest.relative_to(paths.root).as_posix())
     return copied, warnings
+
+
+def _github_repo_parts(url: str) -> tuple[str, str]:
+    parsed = urlparse(url.strip())
+    if parsed.scheme != "https" or parsed.hostname not in {"github.com", "www.github.com"}:
+        raise ValueError("GitHub source must be an https://github.com/owner/repository URL.")
+    parts = [part for part in parsed.path.split("/") if part]
+    if len(parts) != 2:
+        raise ValueError("GitHub source must be an https://github.com/owner/repository URL.")
+    owner, repository = parts
+    if repository.endswith(".git"):
+        repository = repository[:-4]
+    if (
+        not owner
+        or not repository
+        or parsed.query
+        or parsed.fragment
+        or not re.fullmatch(r"[A-Za-z0-9_.-]+", owner)
+        or not re.fullmatch(r"[A-Za-z0-9_.-]+", repository)
+        or owner in {".", ".."}
+        or repository in {".", ".."}
+    ):
+        raise ValueError("GitHub source must be an https://github.com/owner/repository URL.")
+    return owner, repository
+
+
+def download_github_source_files(url: str, destination: Path) -> list[Path]:
+    """Download supported source files from a public GitHub repository archive."""
+    owner, repository = _github_repo_parts(url)
+    headers = {"User-Agent": "hive-planner-source-loader"}
+    api_url = f"https://api.github.com/repos/{owner}/{repository}"
+    try:
+        request = urllib.request.Request(api_url, headers=headers)
+        with urllib.request.urlopen(request, timeout=30) as response:
+            metadata = json.loads(response.read(1_000_000).decode("utf-8"))
+        branch = metadata.get("default_branch") if isinstance(metadata, dict) else None
+        if not isinstance(branch, str) or not branch:
+            raise ValueError("GitHub did not provide a default branch for that repository.")
+        archive_url = (
+            f"https://codeload.github.com/{owner}/{repository}/zip/refs/heads/"
+            f"{quote(branch, safe='')}"
+        )
+        archive_request = urllib.request.Request(archive_url, headers=headers)
+        destination.mkdir(parents=True, exist_ok=True)
+        archive_path = destination / "repository.zip"
+        with urllib.request.urlopen(archive_request, timeout=120) as response:
+            total_bytes = 0
+            with archive_path.open("wb") as output:
+                while True:
+                    chunk = response.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    total_bytes += len(chunk)
+                    if total_bytes > GITHUB_ARCHIVE_MAX_BYTES:
+                        raise ValueError(
+                            "GitHub repository archive is larger than the 2 GB limit."
+                        )
+                    output.write(chunk)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        raise ValueError(f"Could not download GitHub repository: {exc}") from exc
+    try:
+        with zipfile.ZipFile(archive_path) as bundle:
+            extract_root = (destination / "repository").resolve()
+            file_count = 0
+            extracted_bytes = 0
+            for member in bundle.infolist():
+                target = (extract_root / member.filename).resolve()
+                if target != extract_root and extract_root not in target.parents:
+                    raise ValueError("GitHub repository archive contains an unsafe path.")
+                if member.is_dir():
+                    continue
+                file_count += 1
+                extracted_bytes += member.file_size
+                mode = member.external_attr >> 16
+                if stat.S_IFMT(mode) == stat.S_IFLNK:
+                    raise ValueError("GitHub repository archive contains a symlink.")
+                if file_count > GITHUB_ARCHIVE_MAX_FILES:
+                    raise ValueError("GitHub repository archive contains too many files.")
+                if extracted_bytes > GITHUB_ARCHIVE_MAX_EXTRACTED_BYTES:
+                    raise ValueError(
+                        "GitHub repository expands beyond the 10 GB extraction limit."
+                    )
+            extract_root.mkdir(parents=True, exist_ok=True)
+            bundle.extractall(extract_root)
+    except (OSError, zipfile.BadZipFile) as exc:
+        raise ValueError(f"GitHub repository archive could not be opened: {exc}") from exc
+
+    skip_parts = {".git", ".github", ".hive", ".cursor", "node_modules", "venv", ".venv"}
+    files: list[Path] = []
+    for path in (destination / "repository").rglob("*"):
+        if not path.is_file() or path.suffix.lower() not in SUPPORTED_EXTENSIONS:
+            continue
+        if any(part.casefold() in skip_parts for part in path.relative_to(destination).parts):
+            continue
+        files.append(path)
+    if not files:
+        raise ValueError("GitHub repository contains no supported source files.")
+    return sorted(files)
 
 
 def _load_json_object(path: Path) -> dict | None:
@@ -2413,6 +2566,8 @@ def run_cartridge_load_sources(
     source_files: list[Path],
     feature: str,
     *,
+    github_url: str | None = None,
+    github_urls: list[str] | None = None,
     embed: bool = False,
     promote: bool = True,
     force_promote: bool = False,
@@ -2424,15 +2579,42 @@ def run_cartridge_load_sources(
     summary = summarize_project(target)
     if not summary.ok:
         return {"ok": False, "error": summary.detail}
-    if not source_files:
-        return {"ok": False, "error": "Choose at least one source file."}
+    requested_github_urls = [
+        url.strip()
+        for url in ([github_url] if github_url else []) + (github_urls or [])
+        if isinstance(url, str) and url.strip()
+    ]
+    if not source_files and not requested_github_urls:
+        return {"ok": False, "error": "Choose source files or enter a GitHub repository URL."}
     try:
         validate_feature_id(feature.strip())
     except ValueError as exc:
         return {"ok": False, "error": str(exc)}
 
     paths = RepoPaths(root=target)
-    copied, warnings = _stage_context_sources(paths, source_files)
+    with tempfile.TemporaryDirectory(prefix="hive-github-source-") as temp_dir:
+        github_repositories: list[tuple[tuple[str, str], list[Path]]] = []
+        for index, requested_url in enumerate(dict.fromkeys(requested_github_urls)):
+            try:
+                owner_repo = _github_repo_parts(requested_url)
+                github_sources = download_github_source_files(
+                    requested_url,
+                    Path(temp_dir) / f"repository-{index}",
+                )
+            except ValueError as exc:
+                return {"ok": False, "error": str(exc)}
+            github_repositories.append((owner_repo, github_sources))
+        copied, warnings = _stage_context_sources(paths, list(source_files))
+        for (owner, repository), github_sources in github_repositories:
+            if github_sources:
+                github_copied, github_warnings = _stage_context_sources(
+                    paths,
+                    github_sources,
+                    destination_subdir=Path("github") / owner / repository,
+                    preserve_root=Path(temp_dir) / f"repository-{index}" / "repository",
+                )
+                copied.extend(github_copied)
+                warnings.extend(github_warnings)
     if not copied:
         return {"ok": False, "error": "No supported source files were copied.", "warnings": warnings}
 
@@ -2893,6 +3075,18 @@ def _log_scan_mtime(path: Path) -> float:
         return 0.0
 
 
+def _entry_is_file(path: Path) -> bool:
+    """True for a regular file. A log pruned mid-scan can fail stat and still be readable."""
+    try:
+        return stat.S_ISREG(path.stat().st_mode)
+    except OSError:
+        try:
+            with path.open("rb"):
+                return True
+        except OSError:
+            return False
+
+
 def _files_under(root: Path, suffix: str) -> list[Path]:
     """Files ending in suffix, without following a directory junction."""
     found: list[Path] = []
@@ -2912,12 +3106,16 @@ def _files_under(root: Path, suffix: str) -> list[Path]:
         except OSError:
             return
         for path in entries:
-            if path.is_dir():
+            try:
+                is_dir = path.is_dir()
+            except OSError:
+                is_dir = False
+            if is_dir:
                 if _is_reparse_dir(path):
                     continue
                 scan(path)
                 continue
-            if path.is_file() and path.suffix.lower() == wanted:
+            if path.suffix.lower() == wanted and _entry_is_file(path):
                 found.append(path)
 
     scan(root)

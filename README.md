@@ -35,6 +35,7 @@ Quick launch: double-click `scripts\HivePlanner.lnk`, or run the portable build 
 | `docs/` | Architecture, decisions, and reference notes |
 | `plans/` | Planning artifacts, specs, and task breakdowns |
 | `src/` | Source code and scripts |
+| `CHAT_HISTORY/` | Development-only chat export. Not source. Do not compile it or treat it as build input. |
 | `.cursor/` | Cursor IDE rules and project guidance |
 
 

@@ -59,6 +59,15 @@ def test_cursor_rule_names_the_call_and_the_command() -> None:
     assert "how to call it" in rule
 
 
+def test_ground_truth_prompt_mines_organized_github_sources() -> None:
+    from hive_planner.ground_truth_mine import render_agent_prompt
+
+    prompt = render_agent_prompt()
+
+    assert "context-library/sources/github/" in prompt
+    assert "A staged repository is indexed evidence" in prompt
+
+
 def test_install_leaves_no_tmp_ground_truth_files(tmp_path: Path) -> None:
     install_ground_truth_mine(tmp_path)
     leftovers = [path for path in tmp_path.rglob("*.tmp") if path.is_file()]
