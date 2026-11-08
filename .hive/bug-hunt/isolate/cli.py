@@ -1,0 +1,1526 @@
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+
+from hive_planner.agents_memory import (
+    AgentsMemoryError,
+    agents_memory_error_detail,
+    ingest_agents_candidates,
+    lint_agents_md,
+    run_agents_memory,
+)
+from hive_planner.ci_handoff import run_ci_check
+from hive_planner.config import RepoPaths, resolve_repo_file_path, is_repo_root, resolve_root
+from hive_planner.roadmap_status import validate_roadmap
+from hive_planner.spec_drift import check_memory_spec_drift, complete_spec_creation
+from hive_planner.emitter import emit_cartridge
+from hive_planner.impact import ImpactError, build_impact_packet, impact_warnings, write_impact_packet
+from hive_planner.map_sync import sync_impact_maps
+from hive_planner.pipeline import ingest, status_summary
+from hive_planner.translator import TranslatorError, translate_document, write_translator_status
+
+
+def _pause_seconds_arg(value: str) -> int:
+    from hive_planner.bug_hunt import BugHuntError, parse_pause_seconds
+
+    try:
+        return parse_pause_seconds(value)
+    except BugHuntError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
+
+
+def _iterations_arg(value: str) -> int:
+    from hive_planner.bug_hunt import BugHuntError, parse_iterations
+
+    try:
+        return parse_iterations(value)
+    except BugHuntError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        prog="hive-planner",
+        description="Hive Code Planner cartridge compiler (hook: compiler.pipeline)",
+    )
+    parser.add_argument("--root", type=Path, default=None, help="Repo root (auto-detected if omitted)")
+
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    ingest_parser = sub.add_parser("ingest", help="Discover, normalize, chunk, and index sources")
+    ingest_parser.add_argument(
+        "--embed",
+        action="store_true",
+        help="Build/update embedding index for hybrid retrieval on emit",
+    )
+    ingest_parser.add_argument(
+        "--no-ocr",
+        action="store_true",
+        help="Do not OCR image-only PDFs during ingest (text extraction only)",
+    )
+    source4s_parser = sub.add_parser(
+        "source4s",
+        help="Upload txt/pdf reference files for cartridge-linked agent retrieval",
+    )
+    source4s_parser.add_argument(
+        "--files",
+        nargs="+",
+        required=True,
+        type=Path,
+        help="One or more .txt/.pdf files or folders to stage under context-library/sources/source4s/",
+    )
+    source4s_parser.add_argument(
+        "--feature",
+        default=None,
+        help="Feature id for cartridge/source-context.md retrieval (required unless --ingest-only)",
+    )
+    source4s_parser.add_argument(
+        "--ingest-only",
+        action="store_true",
+        help="Index files only — do not refresh cartridge/source-context.md",
+    )
+    source4s_parser.add_argument(
+        "--embed",
+        action="store_true",
+        help="Build/update embedding index for hybrid retrieval",
+    )
+    source4s_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite cartridge/source-context.md when draft or manual banners exist",
+    )
+    source4s_parser.add_argument(
+        "--no-ocr",
+        action="store_true",
+        help="Do not OCR image-only PDFs during ingest (text extraction only)",
+    )
+    source4s_parser.add_argument(
+        "--force-delta",
+        action="store_true",
+        help=argparse.SUPPRESS,
+    )
+    ocr_status_parser = sub.add_parser(
+        "ocr-status",
+        help="Report Tesseract OCR discovery for image-only PDF conversion",
+    )
+    ocr_status_parser.add_argument(
+        "--scan-d-drive",
+        action="store_true",
+        help="Deep-scan D: drive for tesseract.exe (slower)",
+    )
+    ocr_convert_parser = sub.add_parser(
+        "ocr-convert",
+        help="OCR image-only PDFs to searchable markdown sidecars",
+    )
+    ocr_convert_parser.add_argument(
+        "--files",
+        nargs="+",
+        required=True,
+        type=Path,
+        help="One or more PDF files to OCR",
+    )
+    ocr_convert_parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=None,
+        help="Directory for .ocr.md output (default: next to each PDF)",
+    )
+    ocr_convert_parser.add_argument(
+        "--scan-d-drive",
+        action="store_true",
+        help="Deep-scan D: drive for tesseract.exe before converting",
+    )
+    emit_parser = sub.add_parser("emit", help="Emit cartridge manifest and source-context.md")
+    emit_parser.add_argument("--feature", required=True, help="Active feature name for retrieval")
+    emit_parser.add_argument(
+        "--force-delta",
+        action="store_true",
+        help="Overwrite cartridge holistic/macro/micro even when draft or manual banners exist",
+    )
+    emit_parser.add_argument(
+        "--emit-rules-seeds",
+        action="store_true",
+        help="Write cartridge/rules/<feature>.mdc.seed from Delta macro/micro (never writes .cursor/rules/)",
+    )
+    emit_parser.add_argument(
+        "--promote",
+        action="store_true",
+        help="After emit, run cartridge promote + spec-drift (spec-drift/handoff when no drafts to merge)",
+    )
+    emit_parser.add_argument(
+        "--mark-draft",
+        action="store_true",
+        help="Prepend draft banners on emitted cartridge layers (use before --promote for Sources emit)",
+    )
+    emit_parser.add_argument(
+        "--force-promote",
+        action="store_true",
+        help="With --promote, overwrite existing non-bootstrap Delta/spec targets",
+    )
+    sub.add_parser("status", help="Show ingest/index/cartridge status")
+
+    impact_parser = sub.add_parser("impact", help="Generate change-impact packet (hook: change.impact)")
+    impact_parser.add_argument("--feature", required=True, help="Active feature name")
+    impact_parser.add_argument(
+        "--files",
+        nargs="+",
+        required=True,
+        help="Repo-relative or absolute paths targeted for edit",
+    )
+    impact_parser.add_argument(
+        "--mode",
+        choices=["default", "bugfix"],
+        default="default",
+        help="Impact analysis mode (bugfix widens call-graph targets and sets medium risk)",
+    )
+    impact_parser.add_argument(
+        "--deep",
+        action="store_true",
+        help="Include import/call-graph secondary targets (also enabled by --mode bugfix)",
+    )
+
+    sync_maps = sub.add_parser(
+        "impact-sync-maps",
+        help="Merge src/test discovery into change-impact maps (hook: change.impact)",
+    )
+    sync_maps.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Report map changes without writing files",
+    )
+
+    ci_check = sub.add_parser(
+        "ci-check",
+        help="Run handoff validation suite (hook: workflow.git_handoff)",
+    )
+    ci_check.add_argument(
+        "--skip-pytest",
+        action="store_true",
+        help="Skip pytest step (useful when already running under pytest)",
+    )
+    ci_check.add_argument(
+        "--allow-map-drift",
+        action="store_true",
+        help="Do not fail when impact maps are out of sync",
+    )
+
+    vendor_sync = sub.add_parser(
+        "vendor-sync",
+        help="Check or apply unified upstream vendor pins (Stage 9)",
+    )
+    vendor_sync.add_argument(
+        "--check",
+        action="store_true",
+        help="Validate vendor/manifest.json schema and report pin status (default)",
+    )
+    vendor_sync.add_argument(
+        "--apply",
+        action="store_true",
+        help="Import pinned upstream trees from vendor/manifest.json",
+    )
+
+    sub.add_parser(
+        "unified-verify",
+        help="Verify vendor manifest and project .hive/upstream-pins.json (Stage 9)",
+    )
+
+    sub.add_parser("roadmap-status", help="Validate Stage roadmap artifacts (hook: workflow.tools)")
+
+    init_parser = sub.add_parser(
+        "init",
+        help="Bootstrap a new Hive project profile (hook: workflow.project_bootstrap)",
+    )
+    init_parser.add_argument("--target", required=True, type=Path, help="Directory for the new project root")
+    init_parser.add_argument("--name", default=None, help="Project display name (default: target folder name)")
+    init_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Scaffold into a non-empty or partially initialized directory",
+    )
+    init_parser.add_argument(
+        "--profile",
+        default="minimal",
+        choices=("minimal", "full"),
+        help="Bootstrap profile: minimal (v1) or full starter-kit v2 (pyproject, CI stub, src/tests)",
+    )
+    init_parser.add_argument(
+        "--git-init",
+        action="store_true",
+        help="Run git init in the target after scaffolding (optional; requires git on PATH)",
+    )
+    init_parser.add_argument(
+        "--agent-handoff",
+        default="unified",
+        choices=("off", "unified"),
+        help="Agent handoff profile: unified deploys Spec Kit + Continual Learning together; off = planning only",
+    )
+    init_parser.add_argument(
+        "--spec-kit",
+        action="store_true",
+        help="Deprecated alias for --agent-handoff unified",
+    )
+    init_parser.add_argument(
+        "--continual-learning",
+        action="store_true",
+        help="Deprecated; unified mode always enables both Spec Kit and Continual Learning",
+    )
+    init_parser.add_argument(
+        "--cl-runtime",
+        default="cursor",
+        choices=("cursor", "headless", "external"),
+        help="Continual Learning runtime: cursor (plugin) or headless/external (CLI-only memory loop)",
+    )
+    init_parser.add_argument(
+        "--implementation-loop-pack",
+        default=None,
+        choices=("1-pack", "4-pack"),
+        help="Install the post-spec coding loop with this pack (optional)",
+    )
+    init_parser.add_argument(
+        "--agnostic-loop",
+        action="store_true",
+        help="Install the pause-cycle agnostic loop (optional)",
+    )
+
+    cl_runtime_parser = sub.add_parser(
+        "cl-runtime",
+        help="Show or set Continual Learning runtime (Cursor plugin vs IDE-agnostic headless)",
+    )
+    cl_runtime_sub = cl_runtime_parser.add_subparsers(dest="cl_runtime_command", required=True)
+    cl_runtime_show = cl_runtime_sub.add_parser("show", help="Show resolved CL runtime for this project")
+    cl_runtime_set = cl_runtime_sub.add_parser("set", help="Set CL runtime in .hive/project.json")
+    cl_runtime_set.add_argument(
+        "runtime",
+        choices=("cursor", "headless", "external"),
+        help="cursor = Hive vendored Cursor plugin; headless/external = CLI agents-propose path",
+    )
+
+    notify_parser = sub.add_parser(
+        "notify",
+        help="Show an IDE-agnostic desktop notice (no chat prompt)",
+    )
+    notify_parser.add_argument("--title", default="HIVE Planner")
+    notify_parser.add_argument("--body", required=True)
+    notify_parser.add_argument("--repo", default="", help="Repo heading shown on the notice")
+    notify_parser.add_argument("--seconds", type=int, default=12)
+
+    translate_parser = sub.add_parser("translate", help="Rule-based cartridge draft translation")
+    translate_parser.add_argument("--input", required=True, type=Path, help="Research markdown input file")
+    translate_parser.add_argument("--feature", required=True, help="Feature name for micro/spec outputs")
+    translate_parser.add_argument(
+        "--no-promote",
+        action="store_true",
+        help="Skip promoting drafts to Delta/Spec Kit and spec-drift check",
+    )
+    translate_parser.add_argument(
+        "--force-promote",
+        action="store_true",
+        help="Overwrite existing Delta/spec targets when promoting cartridge drafts",
+    )
+
+    promote_parser = sub.add_parser(
+        "cartridge-promote",
+        help="Promote draft cartridge files to Delta/Spec Kit and run spec-drift (hook: integration.cl_spec)",
+    )
+    promote_parser.add_argument("--feature", required=True, help="Feature name")
+    promote_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite existing non-bootstrap Delta/spec targets",
+    )
+    promote_parser.add_argument(
+        "--skip-spec-drift",
+        action="store_true",
+        help="Promote only — do not run spec-drift-check",
+    )
+
+    agents_lint = sub.add_parser("agents-lint", help="Lint AGENTS.md structure and bullets")
+    agents_lint.add_argument("--path", type=Path, default=None, help="AGENTS.md path (default: repo root)")
+
+    agents_propose = sub.add_parser("agents-propose", help="Propose AGENTS.md memory updates")
+    agents_propose.add_argument("--candidates", required=True, type=Path, help="Candidate bullets file")
+    agents_propose.add_argument("--path", type=Path, default=None, help="AGENTS.md path (default: repo root)")
+    agents_propose.add_argument(
+        "--apply",
+        action="store_true",
+        help="Guarded v2 apply — merge operational candidates into Durable Workspace Facts only",
+    )
+    agents_propose.add_argument(
+        "--skip-wiring-audit",
+        action="store_true",
+        help="Skip Integration wiring audit gate (unified handoff only)",
+    )
+    agents_propose.add_argument(
+        "--no-auto-route",
+        action="store_true",
+        help="Disable autonomous split/route remediation (strict reject-only validation)",
+    )
+
+    agents_apply = sub.add_parser(
+        "agents-apply",
+        help="Apply validated operational candidates to AGENTS.md (hook: automation.ci_memory)",
+    )
+    agents_apply.add_argument("--candidates", required=True, type=Path, help="Candidate bullets file")
+    agents_apply.add_argument("--path", type=Path, default=None, help="AGENTS.md path (default: repo root)")
+    agents_apply.add_argument(
+        "--skip-wiring-audit",
+        action="store_true",
+        help="Skip Integration wiring audit gate (unified handoff only)",
+    )
+    agents_apply.add_argument(
+        "--no-auto-route",
+        action="store_true",
+        help="Disable autonomous split/route remediation (strict reject-only validation)",
+    )
+
+    agents_ingest = sub.add_parser(
+        "agents-ingest",
+        help="Normalize Continual Learning / transcript export into candidates file",
+    )
+    agents_ingest.add_argument("--from", dest="source", required=True, type=Path, help="Source export file")
+    agents_ingest.add_argument(
+        "--out",
+        type=Path,
+        default=None,
+        help="Output path (default: docs/proposals/candidates-normalized-<timestamp>.md)",
+    )
+
+    spec_drift = sub.add_parser(
+        "spec-drift-check",
+        help="Check Spec Kit handoff and memory/spec alignment (hook: integration.cl_spec)",
+    )
+    spec_drift.add_argument("--feature", default=None, help="Feature name (default: active from AGENTS.md)")
+    spec_drift.add_argument(
+        "--candidates",
+        type=Path,
+        default=None,
+        help="Optional candidate bullets file to classify",
+    )
+    spec_drift.add_argument(
+        "--skip-agents-facts",
+        action="store_true",
+        help="Do not scan existing Durable Workspace Facts in AGENTS.md",
+    )
+
+    spec_create = sub.add_parser(
+        "spec-create",
+        help="Accept a spec only when template sections and the wiring-audit checklist are present, then set AGENTS.md Active feature",
+    )
+    spec_create.add_argument("--feature", required=True, help="Feature id to accept and set as the active handoff feature")
+
+    rosetta_eject_parser = sub.add_parser(
+        "rosetta-eject",
+        help="Export Rosetta planning session contract for Perplexity, Gemini, etc. (hook: planning.rosetta)",
+    )
+    rosetta_eject_parser.add_argument(
+        "--out",
+        type=Path,
+        default=None,
+        help="Output directory (default: repo root or current directory)",
+    )
+    rosetta_eject_parser.add_argument(
+        "--project-name",
+        default=None,
+        help="Project name for the session-start prompt (default: folder name)",
+    )
+    rosetta_eject_parser.add_argument(
+        "--prompt-only",
+        action="store_true",
+        help="Print session-start prompt to stdout instead of writing files",
+    )
+
+    wiring_audit = sub.add_parser(
+        "wiring-audit",
+        help="Record or verify Integration wiring audit attestation (hook: integration.wiring_audit)",
+    )
+    wiring_audit_sub = wiring_audit.add_subparsers(dest="wiring_audit_command", required=True)
+    wiring_record = wiring_audit_sub.add_parser("record", help="Record wiring audit attestation after validation")
+    wiring_record.add_argument("--feature", default=None, help="Feature id (default: active from AGENTS.md)")
+    wiring_record.add_argument(
+        "--evidence",
+        required=True,
+        help="Integration-level validation command or result (required)",
+    )
+    wiring_record.add_argument("--summary", default="", help="Optional short audit summary")
+    wiring_check = wiring_audit_sub.add_parser("check", help="Verify wiring audit attestation is current")
+    wiring_check.add_argument("--feature", default=None, help="Feature id (default: active from AGENTS.md)")
+
+    cl_migrate = sub.add_parser(
+        "cl-migrate",
+        help="Migrate marketplace Continual Learning data to Hive vendored CL",
+    )
+    cl_migrate.add_argument(
+        "--remove-marketplace-plugin",
+        action="store_true",
+        help="Remove .cursor/plugins/continual-learning/ from the project after migration",
+    )
+    cl_migrate.add_argument("--dry-run", action="store_true", help="Report actions without writing files")
+
+    graph_parser = sub.add_parser(
+        "graph",
+        help="Shared graph memory offload/promote/status/export (hook: memory.shared_graph)",
+    )
+    graph_sub = graph_parser.add_subparsers(dest="graph_command", required=True)
+    graph_offload = graph_sub.add_parser("offload", help="Append validated nodes/edges to staging JSONL")
+    graph_offload.add_argument(
+        "--from",
+        dest="source",
+        required=True,
+        type=Path,
+        help="JSON bundle {nodes,edges} or JSONL with kind node|edge",
+    )
+    graph_promote = graph_sub.add_parser(
+        "promote",
+        help="Promote staging records into permanent store (rule-based gate)",
+    )
+    graph_promote.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Report promote actions without writing files",
+    )
+    graph_sub.add_parser("status", help="Show staging/permanent counts and manifest")
+    graph_export = graph_sub.add_parser("export", help="Export a tier as JSON")
+    graph_export.add_argument(
+        "--tier",
+        choices=("staging", "permanent"),
+        default="permanent",
+        help="Which store to export (default: permanent)",
+    )
+    graph_export.add_argument(
+        "--pretty",
+        action="store_true",
+        help="Pretty-print JSON",
+    )
+
+    ground_truth = sub.add_parser(
+        "ground-truth-on-mine",
+        help="Install the ground-truth mine agent script (hook: planning.rosetta)",
+    )
+    ground_truth.add_argument(
+        "--print",
+        dest="print_only",
+        action="store_true",
+        help="Print the script and do not write files",
+    )
+
+    from hive_planner.bug_hunt import (
+        DEFAULT_ITERATIONS,
+        DEFAULT_PAUSE_SECONDS,
+        MAX_ITERATIONS,
+        MIN_ITERATIONS,
+    )
+
+    bug_hunt = sub.add_parser(
+        "bug-hunt",
+        help="Install the continuous bug-hunt agent script (hook: change.bugfix_mode)",
+    )
+    bug_hunt.add_argument(
+        "--iterations",
+        type=_iterations_arg,
+        default=DEFAULT_ITERATIONS,
+        help=(
+            "Committed fixes before the hunt stops "
+            f"({MIN_ITERATIONS}-{MAX_ITERATIONS}, default {DEFAULT_ITERATIONS})"
+        ),
+    )
+    bug_hunt.add_argument(
+        "--pause-seconds",
+        type=_pause_seconds_arg,
+        default=DEFAULT_PAUSE_SECONDS,
+        help=(
+            "Seconds between passes. 0 skips the wait and the next pass still starts. "
+            f"Default {DEFAULT_PAUSE_SECONDS}."
+        ),
+    )
+    bug_hunt.add_argument(
+        "--print",
+        dest="print_only",
+        action="store_true",
+        help="Print the script and do not write files",
+    )
+    bug_hunt_commit = sub.add_parser(
+        "bug-hunt-commit",
+        help="Commit one bug-hunt fix without including unrelated edits in the same files",
+    )
+    bug_hunt_commit.add_argument("--message", required=True, help="Commit message")
+    bug_hunt_commit.add_argument(
+        "--snapshot",
+        action="append",
+        required=True,
+        metavar="PATH=SNAPSHOT",
+        help="Repo-relative file and the copy saved before this fix edited it",
+    )
+
+    impl_loop = sub.add_parser(
+        "implementation-loop",
+        help="Install the post-spec coding loop (hook: spec.flow)",
+    )
+    impl_sub = impl_loop.add_subparsers(dest="implementation_loop_command", required=True)
+    impl_install = impl_sub.add_parser("install", help="Install the loop into this project")
+    impl_install.add_argument(
+        "--pack",
+        required=True,
+        choices=("1-pack", "4-pack"),
+        help="Pack: 1-pack solo coordinator, 4-pack coordinator + coder + checker + reviewer",
+    )
+    impl_install.add_argument(
+        "--force-pack",
+        action="store_true",
+        help="Replace an existing different pack",
+    )
+    impl_install.add_argument(
+        "--print",
+        dest="print_only",
+        action="store_true",
+        help="Print the coordinator script and do not write files",
+    )
+    impl_status = impl_sub.add_parser("status", help="Report whether a feature is ready to code")
+    impl_status.add_argument("--feature", required=True, help="Feature id to check")
+    impl_start = impl_sub.add_parser("start", help="Start coordinator gates for a feature")
+    impl_start.add_argument("--feature", required=True, help="Feature id")
+    impl_start.add_argument(
+        "--allow-dirty",
+        action="store_true",
+        help="Continue despite unrelated dirty paths after the human chooses",
+    )
+    impl_start.add_argument(
+        "--force-feature",
+        action="store_true",
+        help="Switch from a different running feature, or continue after status blocked",
+    )
+    impl_start.add_argument(
+        "--allow-overlap",
+        action="store_true",
+        help="Continue when this feature and the feature already in the loop declare the same files",
+    )
+    impl_handoff = impl_sub.add_parser("handoff", help="Write handoff.md and increment round_trips")
+    impl_handoff.add_argument(
+        "--role",
+        required=True,
+        help="coder, checker, reviewer (4-pack) or coordinator (1-pack)",
+    )
+    impl_handoff.add_argument(
+        "--continue-after-cap",
+        action="store_true",
+        help="Allow another handoff after 10 round trips when the human agrees",
+    )
+    impl_sub.add_parser(
+        "check",
+        help="Run checker infrastructure (build, test:quick, wiring audit) and append result.md",
+    )
+    impl_accept = impl_sub.add_parser("accept", help="Accept a result.md entry for a role")
+    impl_accept.add_argument("--role", required=True, help="Role that just returned")
+    impl_sub.add_parser("commit", help="Commit after checker and reviewer pass")
+
+    agn_loop = sub.add_parser(
+        "agnostic-loop",
+        help="Pause-cycle work chooser (hook: workflow.tools)",
+    )
+    agn_sub = agn_loop.add_subparsers(dest="agnostic_loop_command", required=True)
+    agn_install = agn_sub.add_parser("install", help="Install the hive-loop-kit into the project")
+    agn_install.add_argument(
+        "--print",
+        dest="print_only",
+        action="store_true",
+        help="Print the command and do not write files",
+    )
+    agn_sub.add_parser("rewards", help="List catalog reward ids")
+    agn_sub.add_parser("status", help="Show cycle state and policy")
+    agn_arm = agn_sub.add_parser("arm", help="Point a paused sequence at a reward")
+    agn_arm.add_argument("--reward", required=True)
+    agn_arm.add_argument("--cycles", type=int, default=30)
+    agn_sub.add_parser("begin", help="Open one hook")
+    agn_rev = agn_sub.add_parser("review", help="Close the open hook and pause")
+    agn_rev.add_argument("--note", required=True)
+    agn_obs = agn_sub.add_parser("observe", help="Record a hit or miss for a reward")
+    agn_obs.add_argument("--reward", required=True)
+    agn_flag = agn_obs.add_mutually_exclusive_group(required=True)
+    agn_flag.add_argument("--hit", action="store_true")
+    agn_flag.add_argument("--miss", action="store_true")
+    agn_choose = agn_sub.add_parser("choose", help="Pick the next reward (MCTS + Thompson)")
+    agn_choose.add_argument(
+        "--open",
+        default=None,
+        help="reward=count pairs, comma separated. Omitted means one of each.",
+    )
+    agn_choose.add_argument("--sims", type=int, default=64)
+    agn_choose.add_argument("--horizon", type=int, default=4)
+    agn_choose.add_argument("--seed", type=int, default=None)
+    agn_choose.add_argument("--arm", action="store_true", help="Arm the first planned reward")
+    agn_choose.add_argument("--cycles", type=int, default=1)
+
+    sub.add_parser(
+        "mcp-serve",
+        help="Run stdio MCP so a Cursor agent can call Hive Planner (no extra stdout)",
+    )
+
+    args = parser.parse_args(argv)
+    if args.command == "mcp-serve":
+        from hive_planner.mcp_server import serve
+
+        return serve()
+    root, auto_detected = resolve_root(args.root)
+    if root.suffix.lower() == ".code-workspace" and not root.is_dir():
+        if not root.is_file():
+            print(f"Error: Workspace file not found: {root}", file=sys.stderr)
+            return 1
+        from hive_planner.launcher.service import workspace_primary_folder
+
+        folder = workspace_primary_folder(root)
+        if folder is None:
+            print(f"Error: Could not resolve a project folder from {root}", file=sys.stderr)
+            return 1
+        root = folder
+    paths = RepoPaths(root=root)
+
+    if args.root is None and not auto_detected and not is_repo_root(root):
+        print(
+            "Warning: could not auto-detect repo root (missing START_HERE.md). "
+            "Use --root or run from the Hive Code Planner directory.",
+            file=sys.stderr,
+        )
+
+    if args.command == "notify":
+        from hive_planner.notify import failure_message, notify
+
+        if not notify(args.title, args.body, seconds=args.seconds, repo=args.repo or None):
+            print(failure_message(), file=sys.stderr)
+            return 1
+        print(json.dumps({"ok": True, "title": args.title}))
+        return 0
+
+    if args.command == "init":
+        from hive_planner.bootstrap import BootstrapError, init_project
+
+        try:
+            agent_handoff = args.agent_handoff
+            if args.spec_kit and agent_handoff == "off":
+                agent_handoff = "unified"
+            result = init_project(
+                paths,
+                args.target,
+                name=args.name,
+                force=args.force,
+                profile=args.profile,
+                git_init=args.git_init,
+                agent_handoff=agent_handoff,
+                cl_runtime=args.cl_runtime,
+                implementation_loop_pack=args.implementation_loop_pack,
+                agnostic_loop=args.agnostic_loop,
+            )
+        except BootstrapError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        except OSError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        print(f"Hive source: {root}")
+        print(f"Bootstrapped: {result.target}")
+        print(f"Project: {result.project_name}")
+        for warning in result.warnings:
+            print(f"Warning: {warning}")
+        from hive_planner.agent_handoff import AGENT_HANDOFF_UNIFIED, resolve_agent_handoff_mode, validate_unified_handoff
+
+        payload = result.to_dict()
+        mode = resolve_agent_handoff_mode(result.target)
+        handoff_ok = True
+        if mode == AGENT_HANDOFF_UNIFIED:
+            handoff = validate_unified_handoff(result.target)
+            handoff_ok = handoff.complete
+            payload["handoff_ok"] = handoff_ok
+            if not handoff_ok:
+                payload["handoff_missing"] = handoff.missing
+                print(
+                    f"Error: Unified handoff incomplete — missing: {', '.join(handoff.missing)}",
+                    file=sys.stderr,
+                )
+        print(json.dumps(payload, indent=2))
+        return 0 if handoff_ok else 1
+
+    if args.command == "ingest":
+        from hive_planner.format_deps import ingest_pdf_dependency_warnings
+        from hive_planner.ocr_runtime import ocr_pdf_enabled
+
+        token = ocr_pdf_enabled.set(not args.no_ocr)
+        try:
+            report = ingest(paths, embed=args.embed)
+        finally:
+            ocr_pdf_enabled.reset(token)
+        print(f"Root: {root}")
+        print(f"Processed: {report.processed}, skipped: {report.skipped}, pruned: {report.pruned}")
+        for warning in report.warnings:
+            print(f"Warning: {warning}")
+        for warning in impact_warnings(paths):
+            print(f"Warning: {warning}")
+        summary = status_summary(paths)
+        print(json.dumps(summary, indent=2))
+        has_pdf_dep_warnings = bool(ingest_pdf_dependency_warnings(report.warnings))
+        return 0 if report.skipped == 0 and not has_pdf_dep_warnings else 1
+
+    if args.command == "source4s":
+        from hive_planner.format_deps import ingest_pdf_dependency_warnings
+        from hive_planner.source4s import pdf_ocr_quality_warnings, run_source4s
+
+        update_cartridge = not args.ingest_only
+        if update_cartridge and not args.feature:
+            print("Error: --feature is required unless --ingest-only is set.", file=sys.stderr)
+            return 1
+        result = run_source4s(
+            paths,
+            args.files,
+            feature=args.feature,
+            embed=args.embed,
+            update_cartridge=update_cartridge,
+            force_delta=args.force or args.force_delta,
+            ocr_pdf=not args.no_ocr,
+        )
+        print(f"Root: {root}")
+        if result.error:
+            print(f"Error: {result.error}", file=sys.stderr)
+        for rel in result.copied:
+            print(f"Staged: {rel}")
+        print(
+            f"Ingest: processed={result.processed}, skipped={result.skipped}, pruned={result.pruned}, "
+            f"indexed_staged={result.indexed_staged}"
+        )
+        for warning in result.warnings:
+            print(f"Warning: {warning}")
+        if result.source_context_path:
+            print(f"Cartridge link: {result.source_context_path}")
+        for name, rel in result.cartridge_outputs.items():
+            print(f"Wrote {name}: {rel}")
+        print(json.dumps(result.to_dict(), indent=2))
+        has_ocr_warnings = bool(pdf_ocr_quality_warnings(result.warnings))
+        has_pdf_dep_warnings = bool(ingest_pdf_dependency_warnings(result.warnings))
+        return 0 if result.ok and not has_ocr_warnings and not has_pdf_dep_warnings else 1
+
+    if args.command == "ocr-status":
+        from hive_planner.ocr_runtime import ocr_runtime_status
+
+        status = ocr_runtime_status(scan_d_drive=args.scan_d_drive, refresh=True)
+        print(f"Root: {root}")
+        print(f"OCR available: {status.available}")
+        print(status.detail)
+        if status.install is not None:
+            print(f"Tesseract: {status.install.exe}")
+            print(f"Tessdata: {status.install.tessdata_dir}")
+            print(f"Source: {status.install.source}")
+        print(json.dumps(status.to_dict(), indent=2))
+        return 0 if status.available else 1
+
+    if args.command == "ocr-convert":
+        from hive_planner.format_deps import pdf_support_available, pdf_support_message
+        from hive_planner.ocr_runtime import convert_pdf_to_markdown, ocr_runtime_status, ocr_sidecar_basename
+
+        if not pdf_support_available():
+            print(f"Error: {pdf_support_message()}", file=sys.stderr)
+            return 1
+        status = ocr_runtime_status(scan_d_drive=args.scan_d_drive, refresh=True)
+        if not status.available or status.install is None:
+            print(f"Error: {status.detail}", file=sys.stderr)
+            return 1
+        failed = 0
+        seen_pdfs: set[Path] = set()
+        for pdf in args.files:
+            pdf_key = pdf.resolve()
+            if pdf_key in seen_pdfs:
+                continue
+            seen_pdfs.add(pdf_key)
+            try:
+                out = (
+                    (args.output_dir / ocr_sidecar_basename(pdf))
+                    if args.output_dir
+                    else None
+                )
+                dest, unresolved = convert_pdf_to_markdown(
+                    pdf,
+                    out,
+                    install=status.install,
+                )
+                print(f"OCR: {pdf} -> {dest}")
+                if unresolved:
+                    label = ", ".join(str(page) for page in unresolved)
+                    print(
+                        f"Warning: {pdf}: {len(unresolved)} page(s) produced no OCR text: {label}",
+                        file=sys.stderr,
+                    )
+                    failed += 1
+            except Exception as exc:
+                failed += 1
+                print(f"Error: {pdf}: {exc}", file=sys.stderr)
+        return 1 if failed else 0
+
+    if args.command == "emit":
+        try:
+            outputs, warnings = emit_cartridge(
+                paths,
+                args.feature,
+                force_delta=args.force_delta,
+                emit_rules_seeds=args.emit_rules_seeds,
+            )
+        except ValueError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        print(f"Root: {root}")
+        for warning in warnings:
+            print(f"Warning: {warning}")
+        for warning in impact_warnings(paths, args.feature):
+            print(f"Warning: {warning}")
+        for name, path in outputs.items():
+            print(f"Wrote {name}: {path.relative_to(root)}")
+        payload = {"outputs": {name: str(path.relative_to(root)) for name, path in outputs.items()}}
+        if args.mark_draft:
+            from hive_planner.cartridge_promote import mark_cartridge_layers_draft
+
+            payload["mark_draft"] = mark_cartridge_layers_draft(
+                paths,
+                args.feature,
+                only_paths=outputs.values(),
+            )
+            for layer, status in sorted(payload["mark_draft"].items()):
+                print(f"Mark draft {layer}: {status}")
+        if args.promote:
+            from hive_planner.cartridge_promote import promote_cartridge_drafts
+
+            promote = promote_cartridge_drafts(
+                paths,
+                args.feature,
+                force=args.force_promote,
+                only_cartridge_paths=outputs.values(),
+            )
+            payload["promote"] = promote.to_dict()
+            if promote.candidates_path:
+                print(f"Wrote CL candidates: {promote.candidates_path}")
+            print(f"Promotion spec-drift ok: {promote.ok}")
+            if not promote.ok:
+                from hive_planner.cartridge_promote import HANDOFF_INCOMPLETE_MSG
+
+                print(HANDOFF_INCOMPLETE_MSG, file=sys.stderr)
+            print(json.dumps(payload, indent=2))
+            from hive_planner.cartridge_promote import promote_cli_exit_code
+
+            return promote_cli_exit_code(promote)
+        if args.mark_draft:
+            print(json.dumps(payload, indent=2))
+        return 0
+
+    if args.command == "status":
+        summary = status_summary(paths)
+        print(f"Root: {root}")
+        print(json.dumps(summary, indent=2))
+        return 0
+
+    if args.command == "impact":
+        try:
+            file_paths = [resolve_repo_file_path(paths, Path(f)) for f in args.files]
+        except ValueError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        try:
+            packet = build_impact_packet(
+                paths,
+                args.feature,
+                file_paths,
+                mode=args.mode,
+                deep=args.deep,
+            )
+            out_path = write_impact_packet(paths, packet)
+        except ImpactError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        print(f"Root: {root}")
+        print(f"Wrote impact packet: {out_path.relative_to(root)}")
+        print(f"Risk: {packet.risk_score}")
+        print(json.dumps(packet.to_dict(), indent=2))
+        return 0
+
+    if args.command == "impact-sync-maps":
+        report = sync_impact_maps(paths, dry_run=args.dry_run)
+        print(f"Root: {root}")
+        print(json.dumps(report.to_dict(), indent=2))
+        return 0
+
+    if args.command == "ci-check":
+        report = run_ci_check(
+            paths,
+            skip_pytest=args.skip_pytest,
+            check_map_drift=not args.allow_map_drift,
+            check_roadmap=None,
+        )
+        print(f"Root: {root}")
+        print(json.dumps(report.to_dict(), indent=2))
+        for step in report.steps:
+            status = "ok" if step.ok else "FAIL"
+            print(f"{status}: {step.name} — {step.detail}")
+        return 0 if report.ok else 1
+
+    if args.command == "roadmap-status":
+        report = validate_roadmap(paths)
+        print(f"Root: {root}")
+        print(json.dumps(report.to_dict(), indent=2))
+        if report.missing:
+            print("Missing:", ", ".join(report.missing))
+        return 0 if report.ok else 1
+
+    if args.command == "translate":
+        try:
+            result = translate_document(paths, args.input, args.feature)
+            status_path = write_translator_status(paths, result)
+        except ValueError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        except TranslatorError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        print(f"Root: {root}")
+        for rel in result.files_written:
+            print(f"Wrote draft: cartridge/{rel}")
+        print(f"Wrote status: {status_path.relative_to(root)}")
+        payload = result.to_dict()
+        if not getattr(args, "no_promote", False):
+            from hive_planner.cartridge_promote import promote_cartridge_drafts
+
+            promote = promote_cartridge_drafts(
+                paths,
+                args.feature,
+                force=args.force_promote,
+            )
+            payload["promote"] = promote.to_dict()
+            if promote.candidates_path:
+                print(f"Wrote CL candidates: {promote.candidates_path}")
+            print(f"Promotion spec-drift ok: {promote.ok}")
+            if not promote.ok:
+                from hive_planner.cartridge_promote import HANDOFF_INCOMPLETE_MSG
+
+                print(HANDOFF_INCOMPLETE_MSG, file=sys.stderr)
+        print(json.dumps(payload, indent=2))
+        from hive_planner.cartridge_promote import promote_cli_exit_code
+
+        return promote_cli_exit_code(payload.get("promote"))
+
+    if args.command == "cartridge-promote":
+        from hive_planner.cartridge_promote import promote_cartridge_drafts
+
+        try:
+            result = promote_cartridge_drafts(
+                paths,
+                args.feature,
+                force=args.force,
+                run_spec_drift=not args.skip_spec_drift,
+            )
+        except ValueError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        print(f"Root: {root}")
+        if result.candidates_path:
+            print(f"Wrote CL candidates: {result.candidates_path}")
+        for warning in result.warnings:
+            print(f"Warning: {warning}", file=sys.stderr)
+        if not result.ok:
+            from hive_planner.cartridge_promote import HANDOFF_INCOMPLETE_MSG
+
+            print(HANDOFF_INCOMPLETE_MSG, file=sys.stderr)
+        print(json.dumps(result.to_dict(), indent=2))
+        return 0 if result.ok else 1
+
+    if args.command == "agents-lint":
+        try:
+            report = lint_agents_md(paths, args.path)
+        except AgentsMemoryError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        print(f"Root: {root}")
+        print(json.dumps(report.to_dict(), indent=2))
+        return 0 if report.ok else 1
+
+    if args.command == "agents-propose":
+        try:
+            result = run_agents_memory(
+                paths,
+                args.candidates,
+                agents_path=args.path,
+                apply=args.apply,
+                skip_wiring_audit=args.skip_wiring_audit,
+                auto_route=not args.no_auto_route,
+            )
+        except AgentsMemoryError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            detail = agents_memory_error_detail(exc)
+            if detail.get("proposal_path"):
+                print(f"Proposal: {detail['proposal_path']}", file=sys.stderr)
+            print(json.dumps(detail, indent=2), file=sys.stderr)
+            return 1
+        print(f"Root: {root}")
+        print(f"Wrote proposal: {result.proposal_path.relative_to(root)}")
+        if result.applied:
+            print("Applied accepted bullets to AGENTS.md (guarded v2 apply)")
+        else:
+            print("AGENTS.md unchanged (proposal-only workflow)")
+        if result.routing:
+            print(f"Routing decisions: {len(result.routing)}")
+        print(json.dumps(result.to_dict(), indent=2))
+        return 0
+
+    if args.command == "agents-apply":
+        try:
+            result = run_agents_memory(
+                paths,
+                args.candidates,
+                agents_path=args.path,
+                apply=True,
+                skip_wiring_audit=args.skip_wiring_audit,
+                auto_route=not args.no_auto_route,
+            )
+        except AgentsMemoryError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            detail = agents_memory_error_detail(exc)
+            if detail.get("proposal_path"):
+                print(f"Proposal: {detail['proposal_path']}", file=sys.stderr)
+            print(json.dumps(detail, indent=2), file=sys.stderr)
+            return 1
+        print(f"Root: {root}")
+        print(f"Wrote proposal: {result.proposal_path.relative_to(root)}")
+        if result.applied:
+            print("Applied accepted bullets to AGENTS.md (guarded v2 apply)")
+        else:
+            print("AGENTS.md unchanged (all accepted bullets already present — no-op)")
+        if result.routing:
+            print(f"Routing decisions: {len(result.routing)}")
+        print(json.dumps(result.to_dict(), indent=2))
+        return 0
+
+    if args.command == "cl-runtime":
+        from hive_planner.cl_runtime import resolve_cl_runtime, set_project_cl_runtime
+
+        if args.cl_runtime_command == "show":
+            runtime = resolve_cl_runtime(root)
+            print(f"Root: {root}")
+            print(f"cl_runtime: {runtime}")
+            return 0
+        try:
+            set_project_cl_runtime(root, args.runtime)
+        except ValueError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        print(f"Root: {root}")
+        print(f"Set cl_runtime={args.runtime}")
+        print("Re-run Deploy agent handoff (launcher or bootstrap) to refresh CL artifacts.")
+        return 0
+
+    if args.command == "cl-migrate":
+        from hive_planner.cl_migration import ClMigrationError, migrate_marketplace_cl
+
+        try:
+            report = migrate_marketplace_cl(
+                paths,
+                remove_marketplace_plugin=args.remove_marketplace_plugin,
+                dry_run=args.dry_run,
+            )
+        except ClMigrationError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        print(f"Root: {root}")
+        print(json.dumps(report.to_dict(), indent=2))
+        return 0 if report.ok else 1
+
+    if args.command == "graph":
+        from hive_planner.graph_store import (
+            GraphStoreError,
+            export_tier,
+            graph_status,
+            offload_from_file,
+            promote_staging,
+        )
+
+        if args.graph_command == "offload":
+            try:
+                source = args.source if args.source.is_absolute() else root / args.source
+                result = offload_from_file(paths, source)
+            except GraphStoreError as exc:
+                print(f"Error: {exc}", file=sys.stderr)
+                return 1
+            print(f"Root: {root}")
+            print(json.dumps(result.to_dict(), indent=2))
+            return 0
+
+        if args.graph_command == "promote":
+            try:
+                result = promote_staging(paths, dry_run=args.dry_run)
+            except GraphStoreError as exc:
+                print(f"Error: {exc}", file=sys.stderr)
+                return 1
+            print(f"Root: {root}")
+            print(json.dumps(result.to_dict(), indent=2))
+            return 0
+
+        if args.graph_command == "status":
+            try:
+                payload = graph_status(paths)
+            except GraphStoreError as exc:
+                print(f"Error: {exc}", file=sys.stderr)
+                return 1
+            print(f"Root: {root}")
+            print(json.dumps(payload, indent=2))
+            return 0
+
+        try:
+            payload = export_tier(paths, args.tier)
+        except GraphStoreError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        print(f"Root: {root}")
+        if args.pretty:
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+        else:
+            print(json.dumps(payload, ensure_ascii=False))
+        return 0
+
+    if args.command == "agents-ingest":
+        try:
+            out_path = ingest_agents_candidates(paths, args.source, output_path=args.out)
+        except AgentsMemoryError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        print(f"Root: {root}")
+        try:
+            shown = out_path.relative_to(root)
+        except ValueError:
+            shown = out_path
+        print(f"Wrote normalized candidates: {shown}")
+        return 0
+
+    if args.command == "spec-drift-check":
+        report = check_memory_spec_drift(
+            paths,
+            feature=args.feature,
+            candidates_path=args.candidates,
+            include_agents_facts=not args.skip_agents_facts,
+        )
+        print(f"Root: {root}")
+        print(json.dumps(report.to_dict(), indent=2))
+        if report.drift_items:
+            print("Drift items:", file=sys.stderr)
+            for item in report.drift_items:
+                print(f"  - {item}", file=sys.stderr)
+        if report.spec_actions:
+            print("Spec actions:", file=sys.stderr)
+            for action in report.spec_actions:
+                print(f"  - {action}", file=sys.stderr)
+        return 0 if report.ok else 1
+
+    if args.command == "spec-create":
+        created = complete_spec_creation(paths, args.feature)
+        print(f"Root: {root}")
+        print(json.dumps(created.to_dict(), indent=2))
+        if created.missing:
+            print("Spec create blocked:", file=sys.stderr)
+            for item in created.missing:
+                print(f"  - {item}", file=sys.stderr)
+        return 0 if created.ok else 1
+
+    if args.command == "wiring-audit":
+        from hive_planner.wiring_audit import WiringAuditError, check_wiring_audit, record_wiring_audit
+
+        if args.wiring_audit_command == "record":
+            try:
+                out_path = record_wiring_audit(
+                    paths,
+                    feature=args.feature,
+                    evidence=args.evidence,
+                    summary=args.summary,
+                )
+            except WiringAuditError as exc:
+                print(f"Error: {exc}", file=sys.stderr)
+                return 1
+            print(f"Root: {root}")
+            print(f"Recorded wiring audit: {out_path.relative_to(root)}")
+            return 0
+
+        report = check_wiring_audit(paths, feature=args.feature)
+        print(f"Root: {root}")
+        print(json.dumps(report.to_dict(), indent=2))
+        return 0 if report.ok else 1
+
+    if args.command == "vendor-sync":
+        from hive_planner.vendor_sync import VendorSyncError, vendor_sync_apply, vendor_sync_check
+
+        try:
+            if args.apply:
+                report = vendor_sync_apply(root)
+            else:
+                report = vendor_sync_check(root)
+        except VendorSyncError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        print(f"Root: {root}")
+        print(json.dumps(report.to_dict(), indent=2))
+        return 0 if report.ok else 1
+
+    if args.command == "unified-verify":
+        from hive_planner.vendor_sync import VendorSyncError, unified_verify
+
+        try:
+            report = unified_verify(paths)
+        except VendorSyncError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        print(f"Root: {root}")
+        print(json.dumps(report.to_dict(), indent=2))
+        return 0 if report.ok else 1
+
+    if args.command == "rosetta-eject":
+        from hive_planner.rosetta_eject import (
+            RosettaEjectError,
+            build_session_start_prompt,
+            eject_rosetta_cartridge,
+            infer_project_name,
+        )
+
+        project_name = args.project_name or infer_project_name(root)
+        if args.prompt_only:
+            print(build_session_start_prompt(project_name=project_name), end="")
+            return 0
+        out_dir = args.out or root
+        try:
+            result = eject_rosetta_cartridge(out_dir, repo_root=root, project_name=project_name)
+        except RosettaEjectError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        print(f"Root: {root}")
+        print(json.dumps(result.to_dict(), indent=2))
+        return 0
+
+    if args.command == "ground-truth-on-mine":
+        from hive_planner.ground_truth_mine import (
+            GroundTruthMineError,
+            install_ground_truth_mine,
+            missing_ground_truth_mine_artifacts,
+            preview_agent_prompt as preview_ground_truth_prompt,
+        )
+
+        try:
+            if args.print_only:
+                print(preview_ground_truth_prompt(root), end="")
+                return 0
+            installed = install_ground_truth_mine(root)
+        except (GroundTruthMineError, OSError) as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        missing = missing_ground_truth_mine_artifacts(installed.root)
+        if missing:
+            print(
+                "Error: Ground-truth mine install incomplete — missing: " + ", ".join(missing),
+                file=sys.stderr,
+            )
+            return 1
+        print(f"Root: {installed.root}")
+        print(json.dumps(installed.to_dict(), indent=2))
+        return 0
+
+    if args.command == "bug-hunt-commit":
+        from hive_planner.bug_hunt import BugHuntError, commit_isolated_fix
+
+        keyed: dict[str, Path] = {}
+        for item in args.snapshot:
+            rel, sep, snap = str(item).partition("=")
+            if not sep or not rel or not snap:
+                print("Error: --snapshot must be PATH=SNAPSHOT", file=sys.stderr)
+                return 1
+            keyed[rel] = Path(snap)
+        try:
+            result = commit_isolated_fix(root, message=args.message, snapshots=keyed)
+        except (BugHuntError, OSError) as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        print(json.dumps(result, indent=2))
+        return 0 if result.get("ok") else 1
+
+    if args.command == "bug-hunt":
+        from hive_planner.bug_hunt import (
+            BugHuntError,
+            install_bug_hunt,
+            missing_bug_hunt_artifacts,
+            preview_agent_prompt,
+        )
+
+        try:
+            if args.print_only:
+                print(
+                    preview_agent_prompt(root, args.iterations, pause_seconds=args.pause_seconds),
+                    end="",
+                )
+                return 0
+            installed = install_bug_hunt(
+                root,
+                iterations=args.iterations,
+                pause_seconds=args.pause_seconds,
+            )
+        except (BugHuntError, OSError) as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        missing = missing_bug_hunt_artifacts(installed.root)
+        if missing:
+            print(
+                "Error: Bug-hunt install incomplete — missing: " + ", ".join(missing),
+                file=sys.stderr,
+            )
+            return 1
+        print(f"Root: {installed.root}")
+        print(json.dumps(installed.to_dict(), indent=2))
+        return 0
+
+    if args.command == "implementation-loop":
+        from hive_planner.implementation_loop import (
+            CoordinatorError,
+            assess_implementation_readiness,
+            coordinator_accept,
+            coordinator_check,
+            coordinator_commit,
+            coordinator_handoff,
+            coordinator_start,
+            install_implementation_loop,
+            preview_agent_prompt,
+        )
+
+        if args.implementation_loop_command == "install":
+            try:
+                if args.print_only:
+                    print(preview_agent_prompt(args.pack), end="")
+                    return 0
+                written = install_implementation_loop(root, args.pack, force_pack=args.force_pack)
+            except (ValueError, OSError) as exc:
+                print(f"Error: {exc}", file=sys.stderr)
+                return 1
+            print(f"Root: {root}")
+            print("Written:")
+            for rel in written:
+                print(f"  - {rel}")
+            return 0
+
+        if args.implementation_loop_command == "status":
+            report = assess_implementation_readiness(root, args.feature)
+            print(json.dumps(report.to_dict(), indent=2))
+            if report.ready and report.blocked_reason == "complete":
+                return 0
+            return 0 if report.ready else 2
+
+        try:
+            if args.implementation_loop_command == "start":
+                gate = coordinator_start(
+                    root,
+                    args.feature,
+                    allow_dirty=args.allow_dirty,
+                    force_feature=args.force_feature,
+                    allow_overlap=args.allow_overlap,
+                )
+            elif args.implementation_loop_command == "handoff":
+                gate = coordinator_handoff(
+                    root,
+                    args.role,
+                    continue_after_cap=args.continue_after_cap,
+                )
+            elif args.implementation_loop_command == "check":
+                gate = coordinator_check(root)
+            elif args.implementation_loop_command == "accept":
+                gate = coordinator_accept(root, args.role)
+            elif args.implementation_loop_command == "commit":
+                gate = coordinator_commit(root)
+            else:
+                return 1
+        except CoordinatorError as exc:
+            payload = {"ok": False, "blocked_reason": str(exc), **exc.fields}
+            print(json.dumps(payload, indent=2))
+            return 2
+        print(json.dumps(gate.to_dict(), indent=2))
+        return 0 if gate.ok else 2
+
+    if args.command == "agnostic-loop":
+        from hive_planner.agnostic_loop import (
+            arm,
+            begin,
+            choose,
+            catalog_problem,
+            install_agnostic_loop,
+            missing_agnostic_loop_artifacts,
+            observe,
+            parse_open,
+            preview_agent_prompt as preview_agnostic_prompt,
+            review,
+            rewards,
+            status,
+        )
+
+        cmd = args.agnostic_loop_command
+        if cmd == "install":
+            try:
+                if args.print_only:
+                    print(preview_agnostic_prompt(), end="")
+                    return 0
+                written = install_agnostic_loop(root)
+            except OSError as exc:
+                print(f"Error: {exc}", file=sys.stderr)
+                return 1
+            missing = missing_agnostic_loop_artifacts(root)
+            if missing:
+                print("Error: Agnostic-loop install incomplete — missing: " + ", ".join(missing), file=sys.stderr)
+                return 1
+            print(f"Root: {root}")
+            print("Written:")
+            for rel in written:
+                print(f"  - {rel}")
+            return 0
+        try:
+            err = catalog_problem(root)
+            if err:
+                print(json.dumps({"ok": False, "action": cmd, "blocked_reason": err}, indent=2))
+                return 3
+            if cmd == "rewards":
+                print(json.dumps(sorted(rewards(root)), indent=2))
+                return 0
+            if cmd == "status":
+                report = status(root)
+                print(json.dumps(report, indent=2))
+                return 0 if report.get("ok") is not False else 3
+            if cmd == "arm":
+                payload, code = arm(root, args.reward, args.cycles)
+                print(json.dumps(payload, indent=2))
+                return code
+            if cmd == "begin":
+                payload, code = begin(root)
+                print(json.dumps(payload, indent=2))
+                return code
+            if cmd == "review":
+                payload, code = review(root, args.note)
+                print(json.dumps(payload, indent=2))
+                return code
+            if cmd == "observe":
+                payload, code = observe(root, args.reward, args.hit)
+                print(json.dumps(payload, indent=2))
+                return code
+            if cmd == "choose":
+                names = rewards(root)
+                opens = parse_open(args.open, names)
+                if opens is None:
+                    print(json.dumps({"ok": False, "action": "choose", "blocked_reason": "invalid --open"}, indent=2))
+                    return 3
+                payload, code = choose(
+                    root,
+                    opens,
+                    sims=args.sims,
+                    horizon=args.horizon,
+                    seed=args.seed,
+                    do_arm=args.arm,
+                    cycles=args.cycles,
+                    names=names,
+                )
+                print(json.dumps(payload, indent=2))
+                return code
+        except OSError as exc:
+            print(json.dumps({"ok": False, "action": cmd, "blocked_reason": str(exc)}, indent=2))
+            return 1
+        return 1
+
+    return 1

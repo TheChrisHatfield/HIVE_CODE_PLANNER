@@ -1,0 +1,2411 @@
+{
+  "opened": [
+    "src/hive_planner/vendor_templates/continual-learning/hooks/hive_notify.py",
+    "src/hive_planner/implementation_loop.py",
+    "dist/HivePlannerPortable/_internal/hive_planner/vendor_templates/continual-learning/hooks/hive_notify.py",
+    "dist/HivePlannerPortable/_internal/pymupdf/__main__.py"
+  ],
+  "queue": [
+    {
+      "file": "vendor/spec-kit/src/specify_cli/_console.py",
+      "signals": {
+        "recent_fix_commits": 0.0,
+        "thin_test": 0.0,
+        "wiring_hop": 1.0,
+        "dead_setting": 0.0,
+        "reverted": 0.0,
+        "split_stores": 0.0
+      },
+      "score": 20.4359,
+      "findings": 1,
+      "lines": 248,
+      "likelihood": 17.664681973035314,
+      "attribution": {
+        "attribution_version": 1,
+        "mode": "rank",
+        "six_signal": {
+          "recent_fix_commits": -0.0,
+          "thin_test": 0.0,
+          "wiring_hop": 1.503941352231641,
+          "dead_setting": 0.0,
+          "reverted": 0.0,
+          "split_stores": 0.0,
+          "total": 1.503941352231641
+        },
+        "detector_trust": 1.2732537858706885,
+        "place": 0.1904902828573942,
+        "likelihood": 17.664681973035314,
+        "exploration": 0.25,
+        "raw_activity_total": 2.9676854209597234,
+        "raw_surface_total": 20.63236739399504,
+        "exploit_score": 20.185900356540017,
+        "final_score": 20.435900356540017,
+        "top": [
+          "likelihood",
+          "wiring_hop",
+          "detector_trust",
+          "exploration",
+          "place",
+          "dead_setting",
+          "recent_fix_commits",
+          "reverted",
+          "split_stores",
+          "thin_test"
+        ],
+        "file": "vendor/spec-kit/src/specify_cli/_console.py"
+      }
+    },
+    {
+      "file": "vendor/spec-kit/src/specify_cli/_assets.py",
+      "signals": {
+        "recent_fix_commits": 0.0,
+        "thin_test": 0.0,
+        "wiring_hop": 1.0,
+        "dead_setting": 0.0,
+        "reverted": 0.0,
+        "split_stores": 0.0
+      },
+      "score": 20.390468,
+      "findings": 1,
+      "lines": 122,
+      "likelihood": 17.61924964872823,
+      "attribution": {
+        "attribution_version": 1,
+        "mode": "rank",
+        "six_signal": {
+          "recent_fix_commits": -0.0,
+          "thin_test": 0.0,
+          "wiring_hop": 1.503941352231641,
+          "dead_setting": 0.0,
+          "reverted": 0.0,
+          "split_stores": 0.0,
+          "total": 1.503941352231641
+        },
+        "detector_trust": 1.2732537858706885,
+        "place": 0.1904902828573942,
+        "likelihood": 17.61924964872823,
+        "exploration": 0.25,
+        "raw_activity_total": 2.9676854209597234,
+        "raw_surface_total": 20.586935069687954,
+        "exploit_score": 20.14046803223293,
+        "final_score": 20.39046803223293,
+        "top": [
+          "likelihood",
+          "wiring_hop",
+          "detector_trust",
+          "exploration",
+          "place",
+          "dead_setting",
+          "recent_fix_commits",
+          "reverted",
+          "split_stores",
+          "thin_test"
+        ],
+        "file": "vendor/spec-kit/src/specify_cli/_assets.py"
+      }
+    },
+    {
+      "file": "vendor/spec-kit/src/specify_cli/presets/__init__.py",
+      "signals": {
+        "recent_fix_commits": 0.0,
+        "thin_test": 0.0,
+        "wiring_hop": 0.0,
+        "dead_setting": 0.0,
+        "reverted": 0.0,
+        "split_stores": 0.0
+      },
+      "score": 20.036875,
+      "findings": 3,
+      "lines": 3309,
+      "likelihood": 18.38514697855439,
+      "attribution": {
+        "attribution_version": 1,
+        "mode": "rank",
+        "six_signal": {
+          "recent_fix_commits": -0.0,
+          "thin_test": 0.0,
+          "wiring_hop": 0.0,
+          "dead_setting": 0.0,
+          "reverted": 0.0,
+          "split_stores": 0.0,
+          "total": 0.0
+        },
+        "detector_trust": 1.2732537858706885,
+        "place": 0.1904902828573942,
+        "likelihood": 18.38514697855439,
+        "exploration": 0.25,
+        "raw_activity_total": 1.4637440687280827,
+        "raw_surface_total": 19.84889104728247,
+        "exploit_score": 19.786874523588917,
+        "final_score": 20.036874523588917,
+        "top": [
+          "likelihood",
+          "detector_trust",
+          "exploration",
+          "place",
+          "dead_setting",
+          "recent_fix_commits",
+          "reverted",
+          "split_stores",
+          "thin_test",
+          "wiring_hop"
+        ],
+        "file": "vendor/spec-kit/src/specify_cli/presets/__init__.py"
+      }
+    },
+    {
+      "file": "src/hive_planner/launcher/app.py",
+      "signals": {
+        "recent_fix_commits": 5.0,
+        "thin_test": 0.0,
+        "wiring_hop": 1.0,
+        "dead_setting": 0.0,
+        "reverted": 0.0,
+        "split_stores": 0.0
+      },
+      "score": 19.889714,
+      "findings": 2,
+      "lines": 8019,
+      "likelihood": 18.09824485348768,
+      "attribution": {
+        "attribution_version": 1,
+        "mode": "rank",
+        "six_signal": {
+          "recent_fix_commits": -1.744038329709483,
+          "thin_test": 0.0,
+          "wiring_hop": 1.503941352231641,
+          "dead_setting": 0.0,
+          "reverted": 0.0,
+          "split_stores": 0.0,
+          "total": -0.2400969774778421
+        },
+        "detector_trust": 1.2732537858706885,
+        "place": 0.8903189202933081,
+        "likelihood": 18.09824485348768,
+        "exploration": 0.003711711711711712,
+        "raw_activity_total": 1.9234757286861544,
+        "raw_surface_total": 20.021720582173835,
+        "exploit_score": 19.88600181000251,
+        "final_score": 19.889713521714224,
+        "top": [
+          "likelihood",
+          "recent_fix_commits",
+          "wiring_hop",
+          "detector_trust",
+          "place",
+          "exploration",
+          "dead_setting",
+          "reverted",
+          "split_stores",
+          "thin_test"
+        ],
+        "file": "src/hive_planner/launcher/app.py"
+      }
+    },
+    {
+      "file": "src/hive_planner/bug_hunt.py",
+      "signals": {
+        "recent_fix_commits": 7.0,
+        "thin_test": 0.0,
+        "wiring_hop": 1.0,
+        "dead_setting": 0.0,
+        "reverted": 0.0,
+        "split_stores": 0.0
+      },
+      "score": 19.259007,
+      "findings": 1,
+      "lines": 3582,
+      "likelihood": 17.692234015636288,
+      "attribution": {
+        "attribution_version": 1,
+        "mode": "rank",
+        "six_signal": {
+          "recent_fix_commits": -2.0240583713182634,
+          "thin_test": 0.0,
+          "wiring_hop": 1.503941352231641,
+          "dead_setting": 0.0,
+          "reverted": 0.0,
+          "split_stores": 0.0,
+          "total": -0.5201170190866224
+        },
+        "detector_trust": 1.2732537858706885,
+        "place": 0.8903189202933081,
+        "likelihood": 17.692234015636288,
+        "exploration": 0.009948717948717949,
+        "raw_activity_total": 1.643455687077374,
+        "raw_surface_total": 19.335689702713662,
+        "exploit_score": 19.249057937163712,
+        "final_score": 19.25900665511243,
+        "top": [
+          "likelihood",
+          "recent_fix_commits",
+          "wiring_hop",
+          "detector_trust",
+          "place",
+          "exploration",
+          "dead_setting",
+          "reverted",
+          "split_stores",
+          "thin_test"
+        ],
+        "file": "src/hive_planner/bug_hunt.py"
+      }
+    },
+    {
+      "file": "src/hive_planner/launcher/__main__.py",
+      "signals": {
+        "recent_fix_commits": 0.0,
+        "thin_test": 1.0,
+        "wiring_hop": 0.0,
+        "dead_setting": 0.0,
+        "reverted": 0.0,
+        "split_stores": 0.0
+      },
+      "score": 7.849653,
+      "findings": 0,
+      "lines": 119,
+      "likelihood": 4.9221217748116946,
+      "attribution": {
+        "attribution_version": 1,
+        "mode": "rank",
+        "six_signal": {
+          "recent_fix_commits": -0.0,
+          "thin_test": 2.751770082693268,
+          "wiring_hop": 0.0,
+          "dead_setting": 0.0,
+          "reverted": 0.0,
+          "split_stores": 0.0,
+          "total": 2.751770082693268
+        },
+        "detector_trust": 0.0,
+        "place": 0.8903189202933081,
+        "likelihood": 4.9221217748116946,
+        "exploration": 0.041999999999999996,
+        "raw_activity_total": 3.642089002986576,
+        "raw_surface_total": 8.56421077779827,
+        "exploit_score": 7.807653068711686,
+        "final_score": 7.849653068711686,
+        "top": [
+          "likelihood",
+          "thin_test",
+          "place",
+          "exploration",
+          "dead_setting",
+          "detector_trust",
+          "recent_fix_commits",
+          "reverted",
+          "split_stores",
+          "wiring_hop"
+        ],
+        "file": "src/hive_planner/launcher/__main__.py"
+      }
+    },
+    {
+      "file": "vendor/spec-kit/src/specify_cli/workflows/catalog.py",
+      "signals": {
+        "recent_fix_commits": 0.0,
+        "thin_test": 1.0,
+        "wiring_hop": 0.0,
+        "dead_setting": 0.0,
+        "reverted": 0.0,
+        "split_stores": 0.0
+      },
+      "score": 7.751799,
+      "findings": 0,
+      "lines": 1200,
+      "likelihood": 4.9959662706258285,
+      "attribution": {
+        "attribution_version": 1,
+        "mode": "rank",
+        "six_signal": {
+          "recent_fix_commits": -0.0,
+          "thin_test": 2.751770082693268,
+          "wiring_hop": 0.0,
+          "dead_setting": 0.0,
+          "reverted": 0.0,
+          "split_stores": 0.0,
+          "total": 2.751770082693268
+        },
+        "detector_trust": 0.0,
+        "place": 0.1904902828573942,
+        "likelihood": 4.9959662706258285,
+        "exploration": 0.25,
+        "raw_activity_total": 2.942260365550662,
+        "raw_surface_total": 7.93822663617649,
+        "exploit_score": 7.501799130386274,
+        "final_score": 7.751799130386274,
+        "top": [
+          "likelihood",
+          "thin_test",
+          "exploration",
+          "place",
+          "dead_setting",
+          "detector_trust",
+          "recent_fix_commits",
+          "reverted",
+          "split_stores",
+          "wiring_hop"
+        ],
+        "file": "vendor/spec-kit/src/specify_cli/workflows/catalog.py"
+      }
+    },
+    {
+      "file": "vendor/spec-kit/src/specify_cli/agents.py",
+      "signals": {
+        "recent_fix_commits": 0.0,
+        "thin_test": 1.0,
+        "wiring_hop": 0.0,
+        "dead_setting": 0.0,
+        "reverted": 0.0,
+        "split_stores": 0.0
+      },
+      "score": 7.751075,
+      "findings": 0,
+      "lines": 1186,
+      "likelihood": 4.995242197020758,
+      "attribution": {
+        "attribution_version": 1,
+        "mode": "rank",
+        "six_signal": {
+          "recent_fix_commits": -0.0,
+          "thin_test": 2.751770082693268,
+          "wiring_hop": 0.0,
+          "dead_setting": 0.0,
+          "reverted": 0.0,
+          "split_stores": 0.0,
+          "total": 2.751770082693268
+        },
+        "detector_trust": 0.0,
+        "place": 0.1904902828573942,
+        "likelihood": 4.995242197020758,
+        "exploration": 0.25,
+        "raw_activity_total": 2.942260365550662,
+        "raw_surface_total": 7.93750256257142,
+        "exploit_score": 7.501075056781204,
+        "final_score": 7.751075056781204,
+        "top": [
+          "likelihood",
+          "thin_test",
+          "exploration",
+          "place",
+          "dead_setting",
+          "detector_trust",
+          "recent_fix_commits",
+          "reverted",
+          "split_stores",
+          "wiring_hop"
+        ],
+        "file": "vendor/spec-kit/src/specify_cli/agents.py"
+      }
+    },
+    {
+      "file": "vendor/spec-kit/src/specify_cli/workflows/engine.py",
+      "signals": {
+        "recent_fix_commits": 0.0,
+        "thin_test": 1.0,
+        "wiring_hop": 0.0,
+        "dead_setting": 0.0,
+        "reverted": 0.0,
+        "split_stores": 0.0
+      },
+      "score": 7.750548,
+      "findings": 0,
+      "lines": 1066,
+      "likelihood": 4.994714941219956,
+      "attribution": {
+        "attribution_version": 1,
+        "mode": "rank",
+        "six_signal": {
+          "recent_fix_commits": -0.0,
+          "thin_test": 2.751770082693268,
+          "wiring_hop": 0.0,
+          "dead_setting": 0.0,
+          "reverted": 0.0,
+          "split_stores": 0.0,
+          "total": 2.751770082693268
+        },
+        "detector_trust": 0.0,
+        "place": 0.1904902828573942,
+        "likelihood": 4.994714941219956,
+        "exploration": 0.25,
+        "raw_activity_total": 2.942260365550662,
+        "raw_surface_total": 7.936975306770618,
+        "exploit_score": 7.500547800980401,
+        "final_score": 7.750547800980401,
+        "top": [
+          "likelihood",
+          "thin_test",
+          "exploration",
+          "place",
+          "dead_setting",
+          "detector_trust",
+          "recent_fix_commits",
+          "reverted",
+          "split_stores",
+          "wiring_hop"
+        ],
+        "file": "vendor/spec-kit/src/specify_cli/workflows/engine.py"
+      }
+    },
+    {
+      "file": "vendor/spec-kit/src/specify_cli/integrations/catalog.py",
+      "signals": {
+        "recent_fix_commits": 0.0,
+        "thin_test": 1.0,
+        "wiring_hop": 0.0,
+        "dead_setting": 0.0,
+        "reverted": 0.0,
+        "split_stores": 0.0
+      },
+      "score": 7.749363,
+      "findings": 0,
+      "lines": 816,
+      "likelihood": 4.993530069600501,
+      "attribution": {
+        "attribution_version": 1,
+        "mode": "rank",
+        "six_signal": {
+          "recent_fix_commits": -0.0,
+          "thin_test": 2.751770082693268,
+          "wiring_hop": 0.0,
+          "dead_setting": 0.0,
+          "reverted": 0.0,
+          "split_stores": 0.0,
+          "total": 2.751770082693268
+        },
+        "detector_trust": 0.0,
+        "place": 0.1904902828573942,
+        "likelihood": 4.993530069600501,
+        "exploration": 0.25,
+        "raw_activity_total": 2.942260365550662,
+        "raw_surface_total": 7.935790435151163,
+        "exploit_score": 7.499362929360947,
+        "final_score": 7.749362929360947,
+        "top": [
+          "likelihood",
+          "thin_test",
+          "exploration",
+          "place",
+          "dead_setting",
+          "detector_trust",
+          "recent_fix_commits",
+          "reverted",
+          "split_stores",
+          "wiring_hop"
+        ],
+        "file": "vendor/spec-kit/src/specify_cli/integrations/catalog.py"
+      }
+    },
+    {
+      "file": "src/hive_planner/frozen_entry.py",
+      "signals": {
+        "recent_fix_commits": 0.0,
+        "thin_test": 1.0,
+        "wiring_hop": 0.0,
+        "dead_setting": 0.0,
+        "reverted": 0.0,
+        "split_stores": 0.0
+      },
+      "score": 7.735299,
+      "findings": 0,
+      "lines": 34,
+      "likelihood": 4.724434380916389,
+      "attribution": {
+        "attribution_version": 1,
+        "mode": "rank",
+        "six_signal": {
+          "recent_fix_commits": -0.0,
+          "thin_test": 2.751770082693268,
+          "wiring_hop": 0.0,
+          "dead_setting": 0.0,
+          "reverted": 0.0,
+          "split_stores": 0.0,
+          "total": 2.751770082693268
+        },
+        "detector_trust": 0.0,
+        "place": 0.8903189202933081,
+        "likelihood": 4.724434380916389,
+        "exploration": 0.12533333333333332,
+        "raw_activity_total": 3.642089002986576,
+        "raw_surface_total": 8.366523383902965,
+        "exploit_score": 7.60996567481638,
+        "final_score": 7.735299008149714,
+        "top": [
+          "likelihood",
+          "thin_test",
+          "place",
+          "exploration",
+          "dead_setting",
+          "detector_trust",
+          "recent_fix_commits",
+          "reverted",
+          "split_stores",
+          "wiring_hop"
+        ],
+        "file": "src/hive_planner/frozen_entry.py"
+      }
+    },
+    {
+      "file": "vendor/cursor-plugins/continual-learning/hooks/continual-learning-stop.py",
+      "signals": {
+        "recent_fix_commits": 0.0,
+        "thin_test": 1.0,
+        "wiring_hop": 0.0,
+        "dead_setting": 0.0,
+        "reverted": 0.0,
+        "split_stores": 0.0
+      },
+      "score": 7.71954,
+      "findings": 0,
+      "lines": 213,
+      "likelihood": 4.963707477609102,
+      "attribution": {
+        "attribution_version": 1,
+        "mode": "rank",
+        "six_signal": {
+          "recent_fix_commits": -0.0,
+          "thin_test": 2.751770082693268,
+          "wiring_hop": 0.0,
+          "dead_setting": 0.0,
+          "reverted": 0.0,
+          "split_stores": 0.0,
+          "total": 2.751770082693268
+        },
+        "detector_trust": 0.0,
+        "place": 0.1904902828573942,
+        "likelihood": 4.963707477609102,
+        "exploration": 0.25,
+        "raw_activity_total": 2.942260365550662,
+        "raw_surface_total": 7.905967843159764,
+        "exploit_score": 7.469540337369548,
+        "final_score": 7.719540337369548,
+        "top": [
+          "likelihood",
+          "thin_test",
+          "exploration",
+          "place",
+          "dead_setting",
+          "detector_trust",
+          "recent_fix_commits",
+          "reverted",
+          "split_stores",
+          "wiring_hop"
+        ],
+        "file": "vendor/cursor-plugins/continual-learning/hooks/continual-learning-stop.py"
+      }
+    },
+    {
+      "file": "vendor/spec-kit/src/specify_cli/catalogs.py",
+      "signals": {
+        "recent_fix_commits": 0.0,
+        "thin_test": 1.0,
+        "wiring_hop": 0.0,
+        "dead_setting": 0.0,
+        "reverted": 0.0,
+        "split_stores": 0.0
+      },
+      "score": 7.705728,
+      "findings": 0,
+      "lines": 181,
+      "likelihood": 4.94989513020408,
+      "attribution": {
+        "attribution_version": 1,
+        "mode": "rank",
+        "six_signal": {
+          "recent_fix_commits": -0.0,
+          "thin_test": 2.751770082693268,
+          "wiring_hop": 0.0,
+          "dead_setting": 0.0,
+          "reverted": 0.0,
+          "split_stores": 0.0,
+          "total": 2.751770082693268
+        },
+        "detector_trust": 0.0,
+        "place": 0.1904902828573942,
+        "likelihood": 4.94989513020408,
+        "exploration": 0.25,
+        "raw_activity_total": 2.942260365550662,
+        "raw_surface_total": 7.892155495754742,
+        "exploit_score": 7.455727989964526,
+        "final_score": 7.705727989964526,
+        "top": [
+          "likelihood",
+          "thin_test",
+          "exploration",
+          "place",
+          "dead_setting",
+          "detector_trust",
+          "recent_fix_commits",
+          "reverted",
+          "split_stores",
+          "wiring_hop"
+        ],
+        "file": "vendor/spec-kit/src/specify_cli/catalogs.py"
+      }
+    },
+    {
+      "file": "scripts/sandbox_rank_weights.py",
+      "signals": {
+        "recent_fix_commits": 0.0,
+        "thin_test": 1.0,
+        "wiring_hop": 0.0,
+        "dead_setting": 0.0,
+        "reverted": 0.0,
+        "split_stores": 0.0
+      },
+      "score": 7.676431,
+      "findings": 0,
+      "lines": 567,
+      "likelihood": 4.991224453044513,
+      "attribution": {
+        "attribution_version": 1,
+        "mode": "rank",
+        "six_signal": {
+          "recent_fix_commits": -0.0,
+          "thin_test": 2.751770082693268,
+          "wiring_hop": 0.0,
+          "dead_setting": 0.0,
+          "reverted": 0.0,
+          "split_stores": 0.0,
+          "total": 2.751770082693268
+        },
+        "detector_trust": 0.0,
+        "place": 0.17878382922696617,
+        "likelihood": 4.991224453044513,
+        "exploration": 0.18649893172778523,
+        "raw_activity_total": 2.930553911920234,
+        "raw_surface_total": 7.921778364964747,
+        "exploit_score": 7.48993201248345,
+        "final_score": 7.676430944211235,
+        "top": [
+          "likelihood",
+          "thin_test",
+          "exploration",
+          "place",
+          "dead_setting",
+          "detector_trust",
+          "recent_fix_commits",
+          "reverted",
+          "split_stores",
+          "wiring_hop"
+        ],
+        "file": "scripts/sandbox_rank_weights.py"
+      }
+    },
+    {
+      "file": "scripts/gan-loop/_flagged_line_fix.py",
+      "signals": {
+        "recent_fix_commits": 0.0,
+        "thin_test": 1.0,
+        "wiring_hop": 0.0,
+        "dead_setting": 0.0,
+        "reverted": 0.0,
+        "split_stores": 0.0
+      },
+      "score": 7.665551,
+      "findings": 0,
+      "lines": 270,
+      "likelihood": 4.9803443886116625,
+      "attribution": {
+        "attribution_version": 1,
+        "mode": "rank",
+        "six_signal": {
+          "recent_fix_commits": -0.0,
+          "thin_test": 2.751770082693268,
+          "wiring_hop": 0.0,
+          "dead_setting": 0.0,
+          "reverted": 0.0,
+          "split_stores": 0.0,
+          "total": 2.751770082693268
+        },
+        "detector_trust": 0.0,
+        "place": 0.17878382922696617,
+        "likelihood": 4.9803443886116625,
+        "exploration": 0.18649893172778523,
+        "raw_activity_total": 2.930553911920234,
+        "raw_surface_total": 7.910898300531897,
+        "exploit_score": 7.4790519480506,
+        "final_score": 7.665550879778385,
+        "top": [
+          "likelihood",
+          "thin_test",
+          "exploration",
+          "place",
+          "dead_setting",
+          "detector_trust",
+          "recent_fix_commits",
+          "reverted",
+          "split_stores",
+          "wiring_hop"
+        ],
+        "file": "scripts/gan-loop/_flagged_line_fix.py"
+      }
+    },
+    {
+      "file": "vendor/spec-kit/src/specify_cli/authentication/azure_devops.py",
+      "signals": {
+        "recent_fix_commits": 0.0,
+        "thin_test": 1.0,
+        "wiring_hop": 0.0,
+        "dead_setting": 0.0,
+        "reverted": 0.0,
+        "split_stores": 0.0
+      },
+      "score": 7.661316,
+      "findings": 0,
+      "lines": 118,
+      "likelihood": 4.905482663122308,
+      "attribution": {
+        "attribution_version": 1,
+        "mode": "rank",
+        "six_signal": {
+          "recent_fix_commits": -0.0,
+          "thin_test": 2.751770082693268,
+          "wiring_hop": 0.0,
+          "dead_setting": 0.0,
+          "reverted": 0.0,
+          "split_stores": 0.0,
+          "total": 2.751770082693268
+        },
+        "detector_trust": 0.0,
+        "place": 0.1904902828573942,
+        "likelihood": 4.905482663122308,
+        "exploration": 0.25,
+        "raw_activity_total": 2.942260365550662,
+        "raw_surface_total": 7.84774302867297,
+        "exploit_score": 7.411315522882754,
+        "final_score": 7.661315522882754,
+        "top": [
+          "likelihood",
+          "thin_test",
+          "exploration",
+          "place",
+          "dead_setting",
+          "detector_trust",
+          "recent_fix_commits",
+          "reverted",
+          "split_stores",
+          "wiring_hop"
+        ],
+        "file": "vendor/spec-kit/src/specify_cli/authentication/azure_devops.py"
+      }
+    },
+    {
+      "file": "vendor/spec-kit/src/specify_cli/bundler/services/catalog_stack.py",
+      "signals": {
+        "recent_fix_commits": 0.0,
+        "thin_test": 1.0,
+        "wiring_hop": 0.0,
+        "dead_setting": 0.0,
+        "reverted": 0.0,
+        "split_stores": 0.0
+      },
+      "score": 7.655009,
+      "findings": 0,
+      "lines": 115,
+      "likelihood": 4.899176145637593,
+      "attribution": {
+        "attribution_version": 1,
+        "mode": "rank",
+        "six_signal": {
+          "recent_fix_commits": -0.0,
+          "thin_test": 2.751770082693268,
+          "wiring_hop": 0.0,
+          "dead_setting": 0.0,
+          "reverted": 0.0,
+          "split_stores": 0.0,
+          "total": 2.751770082693268
+        },
+        "detector_trust": 0.0,
+        "place": 0.1904902828573942,
+        "likelihood": 4.899176145637593,
+        "exploration": 0.25,
+        "raw_activity_total": 2.942260365550662,
+        "raw_surface_total": 7.841436511188255,
+        "exploit_score": 7.405009005398039,
+        "final_score": 7.655009005398039,
+        "top": [
+          "likelihood",
+          "thin_test",
+          "exploration",
+          "place",
+          "dead_setting",
+          "detector_trust",
+          "recent_fix_commits",
+          "reverted",
+          "split_stores",
+          "wiring_hop"
+        ],
+        "file": "vendor/spec-kit/src/specify_cli/bundler/services/catalog_stack.py"
+      }
+    },
+    {
+      "file": "scripts/sandbox_rank_emit_unlabeled.py",
+      "signals": {
+        "recent_fix_commits": 0.0,
+        "thin_test": 1.0,
+        "wiring_hop": 0.0,
+        "dead_setting": 0.0,
+        "reverted": 0.0,
+        "split_stores": 0.0
+      },
+      "score": 7.64964,
+      "findings": 0,
+      "lines": 182,
+      "likelihood": 4.9644337423314475,
+      "attribution": {
+        "attribution_version": 1,
+        "mode": "rank",
+        "six_signal": {
+          "recent_fix_commits": -0.0,
+          "thin_test": 2.751770082693268,
+          "wiring_hop": 0.0,
+          "dead_setting": 0.0,
+          "reverted": 0.0,
+          "split_stores": 0.0,
+          "total": 2.751770082693268
+        },
+        "detector_trust": 0.0,
+        "place": 0.17878382922696617,
+        "likelihood": 4.9644337423314475,
+        "exploration": 0.18649893172778523,
+        "raw_activity_total": 2.930553911920234,
+        "raw_surface_total": 7.894987654251682,
+        "exploit_score": 7.463141301770385,
+        "final_score": 7.64964023349817,
+        "top": [
+          "likelihood",
+          "thin_test",
+          "exploration",
+          "place",
+          "dead_setting",
+          "detector_trust",
+          "recent_fix_commits",
+          "reverted",
+          "split_stores",
+          "wiring_hop"
+        ],
+        "file": "scripts/sandbox_rank_emit_unlabeled.py"
+      }
+    },
+    {
+      "file": "scripts/sandbox_rank_gd.py",
+      "signals": {
+        "recent_fix_commits": 0.0,
+        "thin_test": 1.0,
+        "wiring_hop": 0.0,
+        "dead_setting": 0.0,
+        "reverted": 0.0,
+        "split_stores": 0.0
+      },
+      "score": 7.647782,
+      "findings": 0,
+      "lines": 197,
+      "likelihood": 4.962575698806678,
+      "attribution": {
+        "attribution_version": 1,
+        "mode": "rank",
+        "six_signal": {
+          "recent_fix_commits": -0.0,
+          "thin_test": 2.751770082693268,
+          "wiring_hop": 0.0,
+          "dead_setting": 0.0,
+          "reverted": 0.0,
+          "split_stores": 0.0,
+          "total": 2.751770082693268
+        },
+        "detector_trust": 0.0,
+        "place": 0.17878382922696617,
+        "likelihood": 4.962575698806678,
+        "exploration": 0.18649893172778523,
+        "raw_activity_total": 2.930553911920234,
+        "raw_surface_total": 7.893129610726912,
+        "exploit_score": 7.461283258245615,
+        "final_score": 7.6477821899734,
+        "top": [
+          "likelihood",
+          "thin_test",
+          "exploration",
+          "place",
+          "dead_setting",
+          "detector_trust",
+          "recent_fix_commits",
+          "reverted",
+          "split_stores",
+          "wiring_hop"
+        ],
+        "file": "scripts/sandbox_rank_gd.py"
+      }
+    },
+    {
+      "file": "scripts/gan-loop/_split_mlp.py",
+      "signals": {
+        "recent_fix_commits": 0.0,
+        "thin_test": 1.0,
+        "wiring_hop": 0.0,
+        "dead_setting": 0.0,
+        "reverted": 0.0,
+        "split_stores": 0.0
+      },
+      "score": 7.633298,
+      "findings": 0,
+      "lines": 175,
+      "likelihood": 4.948091613514776,
+      "attribution": {
+        "attribution_version": 1,
+        "mode": "rank",
+        "six_signal": {
+          "recent_fix_commits": -0.0,
+          "thin_test": 2.751770082693268,
+          "wiring_hop": 0.0,
+          "dead_setting": 0.0,
+          "reverted": 0.0,
+          "split_stores": 0.0,
+          "total": 2.751770082693268
+        },
+        "detector_trust": 0.0,
+        "place": 0.17878382922696617,
+        "likelihood": 4.948091613514776,
+        "exploration": 0.18649893172778523,
+        "raw_activity_total": 2.930553911920234,
+        "raw_surface_total": 7.87864552543501,
+        "exploit_score": 7.446799172953712,
+        "final_score": 7.633298104681497,
+        "top": [
+          "likelihood",
+          "thin_test",
+          "exploration",
+          "place",
+          "dead_setting",
+          "detector_trust",
+          "recent_fix_commits",
+          "reverted",
+          "split_stores",
+          "wiring_hop"
+        ],
+        "file": "scripts/gan-loop/_split_mlp.py"
+      }
+    },
+    {
+      "file": "scripts/sandbox_rank_hard_negatives.py",
+      "signals": {
+        "recent_fix_commits": 0.0,
+        "thin_test": 1.0,
+        "wiring_hop": 0.0,
+        "dead_setting": 0.0,
+        "reverted": 0.0,
+        "split_stores": 0.0
+      },
+      "score": 7.631323,
+      "findings": 0,
+      "lines": 118,
+      "likelihood": 4.946116249001493,
+      "attribution": {
+        "attribution_version": 1,
+        "mode": "rank",
+        "six_signal": {
+          "recent_fix_commits": -0.0,
+          "thin_test": 2.751770082693268,
+          "wiring_hop": 0.0,
+          "dead_setting": 0.0,
+          "reverted": 0.0,
+          "split_stores": 0.0,
+          "total": 2.751770082693268
+        },
+        "detector_trust": 0.0,
+        "place": 0.17878382922696617,
+        "likelihood": 4.946116249001493,
+        "exploration": 0.18649893172778523,
+        "raw_activity_total": 2.930553911920234,
+        "raw_surface_total": 7.876670160921727,
+        "exploit_score": 7.444823808440431,
+        "final_score": 7.6313227401682155,
+        "top": [
+          "likelihood",
+          "thin_test",
+          "exploration",
+          "place",
+          "dead_setting",
+          "detector_trust",
+          "recent_fix_commits",
+          "reverted",
+          "split_stores",
+          "wiring_hop"
+        ],
+        "file": "scripts/sandbox_rank_hard_negatives.py"
+      }
+    },
+    {
+      "file": "code-improvements/LEITNER/src/leitner_learning/acp_agent/router.py",
+      "signals": {
+        "recent_fix_commits": 0.0,
+        "thin_test": 1.0,
+        "wiring_hop": 0.0,
+        "dead_setting": 0.0,
+        "reverted": 0.0,
+        "split_stores": 0.0
+      },
+      "score": 7.618936,
+      "findings": 0,
+      "lines": 341,
+      "likelihood": 4.982301142203397,
+      "attribution": {
+        "attribution_version": 1,
+        "mode": "rank",
+        "six_signal": {
+          "recent_fix_commits": -0.0,
+          "thin_test": 2.751770082693268,
+          "wiring_hop": 0.0,
+          "dead_setting": 0.0,
+          "reverted": 0.0,
+          "split_stores": 0.0,
+          "total": 2.751770082693268
+        },
+        "detector_trust": 0.0,
+        "place": 0.0,
+        "likelihood": 4.982301142203397,
+        "exploration": 0.25,
+        "raw_activity_total": 2.751770082693268,
+        "raw_surface_total": 7.734071224896665,
+        "exploit_score": 7.368935595703305,
+        "final_score": 7.618935595703305,
+        "top": [
+          "likelihood",
+          "thin_test",
+          "exploration",
+          "dead_setting",
+          "detector_trust",
+          "place",
+          "recent_fix_commits",
+          "reverted",
+          "split_stores",
+          "wiring_hop"
+        ],
+        "file": "code-improvements/LEITNER/src/leitner_learning/acp_agent/router.py"
+      }
+    },
+    {
+      "file": "scripts/gan-loop/_fold_families.py",
+      "signals": {
+        "recent_fix_commits": 0.0,
+        "thin_test": 1.0,
+        "wiring_hop": 0.0,
+        "dead_setting": 0.0,
+        "reverted": 0.0,
+        "split_stores": 0.0
+      },
+      "score": 7.613957,
+      "findings": 0,
+      "lines": 95,
+      "likelihood": 4.928750665231581,
+      "attribution": {
+        "attribution_version": 1,
+        "mode": "rank",
+        "six_signal": {
+          "recent_fix_commits": -0.0,
+          "thin_test": 2.751770082693268,
+          "wiring_hop": 0.0,
+          "dead_setting": 0.0,
+          "reverted": 0.0,
+          "split_stores": 0.0,
+          "total": 2.751770082693268
+        },
+        "detector_trust": 0.0,
+        "place": 0.17878382922696617,
+        "likelihood": 4.928750665231581,
+        "exploration": 0.18649893172778523,
+        "raw_activity_total": 2.930553911920234,
+        "raw_surface_total": 7.859304577151815,
+        "exploit_score": 7.427458224670518,
+        "final_score": 7.613957156398303,
+        "top": [
+          "likelihood",
+          "thin_test",
+          "exploration",
+          "place",
+          "dead_setting",
+          "detector_trust",
+          "recent_fix_commits",
+          "reverted",
+          "split_stores",
+          "wiring_hop"
+        ],
+        "file": "scripts/gan-loop/_fold_families.py"
+      }
+    },
+    {
+      "file": "code-improvements/continuous-thought-machines/data/custom_datasets.py",
+      "signals": {
+        "recent_fix_commits": 0.0,
+        "thin_test": 1.0,
+        "wiring_hop": 0.0,
+        "dead_setting": 0.0,
+        "reverted": 0.0,
+        "split_stores": 0.0
+      },
+      "score": 7.613748,
+      "findings": 0,
+      "lines": 327,
+      "likelihood": 4.9771139760786,
+      "attribution": {
+        "attribution_version": 1,
+        "mode": "rank",
+        "six_signal": {
+          "recent_fix_commits": -0.0,
+          "thin_test": 2.751770082693268,
+          "wiring_hop": 0.0,
+          "dead_setting": 0.0,
+          "reverted": 0.0,
+          "split_stores": 0.0,
+          "total": 2.751770082693268
+        },
+        "detector_trust": 0.0,
+        "place": 0.0,
+        "likelihood": 4.9771139760786,
+        "exploration": 0.25,
+        "raw_activity_total": 2.751770082693268,
+        "raw_surface_total": 7.728884058771868,
+        "exploit_score": 7.363748429578508,
+        "final_score": 7.613748429578508,
+        "top": [
+          "likelihood",
+          "thin_test",
+          "exploration",
+          "dead_setting",
+          "detector_trust",
+          "place",
+          "recent_fix_commits",
+          "reverted",
+          "split_stores",
+          "wiring_hop"
+        ],
+        "file": "code-improvements/continuous-thought-machines/data/custom_datasets.py"
+      }
+    },
+    {
+      "file": "code-improvements/moshi/moshi/moshi/server.py",
+      "signals": {
+        "recent_fix_commits": 0.0,
+        "thin_test": 1.0,
+        "wiring_hop": 0.0,
+        "dead_setting": 0.0,
+        "reverted": 0.0,
+        "split_stores": 0.0
+      },
+      "score": 7.613379,
+      "findings": 0,
+      "lines": 289,
+      "likelihood": 4.97674456297169,
+      "attribution": {
+        "attribution_version": 1,
+        "mode": "rank",
+        "six_signal": {
+          "recent_fix_commits": -0.0,
+          "thin_test": 2.751770082693268,
+          "wiring_hop": 0.0,
+          "dead_setting": 0.0,
+          "reverted": 0.0,
+          "split_stores": 0.0,
+          "total": 2.751770082693268
+        },
+        "detector_trust": 0.0,
+        "place": 0.0,
+        "likelihood": 4.97674456297169,
+        "exploration": 0.25,
+        "raw_activity_total": 2.751770082693268,
+        "raw_surface_total": 7.728514645664958,
+        "exploit_score": 7.3633790164715975,
+        "final_score": 7.6133790164715975,
+        "top": [
+          "likelihood",
+          "thin_test",
+          "exploration",
+          "dead_setting",
+          "detector_trust",
+          "place",
+          "recent_fix_commits",
+          "reverted",
+          "split_stores",
+          "wiring_hop"
+        ],
+        "file": "code-improvements/moshi/moshi/moshi/server.py"
+      }
+    },
+    {
+      "file": "scripts/gan-loop/_split7.py",
+      "signals": {
+        "recent_fix_commits": 0.0,
+        "thin_test": 1.0,
+        "wiring_hop": 0.0,
+        "dead_setting": 0.0,
+        "reverted": 0.0,
+        "split_stores": 0.0
+      },
+      "score": 7.612745,
+      "findings": 0,
+      "lines": 123,
+      "likelihood": 4.927538305988028,
+      "attribution": {
+        "attribution_version": 1,
+        "mode": "rank",
+        "six_signal": {
+          "recent_fix_commits": -0.0,
+          "thin_test": 2.751770082693268,
+          "wiring_hop": 0.0,
+          "dead_setting": 0.0,
+          "reverted": 0.0,
+          "split_stores": 0.0,
+          "total": 2.751770082693268
+        },
+        "detector_trust": 0.0,
+        "place": 0.17878382922696617,
+        "likelihood": 4.927538305988028,
+        "exploration": 0.18649893172778523,
+        "raw_activity_total": 2.930553911920234,
+        "raw_surface_total": 7.858092217908262,
+        "exploit_score": 7.426245865426965,
+        "final_score": 7.61274479715475,
+        "top": [
+          "likelihood",
+          "thin_test",
+          "exploration",
+          "place",
+          "dead_setting",
+          "detector_trust",
+          "recent_fix_commits",
+          "reverted",
+          "split_stores",
+          "wiring_hop"
+        ],
+        "file": "scripts/gan-loop/_split7.py"
+      }
+    },
+    {
+      "file": "code-improvements/moshi-finetune/finetune/data/interleaver.py",
+      "signals": {
+        "recent_fix_commits": 0.0,
+        "thin_test": 1.0,
+        "wiring_hop": 0.0,
+        "dead_setting": 0.0,
+        "reverted": 0.0,
+        "split_stores": 0.0
+      },
+      "score": 7.609604,
+      "findings": 0,
+      "lines": 294,
+      "likelihood": 4.972969102622068,
+      "attribution": {
+        "attribution_version": 1,
+        "mode": "rank",
+        "six_signal": {
+          "recent_fix_commits": -0.0,
+          "thin_test": 2.751770082693268,
+          "wiring_hop": 0.0,
+          "dead_setting": 0.0,
+          "reverted": 0.0,
+          "split_stores": 0.0,
+          "total": 2.751770082693268
+        },
+        "detector_trust": 0.0,
+        "place": 0.0,
+        "likelihood": 4.972969102622068,
+        "exploration": 0.25,
+        "raw_activity_total": 2.751770082693268,
+        "raw_surface_total": 7.724739185315336,
+        "exploit_score": 7.359603556121976,
+        "final_score": 7.609603556121976,
+        "top": [
+          "likelihood",
+          "thin_test",
+          "exploration",
+          "dead_setting",
+          "detector_trust",
+          "place",
+          "recent_fix_commits",
+          "reverted",
+          "split_stores",
+          "wiring_hop"
+        ],
+        "file": "code-improvements/moshi-finetune/finetune/data/interleaver.py"
+      }
+    },
+    {
+      "file": "scripts/gan-loop/_emit_r3.py",
+      "signals": {
+        "recent_fix_commits": 0.0,
+        "thin_test": 1.0,
+        "wiring_hop": 0.0,
+        "dead_setting": 0.0,
+        "reverted": 0.0,
+        "split_stores": 0.0
+      },
+      "score": 7.600056,
+      "findings": 0,
+      "lines": 134,
+      "likelihood": 4.914849773993307,
+      "attribution": {
+        "attribution_version": 1,
+        "mode": "rank",
+        "six_signal": {
+          "recent_fix_commits": -0.0,
+          "thin_test": 2.751770082693268,
+          "wiring_hop": 0.0,
+          "dead_setting": 0.0,
+          "reverted": 0.0,
+          "split_stores": 0.0,
+          "total": 2.751770082693268
+        },
+        "detector_trust": 0.0,
+        "place": 0.17878382922696617,
+        "likelihood": 4.914849773993307,
+        "exploration": 0.18649893172778523,
+        "raw_activity_total": 2.930553911920234,
+        "raw_surface_total": 7.845403685913541,
+        "exploit_score": 7.413557333432244,
+        "final_score": 7.600056265160029,
+        "top": [
+          "likelihood",
+          "thin_test",
+          "exploration",
+          "place",
+          "dead_setting",
+          "detector_trust",
+          "recent_fix_commits",
+          "reverted",
+          "split_stores",
+          "wiring_hop"
+        ],
+        "file": "scripts/gan-loop/_emit_r3.py"
+      }
+    },
+    {
+      "file": "scripts/gan-loop/_scale_909.py",
+      "signals": {
+        "recent_fix_commits": 0.0,
+        "thin_test": 1.0,
+        "wiring_hop": 0.0,
+        "dead_setting": 0.0,
+        "reverted": 0.0,
+        "split_stores": 0.0
+      },
+      "score": 7.569273,
+      "findings": 0,
+      "lines": 102,
+      "likelihood": 4.884066477061313,
+      "attribution": {
+        "attribution_version": 1,
+        "mode": "rank",
+        "six_signal": {
+          "recent_fix_commits": -0.0,
+          "thin_test": 2.751770082693268,
+          "wiring_hop": 0.0,
+          "dead_setting": 0.0,
+          "reverted": 0.0,
+          "split_stores": 0.0,
+          "total": 2.751770082693268
+        },
+        "detector_trust": 0.0,
+        "place": 0.17878382922696617,
+        "likelihood": 4.884066477061313,
+        "exploration": 0.18649893172778523,
+        "raw_activity_total": 2.930553911920234,
+        "raw_surface_total": 7.814620388981547,
+        "exploit_score": 7.382774036500249,
+        "final_score": 7.569272968228034,
+        "top": [
+          "likelihood",
+          "thin_test",
+          "exploration",
+          "place",
+          "dead_setting",
+          "detector_trust",
+          "recent_fix_commits",
+          "reverted",
+          "split_stores",
+          "wiring_hop"
+        ],
+        "file": "scripts/gan-loop/_scale_909.py"
+      }
+    },
+    {
+      "file": "scripts/gan-loop/_add_weak.py",
+      "signals": {
+        "recent_fix_commits": 0.0,
+        "thin_test": 1.0,
+        "wiring_hop": 0.0,
+        "dead_setting": 0.0,
+        "reverted": 0.0,
+        "split_stores": 0.0
+      },
+      "score": 7.568822,
+      "findings": 0,
+      "lines": 75,
+      "likelihood": 4.88361573497353,
+      "attribution": {
+        "attribution_version": 1,
+        "mode": "rank",
+        "six_signal": {
+          "recent_fix_commits": -0.0,
+          "thin_test": 2.751770082693268,
+          "wiring_hop": 0.0,
+          "dead_setting": 0.0,
+          "reverted": 0.0,
+          "split_stores": 0.0,
+          "total": 2.751770082693268
+        },
+        "detector_trust": 0.0,
+        "place": 0.17878382922696617,
+        "likelihood": 4.88361573497353,
+        "exploration": 0.18649893172778523,
+        "raw_activity_total": 2.930553911920234,
+        "raw_surface_total": 7.814169646893764,
+        "exploit_score": 7.382323294412467,
+        "final_score": 7.568822226140252,
+        "top": [
+          "likelihood",
+          "thin_test",
+          "exploration",
+          "place",
+          "dead_setting",
+          "detector_trust",
+          "recent_fix_commits",
+          "reverted",
+          "split_stores",
+          "wiring_hop"
+        ],
+        "file": "scripts/gan-loop/_add_weak.py"
+      }
+    },
+    {
+      "file": "code-improvements/HIVE_CODE_DEV_1/src/hive_code_dev_1/dataset/compile.py",
+      "signals": {
+        "recent_fix_commits": 0.0,
+        "thin_test": 1.0,
+        "wiring_hop": 0.0,
+        "dead_setting": 0.0,
+        "reverted": 0.0,
+        "split_stores": 0.0
+      },
+      "score": 7.567143,
+      "findings": 0,
+      "lines": 147,
+      "likelihood": 4.930508951276051,
+      "attribution": {
+        "attribution_version": 1,
+        "mode": "rank",
+        "six_signal": {
+          "recent_fix_commits": -0.0,
+          "thin_test": 2.751770082693268,
+          "wiring_hop": 0.0,
+          "dead_setting": 0.0,
+          "reverted": 0.0,
+          "split_stores": 0.0,
+          "total": 2.751770082693268
+        },
+        "detector_trust": 0.0,
+        "place": 0.0,
+        "likelihood": 4.930508951276051,
+        "exploration": 0.25,
+        "raw_activity_total": 2.751770082693268,
+        "raw_surface_total": 7.682279033969319,
+        "exploit_score": 7.317143404775959,
+        "final_score": 7.567143404775959,
+        "top": [
+          "likelihood",
+          "thin_test",
+          "exploration",
+          "dead_setting",
+          "detector_trust",
+          "place",
+          "recent_fix_commits",
+          "reverted",
+          "split_stores",
+          "wiring_hop"
+        ],
+        "file": "code-improvements/HIVE_CODE_DEV_1/src/hive_code_dev_1/dataset/compile.py"
+      }
+    },
+    {
+      "file": "scripts/gan-loop/_full_split.py",
+      "signals": {
+        "recent_fix_commits": 0.0,
+        "thin_test": 1.0,
+        "wiring_hop": 0.0,
+        "dead_setting": 0.0,
+        "reverted": 0.0,
+        "split_stores": 0.0
+      },
+      "score": 7.543043,
+      "findings": 0,
+      "lines": 96,
+      "likelihood": 4.857836147650486,
+      "attribution": {
+        "attribution_version": 1,
+        "mode": "rank",
+        "six_signal": {
+          "recent_fix_commits": -0.0,
+          "thin_test": 2.751770082693268,
+          "wiring_hop": 0.0,
+          "dead_setting": 0.0,
+          "reverted": 0.0,
+          "split_stores": 0.0,
+          "total": 2.751770082693268
+        },
+        "detector_trust": 0.0,
+        "place": 0.17878382922696617,
+        "likelihood": 4.857836147650486,
+        "exploration": 0.18649893172778523,
+        "raw_activity_total": 2.930553911920234,
+        "raw_surface_total": 7.7883900595707205,
+        "exploit_score": 7.356543707089424,
+        "final_score": 7.543042638817209,
+        "top": [
+          "likelihood",
+          "thin_test",
+          "exploration",
+          "place",
+          "dead_setting",
+          "detector_trust",
+          "recent_fix_commits",
+          "reverted",
+          "split_stores",
+          "wiring_hop"
+        ],
+        "file": "scripts/gan-loop/_full_split.py"
+      }
+    },
+    {
+      "file": "scripts/assets/build_icon.py",
+      "signals": {
+        "recent_fix_commits": 0.0,
+        "thin_test": 1.0,
+        "wiring_hop": 0.0,
+        "dead_setting": 0.0,
+        "reverted": 0.0,
+        "split_stores": 0.0
+      },
+      "score": 7.538278,
+      "findings": 0,
+      "lines": 100,
+      "likelihood": 4.853071392706712,
+      "attribution": {
+        "attribution_version": 1,
+        "mode": "rank",
+        "six_signal": {
+          "recent_fix_commits": -0.0,
+          "thin_test": 2.751770082693268,
+          "wiring_hop": 0.0,
+          "dead_setting": 0.0,
+          "reverted": 0.0,
+          "split_stores": 0.0,
+          "total": 2.751770082693268
+        },
+        "detector_trust": 0.0,
+        "place": 0.17878382922696617,
+        "likelihood": 4.853071392706712,
+        "exploration": 0.18649893172778523,
+        "raw_activity_total": 2.930553911920234,
+        "raw_surface_total": 7.783625304626947,
+        "exploit_score": 7.351778952145649,
+        "final_score": 7.538277883873434,
+        "top": [
+          "likelihood",
+          "thin_test",
+          "exploration",
+          "place",
+          "dead_setting",
+          "detector_trust",
+          "recent_fix_commits",
+          "reverted",
+          "split_stores",
+          "wiring_hop"
+        ],
+        "file": "scripts/assets/build_icon.py"
+      }
+    },
+    {
+      "file": "scripts/gan-loop/_fold_best.py",
+      "signals": {
+        "recent_fix_commits": 0.0,
+        "thin_test": 1.0,
+        "wiring_hop": 0.0,
+        "dead_setting": 0.0,
+        "reverted": 0.0,
+        "split_stores": 0.0
+      },
+      "score": 7.525005,
+      "findings": 0,
+      "lines": 50,
+      "likelihood": 4.839798107474362,
+      "attribution": {
+        "attribution_version": 1,
+        "mode": "rank",
+        "six_signal": {
+          "recent_fix_commits": -0.0,
+          "thin_test": 2.751770082693268,
+          "wiring_hop": 0.0,
+          "dead_setting": 0.0,
+          "reverted": 0.0,
+          "split_stores": 0.0,
+          "total": 2.751770082693268
+        },
+        "detector_trust": 0.0,
+        "place": 0.17878382922696617,
+        "likelihood": 4.839798107474362,
+        "exploration": 0.18649893172778523,
+        "raw_activity_total": 2.930553911920234,
+        "raw_surface_total": 7.770352019394596,
+        "exploit_score": 7.338505666913299,
+        "final_score": 7.525004598641084,
+        "top": [
+          "likelihood",
+          "thin_test",
+          "exploration",
+          "place",
+          "dead_setting",
+          "detector_trust",
+          "recent_fix_commits",
+          "reverted",
+          "split_stores",
+          "wiring_hop"
+        ],
+        "file": "scripts/gan-loop/_fold_best.py"
+      }
+    },
+    {
+      "file": "dist/HivePlannerPortable/_internal/hive_planner/bug_hunt_continue.py",
+      "signals": {
+        "recent_fix_commits": 0.0,
+        "thin_test": 1.0,
+        "wiring_hop": 0.0,
+        "dead_setting": 0.0,
+        "reverted": 0.0,
+        "split_stores": 0.0
+      },
+      "score": 7.524543,
+      "findings": 0,
+      "lines": 486,
+      "likelihood": 4.990343313606298,
+      "attribution": {
+        "attribution_version": 1,
+        "mode": "rank",
+        "six_signal": {
+          "recent_fix_commits": -0.0,
+          "thin_test": 2.751770082693268,
+          "wiring_hop": 0.0,
+          "dead_setting": 0.0,
+          "reverted": 0.0,
+          "split_stores": 0.0,
+          "total": 2.751770082693268
+        },
+        "detector_trust": 0.0,
+        "place": 0.0,
+        "likelihood": 4.990343313606298,
+        "exploration": 0.14756551548759084,
+        "raw_activity_total": 2.751770082693268,
+        "raw_surface_total": 7.742113396299565,
+        "exploit_score": 7.376977767106205,
+        "final_score": 7.524543282593796,
+        "top": [
+          "likelihood",
+          "thin_test",
+          "exploration",
+          "dead_setting",
+          "detector_trust",
+          "place",
+          "recent_fix_commits",
+          "reverted",
+          "split_stores",
+          "wiring_hop"
+        ],
+        "file": "dist/HivePlannerPortable/_internal/hive_planner/bug_hunt_continue.py"
+      }
+    },
+    {
+      "file": "dist/HivePlannerPortable/_internal/hive_planner/vendor_templates/continual-learning/hooks/continual-learning-stop.py",
+      "signals": {
+        "recent_fix_commits": 0.0,
+        "thin_test": 1.0,
+        "wiring_hop": 0.0,
+        "dead_setting": 0.0,
+        "reverted": 0.0,
+        "split_stores": 0.0
+      },
+      "score": 7.518416,
+      "findings": 0,
+      "lines": 368,
+      "likelihood": 4.984216030266966,
+      "attribution": {
+        "attribution_version": 1,
+        "mode": "rank",
+        "six_signal": {
+          "recent_fix_commits": -0.0,
+          "thin_test": 2.751770082693268,
+          "wiring_hop": 0.0,
+          "dead_setting": 0.0,
+          "reverted": 0.0,
+          "split_stores": 0.0,
+          "total": 2.751770082693268
+        },
+        "detector_trust": 0.0,
+        "place": 0.0,
+        "likelihood": 4.984216030266966,
+        "exploration": 0.14756551548759084,
+        "raw_activity_total": 2.751770082693268,
+        "raw_surface_total": 7.735986112960234,
+        "exploit_score": 7.370850483766874,
+        "final_score": 7.518415999254464,
+        "top": [
+          "likelihood",
+          "thin_test",
+          "exploration",
+          "dead_setting",
+          "detector_trust",
+          "place",
+          "recent_fix_commits",
+          "reverted",
+          "split_stores",
+          "wiring_hop"
+        ],
+        "file": "dist/HivePlannerPortable/_internal/hive_planner/vendor_templates/continual-learning/hooks/continual-learning-stop.py"
+      }
+    },
+    {
+      "file": "scripts/gan-loop/_restore_603.py",
+      "signals": {
+        "recent_fix_commits": 0.0,
+        "thin_test": 1.0,
+        "wiring_hop": 0.0,
+        "dead_setting": 0.0,
+        "reverted": 0.0,
+        "split_stores": 0.0
+      },
+      "score": 7.507249,
+      "findings": 0,
+      "lines": 45,
+      "likelihood": 4.8220423740997544,
+      "attribution": {
+        "attribution_version": 1,
+        "mode": "rank",
+        "six_signal": {
+          "recent_fix_commits": -0.0,
+          "thin_test": 2.751770082693268,
+          "wiring_hop": 0.0,
+          "dead_setting": 0.0,
+          "reverted": 0.0,
+          "split_stores": 0.0,
+          "total": 2.751770082693268
+        },
+        "detector_trust": 0.0,
+        "place": 0.17878382922696617,
+        "likelihood": 4.8220423740997544,
+        "exploration": 0.18649893172778523,
+        "raw_activity_total": 2.930553911920234,
+        "raw_surface_total": 7.752596286019989,
+        "exploit_score": 7.320749933538691,
+        "final_score": 7.507248865266476,
+        "top": [
+          "likelihood",
+          "thin_test",
+          "exploration",
+          "place",
+          "dead_setting",
+          "detector_trust",
+          "recent_fix_commits",
+          "reverted",
+          "split_stores",
+          "wiring_hop"
+        ],
+        "file": "scripts/gan-loop/_restore_603.py"
+      }
+    },
+    {
+      "file": "code-improvements/continuous-thought-machines/tasks/rl/envs.py",
+      "signals": {
+        "recent_fix_commits": 0.0,
+        "thin_test": 1.0,
+        "wiring_hop": 0.0,
+        "dead_setting": 0.0,
+        "reverted": 0.0,
+        "split_stores": 0.0
+      },
+      "score": 7.343825,
+      "findings": 0,
+      "lines": 39,
+      "likelihood": 4.707190096431539,
+      "attribution": {
+        "attribution_version": 1,
+        "mode": "rank",
+        "six_signal": {
+          "recent_fix_commits": -0.0,
+          "thin_test": 2.751770082693268,
+          "wiring_hop": 0.0,
+          "dead_setting": 0.0,
+          "reverted": 0.0,
+          "split_stores": 0.0,
+          "total": 2.751770082693268
+        },
+        "detector_trust": 0.0,
+        "place": 0.0,
+        "likelihood": 4.707190096431539,
+        "exploration": 0.25,
+        "raw_activity_total": 2.751770082693268,
+        "raw_surface_total": 7.458960179124807,
+        "exploit_score": 7.093824549931447,
+        "final_score": 7.343824549931447,
+        "top": [
+          "likelihood",
+          "thin_test",
+          "exploration",
+          "dead_setting",
+          "detector_trust",
+          "place",
+          "recent_fix_commits",
+          "reverted",
+          "split_stores",
+          "wiring_hop"
+        ],
+        "file": "code-improvements/continuous-thought-machines/tasks/rl/envs.py"
+      }
+    },
+    {
+      "file": "src/hive_planner/vendor_templates/continual-learning/hooks/continual-learning-stop.py",
+      "signals": {
+        "recent_fix_commits": 2.0,
+        "thin_test": 1.0,
+        "wiring_hop": 0.0,
+        "dead_setting": 0.0,
+        "reverted": 0.0,
+        "split_stores": 0.0
+      },
+      "score": 7.294471,
+      "findings": 0,
+      "lines": 368,
+      "likelihood": 4.984216030266966,
+      "attribution": {
+        "attribution_version": 1,
+        "mode": "rank",
+        "six_signal": {
+          "recent_fix_commits": -1.0693522059367286,
+          "thin_test": 2.751770082693268,
+          "wiring_hop": 0.0,
+          "dead_setting": 0.0,
+          "reverted": 0.0,
+          "split_stores": 0.0,
+          "total": 1.6824178767565392
+        },
+        "detector_trust": 0.0,
+        "place": 0.8903189202933081,
+        "likelihood": 4.984216030266966,
+        "exploration": 0.041999999999999996,
+        "raw_activity_total": 2.5727367970498474,
+        "raw_surface_total": 7.556952827316813,
+        "exploit_score": 7.252470979640328,
+        "final_score": 7.2944709796403275,
+        "top": [
+          "likelihood",
+          "thin_test",
+          "recent_fix_commits",
+          "place",
+          "exploration",
+          "dead_setting",
+          "detector_trust",
+          "reverted",
+          "split_stores",
+          "wiring_hop"
+        ],
+        "file": "src/hive_planner/vendor_templates/continual-learning/hooks/continual-learning-stop.py"
+      }
+    },
+    {
+      "file": "src/hive_planner/bug_hunt_continue.py",
+      "signals": {
+        "recent_fix_commits": 2.0,
+        "thin_test": 1.0,
+        "wiring_hop": 0.0,
+        "dead_setting": 0.0,
+        "reverted": 0.0,
+        "split_stores": 0.0
+      },
+      "score": 7.290182,
+      "findings": 0,
+      "lines": 486,
+      "likelihood": 4.990343313606298,
+      "attribution": {
+        "attribution_version": 1,
+        "mode": "rank",
+        "six_signal": {
+          "recent_fix_commits": -1.0693522059367286,
+          "thin_test": 2.751770082693268,
+          "wiring_hop": 0.0,
+          "dead_setting": 0.0,
+          "reverted": 0.0,
+          "split_stores": 0.0,
+          "total": 1.6824178767565392
+        },
+        "detector_trust": 0.0,
+        "place": 0.8903189202933081,
+        "likelihood": 4.990343313606298,
+        "exploration": 0.03158333333333333,
+        "raw_activity_total": 2.5727367970498474,
+        "raw_surface_total": 7.563080110656145,
+        "exploit_score": 7.2585982629796595,
+        "final_score": 7.290181596312993,
+        "top": [
+          "likelihood",
+          "thin_test",
+          "recent_fix_commits",
+          "place",
+          "exploration",
+          "dead_setting",
+          "detector_trust",
+          "reverted",
+          "split_stores",
+          "wiring_hop"
+        ],
+        "file": "src/hive_planner/bug_hunt_continue.py"
+      }
+    },
+    {
+      "file": "src/hive_planner/models.py",
+      "signals": {
+        "recent_fix_commits": 0.0,
+        "thin_test": 1.0,
+        "wiring_hop": 0.0,
+        "dead_setting": 0.0,
+        "reverted": 0.0,
+        "split_stores": 0.0
+      },
+      "score": 7.278198,
+      "findings": 0,
+      "lines": 43,
+      "likelihood": 4.267333627741957,
+      "attribution": {
+        "attribution_version": 1,
+        "mode": "rank",
+        "six_signal": {
+          "recent_fix_commits": -0.0,
+          "thin_test": 2.751770082693268,
+          "wiring_hop": 0.0,
+          "dead_setting": 0.0,
+          "reverted": 0.0,
+          "split_stores": 0.0,
+          "total": 2.751770082693268
+        },
+        "detector_trust": 0.0,
+        "place": 0.8903189202933081,
+        "likelihood": 4.267333627741957,
+        "exploration": 0.12533333333333332,
+        "raw_activity_total": 3.642089002986576,
+        "raw_surface_total": 7.909422630728533,
+        "exploit_score": 7.152864921641949,
+        "final_score": 7.278198254975282,
+        "top": [
+          "likelihood",
+          "thin_test",
+          "place",
+          "exploration",
+          "dead_setting",
+          "detector_trust",
+          "recent_fix_commits",
+          "reverted",
+          "split_stores",
+          "wiring_hop"
+        ],
+        "file": "src/hive_planner/models.py"
+      }
+    },
+    {
+      "file": "dist/HivePlannerPortable/_internal/pymupdf/_wxcolors.py",
+      "signals": {
+        "recent_fix_commits": 0.0,
+        "thin_test": 1.0,
+        "wiring_hop": 0.0,
+        "dead_setting": 0.0,
+        "reverted": 0.0,
+        "split_stores": 0.0
+      },
+      "score": 7.21095,
+      "findings": 0,
+      "lines": 563,
+      "likelihood": 4.6767504913097575,
+      "attribution": {
+        "attribution_version": 1,
+        "mode": "rank",
+        "six_signal": {
+          "recent_fix_commits": -0.0,
+          "thin_test": 2.751770082693268,
+          "wiring_hop": 0.0,
+          "dead_setting": 0.0,
+          "reverted": 0.0,
+          "split_stores": 0.0,
+          "total": 2.751770082693268
+        },
+        "detector_trust": 0.0,
+        "place": 0.0,
+        "likelihood": 4.6767504913097575,
+        "exploration": 0.14756551548759084,
+        "raw_activity_total": 2.751770082693268,
+        "raw_surface_total": 7.428520574003025,
+        "exploit_score": 7.063384944809665,
+        "final_score": 7.210950460297256,
+        "top": [
+          "likelihood",
+          "thin_test",
+          "exploration",
+          "dead_setting",
+          "detector_trust",
+          "place",
+          "recent_fix_commits",
+          "reverted",
+          "split_stores",
+          "wiring_hop"
+        ],
+        "file": "dist/HivePlannerPortable/_internal/pymupdf/_wxcolors.py"
+      }
+    },
+    {
+      "file": "src/hive_planner/launcher/cursor_submitter/__main__.py",
+      "signals": {
+        "recent_fix_commits": 0.0,
+        "thin_test": 1.0,
+        "wiring_hop": 0.0,
+        "dead_setting": 0.0,
+        "reverted": 0.0,
+        "split_stores": 0.0
+      },
+      "score": 7.186651,
+      "findings": 0,
+      "lines": 23,
+      "likelihood": 4.259119244536192,
+      "attribution": {
+        "attribution_version": 1,
+        "mode": "rank",
+        "six_signal": {
+          "recent_fix_commits": -0.0,
+          "thin_test": 2.751770082693268,
+          "wiring_hop": 0.0,
+          "dead_setting": 0.0,
+          "reverted": 0.0,
+          "split_stores": 0.0,
+          "total": 2.751770082693268
+        },
+        "detector_trust": 0.0,
+        "place": 0.8903189202933081,
+        "likelihood": 4.259119244536192,
+        "exploration": 0.041999999999999996,
+        "raw_activity_total": 3.642089002986576,
+        "raw_surface_total": 7.901208247522768,
+        "exploit_score": 7.144650538436184,
+        "final_score": 7.186650538436184,
+        "top": [
+          "likelihood",
+          "thin_test",
+          "place",
+          "exploration",
+          "dead_setting",
+          "detector_trust",
+          "recent_fix_commits",
+          "reverted",
+          "split_stores",
+          "wiring_hop"
+        ],
+        "file": "src/hive_planner/launcher/cursor_submitter/__main__.py"
+      }
+    },
+    {
+      "file": "scripts/gan-loop/_score_frozen.py",
+      "signals": {
+        "recent_fix_commits": 0.0,
+        "thin_test": 1.0,
+        "wiring_hop": 0.0,
+        "dead_setting": 0.0,
+        "reverted": 0.0,
+        "split_stores": 0.0
+      },
+      "score": 7.075985,
+      "findings": 0,
+      "lines": 18,
+      "likelihood": 4.390778043697873,
+      "attribution": {
+        "attribution_version": 1,
+        "mode": "rank",
+        "six_signal": {
+          "recent_fix_commits": -0.0,
+          "thin_test": 2.751770082693268,
+          "wiring_hop": 0.0,
+          "dead_setting": 0.0,
+          "reverted": 0.0,
+          "split_stores": 0.0,
+          "total": 2.751770082693268
+        },
+        "detector_trust": 0.0,
+        "place": 0.17878382922696617,
+        "likelihood": 4.390778043697873,
+        "exploration": 0.18649893172778523,
+        "raw_activity_total": 2.930553911920234,
+        "raw_surface_total": 7.321331955618107,
+        "exploit_score": 6.88948560313681,
+        "final_score": 7.075984534864595,
+        "top": [
+          "likelihood",
+          "thin_test",
+          "exploration",
+          "place",
+          "dead_setting",
+          "detector_trust",
+          "recent_fix_commits",
+          "reverted",
+          "split_stores",
+          "wiring_hop"
+        ],
+        "file": "scripts/gan-loop/_score_frozen.py"
+      }
+    },
+    {
+      "file": "build/lib/hive_planner/models.py",
+      "signals": {
+        "recent_fix_commits": 0.0,
+        "thin_test": 1.0,
+        "wiring_hop": 0.0,
+        "dead_setting": 0.0,
+        "reverted": 0.0,
+        "split_stores": 0.0
+      },
+      "score": 7.054459,
+      "findings": 0,
+      "lines": 43,
+      "likelihood": 4.267333627741957,
+      "attribution": {
+        "attribution_version": 1,
+        "mode": "rank",
+        "six_signal": {
+          "recent_fix_commits": -0.0,
+          "thin_test": 2.751770082693268,
+          "wiring_hop": 0.0,
+          "dead_setting": 0.0,
+          "reverted": 0.0,
+          "split_stores": 0.0,
+          "total": 2.751770082693268
+        },
+        "detector_trust": 0.0,
+        "place": 0.2424175054135224,
+        "likelihood": 4.267333627741957,
+        "exploration": 0.25,
+        "raw_activity_total": 2.99418758810679,
+        "raw_surface_total": 7.261521215848747,
+        "exploit_score": 6.804458633954375,
+        "final_score": 7.054458633954375,
+        "top": [
+          "likelihood",
+          "thin_test",
+          "exploration",
+          "place",
+          "dead_setting",
+          "detector_trust",
+          "recent_fix_commits",
+          "reverted",
+          "split_stores",
+          "wiring_hop"
+        ],
+        "file": "build/lib/hive_planner/models.py"
+      }
+    },
+    {
+      "file": "vendor/spec-kit/src/specify_cli/authentication/github.py",
+      "signals": {
+        "recent_fix_commits": 0.0,
+        "thin_test": 1.0,
+        "wiring_hop": 0.0,
+        "dead_setting": 0.0,
+        "reverted": 0.0,
+        "split_stores": 0.0
+      },
+      "score": 6.920367,
+      "findings": 0,
+      "lines": 25,
+      "likelihood": 4.164534005743945,
+      "attribution": {
+        "attribution_version": 1,
+        "mode": "rank",
+        "six_signal": {
+          "recent_fix_commits": -0.0,
+          "thin_test": 2.751770082693268,
+          "wiring_hop": 0.0,
+          "dead_setting": 0.0,
+          "reverted": 0.0,
+          "split_stores": 0.0,
+          "total": 2.751770082693268
+        },
+        "detector_trust": 0.0,
+        "place": 0.1904902828573942,
+        "likelihood": 4.164534005743945,
+        "exploration": 0.25,
+        "raw_activity_total": 2.942260365550662,
+        "raw_surface_total": 7.1067943712946064,
+        "exploit_score": 6.6703668655043895,
+        "final_score": 6.9203668655043895,
+        "top": [
+          "likelihood",
+          "thin_test",
+          "exploration",
+          "place",
+          "dead_setting",
+          "detector_trust",
+          "recent_fix_commits",
+          "reverted",
+          "split_stores",
+          "wiring_hop"
+        ],
+        "file": "vendor/spec-kit/src/specify_cli/authentication/github.py"
+      }
+    },
+    {
+      "file": "src/hive_planner/__main__.py",
+      "signals": {
+        "recent_fix_commits": 0.0,
+        "thin_test": 1.0,
+        "wiring_hop": 0.0,
+        "dead_setting": 0.0,
+        "reverted": 0.0,
+        "split_stores": 0.0
+      },
+      "score": 6.571761,
+      "findings": 0,
+      "lines": 5,
+      "likelihood": 3.5608959005909515,
+      "attribution": {
+        "attribution_version": 1,
+        "mode": "rank",
+        "six_signal": {
+          "recent_fix_commits": -0.0,
+          "thin_test": 2.751770082693268,
+          "wiring_hop": 0.0,
+          "dead_setting": 0.0,
+          "reverted": 0.0,
+          "split_stores": 0.0,
+          "total": 2.751770082693268
+        },
+        "detector_trust": 0.0,
+        "place": 0.8903189202933081,
+        "likelihood": 3.5608959005909515,
+        "exploration": 0.12533333333333332,
+        "raw_activity_total": 3.642089002986576,
+        "raw_surface_total": 7.202984903577527,
+        "exploit_score": 6.446427194490943,
+        "final_score": 6.571760527824277,
+        "top": [
+          "likelihood",
+          "thin_test",
+          "place",
+          "exploration",
+          "dead_setting",
+          "detector_trust",
+          "recent_fix_commits",
+          "reverted",
+          "split_stores",
+          "wiring_hop"
+        ],
+        "file": "src/hive_planner/__main__.py"
+      }
+    },
+    {
+      "file": "build/lib/hive_planner/__main__.py",
+      "signals": {
+        "recent_fix_commits": 0.0,
+        "thin_test": 1.0,
+        "wiring_hop": 0.0,
+        "dead_setting": 0.0,
+        "reverted": 0.0,
+        "split_stores": 0.0
+      },
+      "score": 6.348021,
+      "findings": 0,
+      "lines": 5,
+      "likelihood": 3.5608959005909515,
+      "attribution": {
+        "attribution_version": 1,
+        "mode": "rank",
+        "six_signal": {
+          "recent_fix_commits": -0.0,
+          "thin_test": 2.751770082693268,
+          "wiring_hop": 0.0,
+          "dead_setting": 0.0,
+          "reverted": 0.0,
+          "split_stores": 0.0,
+          "total": 2.751770082693268
+        },
+        "detector_trust": 0.0,
+        "place": 0.2424175054135224,
+        "likelihood": 3.5608959005909515,
+        "exploration": 0.25,
+        "raw_activity_total": 2.99418758810679,
+        "raw_surface_total": 6.555083488697742,
+        "exploit_score": 6.098020906803369,
+        "final_score": 6.348020906803369,
+        "top": [
+          "likelihood",
+          "thin_test",
+          "exploration",
+          "place",
+          "dead_setting",
+          "detector_trust",
+          "recent_fix_commits",
+          "reverted",
+          "split_stores",
+          "wiring_hop"
+        ],
+        "file": "build/lib/hive_planner/__main__.py"
+      }
+    },
+    {
+      "file": "src/hive_planner/sandbox_rank_detect.py",
+      "signals": {
+        "recent_fix_commits": 0.0,
+        "thin_test": 0.0,
+        "wiring_hop": 1.0,
+        "dead_setting": 0.0,
+        "reverted": 0.0,
+        "split_stores": 0.0
+      },
+      "score": 6.265315,
+      "findings": 0,
+      "lines": 933,
+      "likelihood": 3.9958706502163674,
+      "attribution": {
+        "attribution_version": 1,
+        "mode": "rank",
+        "six_signal": {
+          "recent_fix_commits": -0.0,
+          "thin_test": 0.0,
+          "wiring_hop": 1.503941352231641,
+          "dead_setting": 0.0,
+          "reverted": 0.0,
+          "split_stores": 0.0,
+          "total": 1.503941352231641
+        },
+        "detector_trust": 0.0,
+        "place": 0.8903189202933081,
+        "likelihood": 3.9958706502163674,
+        "exploration": 0.12533333333333332,
+        "raw_activity_total": 2.394260272524949,
+        "raw_surface_total": 6.390130922741316,
+        "exploit_score": 6.139981508700813,
+        "final_score": 6.2653148420341465,
+        "top": [
+          "likelihood",
+          "wiring_hop",
+          "place",
+          "exploration",
+          "dead_setting",
+          "detector_trust",
+          "recent_fix_commits",
+          "reverted",
+          "split_stores",
+          "thin_test"
+        ],
+        "file": "src/hive_planner/sandbox_rank_detect.py"
+      }
+    }
+  ]
+}

@@ -1,0 +1,134 @@
+"""Handoff validation must surface overlay hook problems, not only missing files."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+from hive_planner.agent_handoff import validate_unified_handoff
+from hive_planner.bootstrap import init_project
+from hive_planner.config import RepoPaths
+
+
+def _hive_source(tmp_path: Path) -> RepoPaths:
+    root = tmp_path / "hive-planner"
+    rules = root / ".cursor" / "rules"
+    kit = root / "starter-kit"
+    rules.mkdir(parents=True)
+    kit.mkdir(parents=True)
+    (rules / "architecture.mdc").write_text("# Architecture\n", encoding="utf-8")
+    (rules / "task-execution.mdc").write_text("# Task Execution\n", encoding="utf-8")
+    (rules / "validation.mdc").write_text("# Validation\n", encoding="utf-8")
+    (kit / "spec-kit-agent-integration.md").write_text("# Spec Kit\n", encoding="utf-8")
+    (root / "docs").mkdir(parents=True)
+    (root / "docs" / "cl-spec-integration.md").write_text("# CL + Spec integration\n", encoding="utf-8")
+    return RepoPaths(root=root)
+
+
+def test_handoff_flags_overlay_hooks_that_still_call_bun(tmp_path: Path) -> None:
+    target = tmp_path / "bun-hooks"
+    init_project(_hive_source(tmp_path), target, agent_handoff="unified")
+    hooks = target / ".cursor" / "plugins" / "hive-continual-learning" / "hooks" / "hooks.json"
+    hooks.write_text(
+        json.dumps({"hooks": {"stop": [{"command": "bun run continual-learning-stop.py"}]}}),
+        encoding="utf-8",
+    )
+
+    status = validate_unified_handoff(target)
+
+    assert status.complete is False
+    assert ".cursor/plugins/hive-continual-learning/hooks/hooks.json" in status.missing
+
+
+def test_handoff_flags_hooks_json_that_omits_workspace_open(tmp_path: Path) -> None:
+    target = tmp_path / "no-workspace-open"
+    init_project(_hive_source(tmp_path), target, agent_handoff="unified")
+    project_hooks = target / ".cursor" / "hooks.json"
+    project_hooks.write_text(
+        json.dumps({"version": 1, "hooks": {"stop": [{"command": "echo keep"}]}}),
+        encoding="utf-8",
+    )
+
+    status = validate_unified_handoff(target)
+
+    assert status.complete is False
+    assert ".cursor/hooks.json" in status.missing
+
+
+def test_utf16_project_hooks_are_reported_unreadable(tmp_path: Path) -> None:
+    from hive_planner.vendor_sync import _verify_cl_overlay, overlay_issues_as_missing
+
+    target = tmp_path / "utf16-hooks"
+    hooks = target / ".cursor" / "hooks.json"
+    hooks.parent.mkdir(parents=True)
+    hooks.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "hooks": {"workspaceOpen": [{"command": "py -3.11 .cursor/hooks/hive_workspace_open.py"}]},
+            }
+        ),
+        encoding="utf-16",
+    )
+
+    issues = _verify_cl_overlay(target)
+    assert any(".cursor/hooks.json is not UTF-8" in issue for issue in issues)
+    assert not any("missing workspaceOpen" in issue for issue in issues)
+    assert ".cursor/hooks.json" in overlay_issues_as_missing(target, None)
+
+
+def test_load_manifest_reads_utf16_json(tmp_path: Path) -> None:
+    from hive_planner.vendor_sync import VendorSyncError, load_manifest
+
+    path = tmp_path / "manifest.json"
+    path.write_text('{"schema": "hive-vendor-v1"}\n', encoding="utf-16")
+    loaded = load_manifest(path)
+    assert loaded["schema"] == "hive-vendor-v1"
+
+    broken = tmp_path / "broken.json"
+    broken.write_bytes(b"\xff\xfe\x00\x00")
+    try:
+        load_manifest(broken)
+    except VendorSyncError:
+        return
+    raise AssertionError("expected VendorSyncError")
+
+
+def test_overlay_sync_skips_a_file_behind_a_junction(tmp_path: Path) -> None:
+    import subprocess
+
+    import pytest
+
+    from hive_planner.vendor_sync import _sync_overlay_tree
+
+    overlay = tmp_path / "overlay"
+    overlay.mkdir()
+    (overlay / "keep.md").write_text("keep\n", encoding="utf-8")
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "secret.md").write_text("secret\n", encoding="utf-8")
+    link = overlay / "linked"
+    created = subprocess.run(
+        ["cmd", "/c", "mklink", "/J", str(link), str(outside)],
+        capture_output=True,
+        text=True,
+    )
+    if created.returncode != 0:
+        pytest.skip("directory junction is not permitted")
+
+    dest = tmp_path / "dest"
+    target = tmp_path / "project"
+    dest.mkdir()
+    target.mkdir()
+    _sync_overlay_tree(
+        overlay,
+        dest,
+        target,
+        overlay_force=True,
+        refresh_changed=False,
+        refresh_stats=None,
+        written=None,
+    )
+
+    assert (dest / "keep.md").read_text(encoding="utf-8") == "keep\n"
+    assert not (dest / "linked" / "secret.md").exists()

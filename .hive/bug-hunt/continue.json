@@ -1,0 +1,10 @@
+{
+  "active": false,
+  "pause_seconds": 10,
+  "ceiling": 50,
+  "committed": 0,
+  "consecutive_empty": 2,
+  "file": "dist/HivePlannerPortable/_internal/pymupdf/__main__.py",
+  "scenario": "Reviewed packaged PyMuPDF page and xref range parsing, password handling, document validation, and output paths. No concrete user-visible bug or Hive wiring failure was found.",
+  "outcome": "empty"
+}

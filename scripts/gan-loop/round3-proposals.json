@@ -1,0 +1,34 @@
+[
+  {
+    "name": "roman_value.py",
+    "source": "\"\"\"Integer value of a Roman numeral.\"\"\"\n\ndef roman_value(text):\n    values = {\"I\": 1, \"V\": 5, \"X\": 10, \"L\": 50, \"C\": 100, \"D\": 500, \"M\": 1000}\n    total = 0\n    previous = 0\n    for ch in reversed(text.upper()):\n        current = values.get(ch, 0)\n        if current < previous:\n            total -= current\n        else:\n            total += current\n            previous = current\n    return total\n"
+  },
+  {
+    "name": "tip_split.py",
+    "source": "\"\"\"Split a tip so each diner gets whole cents.\"\"\"\n\ndef tip_shares(bill_cents, percent, diners):\n    if diners < 1 or bill_cents < 0 or percent < 0:\n        return []\n    total = (bill_cents * percent) // 100\n    base, extra = divmod(total, diners)\n    shares = []\n    seat = 0\n    while seat < diners:\n        bonus = 1 if seat < extra else 0\n        shares.append(base + bonus)\n        seat += 1\n    return shares\n"
+  },
+  {
+    "name": "dim_weight.py",
+    "source": "\"\"\"Billable pounds from the greater of scale and dim weight.\"\"\"\n\ndef dim_pounds(length_in, width_in, height_in):\n    cubic = length_in * width_in * height_in\n    if cubic < 1:\n        return 0\n    return (cubic + 138) // 139\n\ndef billable_pounds(scale, length_in, width_in, height_in):\n    if scale < 0 or length_in < 0 or width_in < 0 or height_in < 0:\n        return 0\n    guessed = dim_pounds(length_in, width_in, height_in)\n    if guessed > scale:\n        return guessed\n    return scale\n"
+  },
+  {
+    "name": "compass_name.py",
+    "source": "\"\"\"Snap a degree heading to an eight-point compass name.\"\"\"\n\ndef compass_name(degrees):\n    names = (\"N\", \"NE\", \"E\", \"SE\", \"S\", \"SW\", \"W\", \"NW\")\n    turned = degrees % 360\n    index = ((turned + 22) // 45) % 8\n    return names[index]\n"
+  },
+  {
+    "name": "scarf_rows.py",
+    "source": "\"\"\"Rows to knit so a scarf reaches a target length.\"\"\"\n\ndef rows_for_length(target_in, rows_per_four):\n    if target_in <= 0 or rows_per_four <= 0:\n        return 0\n    needed = target_in * rows_per_four\n    return (needed + 3) // 4\n"
+  },
+  {
+    "name": "batter_scale.py",
+    "source": "\"\"\"Scale a batter amount when the pan area changes.\"\"\"\n\ndef pan_area(length, width):\n    if length < 0 or width < 0:\n        return 0\n    return length * width\n\ndef scale_batter(amount, old_pan, new_pan):\n    if amount < 0:\n        return 0\n    old_area = pan_area(old_pan[0], old_pan[1])\n    new_area = pan_area(new_pan[0], new_pan[1])\n    if old_area == 0:\n        return 0\n    return amount * new_area // old_area\n"
+  },
+  {
+    "name": "letter_post.py",
+    "source": "\"\"\"Postage in cents for a letter from weight in ounces.\"\"\"\n\nFIRST_OUNCE = 73\nEXTRA_OUNCE = 28\n\ndef ounce_rate(ounces):\n    if ounces <= 1:\n        return FIRST_OUNCE\n    return FIRST_OUNCE + (ounces - 1) * EXTRA_OUNCE\n\ndef letter_postage(ounces):\n    if ounces < 1:\n        return 0\n    return ounce_rate(ounces)\n\nif __name__ == \"__main__\":\n    letter_postage(3)\n"
+  },
+  {
+    "name": "pantry_jar.py",
+    "source": "\"\"\"A labeled jar on a pantry shelf.\"\"\"\n\nclass PantryJar:\n    def __init__(self, item, ounces):\n        self.item = item\n        self.ounces = ounces\n\n    def tag(self):\n        return f\"{self.item} ({self.ounces} oz)\"\n\n    def fits(self, space_oz):\n        return self.ounces <= space_oz\n"
+  }
+]
