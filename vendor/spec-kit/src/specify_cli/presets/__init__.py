@@ -183,6 +183,11 @@ class PresetManifest:
         for field in ["id", "name", "version", "description"]:
             if field not in pack:
                 raise PresetValidationError(f"Missing preset.{field}")
+        for field in ["name", "description"]:
+            if not isinstance(pack[field], str):
+                raise PresetValidationError(
+                    f"Invalid preset.{field}: expected a string, got {type(pack[field]).__name__}"
+                )
 
         # Validate pack ID format
         if not isinstance(pack["id"], str) or not re.fullmatch(r'[a-z0-9-]+', pack["id"]):
@@ -223,6 +228,11 @@ class PresetManifest:
         if not isinstance(provides["templates"], list):
             raise PresetValidationError(
                 "Invalid templates section: expected a list"
+            )
+        tags = self.data.get("tags", [])
+        if not isinstance(tags, list) or any(not isinstance(tag, str) for tag in tags):
+            raise PresetValidationError(
+                "Invalid tags: expected a list of strings"
             )
 
         # Validate templates

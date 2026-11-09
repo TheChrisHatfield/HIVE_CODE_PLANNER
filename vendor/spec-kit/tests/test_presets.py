@@ -292,6 +292,34 @@ class TestPresetManifest:
         with pytest.raises(PresetValidationError, match=message):
             PresetManifest(manifest_path)
 
+    @pytest.mark.parametrize(
+        "field, value, message",
+        [
+            ("name", 123, "Invalid preset.name"),
+            ("description", {"text": "bad"}, "Invalid preset.description"),
+        ],
+    )
+    def test_non_string_preset_metadata_raises_validation_error(
+        self, temp_dir, valid_pack_data, field, value, message
+    ):
+        valid_pack_data["preset"][field] = value
+        manifest_path = temp_dir / "preset.yml"
+        with open(manifest_path, "w") as f:
+            yaml.dump(valid_pack_data, f)
+
+        with pytest.raises(PresetValidationError, match=message):
+            PresetManifest(manifest_path)
+
+    @pytest.mark.parametrize("tags", ["testing", [123], {"tag": "testing"}])
+    def test_invalid_tags_raise_validation_error(self, temp_dir, valid_pack_data, tags):
+        valid_pack_data["tags"] = tags
+        manifest_path = temp_dir / "preset.yml"
+        with open(manifest_path, "w") as f:
+            yaml.dump(valid_pack_data, f)
+
+        with pytest.raises(PresetValidationError, match="Invalid tags"):
+            PresetManifest(manifest_path)
+
     def test_invalid_version(self, temp_dir, valid_pack_data):
         """Test invalid semantic version."""
         valid_pack_data["preset"]["version"] = "not-a-version"
