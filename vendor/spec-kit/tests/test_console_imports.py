@@ -35,6 +35,16 @@ def test_step_tracker_instantiable():
     assert tracker.steps[0]["status"] == "done"
 
 
+def test_step_tracker_clears_stale_detail_on_status_update():
+    tracker = StepTracker("test")
+    tracker.add("step1", "Step One")
+    tracker.error("step1", "temporary failure")
+    tracker.complete("step1")
+
+    assert tracker.steps[0]["status"] == "done"
+    assert tracker.steps[0]["detail"] == ""
+
+
 def test_select_with_arrows_raises_on_empty_options():
     import pytest
     with pytest.raises(ValueError, match="at least one option"):

@@ -68,8 +68,7 @@ class StepTracker:
         for s in self.steps:
             if s["key"] == key:
                 s["status"] = status
-                if detail:
-                    s["detail"] = detail
+                s["detail"] = detail
                 self._maybe_refresh()
                 return
 
