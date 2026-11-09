@@ -652,6 +652,35 @@ def main(argv: list[str] | None = None) -> int:
     agn_choose.add_argument("--arm", action="store_true", help="Arm the first planned reward")
     agn_choose.add_argument("--cycles", type=int, default=1)
 
+    voice_bot = sub.add_parser(
+        "voice-bot",
+        help="Voice_Bot contracts and session state (hook: voice.experience)",
+    )
+    voice_sub = voice_bot.add_subparsers(dest="voice_bot_command", required=True)
+    voice_status = voice_sub.add_parser("status", help="Show cartridge trace and session summary")
+    voice_status.add_argument("--feature", default=None, help="Feature id (default: AGENTS.md active)")
+    voice_init = voice_sub.add_parser("init", help="Start a HIVE-owned voice session record")
+    voice_init.add_argument("--feature", default=None, help="Feature id (default: AGENTS.md active)")
+    voice_init.add_argument("--provider-voice", default="", help="Voice adapter label (optional)")
+    voice_probe = voice_sub.add_parser(
+        "acp-probe",
+        help="Start the Cursor Agent ACP child and send initialize (no model call; T003)",
+    )
+    voice_probe.add_argument("--feature", default=None, help="Feature id (default: AGENTS.md active)")
+    voice_probe.add_argument("--agent-path", default=None, help="Override path to the agent CLI")
+    voice_probe.add_argument("--timeout", type=float, default=30.0, help="Seconds to wait for initialize")
+    voice_turn = voice_sub.add_parser(
+        "turn",
+        help="Submit one read-only coding turn through the ACP session and wait for its result (T004)",
+    )
+    voice_turn.add_argument("instruction", help="Instruction text (max per voice_bot config)")
+    voice_turn.add_argument("--feature", default=None, help="Feature id (default: AGENTS.md active)")
+    voice_turn.add_argument("--file", default="", help="Workspace-relative file to bind to the snapshot")
+    voice_turn.add_argument("--mode", default="ask", choices=["ask", "plan"], help="Read-only mode")
+    voice_turn.add_argument("--client-request-id", default="", help="Dedupe key for this submit (required)")
+    voice_turn.add_argument("--agent-path", default=None, help="Override path to the agent CLI")
+    voice_turn.add_argument("--timeout", type=float, default=600.0, help="Seconds to wait for the turn")
+
     sub.add_parser(
         "mcp-serve",
         help="Run stdio MCP so a Cursor agent can call Hive Planner (no extra stdout)",
@@ -1534,6 +1563,93 @@ def main(argv: list[str] | None = None) -> int:
                 return code
         except OSError as exc:
             print(json.dumps({"ok": False, "action": cmd, "blocked_reason": str(exc)}, indent=2))
+            return 1
+        return 1
+
+    if args.command == "voice-bot":
+        from hive_planner.spec_drift import parse_active_feature
+        from hive_planner.voice_bot import (
+            VoiceBotError,
+            acp_probe,
+            init_voice_session,
+        )
+        from hive_planner.voice_bot import status_summary as voice_bot_status_summary
+
+        feature = args.feature if hasattr(args, "feature") else None
+        if not feature:
+            feature = parse_active_feature(paths) or "Voice_Bot"
+        cmd = args.voice_bot_command
+        try:
+            if cmd == "status":
+                print(f"Root: {root}")
+                print(json.dumps(voice_bot_status_summary(paths, feature), indent=2))
+                return 0
+            if cmd == "init":
+                state = init_voice_session(
+                    paths,
+                    feature,
+                    provider_voice=args.provider_voice or "",
+                )
+                print(f"Root: {root}")
+                print(
+                    json.dumps(
+                        {
+                            "ok": True,
+                            "session_id": state.voice_session.session_id if state.voice_session else None,
+                            "feature": feature,
+                        },
+                        indent=2,
+                    )
+                )
+                return 0
+            if cmd == "acp-probe":
+                result = acp_probe(
+                    paths,
+                    feature,
+                    agent_path=args.agent_path,
+                    timeout=args.timeout,
+                )
+                print(f"Root: {root}")
+                print(json.dumps(result, indent=2))
+                return 0
+            if cmd == "turn":
+                from hive_planner.voice_bot import resolve_cursor_agent_cli
+                from hive_planner.voice_task import VoiceTaskRunner, tests_status_for_task
+
+                agent_path = args.agent_path or resolve_cursor_agent_cli().get("path")
+                if not agent_path:
+                    print("Error: coding_unavailable: Cursor Agent CLI not found", file=sys.stderr)
+                    return 1
+                runner = VoiceTaskRunner(
+                    paths, feature, agent_path=agent_path, request_timeout=args.timeout,
+                )
+                try:
+                    submitted = runner.submit(
+                        args.instruction,
+                        mode=args.mode,
+                        file_path=args.file,
+                        client_request_id=args.client_request_id,
+                    )
+                    task_id = submitted.get("task_id")
+                    if task_id:
+                        runner.wait_idle(timeout=args.timeout + 30)
+                    task = runner.state.coding_tasks.get(task_id) if task_id else None
+                    payload = {
+                        "submit": submitted,
+                        "task_id": task_id,
+                        "state": task.state if task else submitted.get("state"),
+                        "reason": task.reason if task else "",
+                        "tests_status": tests_status_for_task(paths, task_id) if task and task.state in ("completed", "failed", "cancelled") else None,
+                        "spoken": task.evidence.spoken_update if task else submitted.get("spoken", ""),
+                        "written": task.evidence.written_result if task else "",
+                    }
+                finally:
+                    runner.close()
+                print(f"Root: {root}")
+                print(json.dumps(payload, indent=2))
+                return 0 if payload["state"] == "completed" else 1
+        except (VoiceBotError, ValueError) as exc:
+            print(f"Error: {exc}", file=sys.stderr)
             return 1
         return 1
 
