@@ -233,6 +233,65 @@ class TestPresetManifest:
         with pytest.raises(PresetValidationError, match="Invalid preset ID"):
             PresetManifest(manifest_path)
 
+    def test_numeric_pack_id_raises_validation_error(self, temp_dir, valid_pack_data):
+        """Numeric YAML IDs must produce a validation error, not a raw TypeError."""
+        valid_pack_data["preset"]["id"] = 123
+        manifest_path = temp_dir / "preset.yml"
+        with open(manifest_path, 'w') as f:
+            yaml.dump(valid_pack_data, f)
+        with pytest.raises(PresetValidationError, match="Invalid preset ID"):
+            PresetManifest(manifest_path)
+
+    @pytest.mark.parametrize(
+        "field, value, message",
+        [
+            ("name", 123, "Invalid template name"),
+            ("file", 123, "Invalid template file path"),
+        ],
+    )
+    def test_non_string_template_fields_raise_validation_error(
+        self, temp_dir, valid_pack_data, field, value, message
+    ):
+        """Malformed template scalar fields must not escape as raw TypeError."""
+        valid_pack_data["provides"]["templates"][0][field] = value
+        manifest_path = temp_dir / "preset.yml"
+        with open(manifest_path, 'w') as f:
+            yaml.dump(valid_pack_data, f)
+        with pytest.raises(PresetValidationError, match=message):
+            PresetManifest(manifest_path)
+
+    def test_non_string_command_name_raises_validation_error(
+        self, temp_dir, valid_pack_data
+    ):
+        """Numeric command names must be rejected as validation errors."""
+        valid_pack_data["provides"]["templates"][0].update(
+            {"type": "command", "name": 123}
+        )
+        manifest_path = temp_dir / "preset.yml"
+        with open(manifest_path, 'w') as f:
+            yaml.dump(valid_pack_data, f)
+        with pytest.raises(PresetValidationError, match="Invalid command name"):
+            PresetManifest(manifest_path)
+
+    @pytest.mark.parametrize(
+        "section, value, message",
+        [
+            ("preset", None, "Invalid preset metadata"),
+            ("requires", None, "Invalid requires section"),
+            ("provides", None, "Invalid provides section"),
+        ],
+    )
+    def test_non_mapping_sections_raise_validation_error(
+        self, temp_dir, valid_pack_data, section, value, message
+    ):
+        """Malformed manifest sections must produce domain validation errors."""
+        valid_pack_data[section] = value
+        manifest_path = temp_dir / "preset.yml"
+        with open(manifest_path, 'w') as f:
+            yaml.dump(valid_pack_data, f)
+        with pytest.raises(PresetValidationError, match=message):
+            PresetManifest(manifest_path)
+
     def test_invalid_version(self, temp_dir, valid_pack_data):
         """Test invalid semantic version."""
         valid_pack_data["preset"]["version"] = "not-a-version"
