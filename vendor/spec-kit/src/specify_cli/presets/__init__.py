@@ -176,12 +176,16 @@ class PresetManifest:
 
         # Validate preset metadata
         pack = self.data["preset"]
+        if not isinstance(pack, dict):
+            raise PresetValidationError(
+                f"Invalid preset metadata: expected a mapping, got {type(pack).__name__}"
+            )
         for field in ["id", "name", "version", "description"]:
             if field not in pack:
                 raise PresetValidationError(f"Missing preset.{field}")
 
         # Validate pack ID format
-        if not re.match(r'^[a-z0-9-]+$', pack["id"]):
+        if not isinstance(pack["id"], str) or not re.fullmatch(r'[a-z0-9-]+', pack["id"]):
             raise PresetValidationError(
                 f"Invalid preset ID '{pack['id']}': "
                 "must be lowercase alphanumeric with hyphens only"
@@ -190,29 +194,52 @@ class PresetManifest:
         # Validate semantic version
         try:
             pkg_version.Version(pack["version"])
-        except pkg_version.InvalidVersion:
+        except (pkg_version.InvalidVersion, TypeError, ValueError):
             raise PresetValidationError(f"Invalid version: {pack['version']}")
 
         # Validate requires section
         requires = self.data["requires"]
+        if not isinstance(requires, dict):
+            raise PresetValidationError(
+                f"Invalid requires section: expected a mapping, got {type(requires).__name__}"
+            )
         if "speckit_version" not in requires:
             raise PresetValidationError("Missing requires.speckit_version")
+        if not isinstance(requires["speckit_version"], str) or not requires["speckit_version"].strip():
+            raise PresetValidationError(
+                "requires.speckit_version must be a non-empty string"
+            )
 
         # Validate provides section
         provides = self.data["provides"]
+        if not isinstance(provides, dict):
+            raise PresetValidationError(
+                f"Invalid provides section: expected a mapping, got {type(provides).__name__}"
+            )
         if "templates" not in provides or not provides["templates"]:
             raise PresetValidationError(
                 "Preset must provide at least one template"
             )
+        if not isinstance(provides["templates"], list):
+            raise PresetValidationError(
+                "Invalid templates section: expected a list"
+            )
 
         # Validate templates
         for tmpl in provides["templates"]:
+            if not isinstance(tmpl, dict):
+                raise PresetValidationError(
+                    "Invalid template entry: expected a mapping"
+                )
             if "type" not in tmpl or "name" not in tmpl or "file" not in tmpl:
                 raise PresetValidationError(
                     "Template missing 'type', 'name', or 'file'"
                 )
 
-            if tmpl["type"] not in VALID_PRESET_TEMPLATE_TYPES:
+            if (
+                not isinstance(tmpl["type"], str)
+                or tmpl["type"] not in VALID_PRESET_TEMPLATE_TYPES
+            ):
                 raise PresetValidationError(
                     f"Invalid template type '{tmpl['type']}': "
                     f"must be one of {sorted(VALID_PRESET_TEMPLATE_TYPES)}"
@@ -220,6 +247,10 @@ class PresetManifest:
 
             # Validate file path safety: must be relative, no parent traversal
             file_path = tmpl["file"]
+            if not isinstance(file_path, str):
+                raise PresetValidationError(
+                    f"Invalid template file path '{file_path}': must be a string"
+                )
             normalized = os.path.normpath(file_path)
             if os.path.isabs(normalized) or normalized.startswith(".."):
                 raise PresetValidationError(
@@ -252,13 +283,17 @@ class PresetManifest:
             # Validate template name format
             if tmpl["type"] == "command":
                 # Commands use dot notation (e.g. speckit.specify)
-                if not re.match(r'^[a-z0-9.-]+$', tmpl["name"]):
+                if not isinstance(tmpl["name"], str) or not re.fullmatch(
+                    r'[a-z0-9.-]+', tmpl["name"]
+                ):
                     raise PresetValidationError(
                         f"Invalid command name '{tmpl['name']}': "
                         "must be lowercase alphanumeric with hyphens and dots only"
                     )
             else:
-                if not re.match(r'^[a-z0-9-]+$', tmpl["name"]):
+                if not isinstance(tmpl["name"], str) or not re.fullmatch(
+                    r'[a-z0-9-]+', tmpl["name"]
+                ):
                     raise PresetValidationError(
                         f"Invalid template name '{tmpl['name']}': "
                         "must be lowercase alphanumeric with hyphens only"
