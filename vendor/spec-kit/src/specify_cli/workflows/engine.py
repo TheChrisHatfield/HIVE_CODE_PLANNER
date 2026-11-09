@@ -38,6 +38,8 @@ class WorkflowDefinition:
         self.source_path = source_path
 
         workflow = data.get("workflow", {})
+        if not isinstance(workflow, dict):
+            workflow = {}
         self.id: str = workflow.get("id", "")
         self.name: str = workflow.get("name", "")
         self.version: str = workflow.get("version", "0.0.0")
@@ -134,9 +136,9 @@ def validate_workflow(definition: WorkflowDefinition) -> list[str]:
     # -- Top-level fields -------------------------------------------------
     if not definition.id:
         errors.append("Workflow is missing 'workflow.id'.")
-    elif not _ID_PATTERN.match(definition.id):
+    elif not isinstance(definition.id, str) or not _ID_PATTERN.fullmatch(definition.id):
         errors.append(
-            f"Workflow ID {definition.id!r} must be lowercase alphanumeric "
+            f"workflow.id {definition.id!r} must be lowercase alphanumeric "
             f"with hyphens."
         )
 
@@ -145,9 +147,12 @@ def validate_workflow(definition: WorkflowDefinition) -> list[str]:
 
     if not definition.version:
         errors.append("Workflow is missing 'workflow.version'.")
-    elif not re.match(r"^\d+\.\d+\.\d+$", definition.version):
+    elif (
+        not isinstance(definition.version, str)
+        or not re.fullmatch(r"\d+\.\d+\.\d+", definition.version)
+    ):
         errors.append(
-            f"Workflow version {definition.version!r} is not valid "
+            f"workflow.version {definition.version!r} is not valid "
             f"semantic versioning (expected X.Y.Z)."
         )
 

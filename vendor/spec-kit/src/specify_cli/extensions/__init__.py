@@ -197,12 +197,20 @@ class ExtensionManifest:
 
         # Validate extension metadata
         ext = self.data["extension"]
+        if not isinstance(ext, dict):
+            raise ValidationError(
+                f"Invalid extension metadata: expected a mapping, got {type(ext).__name__}"
+            )
         for field in ["id", "name", "version", "description"]:
             if field not in ext:
                 raise ValidationError(f"Missing extension.{field}")
+            if not isinstance(ext[field], str):
+                raise ValidationError(
+                    f"extension.{field} must be a string, got {type(ext[field]).__name__}"
+                )
 
         # Validate extension ID format
-        if not re.match(r"^[a-z0-9-]+$", ext["id"]):
+        if not re.fullmatch(r"[a-z0-9-]+", ext["id"]):
             raise ValidationError(
                 f"Invalid extension ID '{ext['id']}': "
                 "must be lowercase alphanumeric with hyphens only"
@@ -211,7 +219,7 @@ class ExtensionManifest:
         # Validate semantic version
         try:
             pkg_version.Version(ext["version"])
-        except pkg_version.InvalidVersion:
+        except (pkg_version.InvalidVersion, TypeError, ValueError):
             raise ValidationError(f"Invalid version: {ext['version']}")
 
         # Validate optional category field (free-form string)
@@ -231,11 +239,19 @@ class ExtensionManifest:
 
         # Validate requires section
         requires = self.data["requires"]
+        if not isinstance(requires, dict):
+            raise ValidationError("'requires' must be a mapping")
         if "speckit_version" not in requires:
             raise ValidationError("Missing requires.speckit_version")
+        if not isinstance(requires["speckit_version"], str) or not requires["speckit_version"].strip():
+            raise ValidationError(
+                "requires.speckit_version must be a non-empty string"
+            )
 
         # Validate provides section
         provides = self.data["provides"]
+        if not isinstance(provides, dict):
+            raise ValidationError("'provides' must be a mapping")
         commands = provides.get("commands", [])
         hooks = self.data.get("hooks")
 

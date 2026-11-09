@@ -1022,7 +1022,7 @@ def extension_update(
                 continue
             try:
                 installed_version = pkg_version.Version(metadata["version"])
-            except pkg_version.InvalidVersion:
+            except (pkg_version.InvalidVersion, TypeError, ValueError):
                 console.print(
                     f"⚠  {safe_ext_id}: Invalid installed version '{_escape_markup(str(metadata.get('version')))}' in registry (skipping)"
                 )
@@ -1041,7 +1041,7 @@ def extension_update(
 
             try:
                 catalog_version = pkg_version.Version(ext_info["version"])
-            except pkg_version.InvalidVersion:
+            except (pkg_version.InvalidVersion, TypeError, ValueError):
                 console.print(
                     f"⚠  {safe_ext_id}: Invalid catalog version '{_escape_markup(str(ext_info.get('version')))}' (skipping)"
                 )

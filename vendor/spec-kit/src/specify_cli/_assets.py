@@ -38,7 +38,7 @@ def _locate_bundled_extension(extension_id: str) -> Path | None:
     Checks the wheel's core_pack first, then falls back to the
     source-checkout ``extensions/<id>/`` directory.
     """
-    if not re.match(r'^[a-z0-9-]+$', extension_id):
+    if not isinstance(extension_id, str) or not re.fullmatch(r'[a-z0-9-]+', extension_id):
         return None
 
     core = _locate_core_pack()
@@ -61,7 +61,9 @@ def _locate_bundled_workflow(workflow_id: str) -> Path | None:
     Checks the wheel's core_pack first, then falls back to the
     source-checkout ``workflows/<id>/`` directory.
     """
-    if not re.match(r'^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$', workflow_id):
+    if not isinstance(workflow_id, str) or not re.fullmatch(
+        r'[a-z0-9](?:[a-z0-9-]*[a-z0-9])?', workflow_id
+    ):
         return None
 
     core = _locate_core_pack()
@@ -84,7 +86,7 @@ def _locate_bundled_preset(preset_id: str) -> Path | None:
     Checks the wheel's core_pack first, then falls back to the
     source-checkout ``presets/<id>/`` directory.
     """
-    if not re.match(r'^[a-z0-9-]+$', preset_id):
+    if not isinstance(preset_id, str) or not re.fullmatch(r'[a-z0-9-]+', preset_id):
         return None
 
     core = _locate_core_pack()

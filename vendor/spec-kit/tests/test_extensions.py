@@ -290,6 +290,42 @@ class TestExtensionManifest:
         with pytest.raises(ValidationError, match="Invalid extension ID"):
             ExtensionManifest(manifest_path)
 
+    def test_numeric_extension_id_raises_validation_error(
+        self, temp_dir, valid_manifest_data
+    ):
+        """Numeric YAML IDs must produce ValidationError, not raw TypeError."""
+        import yaml
+
+        valid_manifest_data["extension"]["id"] = 123
+        manifest_path = temp_dir / "extension.yml"
+        with open(manifest_path, "w") as f:
+            yaml.dump(valid_manifest_data, f)
+
+        with pytest.raises(ValidationError, match="extension.id must be a string"):
+            ExtensionManifest(manifest_path)
+
+    @pytest.mark.parametrize(
+        "section, message",
+        [
+            ("extension", "Invalid extension metadata"),
+            ("requires", "'requires' must be a mapping"),
+            ("provides", "'provides' must be a mapping"),
+        ],
+    )
+    def test_non_mapping_extension_sections_raise_validation_error(
+        self, temp_dir, valid_manifest_data, section, message
+    ):
+        """Malformed extension sections must produce domain validation errors."""
+        import yaml
+
+        valid_manifest_data[section] = None
+        manifest_path = temp_dir / "extension.yml"
+        with open(manifest_path, "w") as f:
+            yaml.dump(valid_manifest_data, f)
+
+        with pytest.raises(ValidationError, match=message):
+            ExtensionManifest(manifest_path)
+
     def test_invalid_version(self, temp_dir, valid_manifest_data):
         """Test manifest with invalid semantic version."""
         import yaml

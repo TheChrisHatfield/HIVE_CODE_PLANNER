@@ -2048,6 +2048,40 @@ steps:
         errors = validate_workflow(definition)
         assert any("lowercase alphanumeric" in e for e in errors)
 
+    @pytest.mark.parametrize("value", [123, None, []])
+    def test_non_string_workflow_id_returns_validation_error(self, value):
+        from specify_cli.workflows.engine import WorkflowDefinition, validate_workflow
+
+        definition = WorkflowDefinition(
+            {
+                "workflow": {"id": value, "name": "Test", "version": "1.0.0"},
+                "steps": [],
+            }
+        )
+        errors = validate_workflow(definition)
+        assert any("workflow.id" in error.lower() for error in errors)
+
+    @pytest.mark.parametrize("value", [123, None, []])
+    def test_non_string_workflow_version_returns_validation_error(self, value):
+        from specify_cli.workflows.engine import WorkflowDefinition, validate_workflow
+
+        definition = WorkflowDefinition(
+            {
+                "workflow": {"id": "test", "name": "Test", "version": value},
+                "steps": [],
+            }
+        )
+        errors = validate_workflow(definition)
+        assert any("workflow.version" in error.lower() for error in errors)
+
+    @pytest.mark.parametrize("value", [None, []])
+    def test_non_mapping_workflow_defaults_to_validation_errors(self, value):
+        from specify_cli.workflows.engine import WorkflowDefinition, validate_workflow
+
+        definition = WorkflowDefinition({"workflow": value, "steps": []})
+        errors = validate_workflow(definition)
+        assert any("workflow.id" in error.lower() for error in errors)
+
     def test_no_steps(self):
         from specify_cli.workflows.engine import WorkflowDefinition, validate_workflow
 
