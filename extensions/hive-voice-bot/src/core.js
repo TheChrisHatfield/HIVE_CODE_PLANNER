@@ -21,7 +21,9 @@ const SEVERITY_NAMES = Object.freeze(["error", "warning", "information", "hint"]
 // R23: the file must resolve inside the bound workspace root.
 function isInsideWorkspace(rootPath, filePath) {
   const rel = path.relative(path.resolve(rootPath), path.resolve(rootPath, filePath));
-  return rel !== "" && !rel.startsWith("..") && !path.isAbsolute(rel);
+  // Only a leading ".." path segment escapes the root; a name like "..notes" stays inside.
+  const escapes = rel === ".." || rel.startsWith(".." + path.sep);
+  return rel !== "" && !escapes && !path.isAbsolute(rel);
 }
 
 // R21: read snapshot_max_bytes from .hive/voice-bot/config.json (the file the Python side

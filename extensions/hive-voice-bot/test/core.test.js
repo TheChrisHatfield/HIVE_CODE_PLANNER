@@ -62,6 +62,8 @@ test("snapshot for a file outside the workspace is refused (R23 path_outside_wor
 test("isInsideWorkspace rejects traversal, the root itself, and absolute escapes", () => {
   assert.equal(isInsideWorkspace(ROOT, "src/a.py"), true);
   assert.equal(isInsideWorkspace(ROOT, "../other/a.py"), false);
+  assert.equal(isInsideWorkspace(ROOT, "..notes/todo.md"), true);
+  assert.equal(isInsideWorkspace(ROOT, "..cache/a.py"), true);
   assert.equal(isInsideWorkspace(ROOT, "."), false);
   assert.equal(isInsideWorkspace(ROOT, path.resolve("/etc/passwd")), false);
 });
