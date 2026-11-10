@@ -29,8 +29,9 @@ Build the smallest observable bridge first and keep provider-specific behavior b
 6. Test voice transcription, tool selection, interruption, and result narration independently.
    - Before the contract and queue work (T005, T009), add the `voice_bot` config object (T001a) so every R21 limit and R24 budget is read from one place.
 7. Run the native-chat checklist (R19, all four questions) in Phase 4 (T012), after the ACP read-only path in step 2 is proven, so the ACP fallback is the baseline it is compared against. Native handoff is selected only if all four are answered yes on a pinned version (R4); otherwise the ACP fallback stays the coding session. Build order does not decide the priority; evidence does.
-8. Enable edits only after the read-only and safety gates pass.
+8. Enable edits only after the read-only and safety gates pass (R33 latch, T025).
 9. Maintain [evidence-register.md](./evidence-register.md) as gates G0–G6 close.
+10. Live G2 probe is T023 (R31). Spoken playback adapter is T024 (R32). Neither is closed by fixture tests.
 
 ## Cartridge pipeline (operational)
 
@@ -75,7 +76,7 @@ Process for closing spec gaps. Each loop is a neuron in a cascade: it takes the 
 
 ## Architecture
 
-HIVE owns voice-session lifecycle, cartridge/context resolution, task identity, event normalization, permissions, and evidence. A voice adapter owns audio/transcription. A controller chooses bounded tools. A Cursor extension adapter owns editor state and visible approvals. A coding adapter owns either a verified native handoff or a separate ACP session. The HIVE task registry is the source of truth for progress and outcomes.
+HIVE owns voice-session lifecycle, cartridge/context resolution, task identity, event normalization, permissions, and evidence. Implementation files: `voice_bot.py` (contracts), `voice_acp.py` (ACP), `voice_task.py` (submit, queue, broker), `voice_bridge.py` (loopback HTTP local-service). A voice adapter owns audio/transcription. A controller chooses bounded tools. A Cursor extension adapter (`extensions/hive-voice-bot/`) owns editor snapshots; visible approvals stay T008. A coding adapter owns either a verified native handoff or a separate ACP session. The HIVE task registry is the source of truth for progress and outcomes.
 
 ## Key contracts
 
@@ -101,6 +102,7 @@ HIVE owns voice-session lifecycle, cartridge/context resolution, task identity, 
 - Show diffs and detect stale buffers before writes.
 - Validate paths against the bound workspace, authenticate local-service connections, and validate tool arguments before dispatch (R23, T017).
 - Measure audio latency and resource use on the pinned runtime; do not assume targets (R24, T018).
+- Voice_Bot deploy uses the Hive `voice` extra (`moshi`, `pipecat-ai`) plus `voice-bot ensure-runtime --install`. Cursor CLI uses the official installer when missing (R30, T021).
 
 ## Validation strategy
 
