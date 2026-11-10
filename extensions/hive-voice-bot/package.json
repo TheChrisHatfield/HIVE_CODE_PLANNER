@@ -1,0 +1,66 @@
+{
+  "name": "hive-voice-bot",
+  "displayName": "HIVE Voice_Bot Editor Adapter",
+  "description": "Editor adapter for HIVE Voice_Bot: context snapshot, bridge client, and visible approvals (T007a, T008).",
+  "version": "0.0.1",
+  "private": true,
+  "publisher": "hive-planner",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "main": "./src/extension.js",
+  "activationEvents": [
+    "onCommand:hive.voiceBot.getContextSnapshot",
+    "onCommand:hive.voiceBot.approvalStub",
+    "onCommand:hive.voiceBot.startBridge",
+    "onCommand:hive.voiceBot.stopBridge",
+    "onCommand:hive.voiceBot.submitTask",
+    "onCommand:hive.voiceBot.navigateTo"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "hive.voiceBot.getContextSnapshot",
+        "title": "HIVE Voice_Bot: Get Context Snapshot"
+      },
+      {
+        "command": "hive.voiceBot.approvalStub",
+        "title": "HIVE Voice_Bot: Approval UI Stub"
+      },
+      {
+        "command": "hive.voiceBot.startBridge",
+        "title": "HIVE Voice_Bot: Start Bridge"
+      },
+      {
+        "command": "hive.voiceBot.stopBridge",
+        "title": "HIVE Voice_Bot: Stop Bridge"
+      },
+      {
+        "command": "hive.voiceBot.submitTask",
+        "title": "HIVE Voice_Bot: Submit Coding Task"
+      },
+      {
+        "command": "hive.voiceBot.navigateTo",
+        "title": "HIVE Voice_Bot: Navigate To Active File"
+      }
+    ],
+    "configuration": {
+      "title": "HIVE Voice_Bot",
+      "properties": {
+        "hive.voiceBot.pythonCommand": {
+          "type": "string",
+          "default": "py -3.11",
+          "description": "Command that runs Python 3.11 for `-m hive_planner`."
+        },
+        "hive.voiceBot.hivePlannerSrc": {
+          "type": "string",
+          "default": "",
+          "description": "Folder added to PYTHONPATH for hive_planner when the package is not installed (for example <repo>/src)."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "test": "node --test test/core.test.js test/bridge-client.test.js test/bridge.integration.test.js"
+  }
+}
