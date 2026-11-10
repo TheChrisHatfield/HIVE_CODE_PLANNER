@@ -66,11 +66,11 @@ Load [`docs/planning-rosetta-stone.md`](../../planning-rosetta-stone.md) (`plann
 ## Phase 9 — File overlap
 
 - [x] T030 Before `start` or a feature switch, block when the incoming feature and `state.feature` declare the same plan file target. `--allow-overlap` is the only override. Controls CodeSpec gains **Allow overlap**, unchecked, and Force feature does not set it. Add bounded checker-blocker diagnosis and coder repair handoff without bypassing gates. Add evidence-based dirty-scope preflight so non-overlapping dirty paths can auto-start only after safe quick-check evidence.
-- [ ] T031 Refine dirty-scope sensitivity: classify unrelated workspace infrastructure (`.cursor/**`, `.github/**`, `pyproject.toml`, and package manifests) as reviewable risk that can auto-start after a passing bounded preflight and baseline isolation; keep secrets, authentication, destructive configuration, and unresolved commands fail-closed. Root `AGENTS.md` is documentation-class and auto-approved at start and not a commit blocker (decision 2026-11-09). Record both categories and add regression coverage.
+- [x] T031 Refine dirty-scope sensitivity: classify unrelated workspace infrastructure (`.cursor/**`, `.github/**`, `pyproject.toml`, and package manifests) as reviewable risk that can auto-start after a passing bounded preflight and baseline isolation; keep secrets, authentication, destructive configuration, and unresolved commands fail-closed. Root `AGENTS.md` is documentation-class and auto-approved at start and not a commit blocker (decision 2026-11-09). Record both categories and add regression coverage.
 
 ## Active task
 
-**T030** — file-overlap gate on start and switch.
+**T031** — dirty-scope sensitivity (reviewable infrastructure vs hard-risk; root AGENTS.md).
 
 ## Validation log
 
@@ -157,6 +157,11 @@ Load [`docs/planning-rosetta-stone.md`](../../planning-rosetta-stone.md) (`plann
 - implementation-loop check / Home Loop check runs build, test:quick, wiring audit
 - appends checker result.md; bug hunt unchanged
 - spec-drift-check --feature implementation-loop: ok
+
+2026-11-09 — T031 dirty-scope refinement (R13)
+- Reviewable: `.cursor/**`, `.github/**`, package manifests, `pyproject.toml` after 4-loop preflight
+- Fail-closed: secrets, destructive config, unresolved commands; root `AGENTS.md` documentation-class at start/commit
+- pytest tests/test_implementation_loop_coordinator.py -k 'agents or infrastructure or documentation or secret or preflight or dirty': 36 passed
 ```
 
 ## After each implementation task — Integration wiring audit (required)
