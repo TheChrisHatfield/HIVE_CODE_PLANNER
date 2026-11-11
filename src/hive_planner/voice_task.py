@@ -1160,8 +1160,21 @@ class VoiceTaskRunner:
                 raise DelegationError("task_mismatch", "follow-up is bound to a different task")
             active = self._get_task(task_id)
             clean = self._validate_instruction(text)
+            # Carry the active snapshot, including excluded, so dispatch cannot refill
+            # a secret/binary/unsaved file from disk (R2, R28).
+            snap = self.state.context_snapshots.get(active.context_snapshot_id)
             entry = self._enqueue(
-                text=clean, file_path=active.file_path, mode=active.mode, client_request_id="",
+                text=clean,
+                file_path=active.file_path,
+                mode=active.mode,
+                client_request_id="",
+                selection_text=snap.selection_text if snap else "",
+                file_content=snap.file_content if snap else "",
+                document_version=snap.document_version if snap else 0,
+                dirty=snap.dirty if snap else False,
+                diagnostics=list(snap.diagnostics) if snap else [],
+                truncated=bool(snap.truncated) if snap else False,
+                excluded=snap.excluded if snap else "",
             )
             self._refresh_queue_holds()
             self._save()

@@ -94,3 +94,43 @@ def test_submit_dedupe_applies_to_queued_submits_after_dispatch(runner):
     assert again["status"] == "duplicate"
     assert again["task_id"] == task_id
     assert wait_task_terminal(runner, task_id) == "completed"
+
+
+def test_follow_up_keeps_excluded_snapshot_and_does_not_refill_secrets(repo):
+    """R2/R28: queue_follow_up must not drop `excluded`, or dispatch re-reads secrets from disk."""
+    secret = "token = ghp_" + ("a" * 36)
+    (repo.root / "credentials.env").write_text(secret + "\n", encoding="utf-8")
+    r = make_runner(repo)
+    try:
+        blocker = r.submit(
+            "CANCEL_ME block",
+            client_request_id="fu-ex-0",
+            editor_snapshot={
+                "file": "credentials.env",
+                "dirty": False,
+                "document_version": 1,
+                "selection": {"text": "", "truncated": False},
+                "file_content": secret,
+                "diagnostics": [],
+            },
+        )
+        wait_task_state(r, blocker["task_id"], "running")
+        first = r.state.coding_tasks[blocker["task_id"]]
+        first_snap = r.state.context_snapshots[first.context_snapshot_id]
+        assert first_snap.excluded == "secret"
+        assert first_snap.file_content == ""
+        r.queue_follow_up("what is in that file", task_id=blocker["task_id"])
+        assert r.state.queue[0].get("excluded") == "secret"
+        r.cancel(blocker["task_id"])
+        assert wait_for(lambda: r.state.queue and r.state.queue[0]["state"] == "dispatched", timeout=20)
+        follow_id = r.state.queue[0]["task_id"]
+        r.wait_idle(timeout=20)
+        follow = r.state.coding_tasks[follow_id]
+        snap = r.state.context_snapshots[follow.context_snapshot_id]
+        assert snap.excluded == "secret"
+        assert snap.file_content == ""
+        prompt = r._prompt_text(follow)
+        assert "ghp_" not in prompt
+        assert secret not in prompt
+    finally:
+        r.close()
