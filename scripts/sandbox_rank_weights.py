@@ -413,21 +413,16 @@ def unused_holdout_rows(
 
     A file used by any training row is used, even when that row was all zeros.
     Rows with no file name cannot be shown to be unused, so they stay out.
+    Path keys match ``rows_outside_fit`` (slash fold and dropping the first folder).
     """
     used = {file_name for file_name, _, _ in entries[:cut] if file_name}
-    kept: list[tuple[str, list[float], int]] = []
-    seen = 0
-    zeros = 0
-    for file_name, signals, label in entries[cut:]:
-        if not file_name or file_name in used:
-            seen += 1
-            continue
-        if _is_all_zero(signals):
-            zeros += 1
-            continue
-        kept.append((file_name, signals, label))
-    train_files = used
-    hold_files = {file_name for file_name, _, _ in kept}
+    kept, seen, zeros = rows_outside_fit(entries[cut:], used)
+    train_files: set[str] = set()
+    for file_name, _, _ in entries[:cut]:
+        train_files |= _file_keys(file_name)
+    hold_files: set[str] = set()
+    for file_name, _, _ in kept:
+        hold_files |= _file_keys(file_name)
     if train_files & hold_files:
         raise RuntimeError("holdout file also appears in the fit")
     return kept, seen, zeros
