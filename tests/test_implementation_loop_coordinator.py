@@ -323,6 +323,27 @@ def test_start_blocks_declared_file_overlap(loop_root: Path) -> None:
     assert started.feature == "feature-y"
 
 
+def test_start_complete_feature_still_needs_force_when_another_is_running(loop_root: Path) -> None:
+    from hive_planner.spec_drift import SPEC_CREATION_TASKS_TAIL
+
+    _install_ready(loop_root)
+    coordinator_start(loop_root, "feature-x", allow_dirty=True)
+    before = (loop_root / ".hive/implementation-loop/state.json").read_text(encoding="utf-8")
+    _ready_feature(loop_root, "feature-y", "# plan\n")
+    (loop_root / "docs/specs/feature-y/tasks.md").write_text(
+        "# tasks\n\n- [x] T001 done\n" + SPEC_CREATION_TASKS_TAIL,
+        encoding="utf-8",
+    )
+    with pytest.raises(CoordinatorError, match="loop is running") as exc:
+        coordinator_start(loop_root, "feature-y", allow_dirty=True)
+    assert "feature-x" in str(exc.value)
+    assert (loop_root / ".hive/implementation-loop/state.json").read_text(encoding="utf-8") == before
+    started = coordinator_start(loop_root, "feature-y", allow_dirty=True, force_feature=True)
+    assert started.ok is True
+    assert started.blocked_reason == "complete"
+    assert started.feature == "feature-y"
+
+
 def test_start_blocks_overlap_when_plan_is_utf16_le_without_bom(loop_root: Path) -> None:
     _install_ready(loop_root)
     (loop_root / "docs/specs/feature-x/plan.md").write_text(

@@ -2104,6 +2104,13 @@ def coordinator_start(
                 overlap=shared,
             )
 
+    if state.status == "running" and state.feature and state.feature != feature and not force_feature:
+        raise CoordinatorError(
+            f"loop is running for '{state.feature}' — pass --force-feature to switch",
+            action="start",
+            feature=feature,
+        )
+
     if report_ready.blocked_reason == "complete" and report_ready.ready:
         state.status = "complete"
         state.feature = feature
@@ -2129,13 +2136,6 @@ def coordinator_start(
     if not report_ready.ready:
         raise CoordinatorError(
             report_ready.blocked_reason or "not ready",
-            action="start",
-            feature=feature,
-        )
-
-    if state.status == "running" and state.feature and state.feature != feature and not force_feature:
-        raise CoordinatorError(
-            f"loop is running for '{state.feature}' — pass --force-feature to switch",
             action="start",
             feature=feature,
         )
