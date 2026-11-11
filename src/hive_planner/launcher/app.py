@@ -2312,6 +2312,9 @@ class HivePlannerApp:
         self._alias_primary_controls_instance(inst)
         link = self._require_active_link()
         if link is None:
+            # The block still shows the last Execute result; a skipped submit
+            # must not keep "sent" (controls-execute US2).
+            self._show_execute_outcome(inst, "failed")
             return
         repo, error = linked_install_directory(link)
         loop = self.normalize_controls_loop(str(inst["loop"].get())) or ""
