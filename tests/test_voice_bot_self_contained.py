@@ -47,10 +47,38 @@ def test_runtime_plan_lists_the_voice_pack_without_pip_installing():
 
 def test_ensure_runtime_install_calls_pip_for_missing_packages(monkeypatch):
     calls: list[list[str]] = []
+    present = {"moshi": False, "pipecat": False}
 
     def fake_run(cmd, **_kwargs):
         calls.append(list(cmd))
+        present["moshi"] = True
+        present["pipecat"] = True
 
+        class Result:
+            returncode = 0
+
+        return Result()
+
+    monkeypatch.setattr("hive_planner.voice_bot.subprocess.run", fake_run)
+    monkeypatch.setattr("hive_planner.voice_bot._module_installed", lambda name: present.get(name, False))
+    monkeypatch.setattr(
+        "hive_planner.voice_bot.resolve_cursor_agent_cli",
+        lambda: {"available": True, "path": "agent", "version": "test", "acp_subcommand": True},
+    )
+    out = ensure_voice_runtime(install=True)
+    assert out["ok"] is True
+    assert calls
+    pip = calls[0]
+    assert pip[:3] == [pip[0], "-m", "pip"]
+    assert "install" in pip
+    assert "moshi" in pip and "pipecat-ai" in pip
+    assert out["steps"][0]["still_missing"] == []
+
+
+def test_ensure_runtime_pip_zero_without_import_is_not_ok(monkeypatch):
+    """Moshi can report pip exit 0 on Windows and still fail to import (R30)."""
+
+    def fake_run(cmd, **_kwargs):
         class Result:
             returncode = 0
 
@@ -63,12 +91,12 @@ def test_ensure_runtime_install_calls_pip_for_missing_packages(monkeypatch):
         lambda: {"available": True, "path": "agent", "version": "test", "acp_subcommand": True},
     )
     out = ensure_voice_runtime(install=True)
-    assert out["ok"] is True
-    assert calls
-    pip = calls[0]
-    assert pip[:3] == [pip[0], "-m", "pip"]
-    assert "install" in pip
-    assert "moshi" in pip and "pipecat-ai" in pip
+    assert out["ok"] is False
+    step = out["steps"][0]
+    assert step["ok"] is False
+    assert step["returncode"] == 0
+    assert "moshi" in step["still_missing"]
+    assert "pipecat-ai" in step["still_missing"]
 
 
 def test_ensure_runtime_records_pip_failure(monkeypatch):

@@ -593,15 +593,21 @@ def ensure_voice_runtime(*, install: bool = False, install_agent: bool = False) 
         if missing:
             cmd = [sys.executable, "-m", "pip", "install", *missing]
             proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
+            plan = voice_runtime_plan()
+            still_missing = [
+                row["package"]
+                for row in plan["packages"]
+                if row["package"] in missing and not row["installed"]
+            ]
             results.append(
                 {
                     "step": "pip_install",
                     "packages": missing,
-                    "ok": proc.returncode == 0,
+                    "ok": proc.returncode == 0 and not still_missing,
                     "returncode": proc.returncode,
+                    "still_missing": still_missing,
                 }
             )
-            plan = voice_runtime_plan()
         else:
             results.append({"step": "pip_install", "packages": [], "ok": True, "returncode": 0})
         if install_agent and plan["cursor_agent_cli"]["action"] == "official_installer":
