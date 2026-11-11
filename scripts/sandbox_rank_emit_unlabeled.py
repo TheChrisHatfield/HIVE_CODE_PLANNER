@@ -148,13 +148,30 @@ def rows_for(root: Path, nested: list[Path]) -> list[dict[str, object]]:
     return rows
 
 
+def should_skip_existing_log(destination: Path) -> bool:
+    """Skip only a log that already has rows. An empty file is not a stamp."""
+    try:
+        return destination.is_file() and destination.stat().st_size > 0
+    except OSError:
+        return False
+
+
+def write_rank_log(destination: Path, rows: list[dict[str, object]]) -> bool:
+    if not rows:
+        return False
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    text = "".join(json.dumps(row, ensure_ascii=True) + "\n" for row in rows)
+    destination.write_text(text, encoding="utf-8")
+    return True
+
+
 def main() -> int:
     targets = [repo for repo in REPOS if repo.resolve() != KEEP.resolve()]
     print(f"targets={len(targets)} kept_existing={KEEP}")
     wrote = 0
     for root in targets:
         destination = root / ".hive" / "bug-hunt" / "rank-rows.jsonl"
-        if destination.is_file():
+        if should_skip_existing_log(destination):
             print(f"skip existing {destination}")
             continue
         if not root.is_dir():
@@ -165,9 +182,9 @@ def main() -> int:
         counts: dict[str, int] = {}
         for row in rows:
             counts[str(row["outcome"])] = counts.get(str(row["outcome"]), 0) + 1
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        text = "".join(json.dumps(row, ensure_ascii=True) + "\n" for row in rows)
-        destination.write_text(text, encoding="utf-8")
+        if not write_rank_log(destination, rows):
+            print(f"no rows {root}")
+            continue
         wrote += 1
         print(
             f"wrote rows={len(rows)} unlabeled={counts.get('unlabeled', 0)} "
