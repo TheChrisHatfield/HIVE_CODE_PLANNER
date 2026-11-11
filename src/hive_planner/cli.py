@@ -669,6 +669,40 @@ def main(argv: list[str] | None = None) -> int:
     voice_probe.add_argument("--feature", default=None, help="Feature id (default: AGENTS.md active)")
     voice_probe.add_argument("--agent-path", default=None, help="Override path to the agent CLI")
     voice_probe.add_argument("--timeout", type=float, default=30.0, help="Seconds to wait for initialize")
+    voice_live = voice_sub.add_parser(
+        "live-prompt",
+        help="One live ACP session/prompt for G2 evidence (R31). Never pass from a fixture agent.",
+    )
+    voice_live.add_argument("--feature", default=None, help="Feature id (default: AGENTS.md active)")
+    voice_live.add_argument("--agent-path", default=None, help="Override path to the agent CLI")
+    voice_live.add_argument("--timeout", type=float, default=60.0, help="Seconds to wait for the prompt")
+    voice_live.add_argument(
+        "--instruction",
+        default="Read-only G2 probe. Do not modify files.",
+        help="Read-only prompt text",
+    )
+    voice_live.add_argument(
+        "--record",
+        action="store_true",
+        help="Write the G2 row in docs/specs/Voice_Bot/evidence-register.md",
+    )
+    voice_perm = voice_sub.add_parser(
+        "live-permission",
+        help="One live ACP session/request_permission for G6 evidence (R34). Always cancel; never pass from a fixture agent.",
+    )
+    voice_perm.add_argument("--feature", default=None, help="Feature id (default: AGENTS.md active)")
+    voice_perm.add_argument("--agent-path", default=None, help="Override path to the agent CLI")
+    voice_perm.add_argument("--timeout", type=float, default=120.0, help="Seconds to wait for the prompt")
+    voice_perm.add_argument(
+        "--instruction",
+        default="",
+        help="Write-request prompt text (default: G6 probe that asks for a cancelled write)",
+    )
+    voice_perm.add_argument(
+        "--record",
+        action="store_true",
+        help="Write the G6 row in docs/specs/Voice_Bot/evidence-register.md",
+    )
     voice_turn = voice_sub.add_parser(
         "turn",
         help="Submit one read-only coding turn through the ACP session and wait for its result (T004)",
@@ -680,6 +714,41 @@ def main(argv: list[str] | None = None) -> int:
     voice_turn.add_argument("--client-request-id", default="", help="Dedupe key for this submit (required)")
     voice_turn.add_argument("--agent-path", default=None, help="Override path to the agent CLI")
     voice_turn.add_argument("--timeout", type=float, default=600.0, help="Seconds to wait for the turn")
+    voice_ensure = voice_sub.add_parser(
+        "ensure-runtime",
+        help="Install the self-contained Voice_Bot extra (Moshi, Pipecat) and report Cursor CLI (R30)",
+    )
+    voice_ensure.add_argument("--feature", default=None, help="Feature id (default: AGENTS.md active)")
+    voice_ensure.add_argument(
+        "--install",
+        action="store_true",
+        help="pip-install missing Moshi and Pipecat into this Python",
+    )
+    voice_ensure.add_argument(
+        "--install-agent",
+        action="store_true",
+        help="Run the official Cursor CLI installer when agent is missing (requires --install)",
+    )
+    voice_pack = voice_sub.add_parser(
+        "pack",
+        help="Write a Voice_Bot deploy pack (manifest, INSTALL.md, optional wheels) for other machines (R30)",
+    )
+    voice_pack.add_argument(
+        "--output",
+        default="",
+        help="Output directory (default: .hive/voice-bot/deploy-pack under repo root)",
+    )
+    voice_pack.add_argument(
+        "--download-wheels",
+        action="store_true",
+        help="pip download Moshi and Pipecat wheels into the pack (needs network; can be large)",
+    )
+    voice_bridge = voice_sub.add_parser(
+        "bridge",
+        help="Run the loopback approval bridge until stdin closes or Ctrl+C (T017)",
+    )
+    voice_bridge.add_argument("--feature", default=None, help="Feature id (default: AGENTS.md active)")
+    voice_bridge.add_argument("--agent-path", default=None, help="Override path to the agent CLI")
 
     sub.add_parser(
         "mcp-serve",
@@ -1571,7 +1640,10 @@ def main(argv: list[str] | None = None) -> int:
         from hive_planner.voice_bot import (
             VoiceBotError,
             acp_probe,
+            ensure_voice_runtime,
             init_voice_session,
+            live_permission,
+            live_prompt,
         )
         from hive_planner.voice_bot import status_summary as voice_bot_status_summary
 
@@ -1584,12 +1656,40 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"Root: {root}")
                 print(json.dumps(voice_bot_status_summary(paths, feature), indent=2))
                 return 0
-            if cmd == "init":
-                state = init_voice_session(
-                    paths,
-                    feature,
-                    provider_voice=args.provider_voice or "",
+            if cmd == "ensure-runtime":
+                if args.install_agent and not args.install:
+                    print("Error: --install-agent requires --install", file=sys.stderr)
+                    return 1
+                result = ensure_voice_runtime(install=args.install, install_agent=args.install_agent)
+                print(f"Root: {root}")
+                print(json.dumps(result, indent=2))
+                return 0 if result.get("ok") else 1
+            if cmd == "pack":
+                from hive_planner.voice_bot import build_voice_deploy_pack
+
+                out_path = Path(args.output).resolve() if args.output else None
+                result = build_voice_deploy_pack(
+                    paths.root,
+                    out_path,
+                    download_wheels=args.download_wheels,
                 )
+                print(f"Root: {root}")
+                print(json.dumps(result, indent=2))
+                return 0 if result.get("ok") else 1
+            if cmd == "init":
+                from hive_planner.voice_bridge import bridge_is_live
+                from hive_planner.voice_lock import RunnerLock
+
+                # init replaces state.json. Holding the runner lock keeps a bridge or a standalone
+                # turn from starting (or writing) while it runs; the bridge check is the clear message.
+                if bridge_is_live(paths):
+                    raise VoiceBotError("a voice bridge is live; stop it before running voice-bot init")
+                with RunnerLock(paths):
+                    state = init_voice_session(
+                        paths,
+                        feature,
+                        provider_voice=args.provider_voice or "",
+                    )
                 print(f"Root: {root}")
                 print(
                     json.dumps(
@@ -1612,17 +1712,125 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"Root: {root}")
                 print(json.dumps(result, indent=2))
                 return 0
-            if cmd == "turn":
+            if cmd == "live-prompt":
+                result = live_prompt(
+                    paths,
+                    feature,
+                    agent_path=args.agent_path,
+                    timeout=args.timeout,
+                    instruction=args.instruction,
+                    record=args.record,
+                )
+                print(f"Root: {root}")
+                print(json.dumps(result, indent=2))
+                return 0 if result.get("g2") in ("pass", "blocked") else 1
+            if cmd == "live-permission":
+                perm_kw: dict = {
+                    "agent_path": args.agent_path,
+                    "timeout": args.timeout,
+                    "record": args.record,
+                }
+                if args.instruction:
+                    perm_kw["instruction"] = args.instruction
+                result = live_permission(paths, feature, **perm_kw)
+                print(f"Root: {root}")
+                print(json.dumps(result, indent=2))
+                return 0 if result.get("g6") in ("pass", "blocked") else 1
+            if cmd == "bridge":
                 from hive_planner.voice_bot import resolve_cursor_agent_cli
-                from hive_planner.voice_task import VoiceTaskRunner, tests_status_for_task
+                from hive_planner.voice_bot import VOICE_BOT_DIR
+                from hive_planner.voice_bridge import (
+                    ENDPOINT_FILE,
+                    TOKEN_FILE,
+                    BridgeAlreadyRunning,
+                    start_bridge,
+                )
+                from hive_planner.voice_task import VoiceTaskRunner
 
                 agent_path = args.agent_path or resolve_cursor_agent_cli().get("path")
                 if not agent_path:
                     print("Error: coding_unavailable: Cursor Agent CLI not found", file=sys.stderr)
                     return 1
-                runner = VoiceTaskRunner(
-                    paths, feature, agent_path=agent_path, request_timeout=args.timeout,
+                runner = VoiceTaskRunner(paths, feature, agent_path=agent_path)
+                try:
+                    bridge = start_bridge(runner)
+                except BridgeAlreadyRunning as exc:
+                    runner.close()
+                    print(f"Error: {exc}", file=sys.stderr)
+                    return 1
+                try:
+                    # Ready line for the extension client. The token is never printed; it is read from token_file.
+                    print(
+                        json.dumps(
+                            {
+                                "ok": True,
+                                "host": "127.0.0.1",
+                                "port": bridge.port,
+                                "endpoint_file": Path(VOICE_BOT_DIR, ENDPOINT_FILE).as_posix(),
+                                "token_file": Path(VOICE_BOT_DIR, TOKEN_FILE).as_posix(),
+                            }
+                        ),
+                        flush=True,
+                    )
+                    # Stays up until the parent closes stdin (clean stop) or the user presses Ctrl+C.
+                    sys.stdin.read()
+                finally:
+                    bridge.close()
+                    runner.close()
+                return 0
+            if cmd == "turn":
+                from hive_planner.voice_bridge import (
+                    BridgeUnavailable,
+                    bridge_is_live,
+                    run_turn_via_bridge,
                 )
+                from hive_planner.voice_lock import RunnerLockHeld
+
+                def via_bridge() -> dict:
+                    # One writer: a live bridge owns state.json, so submit goes through it.
+                    return run_turn_via_bridge(
+                        paths,
+                        instruction=args.instruction,
+                        mode=args.mode,
+                        file_path=args.file,
+                        client_request_id=args.client_request_id,
+                        timeout=args.timeout,
+                    )
+
+                if bridge_is_live(paths):
+                    try:
+                        payload = via_bridge()
+                    except BridgeUnavailable as exc:
+                        print(f"Error: {exc}", file=sys.stderr)
+                        return 1
+                    print(f"Root: {root}")
+                    print(json.dumps(payload, indent=2))
+                    return 0 if payload["state"] == "completed" else 1
+
+                from hive_planner.voice_bot import resolve_cursor_agent_cli
+                from hive_planner.voice_task import TERMINAL_TASK_STATES, VoiceTaskRunner, tests_status_for_task
+
+                agent_path = args.agent_path or resolve_cursor_agent_cli().get("path")
+                if not agent_path:
+                    print("Error: coding_unavailable: Cursor Agent CLI not found", file=sys.stderr)
+                    return 1
+                try:
+                    runner = VoiceTaskRunner(
+                        paths, feature, agent_path=agent_path, request_timeout=args.timeout,
+                    )
+                except RunnerLockHeld:
+                    # A bridge took the runner after the live check. It is now the only writer,
+                    # so this turn goes through it instead of failing.
+                    if not bridge_is_live(paths):
+                        raise
+                    try:
+                        payload = via_bridge()
+                    except BridgeUnavailable as exc:
+                        print(f"Error: {exc}", file=sys.stderr)
+                        return 1
+                    print(f"Root: {root}")
+                    print(json.dumps(payload, indent=2))
+                    return 0 if payload["state"] == "completed" else 1
                 try:
                     submitted = runner.submit(
                         args.instruction,
@@ -1630,19 +1838,34 @@ def main(argv: list[str] | None = None) -> int:
                         file_path=args.file,
                         client_request_id=args.client_request_id,
                     )
-                    task_id = submitted.get("task_id")
+                    # A submit behind an active task is queued (R5). Wait for its dispatch and
+                    # its terminal state; a queued turn is never reported as finished.
+                    view = runner.wait_submission(args.client_request_id, timeout=args.timeout + 30)
+                    task_id = view.get("task_id")
                     if task_id:
-                        runner.wait_idle(timeout=args.timeout + 30)
-                    task = runner.state.coding_tasks.get(task_id) if task_id else None
-                    payload = {
-                        "submit": submitted,
-                        "task_id": task_id,
-                        "state": task.state if task else submitted.get("state"),
-                        "reason": task.reason if task else "",
-                        "tests_status": tests_status_for_task(paths, task_id) if task and task.state in ("completed", "failed", "cancelled") else None,
-                        "spoken": task.evidence.spoken_update if task else submitted.get("spoken", ""),
-                        "written": task.evidence.written_result if task else "",
-                    }
+                        result = runner.task_result(task_id)
+                        payload = {
+                            "submit": submitted,
+                            "task_id": task_id,
+                            "state": result["state"],
+                            "reason": result["reason"],
+                            "tests_status": (
+                                tests_status_for_task(paths, task_id)
+                                if result["state"] in TERMINAL_TASK_STATES else None
+                            ),
+                            "spoken": result["spoken"],
+                            "written": result["written"],
+                        }
+                    else:
+                        payload = {
+                            "submit": submitted,
+                            "task_id": None,
+                            "state": view.get("state"),
+                            "reason": "",
+                            "tests_status": None,
+                            "spoken": submitted.get("spoken", ""),
+                            "written": "",
+                        }
                 finally:
                     runner.close()
                 print(f"Root: {root}")

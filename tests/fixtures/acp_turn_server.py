@@ -21,7 +21,9 @@ Implements just enough of the ACP session surface for T004-T011 tests:
 from __future__ import annotations
 
 import json
+import os
 import sys
+import time
 
 SESSIONS: dict[str, int] = {}
 _next_session = 0
@@ -113,6 +115,37 @@ def run_turn(req_id, session_id: str, text: str) -> None:
 
     if "REFUSE" in text:
         send({"jsonrpc": "2.0", "id": req_id, "result": {"stopReason": "refusal"}})
+        return
+
+    if "G6_WRITE_UNLESS_CANCEL" in text:
+        _next_perm += 1
+        perm_id = f"perm-{_next_perm}"
+        send({"jsonrpc": "2.0", "id": perm_id, "method": "session/request_permission",
+              "params": {
+                  "sessionId": session_id,
+                  "kind": "write_or_command",
+                  "toolCall": {"toolCallId": f"tc-{perm_id}", "title": "write probe", "kind": "edit"},
+                  "options": [
+                      {"optionId": "allow-once", "name": "Allow", "kind": "allow_once"},
+                      {"optionId": "reject-once", "name": "Reject", "kind": "reject_once"},
+                  ],
+              }})
+        cancelled = False
+        while True:
+            msg = read_message()
+            if msg is None:
+                sys.exit(0)
+            if msg.get("method") == "session/cancel":
+                cancelled = True
+            if msg.get("id") == perm_id and "result" in msg:
+                break
+        if not cancelled:
+            time.sleep(0.8)
+            probe = os.path.join(".hive", "voice-bot", "g6-live-probe.tmp")
+            os.makedirs(os.path.dirname(probe), exist_ok=True)
+            with open(probe, "w", encoding="utf-8") as handle:
+                handle.write("probe")
+        send({"jsonrpc": "2.0", "id": req_id, "result": {"stopReason": "end_turn"}})
         return
 
     if "CANCEL_ME" in text:

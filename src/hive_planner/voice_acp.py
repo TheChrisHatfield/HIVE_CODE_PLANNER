@@ -137,6 +137,15 @@ class AcpClient:
     def notify(self, method: str, params: Any = None) -> None:
         self._send({"jsonrpc": JSONRPC, "method": method, "params": params})
 
+    def terminate(self) -> None:
+        """Kill the child immediately. Used after a refused write so it cannot land (R34)."""
+        try:
+            if self._proc.poll() is None:
+                self._proc.kill()
+        except OSError:
+            pass
+        self._mark_disconnected("provider_terminated")
+
     def close(self) -> None:
         """Close stdin, then terminate the child if it does not exit."""
         try:

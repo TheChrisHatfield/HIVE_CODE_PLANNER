@@ -42,10 +42,12 @@ from hive_planner.voice_acp import (
     AcpTimeout,
     open_agent_acp,
 )
+from hive_planner.voice_lock import RunnerLock
 from hive_planner.voice_bot import (
     CODING_TASK_STATES,
     TERMINAL_TASK_STATES,
     VOICE_BOT_DIR,
+    VOICE_CONTROLLER_TOOLS,
     CodingTask,
     ContextSnapshot,
     TestsStatus,
@@ -53,11 +55,17 @@ from hive_planner.voice_bot import (
     VoiceBotError,
     VoiceBotState,
     VoiceSession,
+    buffers_match,
     create_context_snapshot,
+    edits_enabled,
+    is_planning_question,
     load_state,
     load_voice_bot_config,
+    map_editor_snapshot,
     resolve_cartridge_trace,
     save_state,
+    answer_planning_question,
+    TypedInstructionAdapter,
 )
 
 ALLOWED_MODES: tuple[str, ...] = ("ask", "plan")  # `agent` is refused until G6 closes (R6)
@@ -198,6 +206,24 @@ class VoiceTaskRunner:
     ) -> None:
         self.paths = paths
         self.feature = validate_feature_id(feature)
+        # Cross-process lock, held until close(): no second process may load or write state
+        # for this repo while this runner lives (bridge start race). Raises RunnerLockHeld.
+        self._repo_lock = RunnerLock(paths)
+        self._repo_lock.acquire()
+        try:
+            self._init_state(paths, agent_path, client_factory, request_timeout, clock)
+        except BaseException:
+            self._repo_lock.release()
+            raise
+
+    def _init_state(
+        self,
+        paths: RepoPaths,
+        agent_path: str,
+        client_factory: ClientFactory | None,
+        request_timeout: float,
+        clock: Callable[[], float],
+    ) -> None:
         self.config: VoiceBotConfig = load_voice_bot_config(paths)
         self.agent_path = agent_path
         self._client_factory: ClientFactory = client_factory or self._default_client_factory
@@ -205,6 +231,7 @@ class VoiceTaskRunner:
         self._clock = clock
         self._lock = threading.RLock()
 
+        # Read only after the lock is held, so this is the state no other process can change.
         self.state: VoiceBotState = load_state(paths)
         if self.state.voice_session is None or self.state.voice_session.state == "ended":
             # Start a new voice session but keep existing tasks and their records (R4, R26).
@@ -227,6 +254,8 @@ class VoiceTaskRunner:
         self._progress_last: dict[str, float] = {}
         self._provider_lost_timers: dict[str, threading.Timer] = {}
         self._call_ended = False
+        self._live_buffer: Callable[[str], tuple[int, bool]] | None = None
+        self._recover_after_hive_restart()
 
     # -- helpers ----------------------------------------------------------
 
@@ -242,6 +271,50 @@ class VoiceTaskRunner:
 
     def _save(self) -> None:
         save_state(self.paths, self.state)
+
+    def set_live_buffer(self, lookup: Callable[[str], tuple[int, bool]] | None) -> None:
+        """Editor live version/dirty lookup for the R22 stale check (T014)."""
+        self._live_buffer = lookup
+
+    def _recover_after_hive_restart(self) -> None:
+        """R26: in-flight tasks become unknown; pending approvals time out; queued entries discard."""
+        changed = False
+        for task in self.state.coding_tasks.values():
+            if task.state not in ("submitted", "running", "awaiting_approval", "cancel_requested"):
+                continue
+            task.prior_state = task.state
+            if task.approval:
+                timed = dict(task.approval)
+                timed["status"] = "timed_out"
+                task.approval = timed
+                task.approvals.append(timed)
+            self._transition(task, "unknown", "hive_restarted")
+            self._settle(task)
+            changed = True
+        for entry in self.state.queue:
+            if entry.get("state") in ("queued", "held"):
+                entry["state"] = "discarded"
+                changed = True
+        self._active_task_id = None
+        self._pending_approval = None
+        if changed:
+            self._save()
+
+    def reconnect_task(self, task_id: str) -> dict[str, Any]:
+        """R26: matching provider evidence restores the last non-unknown state. Approvals stay timed out."""
+        with self._lock:
+            task = self._get_task(task_id)
+            if task.state != "unknown":
+                raise DelegationError("not_unknown", f"task is {task.state}")
+            prior = task.prior_state or "running"
+            if prior == "awaiting_approval":
+                prior = "running"
+            timer = self._provider_lost_timers.pop(task_id, None)
+            if timer is not None:
+                timer.cancel()
+            self._transition(task, prior, "provider_reconnect")
+            self._save()
+            return {"task_id": task_id, "state": task.state, "approval": task.approval}
 
     def _get_task(self, task_id: str) -> CodingTask:
         task = self.state.coding_tasks.get(task_id)
@@ -272,7 +345,8 @@ class VoiceTaskRunner:
             return False
         spoken = _shorten(text, self.config.spoken_update_max_chars)
         task.evidence.spoken_update = spoken
-        self._event(task, "speech.spoken", {"text": spoken})
+        playback = TypedInstructionAdapter().speak(spoken)
+        self._event(task, "speech.spoken", {"text": spoken, "audio": bool(playback.get("audio"))})
         return True
 
     def _resolve_file(self, file_path: str) -> str:
@@ -301,8 +375,19 @@ class VoiceTaskRunner:
         parts = [f"Mode: {task.mode}. Read-only request; do not modify files."]
         if task.file_path:
             parts.append(f"Active file: {task.file_path}.")
+        snap = self.state.context_snapshots.get(task.context_snapshot_id)
+        if snap is not None and snap.selection_text:
+            parts.append("Selected code:\n" + snap.selection_text)
+        if snap is not None and snap.file_content:
+            parts.append("File content:\n" + snap.file_content)
+        if snap is not None and snap.cartridge_trace is not None:
+            trace = snap.cartridge_trace
+            if trace.cartridge_id:
+                parts.append(f"Cartridge id: {trace.cartridge_id}.")
+            if trace.source_excerpt_ids:
+                parts.append("Source excerpts: " + ", ".join(trace.source_excerpt_ids) + ".")
         parts.append(task.instruction)
-        return " ".join(parts)
+        return "\n".join(parts)
 
     def _default_client_factory(self, handler: Callable[[str, Any], Any]) -> AcpClient:
         return open_agent_acp(self.agent_path, cwd=str(self.paths.root), server_request_handler=handler)
@@ -501,12 +586,37 @@ class VoiceTaskRunner:
                 return
             self._resolve_approval(pend, "timed_out", {"outcome": {"outcome": "cancelled"}}, "timeout")
 
-    def reply_approval(self, text: str) -> dict[str, Any]:
-        """Route a spoken reply to the pending approval only (R6). Never queues a follow-up."""
+    def pending_approval_view(self) -> dict[str, Any]:
+        """Read-only view of the pending approval for the local bridge (no client or timer handles)."""
+        with self._lock:
+            pend = self._pending_approval
+            if pend is None:
+                return {"pending": False}
+            return {
+                "pending": True,
+                "request_id": pend["request_id"],
+                "task_id": pend["task_id"],
+                "kind": pend["kind"],
+                "action": pend["action"],
+            }
+
+    def reply_approval(
+        self, text: str, *, request_id: str | None = None, task_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Route a spoken reply to the pending approval only (R6). Never queues a follow-up.
+
+        When `request_id` is given, the reply applies only if it names the pending approval;
+        otherwise it is refused as stale and nothing is resolved. `task_id` (R18 binding) must
+        match the pending approval's task when given; a mismatch resolves nothing.
+        """
         with self._lock:
             pend = self._pending_approval
             if pend is None:
                 return {"status": "no_pending_approval", "spoken": ""}
+            if request_id is not None and request_id != pend["request_id"]:
+                return {"status": "stale_approval", "spoken": ""}
+            if task_id is not None and task_id != pend["task_id"]:
+                return {"status": "task_mismatch", "spoken": ""}
             clean = (text or "").strip()
             action = pend["action"]
             if pend["kind"] == "question":
@@ -536,6 +646,16 @@ class VoiceTaskRunner:
             if allow is None:
                 self._resolve_approval(pend, "denied", {"outcome": {"outcome": "cancelled"}}, "no_allow_option")
                 return {"status": "denied", "spoken": "The provider offered no allow option. Nothing was executed."}
+            task = self._get_task(str(pend["task_id"]))
+            snap = self.state.context_snapshots.get(task.context_snapshot_id)
+            if snap is not None and pend["kind"] == "write_or_command":
+                live_version, live_dirty = (snap.document_version, snap.dirty)
+                if self._live_buffer is not None:
+                    live_version, live_dirty = self._live_buffer(snap.file_path)
+                if not buffers_match(snap, live_version, live_dirty):
+                    self._event(task, "context.stale", {"file_path": snap.file_path})
+                    self._resolve_approval(pend, "denied", {"outcome": {"outcome": "cancelled"}}, "stale")
+                    return {"status": "stale", "spoken": "The editor buffer changed. Re-snapshot and resubmit."}
             self._resolve_approval(
                 pend, "approved",
                 {"outcome": {"outcome": "selected", "optionId": allow.get("optionId")}},
@@ -567,7 +687,14 @@ class VoiceTaskRunner:
         task.evidence.written_result = task.evidence.written_result.strip()
         if task.state == "completed":
             self._event(task, "task.completed", {"tests_status": tests})
-            self._say(task, build_spoken_summary("completed", task.reason, tests, self.config.spoken_update_max_chars))
+            if task.provider_kind == "hive_spec":
+                spoken = _shorten(
+                    f"{TEST_SPEECH[tests]} Cited {task.reason}. See written result.",
+                    self.config.spoken_update_max_chars,
+                )
+                self._say(task, spoken)
+            else:
+                self._say(task, build_spoken_summary("completed", task.reason, tests, self.config.spoken_update_max_chars))
         elif task.state == "failed":
             self._event(task, "task.failed", {"reason": task.reason, "tests_status": tests})
             self._say(task, build_spoken_summary("failed", task.reason, tests, self.config.spoken_update_max_chars))
@@ -586,11 +713,36 @@ class VoiceTaskRunner:
             self._save()
         self._dispatch_next()
 
+    def _finish_planning(self, task: CodingTask) -> None:
+        """Answer from spec/plan/tasks on disk. No ACP call (US5, SC-009). Caller holds the lock."""
+        answer = answer_planning_question(self.paths, self.feature, task.instruction)
+        self._transition(task, "running", "hive_spec")
+        task.provider_kind = "hive_spec"
+        self._event(task, "task.started", {"provider": "hive_spec", "source_path": answer["source_path"]})
+        self._say(task, "Task accepted, running.")
+        task.evidence.written_result = answer["written"]
+        self._transition(task, "completed", answer["source_path"])
+        self._settle(task)
+        self._save()
+
     def _launch(self, task_id: str) -> None:
         """Open the provider session for a task, then start its prompt. Never holds the lock while blocking."""
         with self._lock:
             task = self.state.coding_tasks[task_id]
-            mode = task.mode
+            if is_planning_question(task.instruction):
+                if task.state == "cancel_requested":
+                    self._transition(task, "cancelled", "cancelled_before_dispatch")
+                    self._settle(task)
+                    self._save()
+                else:
+                    self._finish_planning(task)
+                planning = True
+            else:
+                planning = False
+                mode = task.mode
+        if planning:
+            self._dispatch_next()
+            return
         try:
             self._ensure_session(mode)
         except (AcpError, VoiceBotError, OSError) as exc:
@@ -619,7 +771,8 @@ class VoiceTaskRunner:
         if cancelled:
             self._dispatch_next()
             return
-        prompt = self._prompt_text(task)
+        with self._lock:
+            prompt = self._prompt_text(task)
         threading.Thread(
             target=self._run_prompt, args=(task_id, prompt), name="voice-turn", daemon=True
         ).start()
@@ -709,13 +862,35 @@ class VoiceTaskRunner:
                 mode=str(entry.get("mode") or "ask"),
                 client_request_id=str(entry.get("client_request_id") or ""),
                 queue_id=str(entry["queue_id"]),
+                selection_text=str(entry.get("selection_text") or ""),
+                file_content=str(entry.get("file_content") or ""),
+                document_version=int(entry.get("document_version") or 0),
+                dirty=bool(entry.get("dirty")),
+                diagnostics=list(entry.get("diagnostics") or []),
+                truncated=bool(entry.get("truncated")),
+                excluded=str(entry.get("excluded") or ""),
             )
             entry["state"] = "dispatched"
             entry["task_id"] = task.task_id
             self._save()
         self._launch(task.task_id)
 
-    def _new_task(self, *, text: str, file_path: str, mode: str, client_request_id: str, queue_id: str | None) -> CodingTask:
+    def _new_task(
+        self,
+        *,
+        text: str,
+        file_path: str,
+        mode: str,
+        client_request_id: str,
+        queue_id: str | None,
+        selection_text: str = "",
+        file_content: str = "",
+        document_version: int = 0,
+        dirty: bool = False,
+        diagnostics: list[str] | None = None,
+        truncated: bool = False,
+        excluded: str = "",
+    ) -> CodingTask:
         """Create a task and make it the active one. Caller holds the lock."""
         snapshot = create_context_snapshot(
             self.paths,
@@ -723,10 +898,14 @@ class VoiceTaskRunner:
             ContextSnapshot(
                 workspace_root=str(self.paths.root),
                 file_path=file_path,
-                selection_text="",
-                document_version=0,
-                dirty=False,
+                selection_text=selection_text,
+                file_content=file_content,
+                document_version=document_version,
+                dirty=dirty,
                 instruction=text,
+                diagnostics=list(diagnostics or []),
+                truncated=truncated,
+                excluded=excluded,
             ),
         )
         now = _now()
@@ -757,7 +936,21 @@ class VoiceTaskRunner:
     def _dedupe_key(self, client_request_id: str) -> str:
         return f"{self.session.session_id}|{client_request_id}"
 
-    def _enqueue(self, *, text: str, file_path: str, mode: str, client_request_id: str) -> dict[str, Any]:
+    def _enqueue(
+        self,
+        *,
+        text: str,
+        file_path: str,
+        mode: str,
+        client_request_id: str,
+        selection_text: str = "",
+        file_content: str = "",
+        document_version: int = 0,
+        dirty: bool = False,
+        diagnostics: list[str] | None = None,
+        truncated: bool = False,
+        excluded: str = "",
+    ) -> dict[str, Any]:
         """Append a FIFO entry (R5). Caller holds the lock. Raises when the queue is full."""
         depth = sum(1 for q in self.state.queue if q.get("state") in ("queued", "held"))
         if depth >= self.config.queue_depth:
@@ -771,6 +964,13 @@ class VoiceTaskRunner:
             "file_path": file_path,
             "mode": mode,
             "client_request_id": client_request_id,
+            "selection_text": selection_text,
+            "file_content": file_content,
+            "document_version": document_version,
+            "dirty": dirty,
+            "diagnostics": list(diagnostics or []),
+            "truncated": truncated,
+            "excluded": excluded,
         }
         self.state.queue.append(entry)
         return entry
@@ -788,24 +988,50 @@ class VoiceTaskRunner:
         mode: str = "ask",
         file_path: str = "",
         client_request_id: str = "",
+        selection_text: str = "",
+        file_content: str = "",
+        document_version: int = 0,
+        dirty: bool = False,
+        editor_snapshot: dict[str, Any] | None = None,
+        diagnostics: list[str] | None = None,
     ) -> dict[str, Any]:
         """`submit_coding_task`. The only call that issues a task_id (R18)."""
         with self._lock:
             self._require_active_session()
             if not str(client_request_id or "").strip():
                 raise DelegationError("missing_client_request_id", "submit requires client_request_id")
-            if mode == "agent":
-                raise DelegationError("agent_mode_disabled", "agent mode is disabled until G6 closes")
+            if mode == "agent" or not edits_enabled(self.paths):
+                if mode == "agent":
+                    raise DelegationError("agent_mode_disabled", "agent mode is disabled until G6 closes")
             if mode not in ALLOWED_MODES:
                 raise DelegationError("invalid_mode", f"mode must be one of {', '.join(ALLOWED_MODES)}")
             key = self._dedupe_key(client_request_id)
             if key in self.state.dedupe:
                 return self._dedupe_result(key)
             text = self._validate_instruction(instruction)
+            mapped_diagnostics = list(diagnostics or [])
+            mapped_truncated = False
+            mapped_excluded = ""
+            if editor_snapshot is not None:
+                mapped = map_editor_snapshot(
+                    editor_snapshot, instruction=text, workspace_root=str(self.paths.root),
+                )
+                file_path = mapped.file_path or file_path
+                selection_text = mapped.selection_text
+                file_content = mapped.file_content
+                document_version = mapped.document_version
+                dirty = mapped.dirty
+                mapped_diagnostics = list(mapped.diagnostics)
+                mapped_truncated = mapped.truncated
+                mapped_excluded = mapped.excluded or ""
             rel = self._resolve_file(file_path)
             if self._active_task_id is not None:
                 entry = self._enqueue(
                     text=text, file_path=rel, mode=mode, client_request_id=client_request_id,
+                    selection_text=selection_text, file_content=file_content,
+                    document_version=document_version, dirty=dirty,
+                    diagnostics=mapped_diagnostics, truncated=mapped_truncated,
+                    excluded=mapped_excluded,
                 )
                 self.state.dedupe[key] = {"task_id": None, "queue_id": entry["queue_id"]}
                 self._refresh_queue_holds()
@@ -816,6 +1042,10 @@ class VoiceTaskRunner:
                 }
             task = self._new_task(
                 text=text, file_path=rel, mode=mode, client_request_id=client_request_id, queue_id=None,
+                selection_text=selection_text, file_content=file_content,
+                document_version=document_version, dirty=dirty,
+                diagnostics=mapped_diagnostics, truncated=mapped_truncated,
+                excluded=mapped_excluded,
             )
             self._save()
             task_id = task.task_id
@@ -824,6 +1054,7 @@ class VoiceTaskRunner:
             task = self.state.coding_tasks[task_id]
             return {
                 "status": task.state, "task_id": task_id, "state": task.state,
+                "context_snapshot_id": task.context_snapshot_id,
                 "spoken": task.evidence.spoken_update,
             }
 
@@ -844,6 +1075,7 @@ class VoiceTaskRunner:
             task = self._get_task(task_id)
             payload: dict[str, Any] = {
                 "task_id": task.task_id,
+                "context_snapshot_id": task.context_snapshot_id,
                 "state": task.state,
                 "reason": task.reason,
                 "transitions": list(task.transitions),
@@ -852,6 +1084,56 @@ class VoiceTaskRunner:
             if task.state in TERMINAL_TASK_STATES:
                 payload["tests_status"] = task.evidence.tests_status
             return payload
+
+    def task_result(self, task_id: str) -> dict[str, Any]:
+        """Status plus the spoken and written text, read under the lock (bridge `GET /v1/task`)."""
+        with self._lock:
+            payload = self.task_status(task_id)
+            task = self._get_task(task_id)
+            payload["spoken"] = task.evidence.spoken_update
+            payload["written"] = task.evidence.written_result
+            return payload
+
+    def submission_view(self, client_request_id: str) -> dict[str, Any]:
+        """Where a submit ended up: a task (dispatched) or a queue entry (still waiting).
+
+        A queued submit has no task_id until the queue dispatches it (R5). Callers poll this
+        instead of assuming the turn ran. `state` is the task state, or the queue state
+        (`queued`, `held`, `dispatched`, `discarded`) while no task exists.
+        """
+        with self._lock:
+            key = self._dedupe_key(client_request_id)
+            ref = self.state.dedupe.get(key)
+            if ref is None:
+                raise DelegationError("unknown_submission", "no submit with that client_request_id")
+            if ref.get("task_id"):
+                task = self._get_task(str(ref["task_id"]))
+                return {
+                    "task_id": task.task_id, "context_snapshot_id": task.context_snapshot_id,
+                    "state": task.state, "queue_id": ref.get("queue_id"),
+                }
+            queue_id = ref.get("queue_id")
+            entry = next((q for q in self.state.queue if q.get("queue_id") == queue_id), None)
+            return {
+                "task_id": None, "context_snapshot_id": None, "queue_id": queue_id,
+                "state": entry.get("state") if entry else "discarded",
+            }
+
+    def wait_submission(self, client_request_id: str, timeout: float) -> dict[str, Any]:
+        """Wait until a submit has a task that is terminal, or its queue entry is discarded.
+
+        Returns the last `submission_view`. Used so a queued turn is waited for, not reported
+        as finished (queued turns bug). Times out with the last view still non-terminal.
+        """
+        deadline = self._clock() + timeout
+        while True:
+            view = self.submission_view(client_request_id)
+            if view["task_id"]:
+                if view["state"] in TERMINAL_TASK_STATES or self._clock() > deadline:
+                    return view
+            elif view["state"] == "discarded" or self._clock() > deadline:
+                return view
+            time.sleep(0.02)
 
     def task_diff(self, task_id: str) -> dict[str, Any]:
         """Read-only tasks record no diff evidence. Diffs arrive with G6 (edits)."""
@@ -911,6 +1193,167 @@ class VoiceTaskRunner:
             self._save()
             return {"task_id": task_id, "state": "cancel_requested", "spoken": "", "rollback": "not_performed"}
 
+    def get_context_snapshot(self, snapshot_id: str) -> dict[str, Any]:
+        with self._lock:
+            snap = self.state.context_snapshots.get(snapshot_id)
+            if snap is None:
+                raise DelegationError("unknown_snapshot", snapshot_id)
+            return snap.to_dict()
+
+    def _bind_workspace(self, workspace: str) -> None:
+        presented = str(workspace or "").strip()
+        if not presented:
+            raise DelegationError("missing_workspace", "every R18 call binds workspace")
+        if Path(presented).resolve() != self.paths.root.resolve():
+            raise DelegationError("workspace_mismatch", "workspace is not bound to this session")
+
+    def _bind_snapshot(self, context_snapshot_id: str) -> None:
+        snapshot_id = str(context_snapshot_id or "").strip()
+        if not snapshot_id:
+            raise DelegationError("missing_context_snapshot_id", "every R18 call binds context_snapshot_id")
+        if snapshot_id not in self.state.context_snapshots:
+            raise DelegationError("unknown_snapshot", snapshot_id)
+
+    def _queue_editor_action(
+        self,
+        *,
+        kind: str,
+        file_path: str = "",
+        task_id: str = "",
+        context_snapshot_id: str = "",
+        text: str = "",
+        truncated: bool = False,
+    ) -> dict[str, Any]:
+        action = {
+            "action_id": _new_id("ed"),
+            "kind": kind,
+            "file_path": file_path,
+            "task_id": task_id,
+            "context_snapshot_id": context_snapshot_id,
+            "text": text,
+            "truncated": truncated,
+            "opened": False,
+        }
+        self.state.editor_actions.append(action)
+        self._save()
+        return action
+
+    def pending_editor_action(self) -> dict[str, Any]:
+        with self._lock:
+            pending = next((row for row in self.state.editor_actions if not row.get("opened")), None)
+            if pending is None:
+                return {"pending": False}
+            return {
+                "pending": True,
+                "action_id": pending["action_id"],
+                "kind": pending["kind"],
+                "file_path": pending.get("file_path") or "",
+                "task_id": pending.get("task_id") or "",
+                "context_snapshot_id": pending.get("context_snapshot_id") or "",
+                "text": pending.get("text") or "",
+                "truncated": bool(pending.get("truncated")),
+            }
+
+    def ack_editor_action(self, action_id: str) -> dict[str, Any]:
+        with self._lock:
+            for row in self.state.editor_actions:
+                if row.get("action_id") == action_id:
+                    row["opened"] = True
+                    self._save()
+                    return {
+                        "status": "opened",
+                        "action_id": action_id,
+                        "kind": row.get("kind"),
+                        "file_path": row.get("file_path") or "",
+                        "navigated": row.get("kind") == "navigate",
+                        "shown": row.get("kind") == "show_diff",
+                    }
+            return {"status": "unknown_action", "action_id": action_id}
+
+    def show_diff(self, task_id: str, *, context_snapshot_id: str = "") -> dict[str, Any]:
+        diff = self.task_diff(task_id)
+        with self._lock:
+            task = self._get_task(task_id)
+            snapshot_id = context_snapshot_id or task.context_snapshot_id
+            self._bind_snapshot(snapshot_id)
+            text = diff.get("diff") or task.evidence.written_result
+            capped, truncated = cap_text(text, self.config.diff_max_bytes)
+            truncated = truncated or bool(diff.get("truncated"))
+            action = self._queue_editor_action(
+                kind="show_diff",
+                file_path=task.file_path,
+                task_id=task_id,
+                context_snapshot_id=snapshot_id,
+                text=capped,
+                truncated=truncated,
+            )
+            return {
+                "task_id": task_id,
+                "diff": capped,
+                "truncated": truncated,
+                "queued": True,
+                "shown": False,
+                "action_id": action["action_id"],
+                "context_snapshot_id": snapshot_id,
+            }
+
+    def navigate_to(self, file_path: str, *, context_snapshot_id: str = "") -> dict[str, Any]:
+        if not str(file_path or "").strip():
+            raise DelegationError("missing_file_path", "navigate_to requires a file path")
+        rel = self._resolve_file(file_path)
+        with self._lock:
+            snapshot_id = str(context_snapshot_id or "").strip()
+            self._bind_snapshot(snapshot_id)
+            action = self._queue_editor_action(
+                kind="navigate",
+                file_path=rel,
+                context_snapshot_id=snapshot_id,
+            )
+            return {
+                "file_path": rel,
+                "queued": True,
+                "navigated": False,
+                "action_id": action["action_id"],
+                "context_snapshot_id": snapshot_id,
+            }
+
+    def invoke_controller_tool(self, name: str, **kwargs: Any) -> dict[str, Any]:
+        """R18: only the named tools exist. Any other name is unbounded_tool (AC 16)."""
+        if name not in VOICE_CONTROLLER_TOOLS:
+            raise DelegationError("unbounded_tool", name)
+        self._bind_workspace(str(kwargs.get("workspace") or ""))
+        if name == "submit_coding_task":
+            editor = kwargs.get("editor_snapshot")
+            return self.submit(
+                str(kwargs.get("instruction") or ""),
+                mode=str(kwargs.get("mode") or "ask"),
+                file_path=str(kwargs.get("file_path") or ""),
+                client_request_id=str(kwargs.get("client_request_id") or ""),
+                selection_text=str(kwargs.get("selection_text") or ""),
+                file_content=str(kwargs.get("file_content") or ""),
+                document_version=int(kwargs.get("document_version") or 0),
+                dirty=bool(kwargs.get("dirty")),
+                editor_snapshot=editor if isinstance(editor, dict) else None,
+            )
+        snapshot_id = str(kwargs.get("context_snapshot_id") or kwargs.get("snapshot_id") or "")
+        self._bind_snapshot(snapshot_id)
+        if name != "get_context_snapshot" and name != "navigate_to":
+            if not str(kwargs.get("task_id") or "").strip():
+                raise DelegationError("missing_task_id", "calls after submit bind task_id")
+        if name == "task_status":
+            return self.task_status(str(kwargs["task_id"]))
+        if name == "task_diff":
+            return self.task_diff(str(kwargs["task_id"]))
+        if name == "show_diff":
+            return self.show_diff(str(kwargs["task_id"]), context_snapshot_id=snapshot_id)
+        if name == "queue_follow_up":
+            return self.queue_follow_up(str(kwargs.get("text") or ""), task_id=str(kwargs["task_id"]))
+        if name == "cancel_coding_task":
+            return self.cancel(str(kwargs["task_id"]))
+        if name == "get_context_snapshot":
+            return self.get_context_snapshot(snapshot_id)
+        return self.navigate_to(str(kwargs.get("file_path") or ""), context_snapshot_id=snapshot_id)
+
     # -- playback, call end (T010) -----------------------------------------
 
     def interrupt_playback(self) -> dict[str, Any]:
@@ -952,14 +1395,17 @@ class VoiceTaskRunner:
             }
 
     def close(self) -> None:
-        """Close the provider session and stop provider-lost timers."""
+        """Close the provider session, stop timers, and release the cross-process runner lock."""
         with self._lock:
             for timer in self._provider_lost_timers.values():
                 timer.cancel()
             client = self._client
             self._client = None
-        if client is not None:
-            client.close()
+        try:
+            if client is not None:
+                client.close()
+        finally:
+            self._repo_lock.release()
 
     # -- synchronous convenience for CLI and tests -------------------------
 
