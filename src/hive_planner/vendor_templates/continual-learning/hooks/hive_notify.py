@@ -189,39 +189,91 @@ def _fallback(title: str, body: str, repo: str | None = None) -> bool:
     return False
 
 
-def _take_repo(argv: list[str] | None) -> tuple[list[str], str]:
-    """Read --repo before argparse. A folder name may start with a dash."""
+_VALUE_FLAGS = {
+    "--title": "title",
+    "--body": "body",
+    "--seconds": "seconds",
+    "--repo": "repo",
+}
+
+
+def _take_option_value(source: list[str], index: int) -> tuple[str | None, int]:
+    """Next argv token, including values that start with a dash."""
+    if index + 1 >= len(source):
+        return None, index + 1
+    return source[index + 1], index + 2
+
+
+def _parse_argv(argv: list[str] | None) -> tuple[dict[str, str], list[str]]:
+    """Peel --title/--body/--seconds/--repo. A value may start with a dash.
+
+    argparse would treat ``--body -now`` as a missing body and an unknown flag.
+    --repo was already peeled for that reason; the other value flags need the
+    same rule so a dashed heading or body still reaches the popup.
+    """
     source = list(sys.argv[1:] if argv is None else argv)
-    kept: list[str] = []
-    repo = ""
+    opts: dict[str, str | None] = {
+        "title": "HIVE Planner",
+        "body": None,
+        "seconds": "12",
+        "repo": "",
+    }
+    leftover: list[str] = []
     index = 0
     while index < len(source):
         arg = source[index]
-        if arg == "--repo":
-            if index + 1 >= len(source):
-                kept.append(arg)
+        matched = False
+        for flag, key in _VALUE_FLAGS.items():
+            if arg == flag:
+                value, index = _take_option_value(source, index)
+                if value is None:
+                    leftover.append(arg)
+                else:
+                    opts[key] = value
+                matched = True
+                break
+            if arg.startswith(flag + "="):
+                opts[key] = arg.split("=", 1)[1]
                 index += 1
-                continue
-            repo = source[index + 1]
-            index += 2
-            continue
-        if arg.startswith("--repo="):
-            repo = arg.split("=", 1)[1]
+                matched = True
+                break
+        if not matched:
+            leftover.append(arg)
             index += 1
-            continue
-        kept.append(arg)
-        index += 1
-    return kept, repo
+    return opts, leftover
+
+
+def _take_repo(argv: list[str] | None) -> tuple[list[str], str]:
+    """Read --repo before argparse. A folder name may start with a dash."""
+    opts, leftover = _parse_argv(argv)
+    return leftover, str(opts["repo"] or "")
 
 
 def main(argv: list[str] | None = None) -> int:
-    kept, repo = _take_repo(argv)
-    parser = argparse.ArgumentParser(prog="hive_notify")
-    parser.add_argument("--title", default="HIVE Planner")
-    parser.add_argument("--body", required=True)
-    parser.add_argument("--seconds", type=int, default=12)
-    args = parser.parse_args(kept)
-    return 0 if show_popup(args.title, args.body, seconds=max(1, args.seconds), repo=repo or None) else 1
+    source = list(sys.argv[1:] if argv is None else argv)
+    if any(arg in ("-h", "--help") for arg in source):
+        parser = argparse.ArgumentParser(prog="hive_notify")
+        parser.add_argument("--title", default="HIVE Planner")
+        parser.add_argument("--body", required=True)
+        parser.add_argument("--seconds", type=int, default=12)
+        parser.add_argument("--repo", default="")
+        parser.print_help()
+        return 0
+    opts, leftover = _parse_argv(argv)
+    if leftover:
+        sys.stderr.write(f"unrecognized arguments: {' '.join(leftover)}\n")
+        return 2
+    if opts["body"] is None:
+        sys.stderr.write("the following arguments are required: --body\n")
+        return 2
+    try:
+        seconds = int(opts["seconds"] or "12")
+    except ValueError:
+        sys.stderr.write(f"invalid --seconds: {opts['seconds']}\n")
+        return 2
+    repo = opts["repo"] or ""
+    title = opts["title"] or "HIVE Planner"
+    return 0 if show_popup(title, opts["body"], seconds=max(1, seconds), repo=repo or None) else 1
 
 
 if __name__ == "__main__":

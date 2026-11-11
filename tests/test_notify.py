@@ -110,6 +110,32 @@ def test_notify_accepts_a_repo_heading_that_starts_with_a_dash(tmp_path: Path, m
     assert json.loads(log.read_text(encoding="utf-8"))["repo"] == heading
 
 
+def test_notify_accepts_a_body_and_title_that_start_with_a_dash(tmp_path: Path, monkeypatch) -> None:
+    """--body/-title values may start with a dash; argparse would steal them as flags."""
+    log = tmp_path / "notice.json"
+    monkeypatch.setenv("HIVE_NOTIFY_DRY_RUN", "1")
+    monkeypatch.setenv("HIVE_NOTIFY_LOG", str(log))
+    hive_notify = _hive_notify()
+    body = "-now updating memory"
+    title = "--internal"
+    assert hive_notify.main(["--title", title, "--body", body, "--repo", "-odd"]) == 0
+    payload = json.loads(log.read_text(encoding="utf-8"))
+    assert payload["title"] == title
+    assert payload["body"] == body
+    assert payload["repo"] == "-odd"
+
+
+def test_notify_body_can_be_the_repo_flag_without_stealing_the_heading(tmp_path: Path, monkeypatch) -> None:
+    log = tmp_path / "notice.json"
+    monkeypatch.setenv("HIVE_NOTIFY_DRY_RUN", "1")
+    monkeypatch.setenv("HIVE_NOTIFY_LOG", str(log))
+    hive_notify = _hive_notify()
+    assert hive_notify.main(["--body", "--repo", "--repo", "HIVE_CODE_PLANNER"]) == 0
+    payload = json.loads(log.read_text(encoding="utf-8"))
+    assert payload["body"] == "--repo"
+    assert payload["repo"] == "HIVE_CODE_PLANNER"
+
+
 def test_installed_notice_keeps_a_far_monitor_window() -> None:
     path = Path(__file__).resolve().parents[1] / ".cursor" / "plugins" / "hive-continual-learning" / "hooks" / "hive_notify.py"
     spec = importlib.util.spec_from_file_location("hive_notify_plugin_under_test", path)
