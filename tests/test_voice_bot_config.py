@@ -47,6 +47,7 @@ def test_defaults_match_r21_provisional_limits() -> None:
     assert cfg.diff_max_bytes == 256 * 1024
     assert cfg.progress_interval_s == 30
     assert cfg.reconnect_window_s == 300
+    assert cfg.edits_enabled is False
 
 
 def test_r24_targets_are_unclaimed_by_default() -> None:
@@ -107,8 +108,9 @@ def test_default_snapshot_limit_is_64kb(repo: RepoPaths) -> None:
     at_limit = _snap(selection="a" * (64 * 1024))
     create_context_snapshot(repo, state, at_limit)
     over = _snap(selection="a" * (64 * 1024 + 1))
-    with pytest.raises(VoiceBotError, match="selection_text exceeds"):
-        create_context_snapshot(repo, load_state(repo), over)
+    stored = create_context_snapshot(repo, load_state(repo), over)
+    assert stored.truncated is True
+    assert len(stored.selection_text.encode("utf-8")) == 64 * 1024
 
 
 def test_snapshot_path_honors_config_file(repo: RepoPaths) -> None:

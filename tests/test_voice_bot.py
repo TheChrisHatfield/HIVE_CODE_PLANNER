@@ -56,6 +56,7 @@ def test_resolve_cartridge_trace_links_spec_and_cartridge(repo: RepoPaths) -> No
     trace = resolve_cartridge_trace(repo, "Voice_Bot")
     assert trace.cartridge_id == "ctx-test"
     assert trace.spec_path == "docs/specs/Voice_Bot/spec.md"
+    assert trace.source_excerpt_ids == ()
     assert "voice.experience" in trace.rosetta_hooks
 
 
@@ -103,6 +104,8 @@ def test_status_summary_and_persist_path(repo: RepoPaths) -> None:
     init_voice_session(repo, "Voice_Bot")
     summary = status_summary(repo, "Voice_Bot")
     assert summary["spec_ready"] is True
+    assert summary["native_chat_path"] == "labeled_acp_fallback"
+    assert summary["speech_path"] == "typed_instruction"
     assert summary["voice_session"] == "active"
     assert voice_bot_state_path(repo).is_file()
     cli = summary["cursor_agent_cli"]
@@ -110,6 +113,11 @@ def test_status_summary_and_persist_path(repo: RepoPaths) -> None:
     assert "path" in cli
     assert "version" in cli
     assert "acp_subcommand" in cli
+    providers = summary["optional_providers"]
+    assert providers["hive_ships_these"] is True
+    assert providers["extra"] == "voice"
+    assert providers["moshi"]["declared"] is True
+    assert providers["pipecat"]["declared"] is True
 
 
 def test_resolve_cursor_agent_cli_shape(

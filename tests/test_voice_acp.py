@@ -120,6 +120,19 @@ def test_crash_is_detected_and_fails_pending_request() -> None:
         c.close()
 
 
+def test_terminate_kills_child_and_fails_pending() -> None:
+    c = AcpClient([sys.executable, str(FAKE_SERVER)])
+    try:
+        assert c.request("initialize", {}, timeout=10)["protocolVersion"] == 1
+        c.terminate()
+        with pytest.raises(AcpDisconnected):
+            c.request("echo", {}, timeout=5)
+        assert not c.is_connected()
+        assert "provider_terminated" in (c.disconnect_reason() or "")
+    finally:
+        c.close()
+
+
 def test_killed_process_is_detected_on_next_request() -> None:
     c = AcpClient([sys.executable, str(FAKE_SERVER)])
     try:

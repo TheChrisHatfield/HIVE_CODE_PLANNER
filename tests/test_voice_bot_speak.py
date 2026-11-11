@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from hive_planner.voice_bot import (
@@ -12,6 +14,22 @@ from hive_planner.voice_bot import (
     hybrid_speech_path,
     pipecat_cancel_on_interruption,
 )
+
+
+def test_runner_spoken_event_records_no_audio(tmp_path: Path):
+    from voice_turn_support import make_repo, make_runner, wait_task_terminal
+
+    paths = make_repo(tmp_path)
+    runner = make_runner(paths)
+    try:
+        out = runner.submit("hello", client_request_id="speak-evt")
+        wait_task_terminal(runner, out["task_id"])
+        events = runner.state.coding_tasks[out["task_id"]].events
+        spoken = [e for e in events if e.get("name") == "speech.spoken"]
+        assert spoken
+        assert spoken[-1].get("payload", {}).get("audio") is False
+    finally:
+        runner.close()
 
 
 def test_typed_speak_records_text_and_plays_no_audio():
