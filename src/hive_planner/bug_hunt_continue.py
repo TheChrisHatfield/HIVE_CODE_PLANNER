@@ -230,7 +230,7 @@ def _write_recovery(root: Path, state: dict) -> None:
 def _queue_has_candidate(root: Path, current_file: str = "") -> bool:
     path = Path(root) / Path(".hive") / "bug-hunt" / "rank-pass.json"
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
+        payload = json.loads(_read_state_text(path))
     except (OSError, UnicodeError, json.JSONDecodeError, MemoryError, RecursionError):
         return False
     if not isinstance(payload, dict) or not isinstance(payload.get("queue"), list):
