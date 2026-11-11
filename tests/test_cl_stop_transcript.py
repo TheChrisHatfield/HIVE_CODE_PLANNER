@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -36,6 +37,23 @@ def test_plugin_utf16_le_transcript_without_a_bom_still_suppresses_the_notice(tm
     )
     module = _load(HOOKS[1], "cl_stop_plugin_le")
     assert module._bug_hunt_in_transcript(str(transcript)) is True
+
+
+def test_utf16_le_state_keeps_turn_count(tmp_path: Path, monkeypatch) -> None:
+    state_path = tmp_path / "continual-learning.json"
+    payload = {
+        "version": 1,
+        "lastRunAtMs": 1,
+        "turnsSinceLastRun": 7,
+        "lastTranscriptMtimeMs": None,
+        "lastProcessedGenerationId": None,
+        "trialStartedAtMs": None,
+    }
+    state_path.write_bytes(json.dumps(payload).encode("utf-16-le"))
+    module = _load(HOOKS[0], "cl_stop_state_le")
+    monkeypatch.setattr(module, "STATE_PATH", state_path)
+    loaded = module._load_state()
+    assert loaded["turnsSinceLastRun"] == 7
 
 
 def test_undecodable_transcript_does_not_raise(tmp_path: Path) -> None:

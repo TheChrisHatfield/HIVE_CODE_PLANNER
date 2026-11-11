@@ -47,13 +47,16 @@ def _read_env(primary: str, legacy: str) -> str | None:
 
 
 def _read_state_text(path: Path) -> str:
+    """Read hook state saved as UTF-8 or UTF-16 (with or without a BOM)."""
+    raw = path.read_bytes()
+    if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+        return raw.decode("utf-16")
+    if b"\x00" not in raw:
+        return raw.decode("utf-8-sig")
     try:
-        return path.read_text(encoding="utf-8-sig")
+        return raw.decode("utf-16-le")
     except UnicodeDecodeError:
-        raw = path.read_bytes()
-        if raw.startswith(b"\xff\xfe") or raw.startswith(b"\xfe\xff"):
-            return raw.decode("utf-16")
-        raise
+        return raw.decode("utf-8-sig")
 
 
 def _load_state() -> dict:
