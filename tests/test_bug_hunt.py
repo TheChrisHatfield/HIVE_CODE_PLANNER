@@ -4046,6 +4046,26 @@ def _git_repo(tmp_path: Path) -> Path:
     return tmp_path
 
 
+def test_commit_isolated_fix_adds_a_new_file_to_the_index(tmp_path: Path) -> None:
+    """Empty-snapshot new files must land in HEAD and the real index (--add)."""
+    repo = _git_repo(tmp_path)
+    keep = repo / "keep.py"
+    keep.write_bytes(b"keep\n")
+    _git(repo, "add", "keep.py")
+    _git(repo, "commit", "-m", "base")
+    new = repo / "src" / "new.py"
+    new.parent.mkdir()
+    snapshot = repo / "empty"
+    snapshot.write_bytes(b"")
+    new.write_bytes(b"fix\n")
+    result = commit_isolated_fix(repo, message="Add new", snapshots={"src/new.py": snapshot})
+    assert result["ok"] is True
+    assert _git(repo, "show", "HEAD:src/new.py") == "fix\n"
+    assert new.read_bytes() == b"fix\n"
+    status = _git(repo, "status", "--short", "--", "src/new.py")
+    assert status.strip() == ""
+
+
 def test_commit_isolated_fix_keeps_unrelated_lines_out_of_the_commit(tmp_path: Path) -> None:
     repo = _git_repo(tmp_path)
     target = repo / "src" / "app.py"

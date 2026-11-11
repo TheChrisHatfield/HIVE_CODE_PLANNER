@@ -3716,7 +3716,13 @@ def commit_isolated_fix(
                 return {"ok": False, "error": f"could not read committed blob: {relative}"}
             mode, blob = info[0], info[2]
             updated = subprocess.run(
-                ["git", "update-index", "--cacheinfo", f"{mode},{blob},{relative}"],
+                [
+                    "git",
+                    "update-index",
+                    "--add",
+                    "--cacheinfo",
+                    f"{mode},{blob},{relative}",
+                ],
                 cwd=repo,
                 env=main_env,
                 capture_output=True,
