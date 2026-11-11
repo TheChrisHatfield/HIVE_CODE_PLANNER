@@ -1062,7 +1062,11 @@ class VoiceTaskRunner:
         ref = self.state.dedupe[key]
         if ref.get("task_id"):
             task = self.state.coding_tasks[str(ref["task_id"])]
-            return {"status": "duplicate", "task_id": task.task_id, "state": task.state, "spoken": ""}
+            return {
+                "status": "duplicate", "task_id": task.task_id,
+                "context_snapshot_id": task.context_snapshot_id,
+                "state": task.state, "spoken": "",
+            }
         queue_id = ref.get("queue_id")
         entry = next((q for q in self.state.queue if q.get("queue_id") == queue_id), None)
         return {
