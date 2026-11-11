@@ -1,0 +1,48 @@
+<!-- DRAFT: rule seed — review before copying to .cursor/rules/*.mdc -->
+
+---
+description: "Feature guardrails for Voice_Bot (review seed — not auto-applied)"
+alwaysApply: false
+---
+
+# Voice_Bot
+
+**Hook:** `voice.experience`, `integration.strategy`, `cursor.native_chat`
+
+> Review this seed before copying to `.cursor/rules/Voice_Bot.mdc`. Remove this block and set `alwaysApply` as needed.
+
+## Architecture context
+
+# Macro Architecture
+**Hook:** `context.delta`, `compiler.pipeline`
+<!-- ROSETTA-NAV -->
+## Agent navigation (Rosetta Stone)
+Load [`docs/planning-rosetta-stone.md`](../../planning-rosetta-stone.md) (`planning.rosetta`) before using this Delta layer.
+- **Hook:** `context.delta`
+- **Unlocks:** micro briefs and spec.flow
+- **Next:** [`20_micro/`](./) feature briefs
+## System Overview
+Hive Code Planner has five cooperating subsystems: **agent loader**, **context library**, **cartridge compiler**, **cartridge output**, and **shared graph memory**. Planning docs and Rosetta hooks define behavior; Python tooling automates ingestion and emission.
+## Subsystems
+### Agent Loader
+
+## Scope
+
+| In scope | Out of scope |
+|---|---|
+| HIVE-owned voice session, transcript, and task state | Replacing Cursor's native voice provider without a supported API |
+| Cartridge-aware context loading and traceability | Making a specific voice model a HIVE architectural dependency |
+| Editor context snapshots | Treating an ACP session as the already-open native Agent chat |
+| Narrow coding-task delegation | Unrestricted shell access from the voice layer |
+| Progress, approval, result, and cancellation events | Claiming success from a completed turn alone |
+| Native-chat capability investigation | Production edits before permission and stale-buffer checks pass |
+
+## Acceptance
+
+See spec acceptance criteria.
+
+## Validation
+
+Use the decision gates in `planning.rosetta`: native handoff, coding transport, voice grounding, editor integrity, concurrent conversation, and safe execution. Begin with a read-only task, then contextual follow-up, then interruption and failure paths before enabling edits.
+
+Record gate results in `docs/specs/Voice_Bot/evidence-register.md`. Re-run `ingest --embed`, `emit --feature Voice_Bot`, and optional `translate --no-promote` when tertiary sources change; merge improvements into spec before `cartridge-promote`.

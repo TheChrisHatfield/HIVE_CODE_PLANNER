@@ -38,6 +38,7 @@ HIVE shall provide a continuous spoken conversation that can load the active car
 | Narrow coding-task delegation | Unrestricted shell access from the voice layer |
 | Progress, approval, result, and cancellation events | Claiming success from a completed turn alone |
 | Native-chat capability investigation | Production edits before permission and stale-buffer checks pass |
+| Hive `voice` extra ships Moshi and Pipecat; `ensure-runtime` installs them (R30) | Requiring a separate Moshi/Pipecat install outside Hive |
 
 ## Proposed boundary
 
@@ -72,7 +73,7 @@ Outputs include transcript events, task identifiers, progress and permission eve
 - The voice controller tool registry exposes only the R18 tool names; a probe for any shell or filesystem tool fails (R18; tests belong to T014).
 - Replacing the voice adapter with a second stub adapter leaves session, task, permission, and evidence contracts unchanged (R11; tests belong to T014).
 - An over-limit instruction, snapshot, or diff is rejected or flagged `truncated`, and a test asserts the flag (R21; tests belong to T014).
-- Native-chat handoff is either demonstrated on a pinned version or clearly reported unavailable.
+- Native-chat handoff is either demonstrated on a pinned version or clearly reported unavailable. G1a–G1d `fail` plus a run ACP session closes G1 as `labeled_acp_fallback` (T028); native submit is not claimed.
 - The ACP fallback remains visibly separate from Cursor’s native chat.
 
 ## Edge cases
@@ -90,6 +91,10 @@ Outputs include transcript events, task identifiers, progress and permission eve
 - Tests not run must never be reported as passed.
 - Unanswered approvals must not unblock execution.
 - External coding results must not be narrated by Moshi until result grounding is demonstrated.
+- Live G2 `session/prompt` is recorded only by `voice-bot live-prompt` (R31, T023). Fixture turns never write G2 pass.
+- `VoiceAdapter.speak` is no-audio on the typed path; Pipecat cancellation stays independent of playback (R32, T024).
+- Production edits require evidence-register G6 `pass` and config `edits_enabled: true` (R33, T025).
+- Live G6 `session/request_permission` is recorded only by `voice-bot live-permission` (R34, T026). The probe always cancels. After the first gated refuse, HIVE cancels the session and stops the child (T027). Fixture turns never write G6 pass.
 
 ## Validation
 

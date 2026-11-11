@@ -1,7 +1,7 @@
 # Spec: Voice_Bot
 
 **Hook:** `workflow.blueprint_first`, `voice.experience`, `integration.strategy`, `agent.handoff`, `agent.sessions`, `agent.events`, `agent.permissions`, `voice.interruption`, `voice.results`, `editor.context`, `cursor.native_chat`, `cursor.acp`, `security.boundaries`, `resource.constraints`, `research.capabilities`, `change.validation`  
-**Status:** draft (gap pass and fix pass applied 2026-11-09; 4-loop gap cascade and 9-second pause rule defined in [plan.md](./plan.md#gap-cascade-4-loops-9-second-pauses); provisional defaults marked)  
+**Status:** draft (gap cascade 2026-11-10 host-submit fill after T028; 4-loop gap cascade and 9-second pause rule defined in [plan.md](./plan.md#gap-cascade-4-loops-9-second-pauses); provisional defaults marked)  
 **Delta:** [Voice_Bot.md](../../delta/20_micro/Voice_Bot.md)  
 **Rosetta:** [Planning Rosetta Stone](../../planning-rosetta-stone.md)
 
@@ -61,7 +61,7 @@ HIVE shall track voice-session start, active, interrupted, and ended states. End
 
 ### R2 — Cartridge-aware context
 
-Each delegated turn shall resolve context through the active HIVE cartridge and bind to a snapshot containing workspace, file, selection, document version, dirty state, diagnostics, and the user instruction. When a cartridge is active, the snapshot shall record cartridge id and source excerpt ids; when none is active, it records `cartridge_id: null`. Secrets shall be excluded before any provider call. Oversized content is truncated under R21 with an explicit `truncated` flag; it is never silently dropped. Secret detection uses a filename deny-list (`.env*`, `*.pem`, `*.key`, `id_rsa*`, `credentials*`) and a content check with provisional patterns (tested in T014): `sk-[A-Za-z0-9]{20,}`, `ghp_[A-Za-z0-9]{36}`, `AKIA[0-9A-Z]{16}`, `-----BEGIN [A-Z ]*PRIVATE KEY-----`, and `(?i)(api[_-]?key|token|secret|password)\s*[:=]\s*\S{16,}`. A match excludes the content and records `excluded: secret`. Binary and unsaved content record `excluded: binary` or `excluded: unsaved`.
+Each delegated turn shall resolve context through the active HIVE cartridge and bind to a snapshot containing workspace, file, selection, document version, dirty state, diagnostics, and the user instruction. When a cartridge is active, the snapshot shall record cartridge id and source excerpt ids; when none is active, it records `cartridge_id: null`. The editor adapter records `selection` as `null` or `{text, start, end, truncated, bytes}` with 1-based line and column. HIVE `ContextSnapshot.selection_text` is `selection.text`, or empty when `selection` is `null`. T008 maps the editor object (including document version, dirty state, and diagnostics) into that snapshot on submit. Secrets shall be excluded before any provider call. Oversized content is truncated under R21 with an explicit `truncated` flag; it is never silently dropped. Secret detection uses a filename deny-list (`.env*`, `*.pem`, `*.key`, `id_rsa*`, `credentials*`) and a content check with provisional patterns (tested in T014): `sk-[A-Za-z0-9]{20,}`, `ghp_[A-Za-z0-9]{36}`, `AKIA[0-9A-Z]{16}`, `-----BEGIN [A-Z ]*PRIVATE KEY-----`, and `(?i)(api[_-]?key|token|secret|password)\s*[:=]\s*\S{16,}`. A match excludes the content and records `excluded: secret`. Binary and unsaved content record `excluded: binary` or `excluded: unsaved`.
 
 ### R3 — Provider adapters and narrow delegation
 
@@ -73,7 +73,7 @@ HIVE shall own the mapping between voice session, cartridge, context snapshot, c
 
 ### R5 — Asynchronous conversation
 
-The voice session shall remain usable while a coding task runs. Initially, one coding turn per session shall be active; follow-ups shall queue until concurrent steering is verified. The queue is FIFO with a default depth of 5 (provisional). A follow-up beyond that depth is rejected with a spoken notice and creates no task. Queued items are held while a task is `awaiting_approval`. Queue entries are persisted in `.hive/voice-bot/state.json` as `{queue_id, session_id, task_id, text, state}`. `state` is one of `queued`, `held` (the active task is `awaiting_approval`), `dispatched`, or `discarded` (session ended before dispatch; see R26). A queue entry is not a task and carries no `task_id` until it is dispatched.
+The voice session shall remain usable while a coding task runs. Initially, one coding turn per session shall be active; follow-ups shall queue until concurrent steering is verified. The queue is FIFO with a default depth of 5 (provisional). A follow-up beyond that depth is rejected with a spoken notice and creates no task. Queued items are held while a task is `awaiting_approval`. Queue entries are persisted in `.hive/voice-bot/state.json` as `{queue_id, session_id, text, state}`. `state` is one of `queued`, `held` (the active task is `awaiting_approval`), `dispatched`, or `discarded` (session ended before dispatch; see R26). A queue entry is not a task. The `task_id` field is absent until dispatch; after dispatch the same record includes `task_id`.
 
 ### R6 — Permissions
 
@@ -140,7 +140,7 @@ The voice controller shall expose only narrow, validated tools. **Coding:** `sub
 
 ### R19 — Native chat investigation checklist (G1)
 
-Before claiming native IDE handoff, HIVE shall record independent evidence for each question (`cursor.native_chat`): (1) supported submission of an external user turn, (2) supported targeting of the active conversation, (3) readable native progress/context, (4) replaceability of the native voice provider. Any unanswered question keeps the **labeled ACP fallback** as the coding session (`integration.strategy`). If ACP is also unavailable (for example, the `agent` binary is absent), no coding session exists: `submit_coding_task` returns `coding_unavailable`, and the voice layer says coding is unavailable. Nothing is labeled as a fallback that has not run.
+Before claiming native IDE handoff, HIVE shall record independent evidence for each question (`cursor.native_chat`): (1) supported submission of an external user turn, (2) supported targeting of the active conversation, (3) readable native progress/context, (4) replaceability of the native voice provider. Any unanswered question keeps the **labeled ACP fallback** as the coding session (`integration.strategy`). When G1a–G1d are recorded `fail` on a pinned version and G2 has run, G1 closes as `labeled_acp_fallback`; native handoff is not claimed. If ACP is also unavailable (for example, the `agent` binary is absent), no coding session exists: `submit_coding_task` returns `coding_unavailable`, and the voice layer says coding is unavailable. Nothing is labeled as a fallback that has not run.
 
 ### R20 — Task state machine
 
@@ -175,7 +175,7 @@ HIVE shall enforce these boundaries for every voice, editor, and coding request:
 
 - **Path validation:** every file path in a snapshot, tool argument, or diff request is normalized and must resolve inside the bound workspace root. A path that escapes the root (including via `..`, symlink, or absolute path) is rejected with reason `path_outside_workspace`; nothing is read or written.
 - **Workspace restriction:** the voice controller and coding adapter operate only on the workspace bound to the session. Changing workspace requires a new session.
-- **Local-service authentication:** a connection to the local voice or Cursor bridge service must present a per-session token generated by HIVE at start and stored under `.hive/voice-bot/`. A connection without a valid token is refused and creates no session.
+- **Local-service authentication:** a connection to the local voice or Cursor bridge service must present a per-session token generated by HIVE at start and stored as `.hive/voice-bot/bridge-token`. The service is loopback HTTP only (`127.0.0.1`). A connection without a valid token is refused with HTTP 401, reaches no runner, and creates no session. Documented routes: `GET /v1/approval`, `POST /v1/reply`, `POST /v1/submit`, `GET /v1/submission`, `GET /v1/task`, `GET /v1/editor`, `POST /v1/editor`. A stale or mismatched `request_id` on reply is HTTP 409 and executes nothing. Endpoint discovery is `.hive/voice-bot/bridge.json` (`host`, `port`). Every documented route runs the declared R18 schema before dispatch (T017).
 - **Tool-argument validation:** each R18 tool validates its arguments against a declared schema (types, lengths, enumerated values, required binding fields) before dispatch. A failed validation returns a structured error and creates no task.
 - **Command separation:** conversational text and model output are never converted into executable commands. Execution requires an R6 approval bound to the exact action and arguments.
 
@@ -183,7 +183,7 @@ Limits (R21) apply to all of the above. Each boundary is tested on the integrate
 
 ### R24 — Measured latency and resource budget (`resource.constraints`)
 
-HIVE shall measure, not assume, the end-to-end latency from `transcript.final` to `task.started` acknowledgment, the time to first `spoken_update`, and the process resource use of the voice service and the coding adapter. Targets are read from the `voice_bot` config object (R21), not hard-coded in a handler. Until T001a lands that object, tests use a test-owned placeholder budget that is not a product target. Until a baseline is measured on the pinned runtime, no numeric target is claimed; the first measurement is recorded in `docs/specs/Voice_Bot/evidence-register.md` with hardware, OS, and version. Hardware and model-size estimates are not promoted to fixed requirements (`resource.constraints`). Measurement is task T018.
+HIVE shall measure, not assume, the end-to-end latency from `transcript.final` to `task.started` acknowledgment, the time to first `spoken_update`, and the process resource use of the voice service and the coding adapter. Targets are read from the `voice_bot` config object (R21, T001a), not hard-coded in a handler. Until a baseline is measured on the pinned runtime, no numeric target is claimed; the first measurement is recorded in `docs/specs/Voice_Bot/evidence-register.md` with hardware, OS, and version. Hardware and model-size estimates are not promoted to fixed requirements (`resource.constraints`). Measurement is task T018.
 
 ### R25 — Call end during a pending approval
 
@@ -209,6 +209,37 @@ Each session binds one workspace folder at start. In a multi-root workspace, tha
 
 The dedupe key `(session_id, client_request_id)` is scoped to one session. A retry after a HIVE restart (R26) with the same key returns the existing task in its recorded state, including `unknown`, and creates no task.
 
+### R30 — Self-contained Voice_Bot deploy (Hive ships the voice stack)
+
+A Voice_Bot deploy is self-contained: the operator does not hunt Moshi, Pipecat, or Cursor CLI as separate products. Hive core `dependencies` stay empty so non-voice installs stay small. The **`voice` extra** is the Voice_Bot pack: `moshi` and `pipecat-ai` are declared there. Install is:
+
+```text
+py -3.11 -m pip install -e ".[voice]"
+py -3.11 -m hive_planner voice-bot ensure-runtime --install
+```
+
+`ensure-runtime` pip-installs any missing extra packages into that Python. Cursor `agent` is not a PyPI package; the same command reports the official installer (`irm 'https://cursor.com/install?win32=true' | iex` on Windows, `curl https://cursor.com/install -fsS | bash` elsewhere) and runs it only with `--install --install-agent`. `voice-bot status` reports each declared item as `installed` or not.
+
+**Pack for other machines:** on a build host with network, run `py -3.11 -m hive_planner voice-bot pack --download-wheels`. That writes `.hive/voice-bot/deploy-pack/` (`manifest.json`, `requirements-voice.txt`, `INSTALL.md`, optional `wheels/`). Copy the Hive repo and that folder to the target host; follow `INSTALL.md` (online pip or offline `--find-links wheels`, then `ensure-runtime`).
+
+Moshi on Windows is still Kyutai-unsupported; a failed pip install is recorded and the speech path stays `typed_instruction` until G3 evidence exists. Absence of `agent` after ensure-runtime still maps coding submit to `coding_unavailable` (R19). Presence of Moshi does not pin STT or close G3.
+
+### R31 — Live G2 probe (operator login)
+
+Fixture ACP turns never write G2 `pass`. `voice-bot live-prompt` is the only writer of a G2 live row. It runs one read-only `session/prompt` against the real `agent acp` child. Before that prompt it records `agent status` (or `CURSOR_API_KEY` present). If the CLI reports not logged in and no key is set, the command records G2 as `blocked` with that status text, creates no coding task, and must not claim pass. A logged-in prompt that returns a stopReason records G2 `pass` with CLI version, date, and stopReason in `evidence-register.md`. A logged-in prompt that errors records G2 `fail`. Tests without login assert `blocked` and that the evidence register is not flipped to pass.
+
+### R32 — Spoken playback adapter (G3 hybrid)
+
+`VoiceAdapter` shall expose `speak(text)` as well as `transcribe`. The typed adapter records `spoken_update` and performs no audio. When `pipecat` is importable, the Pipecat adapter must keep coding cancellation independent of playback interruption (R13 `cancel_on_interruption=False` or equivalent). `hybrid_speech_path()` stays `typed_instruction` until an STT provider is pinned in the evidence register (R10, T013). Installing Moshi or Pipecat does not close G3.
+
+### R33 — G6 edits latch
+
+`edits_enabled()` is true only when `docs/specs/Voice_Bot/evidence-register.md` records G6 as `pass` and `.hive/voice-bot/config.json` has `edits_enabled: true`. Either missing or false keeps production `agent` mode refused (R6, T015). Fixture permission tests do not write G6 `pass`. Live ACP permission evidence is recorded only by R34 before a human may set the config latch.
+
+### R34 — Live G6 permission probe
+
+Fixture ACP turns never write G6 `pass`. `voice-bot live-permission` is the only writer of a G6 live row. It runs one ACP session against the real `agent acp` child, prefers `agent` mode, and initializes with `clientCapabilities.fs` and `terminal` so the agent cannot self-write. Every `session/request_permission`, `cursor/create_plan`, `fs/write_text_file`, and `terminal/*` request is cancelled or errored so no file is written. After the first gated method is refused, HIVE sends `session/cancel` and stops the ACP child so a later self-write cannot create the probe file. Unknown server requests are JSON-RPC errors, not `result: null`. Before that session it records `agent status` (or `CURSOR_API_KEY` present). If the CLI reports not logged in and no key is set, the command records G6 as `blocked`, creates no coding task, and must not claim pass. A logged-in session that observes at least one of those gated methods and does not create the probe file records G6 `pass` with CLI version, date, and a summarized shape. A logged-in session that creates `.hive/voice-bot/g6-live-probe.tmp` without a gated method records G6 `fail` with `unguarded_write`. A logged-in session that observes a gated method and still creates that file records G6 `fail` with `unguarded_write`. A logged-in session that ends without a gated method and without that file records G6 `fail` with `no_permission_request`. Tests without login assert `blocked` and that the evidence register is not flipped to pass. Production `agent` mode stays refused until R33's config latch is also true. An empty `clientCapabilities` object is not used: that shape allowed a live self-write with no permission request.
+
 ## Rosetta metatag decompression (tertiary → spec)
 
 **Compression:** Upstream research stores concepts as `[HOOK:hook_id]` blocks (anchor summary + UNLOCKS). **Decompression:** Follow `planning.rosetta` → hook **UNLOCKS** → merge anchors into this spec and **tasks.md**; use `emit` retrieval when the full anchor is not in the active window. **Cartridge:** `source-context.md` is the compressed excerpt layer; this section is the decompressed index for Voice_Bot.
@@ -233,7 +264,7 @@ The dedupe key `(session_id, client_request_id)` is scoped to one session. A ret
 | `voice.interruption` | Stop talk ≠ cancel task ≠ rollback | R7, T010, SC-003 | `agent.sessions` |
 | `voice.results` | Milestone speech; no false test claims | R8, R14, G6 | `agent.events`, `voice.moshi` |
 | `security.boundaries` | Path, workspace, local-service auth, tool-argument, and command separation | R18, R23, T017 | `agent.permissions`, `editor.context`, `resource.constraints` |
-| `resource.constraints` | Measured latency and resource use; no unmeasured targets | R21, R24, T018 | `voice.moshi`, `voice.pipeline` |
+| `resource.constraints` | Measured latency and resource use; Voice_Bot extra ships Moshi/Pipecat | R21, R24, R30, T018, T021 | `voice.moshi`, `voice.pipeline` |
 | `research.capabilities` | Evidence register for consequential claims | R15, T002, G0–G6 | `cursor.native_chat`, `cursor.acp`, `voice.pipeline`, `voice.moshi` |
 
 **Metatag mining procedure:** `ingest --embed` → `emit --feature Voice_Bot` → search tertiary for `## [HOOK:` → decompress row into spec → `spec-drift-check`. Use `translate --no-promote` for bulk classification only; hook blocks take precedence over un tagged prose.
@@ -297,8 +328,10 @@ Planning sequence from tertiary sources, reframed with **HIVE as the bridge** (t
 |----------------|-------|------|
 | `src/hive_planner/voice_bot.py` | HIVE | Session, snapshot, task evidence, state persistence |
 | `src/hive_planner/voice_acp.py` (T003) | HIVE | ACP subprocess, reader loop, disconnect detection |
+| `src/hive_planner/voice_task.py` (T004–T011) | HIVE | Submit, queue, approval broker, spoken/written split |
+| `src/hive_planner/voice_bridge.py` (T017) | HIVE | Loopback HTTP local-service (token, submit, approval, task) |
+| `extensions/hive-voice-bot/` (T007) | Editor adapter | Context snapshots; approval UI still T008 |
 | Voice / Pipecat service (external) | Voice adapter | Audio, STT, tool surface |
-| Cursor extension (future) | Editor adapter | Snapshots, visible approvals |
 | `agent acp` | Cursor CLI | Coding execution transport |
 
 ## Decision gates (from cartridge / Rosetta)
@@ -323,6 +356,7 @@ Planning sequence from tertiary sources, reframed with **HIVE as the bridge** (t
 - Using CLI print/headless mode as a substitute for full ACP session, permission, and cancellation semantics (`cursor.print_mode`).
 - Treating ambient or unrelated speech as permission approval (`agent.permissions`).
 - Equating MCP tool registration with coding-session attachment or native chat submit (`cursor.mcp`).
+- Requiring the operator to install Moshi or Pipecat from outside the Hive `voice` extra (`resource.constraints`, R30).
 
 ## Success Criteria
 
@@ -340,31 +374,27 @@ Planning sequence from tertiary sources, reframed with **HIVE as the bridge** (t
 - **SC-011:** Each R20 transition is recorded, and `cancel_requested` and `cancelled` are separate records.
 - **SC-012:** A retried submit with the same `client_request_id` returns the same `task_id` and creates no second task.
 - **SC-013:** Spoken test claims match the R8 test-state mapping (`passed`, `failed`, `not_run`, `unknown`) for every completed task in the test run.
+- **SC-014:** The Hive `voice` extra declares Moshi and Pipecat; `voice-bot pack` can emit a deploy folder for other machines; `voice-bot ensure-runtime` can install them; `voice-bot status` reports each as installed or not; speech stays `typed_instruction` until G3 (R30).
 
 ## Deployment readiness
 
-Verdict (2026-11-09): **NOT READY**. The spec is `draft`. Acceptance criteria 1–21 are not all met; only T001, T001a, T002, and T019 are complete.
+Verdict (2026-11-10): **NOT READY**. The spec is `draft`. Production `agent` mode stays off until a human sets the R33 latch. G4 is partial (injected live buffer, not an Extension Host write). G5 is fixture-only.
 
-Verified 2026-11-09 (`pytest tests/test_voice_bot.py tests/test_voice_bot_config.py tests/test_voice_bot_evidence_register.py tests/test_spec_drift_specseed.py` → 24 passed; `agent --version` → `2026.11.05-86047df` on dev host). The passing tests cover contracts, config, and the evidence register only. The following are not implemented in `src/hive_planner/voice_bot.py`:
+Complete: T001–T028 on the fixture / hybrid path. Live G2 `session/prompt` and live G6 permission probe are recorded. Host submit now forwards the T007 `editor_snapshot` (R2). Production edits stay off until R33.
+
+Verified 2026-11-10 (`pytest` voice/acp/specseed suite plus `tests/test_voice_bot_bridge.py` editor-snapshot and body-cap tests). Remaining blockers:
 
 | Blocker | Spec rows | Task | Acceptance |
 |---|---|---|---|
-| ACP adapter + read-only prompt not implemented; G2 and G5 cannot be proven | R19, R24 | T003, T004 | 3, 4, 10 |
-| No `submit_coding_task` / `client_request_id` dedupe | R18, R29, SC-012 | T006, T009 | 12 |
-| No secret exclusion (`excluded: secret`) | R2 | T014 | 15 |
-| No bounded tool registry or schema validation | R18, R23 | T006, T017 | 16, 19 |
-| No path, workspace, or local-service token checks | R23 | T017 | 19 |
-| No permission broker, approval kinds, or exact-match replies | R6, R27 | T008 | 7 |
-| No FIFO follow-up queue or restart/call-end recovery | R5, R25, R26 | T009, T020 | 4, 21 |
-| No stale-buffer check before writes | R22 | T007, T014 | 8 |
-| No editor extension capture | R2, R28 | T007a, T007 | 1, 2 |
-| Gates G1, G3, G5, G6 are not closed | R4, R10, R15 | T012, T013, T016 | 10, 11 |
+| Production `agent` mode stays refused until a human sets the R33 config latch | R6, R33 | T025 | 7 |
+| G4 live editor write path is not recorded | R2, R22, G4 | T014 | 8 |
+| G5 live concurrent voice loop is not recorded | R5, G5 | T016 | 4–5 |
 
-Work is not started on T003 until G2 evidence exists (plan.md, tasks.md). The read-only mode in R6 and T015 stays in force.
+The ACP adapter and fixture read-only path exist (T003, T004). G2 live `session/prompt` is recorded (2026-11-10). The read-only mode in R6 and T015 stays in force until the R33 config latch.
 
 Exit criteria for any deployment claim (all must hold):
 
-1. Gates G1, G2, G3, G5, and G6 are `pass` in `evidence-register.md`, or the matching fallback is labeled and accepted (R4, R19). G4 closes after T007 and T014.
+1. Gates G1, G2, G3, G5, and G6 are `pass` in `evidence-register.md`, or the matching fallback is labeled and accepted (R4, R19). G4 stays open until a live Extension Host write path is recorded (T007 capture and T014 fixture stale check exist).
 2. T003–T018 and T020 are complete, each with the named test file from `tasks.md` run through the integrated path (not string or mock checks).
 3. Acceptance 1–21 and SC-001–SC-013 each cite a passing test or recorded evidence.
 4. `agent --version` is recorded in `evidence-register.md` on the pinned runtime (G2).
@@ -383,7 +413,7 @@ Until these hold, the feature stays in read-only mode (R6, T015) and no spoken o
 
 ## Acceptance criteria
 
-1. Read-only contextual question succeeds with the intended selection. Phase 1 (T004) proves this with an explicit file path and instruction text; selection-based acceptance closes with T007 in Phase 2.
+1. Read-only contextual question succeeds with the intended selection. Phase 1 (T004) proves this with an explicit file path and instruction text. T007 captures selection in the editor adapter. Selection-based acceptance on `voice-bot turn` closes when T008 maps that object into HIVE `selection_text`.
 2. A second question retains the owned coding-session context.
 3. A coding task emits observable progress and a final result.
 4. Conversation continues while the task runs.
@@ -404,12 +434,13 @@ Until these hold, the feature stays in read-only mode (R6, T015) and no spoken o
 19. Path escape, unauthenticated local-service connection, and invalid tool arguments are each refused with a recorded reason and create no task or write (R23, T017).
 20. Measured latency and resource use are recorded in the evidence register on the pinned runtime, and the config object drives any target checked by a test (R24, T018).
 21. Edge-case rules R25–R29 each have an integration test through the submit and approval paths (T020, `tests/test_voice_bot_edges.py`).
+22. The Hive `voice` extra declares Moshi and Pipecat; `ensure-runtime` dry-run lists them; status reports installed vs missing; speech stays `typed_instruction` until G3 (R30, SC-014, `tests/test_voice_bot_self_contained.py`).
 
 ## Risks and open questions
 
-- Supported native-chat turn submission and targeting are unresolved (G1 blocked; T012).
-- Cursor ACP methods and schemas require validation against the installed `agent` binary (G2 blocked; CLI pinned `2026.11.05-86047df`; T003–T004 open as of 2026-11-09).
-- Moshi’s structured tool calling and external-result grounding are unresolved (G3 blocked; T013).
+- Native-chat submit/target/read/replace are recorded `fail` on pinned Cursor 2026.11.05 (G1 closed via labeled ACP; T012/T028). UI automation remains a non-goal.
+- Cursor ACP live `session/prompt` is recorded (G2 pass 2026-11-10, CLI `2026.11.05-86047df`, `stopReason=end_turn`). T003–T004 fixture path remains.
+- Moshi STT stays unpinned; G3 is closed via the labeled hybrid typed path (R10, T013, T024).
 - Editor APIs may expose MCP/plugin registration without native-chat control—do not treat MCP enablement as coding-session attachment.
 - Cartridge `translate` output is draft; promoting specseed without merge would overwrite curated requirements (use `--no-promote` + manual merge per R16).
 - Whether an MCP “listening” tool blocks concurrent coding conversation is unresolved (`cursor.mcp`); validate before in-chat microphone loops. Owner: T016.

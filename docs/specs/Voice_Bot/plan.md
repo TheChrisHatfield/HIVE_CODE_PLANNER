@@ -32,6 +32,9 @@ Build the smallest observable bridge first and keep provider-specific behavior b
 8. Enable edits only after the read-only and safety gates pass (R33 latch, T025).
 9. Maintain [evidence-register.md](./evidence-register.md) as gates G0–G6 close.
 10. Live G2 probe is T023 (R31). Spoken playback adapter is T024 (R32). Neither is closed by fixture tests.
+11. Live G6 permission probe is T026 (R34). Fixture permission tests never write G6 pass. Production edits stay off until the R33 config latch.
+12. After a live `unguarded_write`, T027 stops the ACP child on the first gated refuse so the probe file cannot land later. Unknown server requests are errors, not `result: null`.
+13. G1 closes as `labeled_acp_fallback` when G1a–G1d are `fail` and G2 has run (T028). Native handoff is not claimed.
 
 ## Cartridge pipeline (operational)
 
@@ -76,7 +79,7 @@ Process for closing spec gaps. Each loop is a neuron in a cascade: it takes the 
 
 ## Architecture
 
-HIVE owns voice-session lifecycle, cartridge/context resolution, task identity, event normalization, permissions, and evidence. Implementation files: `voice_bot.py` (contracts), `voice_acp.py` (ACP), `voice_task.py` (submit, queue, broker), `voice_bridge.py` (loopback HTTP local-service). A voice adapter owns audio/transcription. A controller chooses bounded tools. A Cursor extension adapter (`extensions/hive-voice-bot/`) owns editor snapshots; visible approvals stay T008. A coding adapter owns either a verified native handoff or a separate ACP session. The HIVE task registry is the source of truth for progress and outcomes.
+HIVE owns voice-session lifecycle, cartridge/context resolution, task identity, event normalization, permissions, and evidence. Implementation files: `voice_bot.py` (contracts), `voice_acp.py` (ACP), `voice_task.py` (submit, queue, broker), `voice_bridge.py` (loopback HTTP local-service). A voice adapter owns audio/transcription. A controller chooses bounded tools. A Cursor extension adapter (`extensions/hive-voice-bot/`) owns editor snapshots and polls visible approvals (T008). Host submit sends the T007 `editor_snapshot` on `POST /v1/submit` (R2). A coding adapter owns either a verified native handoff or a separate ACP session. The HIVE task registry is the source of truth for progress and outcomes.
 
 ## Key contracts
 
