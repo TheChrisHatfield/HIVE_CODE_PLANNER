@@ -24,10 +24,14 @@ CAP = 40
 
 def _signals_for(path: Path, root: Path, source: str, stems: set[str], fixes: dict[str, int], reverted: set[str]) -> det.Signals:
     rel = path.relative_to(root).as_posix()
-    if path.suffix.lower() == ".py":
-        signals = det.python_signals(source, 1 if det.is_thin(path, root, stems) else 0)
+    thin = 1 if det.is_thin(path, root, stems) else 0
+    suffix = path.suffix.lower()
+    if suffix == ".py":
+        signals = det.python_signals(source, thin)
+    elif suffix == ".cs":
+        signals = det.csharp_signals(source, thin)
     else:
-        signals = det.Signals(thin_test=1 if det.is_thin(path, root, stems) else 0)
+        signals = det.Signals(thin_test=thin)
     signals.recent_fix_commits = fixes.get(rel.casefold(), 0)
     if rel.casefold() in reverted:
         signals.reverted = 1
