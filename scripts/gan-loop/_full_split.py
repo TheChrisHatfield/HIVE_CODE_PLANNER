@@ -20,8 +20,12 @@ def split_class(items, rng):
     n = len(pool)
     n_train = int(round(n * TRAIN))
     n_val = int(round(n * VAL))
-    if n_train + n_val >= n:
-        n_val = max(1, n - n_train - 1)
+    n_test = n - n_train - n_val
+    if n_test <= 0 and n > 0:
+        if n_val > 0:
+            n_val -= 1
+        elif n_train > 0:
+            n_train -= 1
     return pool[:n_train], pool[n_train : n_train + n_val], pool[n_train + n_val :]
 
 
@@ -68,28 +72,33 @@ def one_seed(entries, seed):
     }
 
 
-rows = gan.load_rows(gan.MIXED)
-gan_left = sum(1 for row in rows if str(row.get("file", "")).startswith("gan/"))
-entries = gan.weights.labeled_entries(rows)
-bugs = sum(label for _, _, label in entries)
-if len(entries) != 603 or bugs != 398 or gan_left != 0:
-    raise SystemExit(f"blend is not the locked 603: {len(entries)} bugs={bugs} gan={gan_left}")
+def main() -> None:
+    rows = gan.load_rows(gan.MIXED)
+    gan_left = sum(1 for row in rows if str(row.get("file", "")).startswith("gan/"))
+    entries = gan.weights.labeled_entries(rows)
+    bugs = sum(label for _, _, label in entries)
+    if len(entries) != 603 or bugs != 398 or gan_left != 0:
+        raise SystemExit(f"blend is not the locked 603: {len(entries)} bugs={bugs} gan={gan_left}")
 
-primary = one_seed(entries, 0)
-spread = [one_seed(entries, seed) for seed in range(20)]
-fit_scores = sorted(item["test_fit"] for item in spread)
-hand_scores = sorted(item["test_hand"] for item in spread)
-print(json.dumps({
-    "rows": len(entries),
-    "bugs": bugs,
-    "empties": len(entries) - bugs,
-    "split": "stratified 60/20/20",
-    "primary": primary,
-    "seeds": 20,
-    "test_fit_median": round((fit_scores[9] + fit_scores[10]) / 2, 6),
-    "test_fit_min": fit_scores[0],
-    "test_fit_max": fit_scores[-1],
-    "test_hand_median": round((hand_scores[9] + hand_scores[10]) / 2, 6),
-    "test_hand_min": hand_scores[0],
-    "test_hand_max": hand_scores[-1],
-}))
+    primary = one_seed(entries, 0)
+    spread = [one_seed(entries, seed) for seed in range(20)]
+    fit_scores = sorted(item["test_fit"] for item in spread)
+    hand_scores = sorted(item["test_hand"] for item in spread)
+    print(json.dumps({
+        "rows": len(entries),
+        "bugs": bugs,
+        "empties": len(entries) - bugs,
+        "split": "stratified 60/20/20",
+        "primary": primary,
+        "seeds": 20,
+        "test_fit_median": round((fit_scores[9] + fit_scores[10]) / 2, 6),
+        "test_fit_min": fit_scores[0],
+        "test_fit_max": fit_scores[-1],
+        "test_hand_median": round((hand_scores[9] + hand_scores[10]) / 2, 6),
+        "test_hand_min": hand_scores[0],
+        "test_hand_max": hand_scores[-1],
+    }))
+
+
+if __name__ == "__main__":
+    main()
