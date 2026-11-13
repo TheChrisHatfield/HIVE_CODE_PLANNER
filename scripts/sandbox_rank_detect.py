@@ -590,8 +590,10 @@ def csharp_signals(source: str, thin: int) -> Signals:
         if any(calls.count(name) == 1 for name in methods):
             signals.wiring_hop = 1
         assignments = [match.group(1) for match in _CS_ASSIGNMENT.finditer(masked_source)]
-        loaded = set(re.findall(r"\b([A-Z][A-Za-z0-9_]*)\b", masked_source))
-        if any(name not in loaded - {name} for name in assignments):
+        tokens = re.findall(r"\b([A-Z][A-Za-z0-9_]*)\b", masked_source)
+        # A set difference `loaded - {name}` always drops `name`, so a used
+        # field looked unread. Count tokens: assignment-only means unused.
+        if any(tokens.count(name) == 1 for name in assignments):
             signals.dead_setting = 1
         if any(assignments.count(name) >= 2 for name in set(assignments)):
             signals.split_stores = 1
@@ -771,6 +773,18 @@ def self_check() -> None:
     split = python_signals("N = 1\nN = 2\n", 0)
     if split.split_stores != 1:
         raise SystemExit("self-check missed a split store")
+    cs_used = csharp_signals(
+        "class C { public static int N = 1; void Run() { Use(N); } }\n",
+        0,
+    )
+    if cs_used.dead_setting != 0:
+        raise SystemExit("self-check marked a used C# field unread")
+    cs_dead = csharp_signals(
+        "class C { public static int N = 1; void Run() { Work(); } }\n",
+        0,
+    )
+    if cs_dead.dead_setting != 1:
+        raise SystemExit("self-check missed an unread C# field")
     nested = python_findings(
         "def run():\n    try:\n        work()\n    finally:\n        if ready:\n            return 1\n"
     )
