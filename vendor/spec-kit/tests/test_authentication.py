@@ -374,6 +374,11 @@ class TestGitHubAuth:
     def test_bearer_headers(self):
         assert GitHubAuth().auth_headers("my-token", "bearer") == {"Authorization": "Bearer my-token"}
 
+    def test_bearer_headers_strip_copied_scheme_prefix(self):
+        auth = GitHubAuth()
+        assert auth.auth_headers("Bearer my-token", "bearer") == {"Authorization": "Bearer my-token"}
+        assert auth.auth_headers("token my-token", "bearer") == {"Authorization": "Bearer my-token"}
+
     def test_unsupported_scheme_raises(self):
         with pytest.raises(ValueError, match="basic-pat"):
             GitHubAuth().auth_headers("tok", "basic-pat")

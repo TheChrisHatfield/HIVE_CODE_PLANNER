@@ -21,4 +21,10 @@ class GitHubAuth(AuthProvider):
             raise ValueError(
                 f"GitHubAuth does not support auth scheme {auth_scheme!r}"
             )
-        return {"Authorization": f"Bearer {token}"}
+        credential = token.strip()
+        lowered = credential.casefold()
+        if lowered.startswith("bearer "):
+            credential = credential[7:].strip()
+        elif lowered.startswith("token "):
+            credential = credential[6:].strip()
+        return {"Authorization": f"Bearer {credential}"}
