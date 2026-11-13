@@ -125,6 +125,24 @@ def test_notify_accepts_a_body_and_title_that_start_with_a_dash(tmp_path: Path, 
     assert payload["repo"] == "-odd"
 
 
+def test_notify_help_as_a_value_still_shows_the_notice(tmp_path: Path, monkeypatch) -> None:
+    """-h/--help are help only as leftover flags, not as --body/--title values."""
+    log = tmp_path / "notice.json"
+    monkeypatch.setenv("HIVE_NOTIFY_DRY_RUN", "1")
+    monkeypatch.setenv("HIVE_NOTIFY_LOG", str(log))
+    hive_notify = _hive_notify()
+    assert hive_notify.main(["--title", "-h", "--body", "--help"]) == 0
+    payload = json.loads(log.read_text(encoding="utf-8"))
+    assert payload["title"] == "-h"
+    assert payload["body"] == "--help"
+
+
+def test_notify_bare_help_still_prints_usage(capsys) -> None:
+    hive_notify = _hive_notify()
+    assert hive_notify.main(["--help"]) == 0
+    assert "usage" in capsys.readouterr().out.lower()
+
+
 def test_notify_body_can_be_the_repo_flag_without_stealing_the_heading(tmp_path: Path, monkeypatch) -> None:
     log = tmp_path / "notice.json"
     monkeypatch.setenv("HIVE_NOTIFY_DRY_RUN", "1")

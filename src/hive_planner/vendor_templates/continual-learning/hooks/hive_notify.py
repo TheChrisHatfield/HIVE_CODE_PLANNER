@@ -249,17 +249,22 @@ def _take_repo(argv: list[str] | None) -> tuple[list[str], str]:
     return leftover, str(opts["repo"] or "")
 
 
+def _help_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="hive_notify")
+    parser.add_argument("--title", default="HIVE Planner")
+    parser.add_argument("--body", required=True)
+    parser.add_argument("--seconds", type=int, default=12)
+    parser.add_argument("--repo", default="")
+    return parser
+
+
 def main(argv: list[str] | None = None) -> int:
-    source = list(sys.argv[1:] if argv is None else argv)
-    if any(arg in ("-h", "--help") for arg in source):
-        parser = argparse.ArgumentParser(prog="hive_notify")
-        parser.add_argument("--title", default="HIVE Planner")
-        parser.add_argument("--body", required=True)
-        parser.add_argument("--seconds", type=int, default=12)
-        parser.add_argument("--repo", default="")
-        parser.print_help()
-        return 0
     opts, leftover = _parse_argv(argv)
+    help_wanted = any(arg in ("-h", "--help") for arg in leftover)
+    leftover = [arg for arg in leftover if arg not in ("-h", "--help")]
+    if help_wanted:
+        _help_parser().print_help()
+        return 0
     if leftover:
         sys.stderr.write(f"unrecognized arguments: {' '.join(leftover)}\n")
         return 2
