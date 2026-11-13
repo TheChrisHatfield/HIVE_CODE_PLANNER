@@ -36,10 +36,24 @@ def observable(entries):
     return [entry for entry in entries if not W._is_all_zero(entry[1])]
 
 
+def file_key(name: object) -> str:
+    if not isinstance(name, str) or not name:
+        return ""
+    return name.replace("\\", "/").casefold()
+
+
+def file_count(rows) -> int:
+    """Distinct files. Case and slash marks do not split one file into two."""
+    return len({key for key in (file_key(row[0]) for row in rows) if key})
+
+
 def by_file(entries):
     groups: dict[str, list] = {}
     for entry in entries:
-        groups.setdefault(entry[0].replace("\\", "/").casefold(), []).append(entry)
+        key = file_key(entry[0])
+        if not key:
+            continue
+        groups.setdefault(key, []).append(entry)
     return groups
 
 
@@ -148,7 +162,7 @@ def main() -> int:
         return 2
     for name in ("train", "val", "test"):
         bugs, empties = W._class_counts(chosen[name])
-        files = len({row[0] for row in chosen[name]})
+        files = file_count(chosen[name])
         print(f"  {name}: files={files} rows={len(chosen[name])} bugs={bugs} empty={empties}")
 
     hand = auc_of(W.HAND, chosen["test"], logged=True)
