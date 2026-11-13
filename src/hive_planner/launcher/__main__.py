@@ -73,15 +73,20 @@ def ensure_installed() -> None:
         _show_startup_error("Hive planner source not found.", str(root))
         return
 
-    proc = subprocess.run(
-        [_console_python(), "-m", "pip", "install", "-e", ".[dev]"],
-        cwd=root,
-        capture_output=True,
-        text=True,
-        check=False,
-        **_hidden_subprocess_kwargs(),
-    )
-    if _package_installed():
+    try:
+        proc = subprocess.run(
+            [_console_python(), "-m", "pip", "install", "-e", ".[dev]"],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            check=False,
+            **_hidden_subprocess_kwargs(),
+        )
+    except OSError as exc:
+        _show_startup_error("Could not install hive-planner.", str(exc))
+        return
+
+    if proc.returncode == 0 or _package_installed():
         return
 
     output = ((proc.stderr or "") + (proc.stdout or "")).strip()
