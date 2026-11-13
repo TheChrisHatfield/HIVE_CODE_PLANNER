@@ -613,40 +613,30 @@ def _with_rank_queue(root: Path, state: dict, payload: dict) -> dict:
         if not ok:
             state["_recovery_write_failed"] = True
             state["active"] = False
-            payload = dict(payload)
-            payload["followup_message"] = (
-                message + " Recovery state could not be written; the hunt is stopped."
-            )
-            return payload
+            return {}
         if recovery.get("phase") == "recovery":
             try:
                 summary = advance_rank_pass(root, state, fresh=False)
             except Exception as exc:
-                payload = dict(payload)
-                payload["followup_message"] = (
-                    message + f" Recovery queue rebuild failed ({exc}); the hunt is stopped."
+                print(
+                    f"[bug_hunt_continue] Recovery queue rebuild failed ({exc}); the hunt is stopped.",
+                    file=sys.stderr,
                 )
                 state["active"] = False
-                return payload
+                return {}
         if recovery.get("terminal"):
             state["active"] = False
-            payload = dict(payload)
-            payload["followup_message"] = message + " Recovery is exhausted; the hunt is stopped."
-            return payload
+            return {}
         if recovery.get("phase") == "idle" and (
             str(state.get("outcome") or "").casefold() == "empty"
             and int(state.get("consecutive_empty", 0) or 0) >= 2
             and not _queue_has_candidate(root, str(state.get("file") or ""))
         ):
             state["active"] = False
-            payload = dict(payload)
-            payload["followup_message"] = message + " Recovery is exhausted; the hunt is stopped."
-            return payload
+            return {}
         if recovery.get("phase") == "idle" and int(recovery.get("attempts", 0)) >= 3:
             state["active"] = False
-            payload = dict(payload)
-            payload["followup_message"] = message + " Recovery reached its three-empty limit; the hunt is stopped."
-            return payload
+            return {}
     top = str(summary.get("top") or "")
     if top:
         note = (
