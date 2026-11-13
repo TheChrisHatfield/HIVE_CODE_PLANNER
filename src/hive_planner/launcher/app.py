@@ -2526,6 +2526,14 @@ class HivePlannerApp:
     def _on_controls_run(self) -> None:
         loop = str(self.controls_loop.get() if hasattr(self, "controls_loop") else "")
         command = str(self.controls_command.get() if hasattr(self, "controls_command") else "")
+        canonical = self.normalize_controls_loop(loop)
+        if canonical:
+            loop = canonical
+            try:
+                if hasattr(self, "controls_loop"):
+                    self.controls_loop.set(canonical)
+            except tk.TclError:
+                pass
         resolved = self.resolved_loop_command(loop, command)
         if resolved is None:
             messagebox.showwarning(
