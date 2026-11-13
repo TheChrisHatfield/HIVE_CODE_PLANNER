@@ -410,8 +410,12 @@ class WorkflowCatalog:
                 for wf_data in workflows:
                     if not isinstance(wf_data, dict):
                         continue
-                    wf_id = wf_data.get("id", "")
+                    raw_wf_id = wf_data.get("id")
+                    if raw_wf_id is None:
+                        continue
+                    wf_id = str(raw_wf_id).strip()
                     if wf_id:
+                        wf_data["id"] = wf_id
                         wf_data["_catalog_name"] = entry.name
                         wf_data["_install_allowed"] = entry.install_allowed
                         merged[wf_id] = wf_data
@@ -438,9 +442,9 @@ class WorkflowCatalog:
                 q = query.lower()
                 searchable = " ".join(
                     [
-                        wf_data.get("name", ""),
-                        wf_data.get("description", ""),
-                        wf_data.get("id", ""),
+                        str(wf_data.get("name") or ""),
+                        str(wf_data.get("description") or ""),
+                        str(wf_data.get("id") or ""),
                     ]
                 ).lower()
                 if q not in searchable:

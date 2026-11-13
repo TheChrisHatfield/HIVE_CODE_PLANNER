@@ -4529,6 +4529,53 @@ class TestStepCatalog:
         results = catalog.search(query="missing")
         assert len(results) == 0
 
+    def test_workflow_search_with_non_string_fields(self, project_dir, monkeypatch):
+        """Non-string workflow catalog fields must not raise TypeError."""
+        from specify_cli.workflows.catalog import WorkflowCatalog
+
+        catalog = WorkflowCatalog(project_dir)
+        monkeypatch.setattr(catalog, "_get_merged_workflows", lambda **kw: {
+            "42": {
+                "id": 42,
+                "name": None,
+                "description": 99,
+                "_catalog_name": "test",
+                "_install_allowed": True,
+            },
+        })
+
+        results = catalog.search()
+        assert len(results) == 1
+
+        results = catalog.search(query="42")
+        assert len(results) == 1
+
+        results = catalog.search(query="missing")
+        assert len(results) == 0
+
+    def test_get_merged_workflows_normalizes_list_ids_to_strings(self, project_dir, monkeypatch):
+        """List-based workflow entries with non-string ids must be normalized."""
+        from specify_cli.workflows.catalog import WorkflowCatalog, WorkflowCatalogEntry
+
+        catalog = WorkflowCatalog(project_dir)
+        entry = WorkflowCatalogEntry(
+            name="test",
+            url="https://example.com/workflows.json",
+            priority=1,
+            install_allowed=True,
+        )
+        monkeypatch.setattr(catalog, "get_active_catalogs", lambda: [entry])
+        monkeypatch.setattr(
+            catalog,
+            "_fetch_single_catalog",
+            lambda _entry, _force_refresh=False: {
+                "workflows": [{"id": 42, "name": "Integer ID"}]
+            },
+        )
+        merged = catalog._get_merged_workflows()
+        assert "42" in merged
+        assert merged["42"]["id"] == "42"
+
     def test_get_merged_steps_normalizes_list_ids_to_strings(self, project_dir, monkeypatch):
         """List-based catalog entries with non-string ids must be normalized."""
         from specify_cli.workflows.catalog import StepCatalog, StepCatalogEntry
