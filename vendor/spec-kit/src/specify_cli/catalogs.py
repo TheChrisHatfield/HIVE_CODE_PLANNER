@@ -140,6 +140,15 @@ class CatalogStackBase:
                     f"Invalid priority for catalog '{item.get('name', idx + 1)}': "
                     f"expected integer, got {raw_priority!r}"
                 )
+            # YAML ``priority: 2.9`` is a float; ``int(2.9)`` silently
+            # becomes ``2`` and ties with a real ``priority: 2``, so sort
+            # order follows YAML order instead of the authored numbers.
+            if isinstance(raw_priority, float) and not raw_priority.is_integer():
+                raise self._validation_error(
+                    f"Invalid catalog config {config_path}: "
+                    f"Invalid priority for catalog '{item.get('name', idx + 1)}': "
+                    f"expected integer, got {raw_priority!r}"
+                )
             try:
                 priority = int(raw_priority)
             except (TypeError, ValueError):

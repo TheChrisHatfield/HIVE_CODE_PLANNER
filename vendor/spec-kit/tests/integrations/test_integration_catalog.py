@@ -1291,6 +1291,35 @@ class TestCatalogSourceManagement:
             cat.get_active_catalogs()
         assert str(cfg_path) in str(exc_info.value)
 
+    def test_load_catalog_config_rejects_fractional_priority(
+        self, tmp_path, monkeypatch
+    ):
+        """YAML ``priority: 2.9`` must not sort as integer 2."""
+        self._isolate(tmp_path, monkeypatch)
+        cfg_path = tmp_path / ".specify" / "integration-catalogs.yml"
+        cfg_path.parent.mkdir(parents=True, exist_ok=True)
+        cfg_path.write_text(
+            yaml.dump(
+                {
+                    "catalogs": [
+                        {
+                            "url": "https://a.example.com/catalog.json",
+                            "name": "fractional",
+                            "priority": 2.9,
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        cat = IntegrationCatalog(tmp_path)
+        with pytest.raises(
+            IntegrationValidationError, match="Invalid priority|expected integer"
+        ) as exc_info:
+            cat.get_active_catalogs()
+        assert str(cfg_path) in str(exc_info.value)
+
     @pytest.mark.parametrize("raw_name", [None, "   "])
     def test_load_catalog_config_defaults_blank_names(
         self, tmp_path, monkeypatch, raw_name
