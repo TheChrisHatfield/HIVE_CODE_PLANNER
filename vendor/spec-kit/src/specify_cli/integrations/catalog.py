@@ -291,6 +291,7 @@ class IntegrationCatalog(CatalogStackBase):
                         str(name_val) if name_val else "",
                         str(desc_val) if desc_val else "",
                         str(id_val) if id_val else "",
+                        author_val,
                     ]
                     + [t for t in tags_list if isinstance(t, str)]
                 ).lower()

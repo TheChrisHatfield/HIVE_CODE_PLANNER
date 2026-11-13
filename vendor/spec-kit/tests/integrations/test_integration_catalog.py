@@ -261,6 +261,41 @@ class TestCatalogFetch:
         assert len(results) == 1
         assert results[0]["id"] == "claude"
 
+    def test_search_query_matches_author(self, tmp_path, monkeypatch):
+        """Free-text search must hit author, not only name/description/id/tags."""
+        monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.setenv("USERPROFILE", str(tmp_path))
+        monkeypatch.delenv("SPECKIT_INTEGRATION_CATALOG_URL", raising=False)
+        (tmp_path / ".specify").mkdir()
+        cat = IntegrationCatalog(tmp_path)
+
+        catalog = {
+            "schema_version": "1.0",
+            "updated_at": "2026-01-01T00:00:00Z",
+            "integrations": {
+                "acme-coder": {
+                    "id": "acme-coder",
+                    "name": "Acme Coder",
+                    "version": "2.0.0",
+                    "description": "Community CLI helper",
+                    "author": "acme-org",
+                    "tags": ["cli"],
+                },
+                "other": {
+                    "id": "other",
+                    "name": "Other",
+                    "version": "1.0.0",
+                    "description": "Unrelated",
+                    "author": "someone-else",
+                    "tags": [],
+                },
+            },
+        }
+        self._patch_urlopen(monkeypatch, catalog)
+
+        results = cat.search(query="acme-org")
+        assert [r["id"] for r in results] == ["acme-coder"]
+
     def test_get_integration_info(self, tmp_path, monkeypatch):
         monkeypatch.setenv("HOME", str(tmp_path))
         monkeypatch.setenv("USERPROFILE", str(tmp_path))
