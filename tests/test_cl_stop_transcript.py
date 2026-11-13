@@ -65,6 +65,32 @@ def test_utf16_le_state_keeps_turn_count(tmp_path: Path, monkeypatch) -> None:
     assert loaded["turnsSinceLastRun"] == 7
 
 
+def test_cursor_plugins_vendor_utf16_le_state_keeps_turn_count(tmp_path: Path, monkeypatch) -> None:
+    """vendor/cursor-plugins stop hook must keep turn count from UTF-16-LE state."""
+    state_path = tmp_path / "continual-learning.json"
+    payload = {
+        "version": 1,
+        "lastRunAtMs": 1,
+        "turnsSinceLastRun": 7,
+        "lastTranscriptMtimeMs": None,
+        "lastProcessedGenerationId": None,
+        "trialStartedAtMs": None,
+    }
+    state_path.write_bytes(json.dumps(payload).encode("utf-16-le"))
+    hook = (
+        ROOT
+        / "vendor"
+        / "cursor-plugins"
+        / "continual-learning"
+        / "hooks"
+        / "continual-learning-stop.py"
+    )
+    module = _load(hook, "cl_stop_cursor_plugins_state_le")
+    monkeypatch.setattr(module, "STATE_PATH", state_path)
+    loaded = module._load_state()
+    assert loaded["turnsSinceLastRun"] == 7
+
+
 def test_undecodable_transcript_does_not_raise(tmp_path: Path) -> None:
     transcript = tmp_path / "chat.jsonl"
     raw = bytearray(b'{"role":"user","message":{"content":"bug hunt"}}\n')

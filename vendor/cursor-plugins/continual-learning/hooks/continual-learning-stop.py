@@ -53,6 +53,19 @@ def _read_env(primary: str, legacy: str) -> str | None:
     return os.environ.get(primary) or os.environ.get(legacy)
 
 
+def _read_state_text(path: Path) -> str:
+    """Read hook state saved as UTF-8 or UTF-16 (with or without a BOM)."""
+    raw = path.read_bytes()
+    if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+        return raw.decode("utf-16")
+    if b"\x00" not in raw:
+        return raw.decode("utf-8-sig")
+    try:
+        return raw.decode("utf-16-le")
+    except UnicodeDecodeError:
+        return raw.decode("utf-8-sig")
+
+
 def _load_state() -> dict:
     fallback = {
         "version": 1,
@@ -65,7 +78,7 @@ def _load_state() -> dict:
     if not STATE_PATH.exists():
         return fallback
     try:
-        parsed = json.loads(STATE_PATH.read_text(encoding="utf-8"))
+        parsed = json.loads(_read_state_text(STATE_PATH))
         if not isinstance(parsed, dict) or parsed.get("version") != 1:
             return fallback
         return {
@@ -87,7 +100,7 @@ def _load_state() -> dict:
             if isinstance(parsed.get("trialStartedAtMs"), (int, float))
             else None,
         }
-    except (OSError, json.JSONDecodeError, TypeError):
+    except (OSError, UnicodeError, json.JSONDecodeError, TypeError):
         return fallback
 
 
