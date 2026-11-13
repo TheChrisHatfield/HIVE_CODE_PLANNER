@@ -37,3 +37,64 @@ def test_emit_cli_warns_when_promote_handoff_fails(tmp_path: Path, monkeypatch: 
 
     assert code != 0
     assert HANDOFF_INCOMPLETE_MSG.split("—")[0].strip() in stderr.getvalue()
+
+
+def test_cartridge_promote_cli_handoff_off_is_success(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "proj"
+    root.mkdir()
+    (root / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    (root / "docs").mkdir()
+    (root / "docs" / "planning-rosetta-stone.md").write_text("# rosetta\n", encoding="utf-8")
+    (root / "context-library" / "sources").mkdir(parents=True)
+
+    def fake_promote(_paths, _feature, **kwargs):
+        return CartridgePromoteResult(
+            feature="x",
+            ok=False,
+            promotions={"status": "skipped (agent handoff off)"},
+            warnings=["Agent handoff off — enable unified handoff before promoting."],
+        )
+
+    monkeypatch.setattr("hive_planner.cartridge_promote.promote_cartridge_drafts", fake_promote)
+
+    from hive_planner.cli import main
+
+    stderr = io.StringIO()
+    with redirect_stderr(stderr):
+        code = main(["--root", str(root), "cartridge-promote", "--feature", "x-feature"])
+
+    err = stderr.getvalue()
+    assert code == 0
+    assert "Agent handoff off" in err
+    assert HANDOFF_INCOMPLETE_MSG.split("—")[0].strip() not in err
+
+
+def test_cartridge_promote_cli_spec_drift_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "proj"
+    root.mkdir()
+    (root / "START_HERE.md").write_text("# start\n", encoding="utf-8")
+    (root / "docs").mkdir()
+    (root / "docs" / "planning-rosetta-stone.md").write_text("# rosetta\n", encoding="utf-8")
+    (root / "context-library" / "sources").mkdir(parents=True)
+
+    def fake_promote(_paths, _feature, **kwargs):
+        return CartridgePromoteResult(
+            feature="x",
+            ok=False,
+            promotions={"micro": "written"},
+        )
+
+    monkeypatch.setattr("hive_planner.cartridge_promote.promote_cartridge_drafts", fake_promote)
+
+    from hive_planner.cli import main
+
+    stderr = io.StringIO()
+    with redirect_stderr(stderr):
+        code = main(["--root", str(root), "cartridge-promote", "--feature", "x-feature"])
+
+    assert code == 1
+    assert HANDOFF_INCOMPLETE_MSG.split("—")[0].strip() in stderr.getvalue()
