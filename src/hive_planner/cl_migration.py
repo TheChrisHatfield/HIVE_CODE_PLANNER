@@ -56,14 +56,31 @@ class ClMigrationReport:
         }
 
 
+def _plugin_manifest_text(plugin_json: Path) -> str:
+    raw = plugin_json.read_bytes()
+    if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+        return raw.decode("utf-16")
+    text = raw.decode("utf-8-sig")
+    if b"\x00" not in raw:
+        return text
+    try:
+        return raw.decode("utf-16-le")
+    except UnicodeDecodeError:
+        return text
+
+
 def _plugin_name(plugin_root: Path) -> str | None:
     plugin_json = plugin_root / ".cursor-plugin" / "plugin.json"
     if not plugin_json.is_file():
         return None
     try:
-        data = json.loads(_read_text(plugin_json))
-    except (OSError, UnicodeError, json.JSONDecodeError):
+        data = json.loads(_plugin_manifest_text(plugin_json))
+    except (OSError, UnicodeError):
         return None
+    except json.JSONDecodeError:
+        # Broken JSON is not a missing name. Missing names are removable; this
+        # one must be refused instead of deleting the tree.
+        return ""
     # A JSON array or other non-object is not a missing name. Missing names are
     # removable; this one must be refused instead of crashing .get.
     if not isinstance(data, dict):
