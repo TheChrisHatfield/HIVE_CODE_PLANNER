@@ -22,8 +22,12 @@ def split_class(items, rng):
     n = len(pool)
     n_train = int(round(n * TRAIN))
     n_val = int(round(n * VAL))
-    if n_train + n_val >= n:
-        n_val = max(1, n - n_train - 1)
+    n_test = n - n_train - n_val
+    if n_test <= 0 and n > 0:
+        if n_val > 0:
+            n_val -= 1
+        elif n_train > 0:
+            n_train -= 1
     return pool[:n_train], pool[n_train : n_train + n_val], pool[n_train + n_val :]
 
 
@@ -65,37 +69,42 @@ def one_seed(entries, seed):
     }
 
 
-locked = gan.load_rows(gan.MIXED)
-bugs = [row for row in locked if row.get("outcome") != "empty"]
-if len(bugs) != 398:
-    raise SystemExit(f"expected 398 bugs, found {len(bugs)}")
-hard_rows = hard.collect()
-if len(hard_rows) != 311:
-    raise SystemExit(f"expected 311 hard negatives, found {len(hard_rows)}")
-blanks = []
-for index in range(200):
-    blanks.append(
-        {
-            "file": f"blank/{index}",
-            "signals": {name: 0 for name in gan.weights.SIGNALS},
-            "weighted_sum": 0,
-            "scenario": "blank",
-            "outcome": "empty",
-        }
-    )
-mixed = bugs + hard_rows + blanks
-entries = gan.weights.labeled_entries(mixed)
-if len(entries) != 909:
-    raise SystemExit(f"expected 909 labeled rows, found {len(entries)}")
-spread = [one_seed(entries, seed) for seed in range(20)]
-fit_scores = sorted(item["test_fit"] for item in spread)
-hand_scores = sorted(item["test_hand"] for item in spread)
-print(json.dumps({
-    "rows": 909,
-    "bugs": 398,
-    "hard_negatives": 311,
-    "blanks": 200,
-    "splits": spread,
-    "test_fit_median": round((fit_scores[9] + fit_scores[10]) / 2, 6),
-    "test_hand_median": round((hand_scores[9] + hand_scores[10]) / 2, 6),
-}))
+def main() -> None:
+    locked = gan.load_rows(gan.MIXED)
+    bugs = [row for row in locked if row.get("outcome") != "empty"]
+    if len(bugs) != 398:
+        raise SystemExit(f"expected 398 bugs, found {len(bugs)}")
+    hard_rows = hard.collect()
+    if len(hard_rows) != 311:
+        raise SystemExit(f"expected 311 hard negatives, found {len(hard_rows)}")
+    blanks = []
+    for index in range(200):
+        blanks.append(
+            {
+                "file": f"blank/{index}",
+                "signals": {name: 0 for name in gan.weights.SIGNALS},
+                "weighted_sum": 0,
+                "scenario": "blank",
+                "outcome": "empty",
+            }
+        )
+    mixed = bugs + hard_rows + blanks
+    entries = gan.weights.labeled_entries(mixed)
+    if len(entries) != 909:
+        raise SystemExit(f"expected 909 labeled rows, found {len(entries)}")
+    spread = [one_seed(entries, seed) for seed in range(20)]
+    fit_scores = sorted(item["test_fit"] for item in spread)
+    hand_scores = sorted(item["test_hand"] for item in spread)
+    print(json.dumps({
+        "rows": 909,
+        "bugs": 398,
+        "hard_negatives": 311,
+        "blanks": 200,
+        "splits": spread,
+        "test_fit_median": round((fit_scores[9] + fit_scores[10]) / 2, 6),
+        "test_hand_median": round((hand_scores[9] + hand_scores[10]) / 2, 6),
+    }))
+
+
+if __name__ == "__main__":
+    main()
