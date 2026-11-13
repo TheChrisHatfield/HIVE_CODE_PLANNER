@@ -26,8 +26,14 @@ def split_class(items, rng):
     n = len(pool)
     n_train = int(round(n * TRAIN))
     n_val = int(round(n * VAL))
-    if n_train + n_val >= n:
-        n_val = max(1, n - n_train - 1)
+    n_test = n - n_train - n_val
+    if n_test <= 0 and n > 0:
+        # Rounding 60/20/20 can consume the class. Steal val first, then train,
+        # so AUC still sees a test item. Forcing val to 1 was emptying test at n=3.
+        if n_val > 0:
+            n_val -= 1
+        elif n_train > 0:
+            n_train -= 1
     return pool[:n_train], pool[n_train : n_train + n_val], pool[n_train + n_val :]
 
 
