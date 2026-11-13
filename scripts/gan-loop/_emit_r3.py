@@ -118,7 +118,7 @@ class PantryJar:
         return self.ounces <= space_oz
 '''
 
-files = [
+FILES = [
     ("roman_value.py", roman_value),
     ("tip_split.py", tip_split),
     ("dim_weight.py", dim_weight),
@@ -128,6 +128,17 @@ files = [
     ("letter_post.py", letter_post),
     ("pantry_jar.py", pantry_jar),
 ]
-out = Path(__file__).with_name("round3-proposals.json")
-out.write_text(json.dumps([{"name": n, "source": s} for n, s in files], indent=2), encoding="utf-8")
-print(out)
+DEFAULT_OUT = Path(__file__).with_name("round3-proposals.json")
+
+
+def emit(path: Path | None = None) -> Path:
+    out = DEFAULT_OUT if path is None else path
+    out.write_text(
+        json.dumps([{"name": n, "source": s} for n, s in FILES], indent=2),
+        encoding="utf-8",
+    )
+    return out
+
+
+if __name__ == "__main__":
+    print(emit())
