@@ -1075,7 +1075,7 @@ def test_run_cartridge_load_sources_accepts_multiple_github_urls(
 
     def fake_download(url: str, destination: Path) -> list[Path]:
         repository = url.rsplit("/", 1)[-1]
-        downloaded = destination / "repository" / f"{repository}-main" / "README.md"
+        downloaded = destination / "repository" / f"{repository}-main" / "docs" / "README.md"
         downloaded.parent.mkdir(parents=True)
         downloaded.write_text(f"# {repository}\n", encoding="utf-8")
         return [downloaded]
@@ -1097,8 +1097,8 @@ def test_run_cartridge_load_sources_accepts_multiple_github_urls(
 
     assert result["ok"] is True
     assert sorted(result["copied"]) == [
-        "context-library/sources/github/example/first/README.md",
-        "context-library/sources/github/example/second/README.md",
+        "context-library/sources/github/example/first/docs/README.md",
+        "context-library/sources/github/example/second/docs/README.md",
     ]
 
 

@@ -2603,9 +2603,9 @@ def run_cartridge_load_sources(
                 )
             except ValueError as exc:
                 return {"ok": False, "error": str(exc)}
-            github_repositories.append((owner_repo, github_sources))
+            github_repositories.append((index, owner_repo, github_sources))
         copied, warnings = _stage_context_sources(paths, list(source_files))
-        for (owner, repository), github_sources in github_repositories:
+        for index, (owner, repository), github_sources in github_repositories:
             if github_sources:
                 github_copied, github_warnings = _stage_context_sources(
                     paths,
