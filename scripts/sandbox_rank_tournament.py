@@ -12,9 +12,12 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import re
 import sys
 from collections import Counter, defaultdict
 from pathlib import Path
+
+_GUARD_WORD = re.compile(r"\bguard(?:ed)?\b", re.IGNORECASE)
 
 ROOT = Path(__file__).resolve().parent
 
@@ -80,8 +83,8 @@ def is_tight(signals: list[float]) -> bool:
 
 
 def guard_signal(row: dict) -> float:
-    scenario = str(row.get("scenario", "")).casefold()
-    if "guarded" in scenario or "guard" in scenario:
+    scenario = str(row.get("scenario", ""))
+    if _GUARD_WORD.search(scenario):
         return 1.0
     return 0.0
 
