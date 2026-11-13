@@ -382,6 +382,27 @@ def test_offload_jsonl_kind(tmp_path: Path) -> None:
     assert result.edges_written == 1
 
 
+def test_offload_single_node_with_empty_edges_key(tmp_path: Path) -> None:
+    paths = _paths(tmp_path)
+    payload = tmp_path / "node-with-edges-key.json"
+    payload.write_text(
+        json.dumps(
+            {
+                "id": "n-extra",
+                "type": "concept",
+                "label": "Has leftover edges key",
+                "edges": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    result = offload_from_file(paths, payload)
+    assert result.nodes_written == 1
+    assert result.edges_written == 0
+    staging = export_tier(paths, "staging")
+    assert staging["nodes"][0]["id"] == "n-extra"
+
+
 def test_offload_pretty_printed_single_node(tmp_path: Path) -> None:
     paths = _paths(tmp_path)
     pretty = tmp_path / "single-node.json"

@@ -325,15 +325,30 @@ def parse_offload_input(path: Path) -> tuple[list[dict[str, Any]], list[dict[str
     edges: list[dict[str, Any]] = []
 
     if isinstance(data, dict) and ("nodes" in data or "edges" in data):
-        raw_nodes = data.get("nodes") or []
-        raw_edges = data.get("edges") or []
-        if not isinstance(raw_nodes, list) or not isinstance(raw_edges, list):
-            raise GraphStoreError("Bundle nodes/edges must be arrays")
-        for item in raw_nodes:
-            nodes.append(validate_node(item, default_status="staging"))
-        for item in raw_edges:
-            edges.append(validate_edge(item, default_status="staging"))
-        return nodes, edges
+        looks_like_node = (
+            "id" in data
+            and "from" not in data
+            and "to" not in data
+            and "rel" not in data
+        )
+        looks_like_edge = "from" in data and "to" in data and "rel" in data
+        kind = data.get("kind")
+        # A single node/edge may carry leftover "nodes"/"edges" keys. Those are
+        # not a {nodes,edges} bundle — treating them as one wrote zero rows.
+        if kind not in {"node", "edge"} and not looks_like_node and not looks_like_edge:
+            raw_nodes = data.get("nodes")
+            raw_edges = data.get("edges")
+            if raw_nodes is None:
+                raw_nodes = []
+            if raw_edges is None:
+                raw_edges = []
+            if not isinstance(raw_nodes, list) or not isinstance(raw_edges, list):
+                raise GraphStoreError("Bundle nodes/edges must be arrays")
+            for item in raw_nodes:
+                nodes.append(validate_node(item, default_status="staging"))
+            for item in raw_edges:
+                edges.append(validate_edge(item, default_status="staging"))
+            return nodes, edges
 
     # Pretty-printed or compact single record (not a bundle, not JSONL).
     if isinstance(data, dict):
