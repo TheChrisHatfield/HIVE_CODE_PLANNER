@@ -132,6 +132,52 @@ def test_frozen_entry_exits_when_bootstrap_fails(monkeypatch: pytest.MonkeyPatch
     assert gui_called["value"] is False
 
 
+def test_frozen_entry_gui_bootstrap_failure_shows_startup_dialog(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import hive_planner.frozen_entry as entry
+    import hive_planner.portable_runtime as pr
+
+    monkeypatch.setenv("HIVE_PLANNER_PORTABLE", "1")
+    monkeypatch.setenv("HIVE_PLANNER_APP_ROOT", str(tmp_path))
+    monkeypatch.setattr(sys, "argv", ["HivePlanner.exe"])
+
+    def _fail(root: Path, *, force: bool = False):
+        return pr.PortableRuntimeReport(
+            ok=False,
+            bundled_ok=False,
+            deployed_ok=False,
+            detail="Bundled templates missing",
+            missing=["vendor_templates/manifest.json"],
+        )
+
+    monkeypatch.setattr(pr, "ensure_portable_runtime", _fail)
+    shown: list[tuple[str, str]] = []
+    gui_called = {"value": False}
+
+    def _dialog(message: str, detail: str = "") -> None:
+        shown.append((message, detail))
+        raise SystemExit(1)
+
+    def _gui_main():
+        gui_called["value"] = True
+        return 0
+
+    monkeypatch.setattr("hive_planner.launcher.__main__._show_startup_error", _dialog)
+    monkeypatch.setattr("hive_planner.launcher.__main__.main", _gui_main)
+
+    with pytest.raises(SystemExit) as exited:
+        entry.run()
+    assert exited.value.code == 1
+    assert gui_called["value"] is False
+    assert shown == [
+        (
+            "Portable runtime bootstrap failed.",
+            "Bundled templates missing\nMissing: vendor_templates/manifest.json",
+        )
+    ]
+
+
 def test_auto_complete_onboarding_portable(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     from hive_planner.launcher.config import LauncherConfig
     from hive_planner.launcher.service import auto_complete_onboarding_if_ready

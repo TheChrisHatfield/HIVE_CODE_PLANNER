@@ -13,9 +13,16 @@ def run() -> int:
 
         bootstrap = ensure_portable_runtime(portable_app_root(), force=False)
         if not bootstrap.ok:
-            sys.stderr.write(f"Portable runtime bootstrap failed: {bootstrap.detail}\n")
+            detail = bootstrap.detail
             if bootstrap.missing:
-                sys.stderr.write(f"Missing: {', '.join(bootstrap.missing)}\n")
+                detail = f"{detail}\nMissing: {', '.join(bootstrap.missing)}"
+            # Windowed portable exe has no console; stderr from a double-click is discarded.
+            if is_cli_invocation():
+                sys.stderr.write(f"Portable runtime bootstrap failed: {detail}\n")
+                return 1
+            from hive_planner.launcher.__main__ import _show_startup_error
+
+            _show_startup_error("Portable runtime bootstrap failed.", detail)
             return 1
 
     if is_portable_runtime() and is_cli_invocation():
