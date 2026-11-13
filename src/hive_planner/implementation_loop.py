@@ -810,6 +810,11 @@ def assess_implementation_readiness(root: Path, feature: str) -> ReadinessReport
 
     tasks_path = root / f"docs/specs/{feature}/tasks.md"
     all_checked = tasks_path.is_file() and not _has_open_task(tasks_path)
+    if tasks_path.is_file():
+        try:
+            _read_text(tasks_path)
+        except (OSError, UnicodeError):
+            missing.append(f"cannot read docs/specs/{feature}/tasks.md")
 
     from hive_planner.spec_drift import spec_creation_gaps
     from hive_planner.config import RepoPaths

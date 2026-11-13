@@ -242,6 +242,27 @@ def test_readiness_missing_tasks(project_root: Path) -> None:
     assert any("no open task" in m for m in report.missing)
 
 
+def test_readiness_unreadable_tasks_is_not_ready(
+    project_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import hive_planner.implementation_loop as mod
+
+    monkeypatch.setattr(mod, "_current_branch", lambda root: "feature-x")
+    monkeypatch.setattr(mod, "_resolve_trunk", lambda root: "main")
+    install_implementation_loop(project_root, PACK_4)
+    commands_path = project_root / ".hive/implementation-loop/commands.json"
+    commands = json.loads(commands_path.read_text(encoding="utf-8"))
+    commands["build"] = "echo build"
+    commands["test:full"] = "echo test-full"
+    commands_path.write_text(json.dumps(commands), encoding="utf-8")
+    (project_root / "docs" / "specs" / "feature-x" / "tasks.md").write_bytes(b"\x80\x81\x82")
+    report = assess_implementation_readiness(project_root, "feature-x")
+    assert report.ready is False
+    assert any("cannot read" in m and "tasks.md" in m for m in report.missing)
+    with pytest.raises(CoordinatorError, match="cannot read"):
+        coordinator_start(project_root, "feature-x")
+
+
 def test_readiness_missing_commands(project_root: Path) -> None:
     install_implementation_loop(project_root, PACK_4)
     commands_path = project_root / ".hive/implementation-loop/commands.json"
