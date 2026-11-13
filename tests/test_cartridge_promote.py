@@ -185,6 +185,7 @@ def test_promote_micro_and_spec_scaffold_from_draft(tmp_path: Path) -> None:
     result = promote_cartridge_drafts(paths, feature)
 
     assert result.promotions["micro"] == "written"
+    assert result.promotions["memory_candidates"] == "skipped (missing)"
     assert (project / "docs" / "delta" / "20_micro" / f"{feature}.md").is_file()
     assert (project / "docs" / "specs" / feature / "spec.md").is_file()
     assert (project / "docs" / "specs" / feature / "plan.md").is_file()

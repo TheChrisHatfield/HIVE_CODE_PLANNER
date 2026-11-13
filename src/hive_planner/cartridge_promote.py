@@ -479,8 +479,10 @@ def promote_cartridge_drafts(
                     result.candidates_path = candidates.relative_to(paths.root).as_posix()
                 else:
                     result.promotions["memory_candidates"] = "skipped (no bullets)"
+    elif not write_memory_candidates:
+        result.promotions["memory_candidates"] = "skipped (disabled)"
     else:
-        result.promotions["memory_candidates"] = "skipped (not draft)"
+        result.promotions["memory_candidates"] = "skipped (missing)"
 
     if result.promotions.get("micro") in {"written", "updated"} and not spec_path.exists():
         micro_body = _promote_body(paths.cartridge / "micro" / f"{feature}.md")
