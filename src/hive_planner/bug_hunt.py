@@ -1028,6 +1028,7 @@ _WALK_SKIP = {
     "Logs",
     "Temp",
     "bin",
+    "dist",
     "node_modules",
     "obj",
     "site-packages",

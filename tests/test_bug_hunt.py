@@ -434,11 +434,15 @@ def test_candidate_files_skip_tool_caches(tmp_path: Path) -> None:
     hook = tmp_path / ".cursor" / "hooks" / "bug_hunt_continue.py"
     hook.parent.mkdir(parents=True)
     hook.write_text("x = 1\n", encoding="utf-8")
+    packaged = tmp_path / "dist" / "HivePlannerPortable" / "_internal" / "app.py"
+    packaged.parent.mkdir(parents=True)
+    packaged.write_text("x = 1\n", encoding="utf-8")
     found = {path.resolve() for path in _candidate_files(tmp_path)}
     assert src.resolve() in found
     assert cached.resolve() not in found
     assert toxed.resolve() not in found
     assert hook.resolve() not in found
+    assert packaged.resolve() not in found
     import os
 
     if os.path.normcase("A") != os.path.normcase("a"):
