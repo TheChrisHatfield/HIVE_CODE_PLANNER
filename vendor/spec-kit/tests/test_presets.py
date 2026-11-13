@@ -805,6 +805,13 @@ class TestPresetManager:
         with pytest.raises(PresetCompatibilityError, match="Invalid version specifier"):
             manager.check_compatibility(manifest, "0.1.5")
 
+    def test_check_compatibility_unknown_speckit_version(self, pack_dir, temp_dir):
+        """get_speckit_version fallback 'unknown' must be a compatibility error, not a crash."""
+        manager = PresetManager(temp_dir)
+        manifest = PresetManifest(pack_dir / "preset.yml")
+        with pytest.raises(PresetCompatibilityError, match="not a valid version"):
+            manager.check_compatibility(manifest, "unknown")
+
     def test_install_with_priority(self, project_dir, pack_dir):
         """Test installing a pack with custom priority."""
         manager = PresetManager(project_dir)

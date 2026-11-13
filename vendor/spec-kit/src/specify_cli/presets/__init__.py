@@ -617,7 +617,13 @@ class PresetManager:
             PresetCompatibilityError: If pack is incompatible
         """
         required = manifest.requires_speckit_version
-        current = pkg_version.Version(speckit_version)
+        try:
+            current = pkg_version.Version(speckit_version)
+        except (pkg_version.InvalidVersion, TypeError, ValueError):
+            raise PresetCompatibilityError(
+                f"Cannot check compatibility: spec-kit version {speckit_version!r} "
+                "is not a valid version."
+            )
 
         try:
             specifier = SpecifierSet(required)
