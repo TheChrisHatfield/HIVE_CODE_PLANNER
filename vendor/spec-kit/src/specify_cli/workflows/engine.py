@@ -440,8 +440,13 @@ class RunState:
         with open(state_path, encoding="utf-8") as f:
             state_data = json.load(f)
 
+        # Bind identity to the directory we loaded, not the run_id stored
+        # inside state.json. A copied or renamed run folder can leave
+        # ``"run_id": "oldid"`` in the file; using that value made
+        # ``save()`` write ``runs/oldid/`` and overwrite the original run.
+        # ``_validate_run_id`` already accepted the lookup key above.
         state = cls(
-            run_id=state_data["run_id"],
+            run_id=run_id,
             workflow_id=state_data["workflow_id"],
             project_root=project_root,
         )

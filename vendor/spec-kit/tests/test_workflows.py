@@ -3644,6 +3644,48 @@ class TestRunState:
         with pytest.raises(FileNotFoundError):
             RunState.load("nonexistent", project_dir)
 
+    def test_load_keeps_directory_run_id_when_state_json_differs(self, project_dir):
+        """Resume must stay in the folder named by the CLI, not state.json.
+
+        Copying ``runs/oldid`` to ``runs/copyid`` leaves ``"run_id": "oldid"``
+        in the JSON. Loading via the copy and saving must not write back
+        into ``runs/oldid``.
+        """
+        from specify_cli.workflows.engine import RunState
+        from specify_cli.workflows.base import RunStatus
+
+        copy_dir = project_dir / ".specify" / "workflows" / "runs" / "copyid"
+        copy_dir.mkdir(parents=True)
+        (copy_dir / "state.json").write_text(
+            json.dumps(
+                {
+                    "run_id": "oldid",
+                    "workflow_id": "copied-workflow",
+                    "status": "paused",
+                    "current_step_index": 0,
+                    "step_results": {},
+                }
+            ),
+            encoding="utf-8",
+        )
+        (copy_dir / "inputs.json").write_text(
+            json.dumps({"inputs": {"name": "login"}}),
+            encoding="utf-8",
+        )
+
+        loaded = RunState.load("copyid", project_dir)
+        assert loaded.run_id == "copyid"
+        assert loaded.workflow_id == "copied-workflow"
+        assert loaded.status == RunStatus.PAUSED
+        loaded.status = RunStatus.RUNNING
+        loaded.save()
+
+        assert (copy_dir / "state.json").exists()
+        saved = json.loads((copy_dir / "state.json").read_text(encoding="utf-8"))
+        assert saved["run_id"] == "copyid"
+        assert saved["status"] == "running"
+        assert not (project_dir / ".specify" / "workflows" / "runs" / "oldid").exists()
+
     @pytest.mark.parametrize(
         "malicious_run_id",
         [
