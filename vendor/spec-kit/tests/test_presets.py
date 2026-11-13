@@ -5326,6 +5326,55 @@ class TestWrapStrategy:
         assert "$ARGUMENTS" not in written
         assert "{{parameters}}" in written
 
+    def test_register_commands_yaml_resolves_script_and_args(self, project_dir):
+        """YAML (Goose) agents resolve {SCRIPT} and convert $ARGUMENTS after injection."""
+        from specify_cli.agents import CommandRegistrar
+        import copy
+
+        core_dir = project_dir / ".specify" / "templates" / "commands"
+        core_dir.mkdir(parents=True, exist_ok=True)
+        (core_dir / "specify.md").write_text(
+            "---\ndescription: core\nscripts:\n  sh: .specify/scripts/run.sh {ARGS}\n---\n\n"
+            "Run: {SCRIPT}\n"
+        )
+
+        cmd_dir = project_dir / "preset" / "commands"
+        cmd_dir.mkdir(parents=True, exist_ok=True)
+        (cmd_dir / "speckit.specify.md").write_text(
+            "---\ndescription: goose wrap\nstrategy: wrap\n---\n\n"
+            "## Pre\n\n{CORE_TEMPLATE}\n\n## Post\n"
+        )
+
+        agent_dir = project_dir / ".goose" / "recipes"
+        agent_dir.mkdir(parents=True, exist_ok=True)
+
+        registrar = CommandRegistrar()
+        original = copy.deepcopy(registrar.AGENT_CONFIGS)
+        registrar.AGENT_CONFIGS["test-goose-agent"] = {
+            "dir": str(agent_dir.relative_to(project_dir)),
+            "format": "yaml",
+            "args": "{{args}}",
+            "extension": ".yaml",
+            "strip_frontmatter_keys": [],
+        }
+        try:
+            registrar.register_commands(
+                "test-goose-agent",
+                [{"name": "speckit.specify", "file": "commands/speckit.specify.md"}],
+                "test-preset",
+                project_dir / "preset",
+                project_dir,
+            )
+        finally:
+            CommandRegistrar.AGENT_CONFIGS.clear()
+            CommandRegistrar.AGENT_CONFIGS.update(original)
+
+        written = (agent_dir / "speckit.specify.yaml").read_text()
+        assert "{SCRIPT}" not in written
+        assert "run.sh" in written
+        assert "$ARGUMENTS" not in written
+        assert "{{args}}" in written
+
     def test_extension_command_resolves_via_extension_directory(self, project_dir):
         """Extension commands (e.g. speckit.git.feature) resolve from the extension directory.
 
