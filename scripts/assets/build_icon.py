@@ -15,7 +15,7 @@ MARGIN = 96
 
 
 def hexagon_points(cx: float, cy: float, radius: float) -> list[tuple[float, float]]:
-    """Flat-top regular hexagon."""
+    """Pointy-top regular hexagon (vertex at -90°)."""
     points: list[tuple[float, float]] = []
     for i in range(6):
         angle = math.radians(60 * i - 30)
@@ -23,21 +23,37 @@ def hexagon_points(cx: float, cy: float, radius: float) -> list[tuple[float, flo
     return points
 
 
+def canvas_margin(size: int) -> float:
+    """Scale the 1024-px design margin so smaller canvases keep a usable ring."""
+    if size < 1:
+        raise ValueError(f"icon size must be >= 1, got {size}")
+    return size * (MARGIN / SIZE)
+
+
+def ring_hex_centers(size: int) -> list[tuple[float, float]]:
+    margin = canvas_margin(size)
+    usable = size - (margin * 2)
+    center = size / 2
+    ring_radius = usable * 0.27
+    points = []
+    for i in range(6):
+        angle = math.radians(60 * i - 90)
+        points.append((center + ring_radius * math.cos(angle), center + ring_radius * math.sin(angle)))
+    return points
+
+
 def draw_icon(size: int = SIZE) -> Image.Image:
     img = Image.new("RGBA", (size, size), BG)
     draw = ImageDraw.Draw(img)
 
-    usable = size - (MARGIN * 2)
+    margin = canvas_margin(size)
+    usable = size - (margin * 2)
     center = size / 2
 
     # Ring of 6 hexes around empty center; radius chosen so cluster fits in usable area.
     hex_radius = usable * 0.145
-    ring_radius = usable * 0.27
 
-    for i in range(6):
-        angle = math.radians(60 * i - 90)
-        hx = center + ring_radius * math.cos(angle)
-        hy = center + ring_radius * math.sin(angle)
+    for hx, hy in ring_hex_centers(size):
         draw.polygon(hexagon_points(hx, hy, hex_radius), fill=GREEN)
 
     # Center checklist mark
