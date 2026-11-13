@@ -88,11 +88,13 @@ class CatalogStack:
         Results are sorted by bundle id for deterministic output.
         """
         needle = query.strip().lower()
+        claimed: set[str] = set()
         seen: dict[str, ResolvedBundle] = {}
         for source in self._sources:
             for bundle_id, entry in self._entries_for(source).items():
-                if bundle_id in seen:
+                if bundle_id in claimed:
                     continue
+                claimed.add(bundle_id)
                 if needle and not _matches(entry, needle):
                     continue
                 seen[bundle_id] = ResolvedBundle(

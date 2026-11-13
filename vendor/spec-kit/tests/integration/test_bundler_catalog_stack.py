@@ -71,6 +71,29 @@ def test_search_dedupes_by_precedence_and_filters():
     assert [r.entry.id for r in qa_only] == ["beta"]
 
 
+def test_search_does_not_surface_shadowed_lower_source_on_query_miss():
+    """Highest-precedence id wins even when that entry fails the query.
+
+    Otherwise search lists a lower catalog's copy while resolve/install still
+    bind the higher source — a different bundle than the one shown.
+    """
+    sources = [_source("a", 1, "install-allowed"), _source("b", 2, "install-allowed")]
+    payloads = {
+        "a": catalog_payload({
+            "alpha": catalog_entry_dict("alpha", role="developer"),
+        }),
+        "b": catalog_payload({
+            "alpha": catalog_entry_dict("alpha", role="qa", version="0.0.1"),
+        }),
+    }
+    stack = _stack(sources, payloads)
+
+    assert stack.search("qa") == []
+    resolved = stack.resolve("alpha")
+    assert resolved.source.id == "a"
+    assert resolved.entry.role == "developer"
+
+
 def test_unreachable_source_raises_named_error():
     def fetcher(src):
         raise RuntimeError("boom")
