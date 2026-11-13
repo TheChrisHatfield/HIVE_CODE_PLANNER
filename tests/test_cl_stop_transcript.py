@@ -39,6 +39,15 @@ def test_plugin_utf16_le_transcript_without_a_bom_still_suppresses_the_notice(tm
     assert module._bug_hunt_in_transcript(str(transcript)) is True
 
 
+def test_vendor_utf16_le_transcript_without_a_bom_still_suppresses_the_notice(tmp_path: Path) -> None:
+    transcript = tmp_path / "chat.jsonl"
+    transcript.write_bytes(
+        '{"role":"user","message":{"content":"bug hunt"}}\n'.encode("utf-16-le")
+    )
+    module = _load(HOOKS[0], "cl_stop_vendor_le")
+    assert module._bug_hunt_in_transcript(str(transcript)) is True
+
+
 def test_utf16_le_state_keeps_turn_count(tmp_path: Path, monkeypatch) -> None:
     state_path = tmp_path / "continual-learning.json"
     payload = {

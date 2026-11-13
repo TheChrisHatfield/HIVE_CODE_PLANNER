@@ -155,16 +155,40 @@ def _user_message_texts(line: str) -> list[str]:
     return texts
 
 
+def _looks_like_utf16_le_json(raw: bytes) -> bool:
+    """ASCII JSON written as UTF-16-LE (no BOM) interleaves null bytes."""
+    return (
+        len(raw) >= 4
+        and len(raw) % 2 == 0
+        and raw.startswith(b"{")
+        and raw[1:2] == b"\x00"
+    )
+
+
 def _read_transcript(path: Path) -> str | None:
-    """Read a chat transcript saved as UTF-8 or UTF-16 with a byte-order mark."""
+    """Read a chat transcript saved as UTF-8 or UTF-16 (with or without a BOM)."""
     try:
-        return path.read_text(encoding="utf-8-sig")
-    except UnicodeDecodeError:
         raw = path.read_bytes()
-        if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
-            return raw.decode("utf-16")
-        return None
     except OSError:
+        return None
+    if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+        try:
+            return raw.decode("utf-16")
+        except UnicodeDecodeError:
+            return None
+    if _looks_like_utf16_le_json(raw):
+        try:
+            return raw.decode("utf-16-le")
+        except UnicodeDecodeError:
+            return None
+    try:
+        return raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        if len(raw) >= 2 and len(raw) % 2 == 0:
+            try:
+                return raw.decode("utf-16-le")
+            except UnicodeDecodeError:
+                pass
         return None
 
 
