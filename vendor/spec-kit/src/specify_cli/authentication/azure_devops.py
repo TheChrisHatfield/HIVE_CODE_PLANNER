@@ -17,6 +17,23 @@ if TYPE_CHECKING:
 _ADO_RESOURCE_ID = "499b84ac-1321-427f-aa17-267ca6975798"
 
 
+def _json_string_field(payload: object, key: str) -> str | None:
+    """Return a stripped non-empty string field, or None if it is missing or not a string.
+
+    Azure CLI / token endpoints can return ``null`` or a non-object JSON
+    body. Calling ``.strip()`` on a ``null`` field raises AttributeError on
+    ``null`` and would fail the whole resolve path instead of falling
+    back to unauthenticated.
+    """
+    if not isinstance(payload, dict):
+        return None
+    value = payload.get(key)
+    if not isinstance(value, str):
+        return None
+    value = value.strip()
+    return value or None
+
+
 class AzureDevOpsAuth(AuthProvider):
     """Azure DevOps authentication provider.
 
@@ -74,8 +91,7 @@ class AzureDevOpsAuth(AuthProvider):
             if result.returncode != 0:
                 return None
             payload = _json.loads(result.stdout)
-            token = payload.get("accessToken", "").strip()
-            return token or None
+            return _json_string_field(payload, "accessToken")
         except (OSError, subprocess.TimeoutExpired, _json.JSONDecodeError, KeyError):
             return None
 
@@ -111,7 +127,6 @@ class AzureDevOpsAuth(AuthProvider):
         try:
             with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310
                 payload = _json.loads(resp.read().decode("utf-8"))
-                token = payload.get("access_token", "").strip()
-                return token or None
+                return _json_string_field(payload, "access_token")
         except (urllib.error.URLError, OSError, _json.JSONDecodeError, KeyError):
             return None

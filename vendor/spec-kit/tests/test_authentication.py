@@ -488,6 +488,18 @@ class TestAzureDevOpsAuth:
         with patch("specify_cli.authentication.azure_devops.subprocess.run", side_effect=OSError("not found")):
             assert AzureDevOpsAuth().resolve_token(entry) is None
 
+    def test_resolve_token_azure_cli_null_access_token_returns_none(self):
+        """az JSON ``accessToken: null`` must not raise; treat as missing."""
+        from unittest.mock import patch, MagicMock
+        entry = AuthConfigEntry(
+            hosts=("dev.azure.com",), provider="azure-devops", auth="azure-cli",
+        )
+        result = MagicMock()
+        result.returncode = 0
+        result.stdout = '{"accessToken": null}'
+        with patch("specify_cli.authentication.azure_devops.subprocess.run", return_value=result):
+            assert AzureDevOpsAuth().resolve_token(entry) is None
+
     def test_resolve_token_azure_ad_success(self, monkeypatch):
         """azure-ad acquires token via OAuth2 client credentials."""
         from unittest.mock import patch, MagicMock
@@ -523,6 +535,21 @@ class TestAzureDevOpsAuth:
         )
         with patch("urllib.request.urlopen",
                     side_effect=urllib.error.URLError("connection refused")):
+            assert AzureDevOpsAuth().resolve_token(entry) is None
+
+    def test_resolve_token_azure_ad_null_access_token_returns_none(self, monkeypatch):
+        """Token JSON ``access_token: null`` must not raise; treat as missing."""
+        from unittest.mock import patch, MagicMock
+        monkeypatch.setenv("MY_SECRET", "secret-value")
+        entry = AuthConfigEntry(
+            hosts=("dev.azure.com",), provider="azure-devops", auth="azure-ad",
+            tenant_id="tid", client_id="cid", client_secret_env="MY_SECRET",
+        )
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = b'{"access_token": null}'
+        mock_resp.__enter__ = lambda s: s
+        mock_resp.__exit__ = MagicMock(return_value=False)
+        with patch("urllib.request.urlopen", return_value=mock_resp):
             assert AzureDevOpsAuth().resolve_token(entry) is None
 
 
