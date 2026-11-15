@@ -469,3 +469,10 @@ See `.cursor/rules/integration-wiring-audit.mdc`.
 - Real: py -3.11 -m hive_planner voice-bot moshi-talk --timeout 2 -> moshi_unreachable, exit 1 (no server on 127.0.0.1:8998).
 - T055 G7 still blocked: no Moshi weights in the local HF cache and no server on 8998. Evidence register not changed.
 - Not run: live mic or speaker, live Moshi server, launcher panel wiring to moshi-talk.
+
+2026-11-15 — Session 15l panel call fixes (T056 / T042 panel wiring, R36–R37; code and tests, no live server)
+- src/hive_planner/launcher/voice_panel_controller.py — stop during listen gate opens no devices; worker `finally` clears `mic_active` and adds a notice on an unrequested error; `PENDING_POLL_TTL_S = 0.5` memo on the Moshi approval poll.
+- tests/test_voice_panel_controller.py — new: test_stop_during_listen_gate_never_opens_the_call, test_dropped_call_clears_listening_and_reports_the_error, test_pending_approval_poll_is_memoised_across_text_frames; loopback test waits for fake_io.opened.
+- `py -3.11 -m pytest tests/test_voice_panel_controller.py -q` → 59 passed. `py -3.11 -m pytest tests -k "voice or acp or launcher" -q` → 1137 passed, 2 warnings.
+- Impact: docs/change-impact/impact-packets/2026-11-15-voice-panel-moshi-call-fixes.md.
+- Not run: live mic, live speaker, live Moshi server (G7 / T055 still open).

@@ -66,6 +66,8 @@ REQUEST_TIMEOUT_S = 1.0
 SPOKEN_REQUEST_TIMEOUT_S = 120.0
 BRIDGE_START_TIMEOUT_S = 10.0
 BRIDGE_START_POLL_S = 0.1
+# Moshi text frames check for a pending approval at most this often (see `_cached_pending_approval`).
+PENDING_POLL_TTL_S = 0.5
 BRIDGE_STOP_TIMEOUT_S = 5.0
 # T042 slice 5e: the greeting follows the last typed task. Poll the bridge, then stop at a terminal state.
 TASK_POLL_S = 2.0
@@ -152,6 +154,8 @@ class VoicePanelController:
         self._talk_stop: threading.Event | None = None
         self._talk_result: dict[str, Any] = {}
         self._moshi_approval_buf = ""
+        # (monotonic time, pending view) memo for the Moshi text path; None means not polled yet.
+        self._pending_cache: tuple[float, dict[str, Any] | None] | None = None
         # Notices from a Moshi call (refusals, utterance results), last five. Written by worker threads.
         self.call_notices: list[str] = []
         self._notice_lock = threading.Lock()
@@ -333,14 +337,20 @@ class VoicePanelController:
             # The gate may start the Moshi server and wait for it (minutes on a cold start). It runs
             # here, not on the UI thread, so the panel stays responsive. A refusal is recorded as a
             # notice and the mic turns off; it is never shown as a live call.
+            refused = False
             try:
                 code = self._listen_gate(cfg)
                 if code:
+                    refused = True
                     self._talk_result = {"error": code}
                     self.mic_active = False  # state first, then the notice that reports it
                     self._add_notice(
                         f"Mic off: Moshi is not reachable ({code}). Type your instruction, or check the Moshi install."
                     )
+                    return
+                if stop.is_set():
+                    # Stop was pressed while the gate was still waiting. Do not open the devices.
+                    self._talk_result = {}
                     return
                 self._talk_result = dict(
                     self._talk_fn(
@@ -355,6 +365,14 @@ class VoicePanelController:
                 self._talk_result = {"error": str(exc)}
             except Exception as exc:  # noqa: BLE001 - a worker fault must reach the panel, not kill the app
                 self._talk_result = {"error": f"moshi_call_failed: {exc}"}
+            finally:
+                # A call that ends on its own (socket drop, device fault) must not keep showing
+                # "listening". Only the worker that is still the current call may clear the state.
+                if self._talk_thread is threading.current_thread():
+                    self.mic_active = False
+                    error = str(self._talk_result.get("error") or "")
+                    if error and not refused and not stop.is_set():
+                        self._add_notice(f"Call ended with an error ({error}). Start the mic to call again.")
 
         self.mic_active = True  # set before the worker starts, so a refusal can clear it
         self._talk_thread = threading.Thread(target=_run, name="moshi-call", daemon=True)
@@ -378,7 +396,9 @@ class VoicePanelController:
         clean = (text or "").strip()
         if not clean:
             return False
-        pending = self._pending_approval()
+        # Runs on the Moshi receive thread once per text frame. The poll is cached briefly so a
+        # stream of tokens does not stall audio decoding behind one HTTP round trip each.
+        pending = self._cached_pending_approval()
         if pending is None:
             self._moshi_approval_buf = ""
             return False
@@ -395,8 +415,19 @@ class VoicePanelController:
             "approved", "denied", "answered", "stale", "stale_approval",
             "no_pending_approval", "task_mismatch", "not_delivered",
         ):
+            # The request is resolved, so the memo must not keep naming it. A re-prompt keeps it.
             self._moshi_approval_buf = ""
+            self._pending_cache = None
         return True
+
+    def _cached_pending_approval(self) -> dict[str, Any] | None:
+        """`_pending_approval` with a 0.5 s memo. Only the Moshi text path uses it."""
+        now = time.monotonic()
+        if self._pending_cache is not None and now - self._pending_cache[0] < PENDING_POLL_TTL_S:
+            return self._pending_cache[1]
+        pending = self._pending_approval()
+        self._pending_cache = (now, pending)
+        return pending
 
     def _on_moshi_utterance(self, pcm: Any, sample_rate: int) -> None:
         """T056 speech-to-task: one finished user utterance becomes a task or an approval reply.

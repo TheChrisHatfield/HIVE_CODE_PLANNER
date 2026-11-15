@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import threading
+import time
 import uuid
 from pathlib import Path
 
@@ -626,6 +627,11 @@ def test_moshi_call_runs_real_talk_over_loopback_echo_server(tmp_path: Path) -> 
         fake_io = _FakeIO()
         ctrl = VoicePanelController(lambda: tmp_path, post=_Recorder(), io_factory=lambda device: fake_io)
         assert ctrl.on_mic(True) is None
+        # Wait for the call to open the devices (gate, then talk); stopping earlier is covered
+        # by test_stop_during_listen_gate_never_opens_the_call.
+        deadline = time.monotonic() + 5.0
+        while not fake_io.opened and time.monotonic() < deadline:
+            time.sleep(0.02)
         assert ctrl.on_mic(False) is None
         assert handshakes, "the call must reach the Moshi server (gate + call handshakes)"
         assert fake_io.opened and fake_io.closed, "mic and speaker opened and closed by the call"
@@ -803,3 +809,64 @@ def test_moshi_utterance_refusal_is_recorded_not_dropped(tmp_path: Path, monkeyp
     notices = _wait_notices(ctrl)
     assert notices == ["Speech input is off."]
 
+
+
+# --- review fixes (2026-11-15): stop during gate, dropped call state, pending poll memo ----------
+
+
+def test_stop_during_listen_gate_never_opens_the_call(tmp_path: Path) -> None:
+    """Stop pressed while the gate is still waiting (cold server start) must not open the devices."""
+    gate_started = threading.Event()
+    release_gate = threading.Event()
+    calls: list[str] = []
+
+    def slow_gate(cfg):
+        gate_started.set()
+        release_gate.wait(5.0)
+        return None
+
+    ctrl = VoicePanelController(
+        lambda: tmp_path,
+        post=_Recorder(),
+        talk_fn=lambda *a, **k: calls.append("talk") or {},
+        io_factory=lambda device: _FakeIO(),
+        listen_gate=slow_gate,
+    )
+    assert ctrl.on_mic(True) is None
+    assert gate_started.wait(2.0)
+    # Stop returns without waiting for the gate; then the gate finishes.
+    ctrl._talk_stop.set()
+    release_gate.set()
+    ctrl._talk_thread.join(timeout=3.0)
+    assert calls == [], "a call stopped during the gate must not open the audio devices"
+
+
+def test_dropped_call_clears_listening_and_reports_the_error(tmp_path: Path) -> None:
+    """A call that ends on its own (socket drop) must not keep the panel on 'listening'."""
+
+    def dropping_talk(url, io, *, stop, **_kw):
+        return {"error": "moshi_connection_lost"}
+
+    ctrl = _moshi_ctrl(tmp_path, talk_fn=dropping_talk)
+    assert ctrl.on_mic(True) is None
+    notices = _wait_notices(ctrl)
+    assert ctrl.mic_active is False
+    assert any("moshi_connection_lost" in note for note in notices)
+
+
+def test_pending_approval_poll_is_memoised_across_text_frames(tmp_path: Path, monkeypatch) -> None:
+    """Moshi text arrives per token; the bridge poll must not run once per frame."""
+    polls: list[str] = []
+    post = _Recorder(status=200, payload={"status": "reprompt"})
+    ctrl = _moshi_ctrl(tmp_path, talk_fn=lambda *a, **k: {}, post=post)
+    monkeypatch.setattr(ctrl, "bridge_running", lambda: True)
+
+    def fake_get(route):
+        polls.append(route)
+        return 200, {"pending": True, "task_id": "task_1", "request_id": "req_1"}
+
+    monkeypatch.setattr(ctrl, "_get_from_bridge", fake_get)
+    for fragment in ("approve", "the", "edit"):
+        assert ctrl._on_moshi_text(fragment) is True
+    assert polls == ["/v1/approval"], "one poll covers a burst of text frames"
+    assert len(post.calls) == 3
