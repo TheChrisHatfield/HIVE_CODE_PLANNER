@@ -4,11 +4,50 @@ const path = require("node:path");
 const {
   APPROVAL_OUTCOMES,
   isInsideWorkspace,
+  pickSessionRoot,
+  resolveWorkspaceRelative,
   buildContextSnapshot,
   requestApprovalStub,
 } = require("../src/core");
 
 const ROOT = path.resolve("/repo/project");
+
+// T037 / P2-1: multi-root. The bound root is the folder holding the active file, not folder[0].
+test("multi-root: active file in the second folder binds that folder, not folder[0]", () => {
+  const A = path.resolve("/ws/alpha");
+  const B = path.resolve("/ws/beta");
+  assert.equal(pickSessionRoot([A, B], path.join(B, "src", "app.py")), B);
+});
+
+test("multi-root: active file in the first folder binds folder[0]", () => {
+  const A = path.resolve("/ws/alpha");
+  const B = path.resolve("/ws/beta");
+  assert.equal(pickSessionRoot([A, B], path.join(A, "src", "app.py")), A);
+});
+
+test("multi-root: nested folders bind the most specific (longest) folder", () => {
+  const outer = path.resolve("/ws/mono");
+  const inner = path.resolve("/ws/mono/packages/core");
+  assert.equal(pickSessionRoot([outer, inner], path.join(inner, "x.py")), inner);
+});
+
+test("multi-root: active file outside every folder falls back to folder[0]", () => {
+  const A = path.resolve("/ws/alpha");
+  const B = path.resolve("/ws/beta");
+  assert.equal(pickSessionRoot([A, B], path.resolve("/elsewhere/z.py")), A);
+});
+
+test("multi-root: no active file falls back to folder[0]; a sibling prefix is not inside", () => {
+  const A = path.resolve("/ws/alpha");
+  assert.equal(pickSessionRoot([A], null), A);
+  // "/ws/alpha-old" shares a string prefix with "/ws/alpha" but is a different folder.
+  assert.equal(pickSessionRoot([A, path.resolve("/ws/alpha-old")], path.resolve("/ws/alpha-old/a.py")), path.resolve("/ws/alpha-old"));
+});
+
+test("multi-root: no folders gives null", () => {
+  assert.equal(pickSessionRoot([], path.resolve("/ws/a.py")), null);
+  assert.equal(pickSessionRoot(undefined, null), null);
+});
 
 test("snapshot with no workspace reports no_workspace", () => {
   const s = buildContextSnapshot({ workspaceRoot: null, activeDocument: null });
@@ -66,6 +105,14 @@ test("isInsideWorkspace rejects traversal, the root itself, and absolute escapes
   assert.equal(isInsideWorkspace(ROOT, "..cache/a.py"), true);
   assert.equal(isInsideWorkspace(ROOT, "."), false);
   assert.equal(isInsideWorkspace(ROOT, path.resolve("/etc/passwd")), false);
+});
+
+test("resolveWorkspaceRelative returns an in-root path and rejects traversal (R23)", () => {
+  assert.equal(resolveWorkspaceRelative(ROOT, "src/a.py"), path.resolve(ROOT, "src/a.py"));
+  assert.equal(resolveWorkspaceRelative(ROOT, "../other/a.py"), null);
+  assert.equal(resolveWorkspaceRelative(ROOT, "..notes/todo.md"), path.resolve(ROOT, "..notes/todo.md"));
+  assert.equal(resolveWorkspaceRelative(null, "src/a.py"), null);
+  assert.equal(resolveWorkspaceRelative(ROOT, ""), null);
 });
 
 
@@ -227,4 +274,21 @@ test("snapshot carries diagnostics and their truncated flag end to end", () => {
   assert.equal(s.diagnostics_truncated, false);
   assert.equal(s.file, "src/a.py");
   assert.equal(s.reason, null);
+});
+
+test("bridgeExitError surfaces the already-running reason from the Python refusal", () => {
+  const { bridgeExitError } = require("../src/core");
+  const stderr =
+    "Error: a voice bridge is already running for this repo (see .hive/voice-bot/bridge.json)\n";
+  const err = bridgeExitError(1, stderr);
+  assert.equal(
+    err.message,
+    "a voice bridge is already running for this repo (see .hive/voice-bot/bridge.json)",
+  );
+});
+
+test("bridgeExitError keeps the generic exit text for other failures", () => {
+  const { bridgeExitError } = require("../src/core");
+  const err = bridgeExitError(2, "Traceback: boom");
+  assert.equal(err.message, "bridge exited before ready (code 2): Traceback: boom");
 });

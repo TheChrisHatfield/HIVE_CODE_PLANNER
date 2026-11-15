@@ -703,6 +703,33 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Write the G6 row in docs/specs/Voice_Bot/evidence-register.md",
     )
+    voice_write = voice_sub.add_parser(
+        "live-write",
+        help="One agent-mode ACP task that must write a nonce file to disk (R35). Refuses unless G6 pass and edits_enabled.",
+    )
+    voice_write.add_argument("--feature", default=None, help="Feature id (default: AGENTS.md active)")
+    voice_write.add_argument("--agent-path", default=None, help="Override path to the agent CLI")
+    voice_write.add_argument("--timeout", type=float, default=180.0, help="Seconds to wait for the prompt")
+    voice_moshi = voice_sub.add_parser(
+        "moshi-probe",
+        help="G7 live probe (R37/T055): handshake plus one audio round trip against an operator-run Moshi server.",
+    )
+    voice_moshi.add_argument("--feature", default=None, help="Feature id (default: AGENTS.md active)")
+    voice_moshi.add_argument("--url", default=None, help="Moshi websocket URL (default: config moshi_url)")
+    voice_moshi.add_argument("--timeout", type=float, default=30.0, help="Seconds to wait for a round trip")
+    voice_moshi.add_argument("--model-repo", default="", help="Model repo the operator loaded (recorded in G7)")
+    voice_moshi.add_argument(
+        "--record",
+        action="store_true",
+        help="Write the G7 row in docs/specs/Voice_Bot/evidence-register.md (pass or fail only)",
+    )
+    voice_talk = voice_sub.add_parser(
+        "moshi-talk",
+        help="T056: full-duplex conversation loop (mic -> Moshi -> speaker). Model text is transcript only.",
+    )
+    voice_talk.add_argument("--url", default=None, help="Moshi websocket URL (default: config moshi_url)")
+    voice_talk.add_argument("--duration", type=float, default=0.0, help="Seconds to talk; 0 means until Ctrl+C")
+    voice_talk.add_argument("--timeout", type=float, default=3.0, help="Seconds to wait for the handshake")
     voice_turn = voice_sub.add_parser(
         "turn",
         help="Submit one read-only coding turn through the ACP session and wait for its result (T004)",
@@ -710,7 +737,12 @@ def main(argv: list[str] | None = None) -> int:
     voice_turn.add_argument("instruction", help="Instruction text (max per voice_bot config)")
     voice_turn.add_argument("--feature", default=None, help="Feature id (default: AGENTS.md active)")
     voice_turn.add_argument("--file", default="", help="Workspace-relative file to bind to the snapshot")
-    voice_turn.add_argument("--mode", default="ask", choices=["ask", "plan"], help="Read-only mode")
+    voice_turn.add_argument(
+        "--mode",
+        default="ask",
+        choices=["ask", "plan", "agent"],
+        help="Task mode; agent requires the R33 edits latch",
+    )
     voice_turn.add_argument("--client-request-id", default="", help="Dedupe key for this submit (required)")
     voice_turn.add_argument("--agent-path", default=None, help="Override path to the agent CLI")
     voice_turn.add_argument("--timeout", type=float, default=600.0, help="Seconds to wait for the turn")
@@ -1647,6 +1679,7 @@ def main(argv: list[str] | None = None) -> int:
             init_voice_session,
             live_permission,
             live_prompt,
+            live_write,
         )
         from hive_planner.voice_bot import status_summary as voice_bot_status_summary
 
@@ -1739,6 +1772,60 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"Root: {root}")
                 print(json.dumps(result, indent=2))
                 return 0 if result.get("g6") in ("pass", "blocked") else 1
+            if cmd == "live-write":
+                result = live_write(
+                    paths,
+                    feature,
+                    agent_path=args.agent_path,
+                    timeout=args.timeout,
+                )
+                print(f"Root: {root}")
+                print(json.dumps(result, indent=2))
+                return 0 if result.get("r35") in ("pass", "blocked") else 1
+            if cmd == "moshi-talk":
+                import threading
+
+                from hive_planner.voice_bot import VoiceBotError, load_voice_bot_config
+                from hive_planner.voice_moshi import SoundDeviceIO, count_utterance_only, talk
+
+                cfg = load_voice_bot_config(paths)
+                url = args.url or cfg.moshi_url
+                io = SoundDeviceIO(device=cfg.input_device)
+                stop = threading.Event()
+                try:
+                    result = talk(
+                        url,
+                        io,
+                        stop=stop,
+                        duration_s=args.duration,
+                        timeout=args.timeout,
+                        on_utterance=count_utterance_only,
+                    )
+                except KeyboardInterrupt:
+                    stop.set()
+                    result = {"error": "", "stopped_by": "ctrl_c"}
+                except VoiceBotError as exc:
+                    result = {"error": str(exc)}
+                print(f"Root: {root}")
+                print(json.dumps({"url": url, **result}, indent=2))
+                return 0 if not result.get("error") else 1
+            if cmd == "moshi-probe":
+                from hive_planner.voice_bot import load_voice_bot_config
+                from hive_planner.voice_moshi import moshi_live_probe, record_g7_evidence
+
+                url = args.url or load_voice_bot_config(paths).moshi_url
+                result = moshi_live_probe(url, timeout=args.timeout, model_repo=args.model_repo)
+                if args.record and result["g7"] in ("pass", "fail"):
+                    note = (
+                        f"url {url}; model {args.model_repo or 'unspecified'}; "
+                        f"handshake {result['handshake_ms']} ms; audio {result['audio_frames']}, "
+                        f"text {result['text_frames']}; {result['reason']}"
+                    )
+                    record_g7_evidence(paths, result["g7"], note)
+                    result["recorded"] = True
+                print(f"Root: {root}")
+                print(json.dumps(result, indent=2))
+                return 0 if result.get("g7") in ("pass", "blocked") else 1
             if cmd == "bridge":
                 from hive_planner.voice_bot import resolve_cursor_agent_cli
                 from hive_planner.voice_bot import VOICE_BOT_DIR

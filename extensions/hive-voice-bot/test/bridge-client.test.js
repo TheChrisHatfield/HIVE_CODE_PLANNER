@@ -125,6 +125,33 @@ test("submit posts the T007 editor snapshot when the host captured one", async (
   assert.equal(posted.file_path, "src/app.py");
 });
 
+test("submitSpoken posts the WAV path, client request id, and workspace to /v1/submit/spoken (C3)", async () => {
+  const { calls, fetchImpl } = recordingFetch({ status: 200, body: { task_id: "task_3" } });
+  const client = createBridgeClient({
+    host: "127.0.0.1", port: 9000, token: "tok-1", workspace: ROOT, fetchImpl,
+  });
+  const editorSnapshot = { file: "src/app.py", document_version: 2, dirty: false };
+  const res = await client.submitSpoken({
+    wavPath: "audio/clip.wav",
+    clientRequestId: "cr-spoken-1",
+    filePath: "src/app.py",
+    editorSnapshot,
+  });
+  assert.equal(res.status, 200);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].init.method, "POST");
+  assert.equal(calls[0].init.headers.Authorization, "Bearer tok-1");
+  assert.equal(new URL(calls[0].url).pathname, "/v1/submit/spoken");
+  assert.deepEqual(JSON.parse(calls[0].init.body), {
+    workspace: ROOT,
+    wav_path: "audio/clip.wav",
+    client_request_id: "cr-spoken-1",
+    mode: "ask",
+    file_path: "src/app.py",
+    editor_snapshot: editorSnapshot,
+  });
+});
+
 test("task and submission lookups bind the task, the snapshot, and the workspace", async () => {
   const { calls, fetchImpl } = recordingFetch({ status: 200, body: {} });
   const client = createBridgeClient({
@@ -142,6 +169,20 @@ test("task and submission lookups bind the task, the snapshot, and the workspace
   assert.equal(sub.searchParams.get("client_request_id"), "cr-2");
 });
 
+test("a missing query value is omitted, never sent as the string 'undefined'", async () => {
+  const { calls, fetchImpl } = recordingFetch({ status: 200, body: {} });
+  const client = createBridgeClient({
+    host: "127.0.0.1", port: 9000, token: "tok-1", workspace: ROOT, fetchImpl,
+  });
+  // A submit reply without context_snapshot_id hands the poll an undefined id.
+  await client.task("task_1", undefined);
+  const url = new URL(calls[0].url);
+  assert.equal(url.searchParams.get("task_id"), "task_1");
+  assert.equal(url.searchParams.has("context_snapshot_id"), false);
+  assert.equal(url.searchParams.get("workspace"), ROOT);
+  assert.ok(!calls[0].url.includes("undefined"));
+});
+
 test("editor poll and ack bind workspace and action id", async () => {
   const { calls, fetchImpl } = recordingFetch({ status: 200, body: { pending: true, action_id: "ed_1" } });
   const client = createBridgeClient({
@@ -156,6 +197,39 @@ test("editor poll and ack bind workspace and action id", async () => {
   assert.deepEqual(JSON.parse(calls[1].init.body), { workspace: ROOT, action_id: "ed_1" });
 });
 
+test("live buffer feed posts the file, document version, and dirty flag (T029)", async () => {
+  const { calls, fetchImpl } = recordingFetch({ status: 200, body: { status: "recorded" } });
+  const client = createBridgeClient({
+    host: "127.0.0.1", port: 9000, token: "tok-1", workspace: ROOT, fetchImpl,
+  });
+  const res = await client.liveBuffer({ filePath: "src/app.py", documentVersion: 8, dirty: true });
+  assert.equal(res.status, 200);
+  assert.equal(calls[0].init.method, "POST");
+  assert.equal(new URL(calls[0].url).pathname, "/v1/live");
+  assert.deepEqual(JSON.parse(calls[0].init.body), {
+    workspace: ROOT, file_path: "src/app.py", document_version: 8, dirty: true,
+  });
+});
+
+test("interrupt and end-call post to their bridge routes with the bound workspace (T031)", async () => {
+  const { calls, fetchImpl } = recordingFetch({ status: 200, body: { session_state: "interrupted" } });
+  const client = createBridgeClient({
+    host: "127.0.0.1", port: 9000, token: "tok-1", workspace: ROOT, fetchImpl,
+  });
+  const interrupted = await client.interruptPlayback();
+  const ended = await client.endCall();
+  assert.equal(interrupted.body.session_state, "interrupted");
+  assert.equal(ended.status, 200);
+  assert.equal(calls[0].init.method, "POST");
+  assert.equal(new URL(calls[0].url).pathname, "/v1/playback/interrupt");
+  assert.equal(calls[0].init.headers.Authorization, "Bearer tok-1");
+  assert.deepEqual(JSON.parse(calls[0].init.body), { workspace: ROOT });
+  assert.equal(calls[1].init.method, "POST");
+  assert.equal(new URL(calls[1].url).pathname, "/v1/call/end");
+  assert.equal(calls[1].init.headers.Authorization, "Bearer tok-1");
+  assert.deepEqual(JSON.parse(calls[1].init.body), { workspace: ROOT });
+});
+
 test("reply sends the request id, the task id, and the exact approval text", async () => {
   const { calls, fetchImpl } = recordingFetch({ status: 200, body: { status: "approved" } });
   const client = createBridgeClient({
@@ -168,6 +242,18 @@ test("reply sends the request id, the task id, and the exact approval text", asy
   assert.deepEqual(JSON.parse(calls[0].init.body), {
     workspace: ROOT, request_id: "apr_1", task_id: "task_1", text: "approve edit src/app.py",
   });
+});
+
+test("reply posts the live editor snapshot captured at approval time (R22)", async () => {
+  const { calls, fetchImpl } = recordingFetch({ status: 200, body: { status: "approved" } });
+  const client = createBridgeClient({
+    host: "127.0.0.1", port: 9000, token: "tok-1", workspace: ROOT, fetchImpl,
+  });
+  const editorSnapshot = { file: "src/app.py", document_version: 9, dirty: true };
+  await client.reply({
+    requestId: "apr_2", taskId: "task_2", text: "approve edit src/app.py", editorSnapshot,
+  });
+  assert.deepEqual(JSON.parse(calls[0].init.body).editor_snapshot, editorSnapshot);
 });
 
 test("a non-JSON reply body becomes an empty object rather than a thrown error", async () => {

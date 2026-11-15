@@ -67,15 +67,16 @@ def test_cli_turn_exit_code_reflects_a_failed_task(repo, monkeypatch, capsys):
 
 def test_cli_turn_refuses_agent_mode_with_exit_1(repo, monkeypatch, capsys):
     _swap_agent_to_turn_server(monkeypatch)
-    # argparse rejects `agent` (choices ask/plan) before any runner exists: no task can be created.
-    with pytest.raises(SystemExit) as exc:
-        main([
-            "--root", str(repo.root), "voice-bot", "turn", "edit it",
-            "--feature", "Voice_Bot", "--mode", "agent", "--client-request-id", "cli-3",
-            "--agent-path", "agent",
-        ])
-    assert exc.value.code == 2
-    assert not (repo.root / ".hive" / "voice-bot" / "state.json").exists()
+    code = main([
+        "--root", str(repo.root), "voice-bot", "turn", "edit it",
+        "--feature", "Voice_Bot", "--mode", "agent", "--client-request-id", "cli-3",
+        "--agent-path", "agent",
+    ])
+    assert code == 1
+    assert "agent_mode_disabled" in capsys.readouterr().err
+    from hive_planner.voice_bot import load_state
+
+    assert load_state(repo).coding_tasks == {}
 
 
 def test_cli_turn_without_client_request_id_creates_no_task(repo, monkeypatch, capsys):

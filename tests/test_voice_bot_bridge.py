@@ -22,7 +22,9 @@ from hive_planner.voice_bridge import (
     VoiceBridge,
     bridge_endpoint_path,
     bridge_token_path,
+    max_submit_body_bytes,
     run_turn_via_bridge,
+    token_matches,
 )
 from hive_planner.voice_task import VoiceTaskRunner
 from voice_turn_support import make_repo, make_runner, wait_for, wait_task_state, wait_task_terminal
@@ -84,6 +86,14 @@ def test_start_writes_token_and_endpoint_under_voice_bot_dir(repo, bridge):
     assert endpoint["host"] == "127.0.0.1" and endpoint["port"] == bridge.port
 
 
+def test_token_matches_rejects_wrong_length_without_raising():
+    expected = "a" * 40
+    assert token_matches(expected, expected) is True
+    assert token_matches("short", expected) is False
+    assert token_matches(None, expected) is False
+    assert token_matches("", expected) is False
+
+
 def test_requests_without_or_with_wrong_token_are_refused_and_change_nothing(repo, runner, bridge):
     out = runner.submit("NEEDS_APPROVAL:edit src/app.py", client_request_id="tk-1")
     pending = _await_approval(runner, out["task_id"])
@@ -115,6 +125,7 @@ def test_authorized_get_exposes_pending_approval(repo, runner, bridge):
         "task_id": out["task_id"],
         "kind": "write_or_command",
         "action": "edit src/app.py",
+        "file_path": "",
     }
     runner.reply_approval("deny edit src/app.py", request_id=pending["request_id"])
     wait_task_terminal(runner, out["task_id"])
@@ -131,6 +142,61 @@ def test_authorized_approve_reply_reaches_the_provider_as_selected(repo, runner,
     assert wait_task_terminal(runner, out["task_id"]) == "completed"
     written = runner.state.coding_tasks[out["task_id"]].evidence.written_result
     assert '"outcome": "selected"' in written and '"optionId": "allow"' in written
+
+
+def test_submit_after_close_over_http_includes_spoken_notice(repo, runner, bridge):
+    runner.close()
+    status, body = _call(
+        bridge,
+        "POST",
+        "/v1/submit",
+        token=bridge.token,
+        body={
+            "workspace": str(repo.root),
+            "instruction": "explain add",
+            "client_request_id": "bridge-session-ended-1",
+            "mode": "ask",
+        },
+    )
+    assert status == 400 and body.get("error") == "session_not_active"
+    assert body.get("spoken") == "The voice session has ended. Nothing was submitted."
+
+
+def test_stale_submit_over_http_includes_spoken_notice(repo, runner, bridge):
+    runner.set_live_buffer(lambda _path: (42, True))
+    status, body = _call(
+        bridge,
+        "POST",
+        "/v1/submit",
+        token=bridge.token,
+        body={
+            "workspace": str(repo.root),
+            "instruction": "explain add",
+            "client_request_id": "bridge-stale-1",
+            "mode": "ask",
+            "file_path": "src/app.py",
+            "editor_snapshot": {"file": "src/app.py", "document_version": 1, "dirty": False},
+        },
+    )
+    assert status == 400 and body.get("error") == "stale"
+    assert body.get("spoken")
+    assert runner.state.coding_tasks == {}
+
+
+def test_reply_editor_snapshot_blocks_stale_write(repo, runner, bridge):
+    out = runner.submit(
+        "NEEDS_APPROVAL:edit src/app.py",
+        client_request_id="ok-stale-live",
+        file_path="src/app.py",
+        document_version=1,
+        dirty=False,
+    )
+    pending = _await_approval(runner, out["task_id"])
+    body = _reply_body(repo, out["task_id"], pending, "approve edit src/app.py")
+    body["editor_snapshot"] = {"file": "src/app.py", "document_version": 8, "dirty": True}
+    status, reply = _call(bridge, "POST", "/v1/reply", token=bridge.token, body=body)
+    assert status == 200 and reply["status"] == "stale"
+    wait_task_terminal(runner, out["task_id"])
 
 
 def test_deny_reply_reaches_the_provider_as_cancelled(repo, runner, bridge):
@@ -201,6 +267,16 @@ def test_malformed_bodies_are_rejected_before_the_runner(repo, runner, bridge):
     assert runner.state.coding_tasks[out["task_id"]].state == "awaiting_approval"
     runner.reply_approval("deny edit src/app.py", request_id=pending["request_id"])
     wait_task_terminal(runner, out["task_id"])
+
+
+def test_post_submit_with_query_string_still_routes(repo, runner, bridge):
+    status, sub = _call(
+        bridge, "POST", "/v1/submit?trace=1", token=bridge.token,
+        body={"workspace": str(repo.root), "instruction": "hello",
+              "client_request_id": "bs-query"},
+    )
+    assert status == 200 and sub["task_id"]
+    assert wait_task_terminal(runner, sub["task_id"]) == "completed"
 
 
 def test_post_submit_runs_the_task_and_get_task_reports_the_result(repo, runner, bridge):
@@ -360,6 +436,75 @@ def test_get_task_unknown_id_is_404_and_missing_id_is_400(repo, runner, bridge):
                  token=bridge.token)[0] == 400
 
 
+class _FakeWhisper:
+    """Stands in for the pinned faster-whisper adapter; no model is loaded."""
+
+    def __init__(self, model_dir: Any) -> None:
+        self.model_dir = model_dir
+
+    def transcribe(self, audio: bytes) -> str:
+        return "RUN_TESTS_PASS explain add"
+
+    def transcribe_file(self, wav_path: Path) -> str:
+        assert wav_path.is_file()
+        return "RUN_TESTS_PASS explain add"
+
+
+def test_spoken_route_transcribes_workspace_wav_and_submits_the_transcript(repo, runner, bridge, monkeypatch):
+    import hive_planner.voice_task as voice_task
+
+    monkeypatch.setattr(voice_task, "resolve_pinned_model_dir", lambda: repo.root)
+    monkeypatch.setattr(voice_task, "FasterWhisperAdapter", _FakeWhisper)
+    # voice_layer typed: this test covers the STT route, not the Moshi listen gate (T053).
+    runner.config = dataclasses.replace(runner.config, stt_provider="faster-whisper", voice_layer="typed")
+    (repo.root / "utt.wav").write_bytes(b"RIFF-fake")
+
+    status, body = _call(bridge, "POST", "/v1/submit/spoken", token=bridge.token,
+                         body={"workspace": str(repo.root), "wav_path": "utt.wav",
+                               "client_request_id": "spk-1"})
+    assert status == 200, body
+    assert body["transcript"] == "RUN_TESTS_PASS explain add"
+    task = runner.state.coding_tasks[body["task_id"]]
+    assert task.instruction == "RUN_TESTS_PASS explain add"
+    assert wait_task_terminal(runner, body["task_id"]) == "completed"
+
+
+def test_spoken_route_keeps_editor_snapshot(repo, runner, bridge, monkeypatch):
+    import hive_planner.voice_task as voice_task
+
+    monkeypatch.setattr(voice_task, "resolve_pinned_model_dir", lambda: repo.root)
+    monkeypatch.setattr(voice_task, "FasterWhisperAdapter", _FakeWhisper)
+    runner.config = dataclasses.replace(runner.config, stt_provider="faster-whisper", voice_layer="typed")
+    (repo.root / "utt.wav").write_bytes(b"RIFF-fake")
+
+    status, body = _call(
+        bridge, "POST", "/v1/submit/spoken", token=bridge.token,
+        body={
+            "workspace": str(repo.root),
+            "wav_path": "utt.wav",
+            "client_request_id": "spk-snap-1",
+            "editor_snapshot": {
+                "file": "src/app.py",
+                "document_version": 4,
+                "dirty": False,
+                "selection": {"text": "add"},
+            },
+        },
+    )
+    assert status == 200, body
+    task = runner.state.coding_tasks[body["task_id"]]
+    snap = runner.state.context_snapshots[task.context_snapshot_id]
+    assert task.file_path == "src/app.py"
+    assert snap.document_version == 4
+    assert snap.selection_text == "add"
+
+    # Same gate as /v1/submit: no token means no transcription and no task.
+    status, _ = _call(bridge, "POST", "/v1/submit/spoken", token=None,
+                      body={"workspace": str(repo.root), "wav_path": "utt.wav", "client_request_id": "spk-2"})
+    assert status == 401
+    assert len(runner.state.coding_tasks) == 1
+
+
 def test_submission_view_reports_unknown_submissions_as_404(repo, runner, bridge):
     assert _call(bridge, "GET", "/v1/submission" + _q(repo, client_request_id="never-sent"),
                  token=bridge.token) == (404, {"error": "unknown_submission"})
@@ -447,3 +592,387 @@ def test_close_removes_token_and_endpoint_and_stops_listening(repo, runner):
         assert _call(second, "GET", "/v1/approval" + _q(repo), token=old_token)[0] == 401
     finally:
         second.close()
+
+
+# --- T029: R22 live buffer installed at bridge startup -----------------------------
+
+
+def test_bridge_start_installs_live_lookup_and_close_removes_it(repo, runner):
+    b = VoiceBridge(runner)
+    b.start()
+    try:
+        assert runner.live_buffer_lookup() == b.live_buffer_for
+    finally:
+        b.close()
+    assert runner.live_buffer_lookup() is None
+
+
+def test_reply_without_snapshot_is_blocked_by_a_stale_live_buffer(repo, runner, bridge):
+    out = runner.submit(
+        "NEEDS_APPROVAL:edit src/app.py", client_request_id="lb-1",
+        file_path="src/app.py", document_version=1, dirty=False,
+    )
+    pending = _await_approval(runner, out["task_id"])
+    bridge.record_live_buffer("src/app.py", 8, True)  # the editor moved on since the snapshot
+    status, reply = _call(bridge, "POST", "/v1/reply", token=bridge.token,
+                          body=_reply_body(repo, out["task_id"], pending, "approve edit src/app.py"))
+    assert status == 200 and reply["status"] == "stale"
+    wait_task_terminal(runner, out["task_id"])
+    assert '"outcome": "selected"' not in runner.state.coding_tasks[out["task_id"]].evidence.written_result
+
+
+def test_reply_stale_check_matches_a_backslash_bound_path_to_the_live_buffer(repo, runner, bridge):
+    # The live feed keys buffers by forward-slash path. A task bound with a backslash path must
+    # still find its buffer, or the R22 stale check is silently skipped.
+    out = runner.submit(
+        "NEEDS_APPROVAL:edit src/app.py", client_request_id="lb-bs-1",
+        file_path="src\\app.py", document_version=1, dirty=False,
+    )
+    pending = _await_approval(runner, out["task_id"])
+    bridge.record_live_buffer("src/app.py", 8, True)  # the editor moved on since the snapshot
+    status, reply = _call(bridge, "POST", "/v1/reply", token=bridge.token,
+                          body=_reply_body(repo, out["task_id"], pending, "approve edit src/app.py"))
+    assert status == 200 and reply["status"] == "stale"
+    wait_task_terminal(runner, out["task_id"])
+    assert '"outcome": "selected"' not in runner.state.coding_tasks[out["task_id"]].evidence.written_result
+
+
+def test_reply_without_snapshot_passes_when_the_live_buffer_matches(repo, runner, bridge):
+    out = runner.submit(
+        "NEEDS_APPROVAL:edit src/app.py", client_request_id="lb-2",
+        file_path="src/app.py", document_version=1, dirty=False,
+    )
+    pending = _await_approval(runner, out["task_id"])
+    bridge.record_live_buffer("src/app.py", 1, False)  # control: same version, clean
+    status, reply = _call(bridge, "POST", "/v1/reply", token=bridge.token,
+                          body=_reply_body(repo, out["task_id"], pending, "approve edit src/app.py"))
+    assert status == 200 and reply["status"] == "approved"
+    assert wait_task_terminal(runner, out["task_id"]) == "completed"
+
+
+def test_submit_with_stale_version_is_blocked_by_the_live_buffer(repo, runner, bridge):
+    bridge.record_live_buffer("src/app.py", 42, True)
+    status, body = _call(bridge, "POST", "/v1/submit", token=bridge.token,
+                         body={"workspace": str(repo.root), "instruction": "explain add",
+                               "client_request_id": "lb-3", "file_path": "src/app.py",
+                               "editor_snapshot": {"file": "src/app.py", "document_version": 1, "dirty": False}})
+    assert status == 400 and body["error"] == "stale"
+    assert runner.state.coding_tasks == {}
+
+
+def test_submit_without_a_version_is_not_compared_to_the_live_buffer(repo, runner, bridge):
+    # Over HTTP a submit carries no version unless the body has an editor_snapshot. With nothing to
+    # compare, the live buffer is not consulted; this is the documented limit until the R33 latch opens.
+    bridge.record_live_buffer("src/app.py", 42, True)
+    status, body = _call(bridge, "POST", "/v1/submit", token=bridge.token,
+                         body={"workspace": str(repo.root), "instruction": "explain add",
+                               "client_request_id": "lb-4", "file_path": "src/app.py"})
+    assert status == 200, body
+    wait_task_terminal(runner, body["task_id"])
+
+
+def test_http_live_feed_then_reply_without_snapshot_is_blocked_as_stale(repo, runner, bridge):
+    # T029 producer path: the extension posts the editor version over HTTP, then a reply with no
+    # editor_snapshot in the body is checked against that live reading (R22).
+    out = runner.submit(
+        "NEEDS_APPROVAL:edit src/app.py", client_request_id="lf-1",
+        file_path="src/app.py", document_version=1, dirty=False,
+    )
+    pending = _await_approval(runner, out["task_id"])
+    status, fed = _call(bridge, "POST", "/v1/live", token=bridge.token,
+                        body={"workspace": str(repo.root), "file_path": "src/app.py",
+                              "document_version": 8, "dirty": True})
+    assert status == 200 and fed == {"status": "recorded"}
+    assert bridge.live_buffer_for("src/app.py") == (8, True)
+    status, reply = _call(bridge, "POST", "/v1/reply", token=bridge.token,
+                          body=_reply_body(repo, out["task_id"], pending, "approve edit src/app.py"))
+    assert status == 200 and reply["status"] == "stale"
+    wait_task_terminal(runner, out["task_id"])
+    assert '"outcome": "selected"' not in runner.state.coding_tasks[out["task_id"]].evidence.written_result
+
+
+def test_oversize_post_body_is_refused_without_resetting_the_socket(repo, runner, bridge):
+    """Reject a too-large Content-Length after draining it, so the next request still works."""
+    limit = max_submit_body_bytes(runner.config.instruction_max_chars, runner.config.snapshot_max_bytes)
+    status, body = _call(
+        bridge, "POST", "/v1/submit", token=bridge.token, raw=b"x" * (limit + 1),
+    )
+    assert status == 400 and body == {"error": "bad_length"}
+    assert runner.state.coding_tasks == {}
+    status, approval = _call(bridge, "GET", "/v1/approval" + _q(repo), token=bridge.token)
+    assert status == 200 and approval["pending"] is False
+
+
+def test_live_feed_without_token_records_nothing(repo, runner, bridge):
+    status, _ = _call(bridge, "POST", "/v1/live", token=None,
+                      body={"workspace": str(repo.root), "file_path": "src/app.py",
+                            "document_version": 8, "dirty": True})
+    assert status == 401
+    assert bridge.live_buffer_for("src/app.py") is None
+
+
+@pytest.mark.parametrize("bad", [
+    {"file_path": "/etc/passwd"},
+    {"file_path": "..\\outside.py"},
+    {"file_path": "C:/secret.py"},
+    {"document_version": True},
+    {"document_version": -1},
+    {"document_version": "8"},
+    {"dirty": "yes"},
+])
+def test_live_feed_refuses_bad_fields_before_recording(repo, runner, bridge, bad):
+    body = {"workspace": str(repo.root), "file_path": "src/app.py", "document_version": 8, "dirty": True}
+    body.update(bad)
+    status, out = _call(bridge, "POST", "/v1/live", token=bridge.token, body=body)
+    assert status == 400 and out["error"].startswith("bad_")
+    assert bridge.live_buffer_for("src/app.py") is None
+    assert bridge.live_buffer_for(body["file_path"]) is None
+
+
+# --- T031: playback interrupt and call end over HTTP (R1, R5, R7, R25) -------------------
+
+
+def test_playback_interrupt_and_call_end_require_the_token_and_change_nothing(repo, runner, bridge):
+    blocker = runner.submit("CANCEL_ME hold", client_request_id="t31-tk")
+    wait_task_state(runner, blocker["task_id"], "running")
+    ws = str(repo.root)
+    assert _call(bridge, "POST", "/v1/playback/interrupt", token=None, body={"workspace": ws}) == (
+        401, {"error": "unauthorized"})
+    assert _call(bridge, "POST", "/v1/call/end", token="wrong", body={"workspace": ws}) == (
+        401, {"error": "unauthorized"})
+    assert runner.session.state == "active"
+    assert runner.state.coding_tasks[blocker["task_id"]].state == "running"
+    runner.cancel(blocker["task_id"])
+    wait_task_terminal(runner, blocker["task_id"])
+
+
+def test_playback_interrupt_over_http_keeps_task_state_and_sets_session_interrupted(repo, runner, bridge):
+    blocker = runner.submit("CANCEL_ME hold", client_request_id="t31-int")
+    wait_task_state(runner, blocker["task_id"], "running")
+    status, body = _call(bridge, "POST", "/v1/playback/interrupt", token=bridge.token,
+                         body={"workspace": str(repo.root)})
+    assert status == 200
+    assert body["event"] == "speech.interrupted"
+    assert body["state_changed"] is False
+    assert body["session_state"] == "interrupted"
+    assert runner.session.state == "interrupted"
+    assert runner.state.coding_tasks[blocker["task_id"]].state == "running"
+    runner.cancel(blocker["task_id"])
+    wait_task_terminal(runner, blocker["task_id"])
+
+
+def test_call_end_over_http_keeps_active_task_running_and_discards_queued(repo, runner, bridge):
+    blocker = runner.submit("CANCEL_ME hold", client_request_id="t31-end")
+    wait_task_state(runner, blocker["task_id"], "running")
+    runner.queue_follow_up("never runs", task_id=blocker["task_id"])
+    status, body = _call(bridge, "POST", "/v1/call/end", token=bridge.token,
+                         body={"workspace": str(repo.root)})
+    assert status == 200
+    assert body["session_ended"] is True
+    assert body["discarded"] == 1
+    assert body["active_task_state"] == "running"
+    assert body["rollback"] == "not_performed"
+    assert runner.session.state == "ended"
+    assert runner.state.queue[0]["state"] == "discarded"
+    assert runner.state.coding_tasks[blocker["task_id"]].state == "running"
+    runner.cancel(blocker["task_id"])
+    wait_task_terminal(runner, blocker["task_id"])
+
+
+@pytest.mark.parametrize("route", ["/v1/playback/interrupt", "/v1/call/end"])
+def test_new_control_routes_refuse_unknown_keys_and_missing_workspace(repo, runner, bridge, route):
+    status, body = _call(bridge, "POST", route, token=bridge.token,
+                         body={"workspace": str(repo.root), "shell": "rm -rf"})
+    assert status == 400 and body["error"] == "unknown_argument"
+    status, body = _call(bridge, "POST", route, token=bridge.token, body={})
+    assert status == 400 and body["error"] == "missing_workspace"
+    assert runner.session.state == "active"
+
+
+# --- T036: Patch B routes (cancel, queue, diff, reconnect) over HTTP -----------------------
+
+
+@pytest.mark.parametrize("method,route", [
+    ("POST", "/v1/cancel"), ("POST", "/v1/queue"), ("POST", "/v1/reconnect"), ("GET", "/v1/diff"),
+])
+def test_patch_b_routes_require_the_token(repo, runner, bridge, method, route):
+    ws = str(repo.root)
+    if method == "GET":
+        status, body = _call(bridge, "GET", route + _q(repo, task_id="t36-none"), token=None)
+    else:
+        status, body = _call(bridge, method, route, token=None,
+                             body={"workspace": ws, "task_id": "t36-none", "text": "x"})
+    assert (status, body) == (401, {"error": "unauthorized"})
+    assert runner.state.coding_tasks == {}
+
+
+@pytest.mark.parametrize("route,fields", [
+    ("/v1/cancel", {"task_id": "t36-x"}),
+    ("/v1/queue", {"task_id": "t36-x", "text": "x"}),
+    ("/v1/reconnect", {"task_id": "t36-x"}),
+])
+def test_patch_b_post_routes_refuse_unknown_keys_and_missing_workspace(repo, runner, bridge, route, fields):
+    status, body = _call(bridge, "POST", route, token=bridge.token,
+                         body={"workspace": str(repo.root), **fields, "shell": "rm"})
+    assert status == 400 and body["error"] == "unknown_argument"
+    status, body = _call(bridge, "POST", route, token=bridge.token, body=dict(fields))
+    assert status == 400 and body["error"] == "missing_workspace"
+    assert runner.state.coding_tasks == {}
+
+
+def test_diff_route_refuses_missing_task_id_and_reports_unknown_task_404(repo, runner, bridge):
+    status, body = _call(bridge, "GET", "/v1/diff" + _q(repo), token=bridge.token)
+    assert status == 400 and body["error"] == "missing_task_id"
+    status, body = _call(bridge, "GET", "/v1/diff" + _q(repo, task_id="t36-none"), token=bridge.token)
+    assert status == 404 and body["error"] == "unknown_task"
+
+
+def test_cancel_over_http_records_the_request_and_unknown_task_is_404(repo, runner, bridge):
+    blocker = runner.submit("CANCEL_ME hold", client_request_id="t36-cancel")
+    wait_task_state(runner, blocker["task_id"], "running")
+    status, body = _call(bridge, "POST", "/v1/cancel", token=bridge.token,
+                         body={"workspace": str(repo.root), "task_id": blocker["task_id"]})
+    assert status == 200
+    assert body["task_id"] == blocker["task_id"]
+    assert body["state"] in ("cancel_requested", "cancelled", "failed")
+    wait_task_terminal(runner, blocker["task_id"])
+    status, body = _call(bridge, "POST", "/v1/cancel", token=bridge.token,
+                         body={"workspace": str(repo.root), "task_id": blocker["task_id"]})
+    assert status == 409 and body["error"] == "task_already_terminal"
+    status, body = _call(bridge, "POST", "/v1/cancel", token=bridge.token,
+                         body={"workspace": str(repo.root), "task_id": "t36-none"})
+    assert status == 404 and body["error"] == "unknown_task"
+
+
+def test_queue_over_http_queues_behind_the_active_task_and_wrong_task_is_409(repo, runner, bridge):
+    blocker = runner.submit("CANCEL_ME hold", client_request_id="t36-queue")
+    wait_task_state(runner, blocker["task_id"], "running")
+    status, body = _call(bridge, "POST", "/v1/queue", token=bridge.token,
+                         body={"workspace": str(repo.root), "task_id": blocker["task_id"], "text": "later"})
+    assert status == 200
+    assert body["status"] == "queued" and body["task_id"] is None
+    assert runner.state.queue[-1]["state"] != "discarded"
+    status, body = _call(bridge, "POST", "/v1/queue", token=bridge.token,
+                         body={"workspace": str(repo.root), "task_id": "t36-other", "text": "nope"})
+    assert status == 409 and body["error"] == "task_mismatch"
+    # Clean up: call end discards the queued follow-up (R25), then the blocker is cancelled.
+    _call(bridge, "POST", "/v1/call/end", token=bridge.token, body={"workspace": str(repo.root)})
+    runner.cancel(blocker["task_id"])
+    wait_task_terminal(runner, blocker["task_id"])
+
+
+def test_diff_over_http_reports_no_evidence_for_a_task_without_writes(repo, runner, bridge):
+    done = runner.submit("say hello", client_request_id="t36-diff")
+    wait_task_terminal(runner, done["task_id"])
+    status, body = _call(bridge, "GET", "/v1/diff" + _q(repo, task_id=done["task_id"]), token=bridge.token)
+    assert status == 200
+    assert body["task_id"] == done["task_id"]
+    assert body["source"] == "no_diff_evidence"
+    assert body["diff"] == ""
+
+
+def test_show_diff_over_http_queues_the_editor_action_for_a_completed_task(repo, runner, bridge):
+    # T043: the EDH host reaches show_diff only through the bridge, so the route must queue it
+    # for GET /v1/editor and refuse unknown tasks and missing tokens without queuing anything.
+    done = runner.submit("say hello", client_request_id="t43-show-diff")
+    wait_task_terminal(runner, done["task_id"])
+    status, body = _call(bridge, "POST", "/v1/editor/show_diff", token=None,
+                         body={"workspace": str(repo.root), "task_id": done["task_id"]})
+    assert status == 401 and body["error"] == "unauthorized"
+    assert not any(row.get("kind") == "show_diff" for row in runner.state.editor_actions)
+    status, body = _call(bridge, "POST", "/v1/editor/show_diff", token=bridge.token,
+                         body={"workspace": str(repo.root), "task_id": done["task_id"]})
+    assert status == 200 and body["queued"] is True and body["task_id"] == done["task_id"]
+    status, pending = _call(bridge, "GET", "/v1/editor" + _q(repo), token=bridge.token)
+    assert status == 200 and pending["pending"] is True
+    assert pending["kind"] == "show_diff" and pending["action_id"] == body["action_id"]
+    assert pending["task_id"] == done["task_id"]
+    status, body = _call(bridge, "POST", "/v1/editor/show_diff", token=bridge.token,
+                         body={"workspace": str(repo.root), "task_id": "t43-none"})
+    assert status == 404 and body["error"] == "unknown_task"
+    status, body = _call(bridge, "POST", "/v1/editor/show_diff", token=bridge.token,
+                         body={"task_id": done["task_id"]})
+    assert status == 400 and body["error"] == "missing_workspace"
+
+
+def test_navigate_over_http_queues_the_editor_action_and_refuses_bad_paths(repo, runner, bridge):
+    # Gap fix: navigate_to had no HTTP route, so the extension could never receive a navigate.
+    done = runner.submit("say hello", client_request_id="nav-http-1", file_path="src/app.py")
+    wait_task_terminal(runner, done["task_id"])
+    snap_id = runner.state.coding_tasks[done["task_id"]].context_snapshot_id
+    ws = str(repo.root)
+
+    assert _call(bridge, "POST", "/v1/editor/navigate", token=None,
+                 body={"workspace": ws, "file_path": "src/app.py", "context_snapshot_id": snap_id}) == (
+        401, {"error": "unauthorized"})
+    assert not any(row.get("kind") == "navigate" for row in runner.state.editor_actions)
+
+    status, body = _call(bridge, "POST", "/v1/editor/navigate", token=bridge.token,
+                         body={"workspace": ws, "file_path": "src/app.py", "context_snapshot_id": snap_id})
+    assert status == 200 and body["queued"] is True and body["file_path"] == "src/app.py"
+    status, pending = _call(bridge, "GET", "/v1/editor" + _q(repo), token=bridge.token)
+    assert pending["pending"] is True and pending["kind"] == "navigate"
+    assert pending["action_id"] == body["action_id"]
+
+    status, body = _call(bridge, "POST", "/v1/editor/navigate", token=bridge.token,
+                         body={"workspace": ws, "file_path": "../secret.txt", "context_snapshot_id": snap_id})
+    assert status == 400 and body["error"] == "path_outside_workspace"
+    status, body = _call(bridge, "POST", "/v1/editor/navigate", token=bridge.token,
+                         body={"workspace": ws, "file_path": "src/app.py"})
+    assert status == 400 and body["error"] == "missing_context_snapshot_id"
+    status, body = _call(bridge, "POST", "/v1/editor/navigate", token=bridge.token,
+                         body={"workspace": ws, "file_path": "src/app.py", "context_snapshot_id": snap_id,
+                               "shell": "rm"})
+    assert status == 400 and body["error"] == "unknown_argument"
+
+
+def test_diff_over_http_returns_write_evidence_when_latch_is_on(repo, runner, bridge):
+    from hive_planner.config import RepoPaths
+    from hive_planner.voice_bot import voice_bot_config_path
+
+    spec = repo.root / "docs" / "specs" / "Voice_Bot"
+    spec.mkdir(parents=True, exist_ok=True)
+    (spec / "evidence-register.md").write_text(
+        "| Claim ID | Component | Pinned | Test | Result | Date | Notes |\n"
+        "|---|---|---|---|---|---|---|\n"
+        "| G6 | permissions | x | t | **pass** | 2026-11-11 | fixture |\n",
+        encoding="utf-8",
+    )
+    cfg = voice_bot_config_path(RepoPaths(root=repo.root))
+    cfg.parent.mkdir(parents=True, exist_ok=True)
+    cfg.write_text(json.dumps({"edits_enabled": True}), encoding="utf-8")
+
+    out = runner.submit("CANCEL_ME hold", client_request_id="t36-wdiff")
+    wait_task_state(runner, out["task_id"], "running")
+    runner._on_update({
+        "sessionId": runner._acp_session_id,
+        "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call-http-w1",
+            "status": "completed",
+            "content": [{"type": "diff", "path": "src/app.py",
+                         "oldText": "x = 1\n", "newText": "x = 2\n"}],
+        },
+    })
+    try:
+        status, body = _call(bridge, "GET", "/v1/diff" + _q(repo, task_id=out["task_id"]), token=bridge.token)
+        assert status == 200
+        assert body["source"] == "write_evidence"
+        assert "-x = 1\n" in body["diff"] and "+x = 2\n" in body["diff"]
+    finally:
+        runner.cancel(out["task_id"])
+        wait_task_terminal(runner, out["task_id"])
+
+
+def test_reconnect_over_http_refuses_a_task_that_is_not_unknown(repo, runner, bridge):
+    blocker = runner.submit("CANCEL_ME hold", client_request_id="t36-rec")
+    wait_task_state(runner, blocker["task_id"], "running")
+    status, body = _call(bridge, "POST", "/v1/reconnect", token=bridge.token,
+                         body={"workspace": str(repo.root), "task_id": blocker["task_id"]})
+    assert status == 409 and body["error"] == "not_unknown"
+    assert runner.state.coding_tasks[blocker["task_id"]].state == "running"
+    status, body = _call(bridge, "POST", "/v1/reconnect", token=bridge.token,
+                         body={"workspace": str(repo.root), "task_id": "t36-none"})
+    assert status == 404 and body["error"] == "unknown_task"
+    runner.cancel(blocker["task_id"])
+    wait_task_terminal(runner, blocker["task_id"])

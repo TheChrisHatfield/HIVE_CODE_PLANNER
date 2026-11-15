@@ -17,7 +17,16 @@ Load [`docs/planning-rosetta-stone.md`](../../planning-rosetta-stone.md) (`plann
 
 ## Approach
 
-HIVE Code Planner is the system of record. The cartridge compiler and Rosetta mapping provide the feature's planning context; HIVE session/task contracts provide orchestration; provider adapters connect voice, editor, and coding systems. No provider becomes the core architecture.
+HIVE Code Planner is the system of record. The cartridge compiler and Rosetta mapping provide the feature's planning context; HIVE session/task contracts provide orchestration; provider adapters connect voice, editor, and coding systems. HIVE core owns the contracts. Moshi is the primary voice conversation adapter on every host where a Moshi server runs, Windows included (spec R36, R37). Typed input is the fallback. Coding and editor providers stay behind adapters.
+
+**Moshi refactor sequence (2026-11-14, pending decisions OD-1 and OD-2 in spec R37):**
+1. Record the G7 gate (done as `blocked`, evidence-register).
+2. Answer OD-1 (who starts the Moshi server) and OD-2 (how HIVE text reaches speech).
+3. Add `voice_layer` and `moshi_url` to `VoiceBotConfig`; read them where the speech adapter is chosen (`speech_adapter`).
+4. Add a Moshi websocket adapter (handshake, `0x01` audio out, `0x02` text in, duplex) tested against an in-process stub.
+5. Route `speak()` per OD-2; keep `hybrid_speech_path()` at `typed_instruction` until a WER row exists.
+6. Live G7 probe, then update the R36 gate rows.
+7. During a live Moshi call, route `0x02` text to a pending R6 approval (`POST /v1/reply`). Do not create a task and do not require Whisper.
 
 Build the smallest observable bridge first and keep provider-specific behavior behind adapters.
 
@@ -110,3 +119,7 @@ HIVE owns voice-session lifecycle, cartridge/context resolution, task identity, 
 ## Validation strategy
 
 Use integration tests or scripted capability checks for the ACP round trip, the R8 test-state mapping, speech cadence, the `unknown` disconnect path, approval-kind matching (write, plan, question), contextual follow-up, event routing, permission denial, cancellation, disconnect recovery, and evidence-backed spoken output. Keep native-chat and Moshi claims marked unresolved until reproduced on pinned versions. Restart, call-end, approval-concurrency, snapshot-scope, and dedupe-scope cases (R25–R29) run in `tests/test_voice_bot_edges.py` (T020).
+
+## Gap-fill prop (sequence 4, after T028)
+
+Confirmed wiring gaps (2026-11-11) are tracked in [gap-evaluation-plan.md](./gap-evaluation-plan.md). Execution order, spec patches, and tasks T029–T040 live in [gap-fill-proposal.md](./gap-fill-proposal.md). Haiku 100k § Prompt references that prop for one micro-task per turn.

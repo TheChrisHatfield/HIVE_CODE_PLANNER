@@ -78,13 +78,15 @@ class RepoPaths:
 
 SUPPORTED_EXTENSIONS = {".md", ".txt", ".pdf", ".docx", ".html", ".htm", ".csv", ".pptx"}
 
-FEATURE_ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+# Shared grammar for feature ids. The implementation loop imports this same
+# pattern so the launcher and the loop never disagree about a valid id.
+FEATURE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+@#() -]{0,127}$")
 
 
 def validate_feature_id(feature: str) -> str:
-    if not FEATURE_ID_RE.match(feature):
+    if not FEATURE_ID_RE.fullmatch(feature) or feature[-1].isspace():
         raise ValueError(
-            f"Invalid feature id '{feature}' — use lowercase letters, digits, and hyphens only"
+            f"Invalid feature id '{feature}' — use letters, digits, spaces, and safe punctuation only"
         )
     return feature
 

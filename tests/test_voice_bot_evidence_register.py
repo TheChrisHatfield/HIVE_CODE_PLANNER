@@ -8,7 +8,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 REGISTER = ROOT / "docs" / "specs" / "Voice_Bot" / "evidence-register.md"
 
-GATE_IDS = tuple(f"G{i}" for i in range(7))
+GATE_IDS = tuple(f"G{i}" for i in range(8))  # G0-G7; G7 is the Moshi live probe (T055)
 ALLOWED_RESULTS = {"pass", "partial", "blocked", "fail"}
 
 
@@ -17,7 +17,7 @@ def _table_rows(text: str) -> list[list[str]]:
     rows: list[list[str]] = []
     for ln in lines:
         cells = [c.strip() for c in ln.strip("|").split("|")]
-        if cells and cells[0].startswith("G") and len(cells) >= 7:
+        if cells and re.fullmatch(r"G\d+", cells[0]) and len(cells) >= 7:
             rows.append(cells)
     return rows
 

@@ -50,8 +50,14 @@ def test_defaults_match_r21_provisional_limits() -> None:
     assert cfg.edits_enabled is False
 
 
-def test_r24_targets_are_unclaimed_by_default() -> None:
+def test_r24_latency_targets_default_to_measured_ceiling() -> None:
     cfg = VoiceBotConfig()
+    assert cfg.latency_target_ms == 8_000
+    assert cfg.first_spoken_update_target_ms == 8_000
+
+
+def test_r24_targets_can_be_unset_explicitly() -> None:
+    cfg = VoiceBotConfig.from_dict({"latency_target_ms": None, "first_spoken_update_target_ms": None})
     assert cfg.latency_target_ms is None
     assert cfg.first_spoken_update_target_ms is None
 
@@ -101,6 +107,14 @@ def test_selection_limit_is_read_from_config_in_bytes() -> None:
     validate_context_snapshot(_snap(selection=selection), VoiceBotConfig(snapshot_max_bytes=20))
     with pytest.raises(VoiceBotError, match="selection_text exceeds"):
         validate_context_snapshot(_snap(selection=selection), VoiceBotConfig(snapshot_max_bytes=19))
+
+
+def test_file_content_limit_is_read_from_config_in_bytes() -> None:
+    snap = _snap()
+    snap.file_content = "é" * 10  # 20 bytes, 10 characters
+    validate_context_snapshot(snap, VoiceBotConfig(snapshot_max_bytes=20))
+    with pytest.raises(VoiceBotError, match="file_content exceeds"):
+        validate_context_snapshot(snap, VoiceBotConfig(snapshot_max_bytes=19))
 
 
 def test_default_snapshot_limit_is_64kb(repo: RepoPaths) -> None:

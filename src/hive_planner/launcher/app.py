@@ -92,6 +92,9 @@ from hive_planner.launcher.service import (
 from hive_planner.config import validate_feature_id
 from hive_planner.agent_handoff import validate_unified_handoff
 from hive_planner.launcher.popup_placement import install_popup_memory, remember_popup
+from hive_planner.launcher.voice_panel import PANEL_WIDTH, VoicePanel
+from hive_planner.launcher.voice_mic_recorder import WavMicRecorder
+from hive_planner.launcher.voice_panel_controller import VoicePanelController
 from hive_planner.launcher.theme import (
     COLORS,
     FONT,
@@ -412,11 +415,29 @@ class HivePlannerApp:
         self._home_canvas: tk.Canvas | None = None
 
         root.title(APP_DISPLAY_NAME)
-        root.geometry("920x680")
-        root.minsize(780, 580)
+        root.geometry(f"{920 + PANEL_WIDTH}x680")
+        root.minsize(780 + PANEL_WIDTH, 580)
         root.configure(bg=COLORS["bg"])
         apply_app_icon(root)
         apply_ttk_style(root)
+
+        # Right-hand HIVE Voice bot panel. Packed before the container so it keeps its width.
+        # T042 slice 5a: every control forwards to voice_panel_controller (no decorative no-ops).
+        # Real mic: WavMicRecorder reads the saved input_device at each start (sounddevice, voice extra).
+        self.voice_controller = VoicePanelController(
+            self._voice_project_root,
+            recorder=WavMicRecorder(lambda: self.voice_controller.status()["input_device"]),
+        )
+        self.voice_panel = VoicePanel(
+            root,
+            on_back=self._voice_on_back,
+            on_menu=self._voice_on_menu,
+            on_mic=self.voice_controller.on_mic,
+            on_end=self._voice_on_end,
+            on_side=self._voice_on_side,
+            task_text=self.voice_controller.task_text,
+        )
+        self.voice_panel.pack(side="right", fill="y")
 
         self.container = tk.Frame(root, bg=COLORS["bg"])
         self.container.pack(fill="both", expand=True)
@@ -432,6 +453,50 @@ class HivePlannerApp:
         from hive_planner.runtime_paths import is_portable_runtime
 
         return is_portable_runtime()
+
+    # --- HIVE Voice bot panel (T042 slice 5a) ----------------------------
+
+    def _voice_project_root(self) -> Path | None:
+        raw = getattr(getattr(self, "config", None), "active_project", None)
+        return Path(raw) if raw else None
+
+    def _voice_on_back(self) -> None:
+        """Header back arrow: move keyboard focus to the main shell. The panel stays."""
+        self.container.focus_set()
+
+    def _voice_on_menu(self) -> None:
+        """Menu (slice 5c): status, then one yes/no to start (or stop) the bridge the launcher owns."""
+        ctrl = self.voice_controller
+        running = ctrl.bridge_running()
+        question = "Stop the bridge now?" if running else "Start the bridge now?"
+        if not messagebox.askyesno(
+            "HIVE Voice bot", f"{ctrl.menu_text()}\n\n{question}", parent=self.root
+        ):
+            return
+        result = ctrl.stop_bridge() if running else ctrl.start_bridge()
+        messagebox.showinfo("HIVE Voice bot", result.message, parent=self.root)
+
+    def _voice_on_end(self) -> None:
+        result = self.voice_controller.on_end()
+        if not result.ok:
+            messagebox.showinfo("HIVE Voice bot", result.message, parent=self.root)
+
+    def _voice_on_side(self) -> None:
+        """Side button (T042 slice 5b): typed instruction -> controller.submit_typed -> bridge /v1/submit."""
+        ctrl = self.voice_controller
+        text = simpledialog.askstring(
+            "HIVE Voice bot",
+            "Type an instruction for the active project.",
+            initialvalue=ctrl.last_instruction or "",
+            parent=self.root,
+        )
+        if text is None:  # cancelled: nothing sent
+            return
+        result = ctrl.submit_typed(text)
+        if result.ok:
+            self.voice_panel.show_message(result.message)
+        else:
+            messagebox.showinfo("HIVE Voice bot", result.message, parent=self.root)
 
     def _dialog(self) -> tk.Toplevel:
         dialog = tk.Toplevel(self.root)
@@ -742,9 +807,13 @@ class HivePlannerApp:
         if notebook is None:
             return
         try:
-            self._dashboard_tab = int(notebook.index(notebook.select()))
+            selected = notebook.select()
+            self._dashboard_tab = int(notebook.index(selected))
         except (tk.TclError, ValueError, TypeError):
-            pass
+            return
+        settings_frame = getattr(self, "_settings_tab_frame", None)
+        if settings_frame is not None and str(selected) == str(settings_frame):
+            self._sync_voice_bot_card_for_active()
 
     def _dashboard_alive(self) -> bool:
         notebook = getattr(self, "notebook", None)
@@ -850,6 +919,7 @@ class HivePlannerApp:
         self._update_status_cards()
         self._sync_controls_for_active()
         self._sync_mcp_status_for_active()
+        self._sync_voice_bot_card_for_active()
         self._sync_rosetta_eject_for_active()
         if hasattr(self, "recent_list"):
             try:
@@ -874,7 +944,11 @@ class HivePlannerApp:
         saved_tab = self._dashboard_tab
         saved_scroll = self._home_scroll_y
         self._clear_container()
-        self.config = load_config()
+        # A soft-refresh caller sets _keep_config_on_show so unsaved Settings edits survive.
+        keep_config = bool(getattr(self, "_keep_config_on_show", False))
+        self._keep_config_on_show = False
+        if not keep_config:
+            self.config = load_config()
         self.setup = get_setup_status(self.config)
         self._sync_home_log_for_active()
         self._sync_pending_memory_for_active()
@@ -904,6 +978,7 @@ class HivePlannerApp:
         controls = tk.Frame(notebook, bg=COLORS["bg"])
         projects = tk.Frame(notebook, bg=COLORS["bg"])
         settings = tk.Frame(notebook, bg=COLORS["bg"])
+        self._settings_tab_frame = settings
         notebook.add(home, text="Home")
         notebook.add(controls, text="Controls")
         notebook.add(projects, text="Projects")
@@ -1177,6 +1252,7 @@ class HivePlannerApp:
         if self._dashboard_alive():
             self._soft_refresh_dashboard(reload_config=reload_config)
             return
+        self._keep_config_on_show = not reload_config
         self._show_dashboard()
 
     def _start_home_action(self, message: str) -> None:
@@ -1269,8 +1345,12 @@ class HivePlannerApp:
         from hive_planner.config import RepoPaths
         from hive_planner.spec_drift import (
             add_agents_active_feature,
-            list_project_features,
-            repair_agents_active_feature,
+            feature_combobox_selection,
+            feature_picker_snapshot,
+            FeaturePickerScope,
+            find_candidate_features_report,
+            merge_feature_choices,
+            set_active_feature as set_project_active_feature,
         )
 
         dialog = self._dialog()
@@ -1322,30 +1402,84 @@ class HivePlannerApp:
             fg=COLORS["fg"],
         ).pack(side="left", fill="x", expand=True)
 
-        def refresh_features() -> None:
+        def feature_paths() -> RepoPaths | None:
+            live_root = self._active_linked_root()
+            return RepoPaths(root=live_root) if live_root else None
+
+        # Found ids belong to the project root they were scanned from.
+        picker_scope = FeaturePickerScope()
+
+        def find_features() -> None:
+            paths = feature_paths()
+            if paths is None:
+                messagebox.showwarning("No project", "Link a workspace first (Projects tab).", parent=dialog)
+                return
             try:
-                choices = list_project_features(RepoPaths(root=root))
-            except (OSError, UnicodeError, ValueError, TypeError):
-                choices = []
-            selector.configure(values=choices)
-            active = self._active_feature_label()
-            if active in choices:
-                feature_var.set(active)
-            elif choices:
-                feature_var.set(choices[0])
+                candidates, warnings = find_candidate_features_report(paths)
+            except (OSError, UnicodeError, ValueError, TypeError) as exc:
+                self._queue_home_log(f"Find features failed: {exc}")
+                return
+            picker_scope.record(str(paths.root), [c.feature for c in candidates])
+            for warning in warnings:
+                self._queue_home_log(f"Find features warning: {warning}")
+            if not candidates:
+                self._queue_home_log("Find features: no feature lanes found outside the listed ones.")
+            for c in candidates:
+                self._queue_home_log(f"Found feature '{c.feature}' in {c.source}")
+            refresh_features()
+
+        def refresh_features(repaint: bool = True) -> None:
+            paths = feature_paths()
+            picker_scope.sync(str(paths.root) if paths is not None else None)
+            if paths is None:
+                choices: list[str] = []
+                active: str | None = None
             else:
-                feature_var.set("")
-            set_active.configure(state="normal" if choices else "disabled")
+                try:
+                    choices, active = feature_picker_snapshot(paths)
+                except (OSError, UnicodeError, ValueError, TypeError):
+                    choices = []
+                    active = None
+            choices = merge_feature_choices(choices, picker_scope.found)
+            prior_state = "readonly"
+            try:
+                prior_state = str(selector.cget("state"))
+                selector.configure(state="normal")
+                selector.set("")
+                selector.configure(values=tuple(choices))
+                feature_var.set(feature_combobox_selection(choices, active))
+            except tk.TclError:
+                return
+            finally:
+                try:
+                    selector.configure(state=prior_state or "readonly")
+                except tk.TclError:
+                    pass
+            try:
+                set_active_btn.configure(state="normal" if choices else "disabled")
+            except tk.TclError:
+                pass
+            if repaint:
+                # reload_config=False keeps unsaved Settings edits in memory.
+                self._refresh_home_dashboard(reload_config=False)
 
         def set_active_feature() -> None:
             selected = feature_var.get().strip()
             if not selected:
                 return
-            result = repair_agents_active_feature(RepoPaths(root=root), selected)
+            paths = feature_paths()
+            if paths is None:
+                messagebox.showwarning("No project", "Link a workspace first (Projects tab).", parent=dialog)
+                return
+            if not picker_scope.owns(str(paths.root)):
+                # The dropdown was built for another project. Never write a stale choice.
+                self._queue_home_log("Project changed while the Features dialog was open; list refreshed. Pick again.")
+                refresh_features()
+                return
+            result = set_project_active_feature(paths, selected)
             self._queue_home_log(
                 f"Feature '{selected}' {'selected' if result.repaired else 'not changed'}: {result.detail}"
             )
-            self._refresh_home_dashboard()
             refresh_features()
 
         def add_new_feature() -> None:
@@ -1355,17 +1489,22 @@ class HivePlannerApp:
             try:
                 validate_feature_id(selected)
             except ValueError as exc:
-                messagebox.showerror("Invalid feature", str(exc), parent=self.root)
+                messagebox.showerror("Invalid feature", str(exc), parent=dialog)
                 return
-            result = add_agents_active_feature(RepoPaths(root=root), selected)
+            paths = feature_paths()
+            if paths is None:
+                messagebox.showwarning("No project", "Link a workspace first (Projects tab).", parent=dialog)
+                return
+            result = add_agents_active_feature(paths, selected)
             self._queue_home_log(
                 f"Feature '{selected}' {'added' if result.repaired else 'not changed'}: {result.detail}"
             )
-            new_feature_var.set("")
-            self._refresh_home_dashboard()
+            if result.repaired:
+                # Keep the typed name when nothing changed so the user can correct it.
+                new_feature_var.set("")
             refresh_features()
 
-        set_active = secondary_button(
+        set_active_btn = secondary_button(
             row,
             "Set active",
             set_active_feature,
@@ -1379,11 +1518,17 @@ class HivePlannerApp:
         )
         secondary_button(
             row,
+            "Find",
+            find_features,
+            tooltip="Scan the whole linked project for features outside docs/specs/<feature>/ (delta briefs, any spec folder).",
+        )
+        secondary_button(
+            row,
             "Refresh",
             refresh_features,
-            tooltip="Reload the feature list from the linked project's AGENTS.md.",
+            tooltip="Reload active lanes from AGENTS.md and folders under docs/specs/.",
         )
-        refresh_features()
+        refresh_features(repaint=False)
         action_row = tk.Frame(parent, bg=COLORS["bg"])
         action_row.pack(fill="x", pady=(8, 0))
         secondary_button(
@@ -1831,15 +1976,17 @@ class HivePlannerApp:
 
         header = tk.Frame(frame, bg=COLORS["card"])
         header.pack(fill="x", padx=8, pady=(8, 0))
+        loop_row = tk.Frame(header, bg=COLORS["card"])
+        loop_row.pack(fill="x")
         inst["collapse_btn"] = secondary_button(
-            header,
+            loop_row,
             "▾",
             lambda current=inst: self._on_toggle_controls_collapse(current),
             tooltip="Fold or unfold the settings. Loop, Command, the tab name, Run, and Execute stay visible.",
         )
-        tk.Label(header, text="Loop", width=10, anchor="w", bg=COLORS["card"], fg=COLORS["fg"], font=FONT).pack(side="left")
+        tk.Label(loop_row, text="Loop", width=10, anchor="w", bg=COLORS["card"], fg=COLORS["fg"], font=FONT).pack(side="left")
         loop_box = ttk.Combobox(
-            header,
+            loop_row,
             textvariable=inst["loop"],
             values=tuple(self.LOOP_CONTROL_COMMANDS),
             state="normal",
@@ -1860,9 +2007,9 @@ class HivePlannerApp:
             "<FocusOut>",
             lambda _event, current=inst: self._on_controls_instance_loop_changed(current),
         )
-        tk.Label(header, text="Command", width=10, anchor="w", bg=COLORS["card"], fg=COLORS["fg"], font=FONT).pack(side="left")
+        tk.Label(loop_row, text="Command", width=10, anchor="w", bg=COLORS["card"], fg=COLORS["fg"], font=FONT).pack(side="left")
         command_box = ttk.Combobox(
-            header,
+            loop_row,
             textvariable=inst["command"],
             values=self.LOOP_CONTROL_COMMANDS.get(inst["loop"].get(), self.LOOP_CONTROL_COMMANDS["CodeSpec"]),
             state="readonly",
@@ -1878,20 +2025,42 @@ class HivePlannerApp:
             "<<ComboboxSelected>>",
             lambda _event, current=inst: self._refresh_controls_choice_tips(current),
         )
-        tk.Label(header, text="Tab", width=6, anchor="w", bg=COLORS["card"], fg=COLORS["fg"], font=FONT).pack(side="left")
+        tab_row = tk.Frame(header, bg=COLORS["card"])
+        tab_row.pack(fill="x", pady=(4, 0))
+        inst["tab_row"] = tab_row
+        tab_label = tk.Label(
+            tab_row,
+            text="Tab",
+            width=6,
+            anchor="w",
+            bg=COLORS["card"],
+            fg=COLORS["fg"],
+            font=FONT,
+        )
+        tab_label.pack(side="left")
+        attach_hover_tooltip(
+            tab_label,
+            "Exact Cursor chat title for this project. Blank is not found. Spaces around the name are ignored.",
+        )
         if "tab_name" not in inst:
             inst["tab_name"] = tk.StringVar(value="")
         tab_entry = tk.Entry(
-            header,
+            tab_row,
             textvariable=inst["tab_name"],
             width=22,
             bg=COLORS["card"],
             fg=COLORS["fg"],
             insertbackground=COLORS["fg"],
+            relief="solid",
+            bd=1,
             font=FONT,
         )
-        tab_entry.pack(side="left", padx=(0, 8))
+        tab_entry.pack(side="left", fill="x", expand=True, padx=(0, 8))
         inst["tab_entry"] = tab_entry
+        attach_hover_tooltip(
+            tab_entry,
+            "Exact Cursor chat title for this project. Blank is not found. Spaces around the name are ignored.",
+        )
         actions = tk.Frame(frame, bg=COLORS["card"])
         actions.pack(fill="x", padx=8, pady=(4, 0))
         inst["remove_btn"] = secondary_button(
@@ -2299,17 +2468,22 @@ class HivePlannerApp:
         text = outcome_text(outcome)
         if "execute_outcome" not in inst:
             inst["execute_outcome"] = tk.StringVar(value="")
-        inst["execute_outcome"].set(text)
+        try:
+            inst["execute_outcome"].set(text)
+        except tk.TclError:
+            pass
         if "last" not in inst:
             inst["last"] = tk.StringVar(value="")
-        inst["last"].set(text)
+        try:
+            inst["last"].set(text)
+        except tk.TclError:
+            pass
 
     def _on_controls_execute(self, inst: dict) -> None:
         from hive_planner.launcher.chat_target import execute_controls
         from hive_planner.launcher.cursor_chat_delivery import CursorChatTarget
         from hive_planner.launcher.service import linked_install_directory
 
-        self._alias_primary_controls_instance(inst)
         link = self._require_active_link()
         if link is None:
             # The block still shows the last Execute result; a skipped submit
@@ -2317,8 +2491,15 @@ class HivePlannerApp:
             self._show_execute_outcome(inst, "failed")
             return
         repo, error = linked_install_directory(link)
-        loop = self.normalize_controls_loop(str(inst["loop"].get())) or ""
-        name = str(inst.get("tab_name").get()) if inst.get("tab_name") is not None else ""
+        try:
+            loop = self.normalize_controls_loop(str(inst["loop"].get())) or ""
+        except (tk.TclError, KeyError, AttributeError, TypeError):
+            loop = ""
+        try:
+            tab = inst.get("tab_name")
+            name = str(tab.get()) if tab is not None else ""
+        except (tk.TclError, AttributeError, TypeError):
+            name = ""
         if error or repo is None:
             self._show_execute_outcome(inst, "failed")
             return
@@ -2398,7 +2579,16 @@ class HivePlannerApp:
                 var.set(value)
             last = inst.get("last")
             if last is not None:
-                last.set("")
+                try:
+                    last.set("")
+                except tk.TclError:
+                    pass
+            shown = inst.get("execute_outcome")
+            if shown is not None:
+                try:
+                    shown.set("")
+                except tk.TclError:
+                    pass
 
     def _sync_controls_command_choices(self, inst: dict | None = None) -> None:
         if inst is None:
@@ -2594,6 +2784,7 @@ class HivePlannerApp:
         split.pack(fill="both", expand=True)
         self.projects_split = split
         self._projects_split_place_queued = False
+        self._projects_split_placing = False
         top_pane = tk.Frame(split, bg=COLORS["bg"])
         bottom_pane = tk.Frame(split, bg=COLORS["bg"])
         split.add(top_pane, minsize=120, stretch="always")
@@ -3044,6 +3235,47 @@ class HivePlannerApp:
         )
         self._sync_mcp_status_for_active()
 
+        # T042 slice 5 settings: read-only view of the Voice Bot config (no writes here).
+        voice_card = card(body)
+        card_title(voice_card, "HIVE Voice Bot (read-only)")
+        self.voice_card_label = tk.Label(
+            voice_card,
+            text=self._voice_bot_card_text(),
+            wraplength=760,
+            justify="left",
+            bg=COLORS["card"],
+            fg=COLORS["fg"],
+            font=FONT,
+        )
+        self.voice_card_label.pack(anchor="w", padx=12, pady=(0, 12))
+
+        # T042c: microphone dropdown. Blank = null. Starts from the saved config input_device.
+        current_mic = self.voice_controller.status()["input_device"] or ""
+        mic_row = tk.Frame(voice_card, bg=COLORS["card"])
+        mic_row.pack(anchor="w", padx=12, pady=(0, 12))
+        tk.Label(
+            mic_row,
+            text="Microphone (input_device):",
+            bg=COLORS["card"],
+            fg=COLORS["fg"],
+            font=FONT,
+        ).pack(side="left", padx=(0, 8))
+        self.voice_input_device_var = tk.StringVar(value=current_mic)
+        mic_values = [""] if not current_mic else ["", current_mic]
+        self.voice_input_device_box = ttk.Combobox(
+            mic_row,
+            textvariable=self.voice_input_device_var,
+            values=mic_values,
+            width=32,
+        )
+        self.voice_input_device_box.pack(side="left")
+
+        def _save_voice_input_device(_event=None):
+            self._on_voice_input_device_selected(self.voice_input_device_var.get())
+
+        self.voice_input_device_box.bind("<<ComboboxSelected>>", _save_voice_input_device)
+        self.voice_input_device_box.bind("<Return>", _save_voice_input_device)
+
         tip = card(body)
         card_title(tip, "Pro tip")
         tk.Label(
@@ -3056,6 +3288,56 @@ class HivePlannerApp:
             font=FONT,
         ).pack(anchor="w", padx=12, pady=(0, 12))
         self._bind_page_wheel(body, canvas)
+
+    def _sync_voice_bot_card_for_active(self) -> None:
+        """Re-read the read-only Voice Bot card (active project / Settings revisit)."""
+        if not hasattr(self, "voice_card_label"):
+            return
+        try:
+            self.voice_card_label.config(text=self._voice_bot_card_text())
+        except tk.TclError:
+            return
+        self._refresh_voice_input_device_widgets()
+
+    def _refresh_voice_input_device_widgets(self) -> None:
+        """T042c: reset the microphone dropdown to the saved config value for the active project."""
+        var = getattr(self, "voice_input_device_var", None)
+        box = getattr(self, "voice_input_device_box", None)
+        if var is None or box is None:
+            return
+        saved = self.voice_controller.status()["input_device"] or ""
+        try:
+            var.set(saved)
+            box.configure(values=[""] if not saved else ["", saved])
+        except tk.TclError:
+            return
+
+    def _on_voice_input_device_selected(self, name: str | None):
+        """T042c: Settings dropdown handler. Saves via the controller, refreshes from the reloaded value."""
+        result = self.voice_controller.set_input_device(name)
+        self._sync_voice_bot_card_for_active()
+        if not result.ok:
+            messagebox.showwarning("Microphone not saved", result.message)
+        return result
+
+    def _voice_bot_card_text(self) -> str:
+        """Plain-text body for the read-only HIVE Voice Bot settings card (from controller.status)."""
+        s = self.voice_controller.status()
+        if s["config_error"]:
+            return (
+                f"Config error: {s['config_error']}\n"
+                "Speech values are not shown until .hive/voice-bot/config.json is fixed."
+            )
+        return "\n".join(
+            [
+                f"Bridge: {'running' if s['bridge_running'] else 'not running'}",
+                f"stt_provider: {s['stt_provider'] or 'off (typed only)'}",
+                f"input_device: {s['input_device'] or 'off'}",
+                f"audio_enabled: {'on' if s['audio_enabled'] else 'off'}",
+                f"edits_enabled (config): {'on' if s['edits_enabled'] else 'off'}"
+                " (edits also need the G6 register pass)",
+            ]
+        )
 
     def _sync_mcp_status_for_active(self) -> None:
         if not hasattr(self, "mcp_status_label"):
@@ -3253,6 +3535,8 @@ class HivePlannerApp:
 
     def _place_projects_split_once(self, _event=None) -> None:
         """Queue the sash move. Placing it inside Configure is overwritten by layout."""
+        if getattr(self, "_projects_split_placing", False):
+            return
         split = getattr(self, "projects_split", None)
         if split is None:
             return
@@ -3273,10 +3557,18 @@ class HivePlannerApp:
         if sash_y <= 0:
             return
         try:
-            split.unbind("<Configure>")
+            current = split.sash_coord(0)
+            if current is not None and abs(int(current[1]) - sash_y) <= 1:
+                return
+        except (tk.TclError, TypeError, ValueError, IndexError, AttributeError):
+            pass
+        self._projects_split_placing = True
+        try:
             split.sash_place(0, 0, sash_y)
         except tk.TclError:
             return
+        finally:
+            self._projects_split_placing = False
 
     def _recent_list_needs_scroll(self) -> bool:
         """True when the list is taller than the pane, not merely past the 4-row request."""
@@ -8193,8 +8485,10 @@ class HivePlannerApp:
 
 
 def run_app() -> None:
+    from hive_planner.launcher.theme import enable_windows_dpi_awareness
     from hive_planner.portable_runtime import clear_stale_tk_library_env
 
+    enable_windows_dpi_awareness()
     clear_stale_tk_library_env()
     root = tk.Tk()
     HivePlannerApp(root)

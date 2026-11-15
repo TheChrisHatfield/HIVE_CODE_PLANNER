@@ -1,6 +1,6 @@
 <!--
 meta:hook_id: voice.experience
-meta:status: draft
+meta:status: active
 -->
 
 # Feature Micro Brief: Voice_Bot
@@ -57,6 +57,14 @@ Voice service
 Inputs include finalized user speech, workspace identity, active file, selection, document version, dirty state, diagnostics, and explicit approval.
 
 Outputs include transcript events, task identifiers, progress and permission events, diffs, test evidence, written results, and short spoken updates.
+
+## Voice layer direction (2026-11-14)
+
+- Moshi is the primary voice conversation layer on every host where a Moshi server runs, Windows included (spec R36, R37). Typed input is the fallback.
+- Moshi is the primary communication tool, chosen for multi-duplex conversation. Hive Code Planner is the add-on host. Moshi supplies audio and text through the `VoiceAdapter` boundary.
+- Moshi has no public text-injection input in `moshi` 0.2.13. HIVE narration routes through `speak()` (OD-2, spec R36).
+- While an R6 approval is pending, Moshi `0x02` text is posted to `POST /v1/reply`. It is never a new task (R36).
+- Open decisions: OD-1 (who starts the Moshi server), OD-2 (narration path). Tasks T049–T056 in `tasks.md`.
 
 ## Acceptance criteria
 

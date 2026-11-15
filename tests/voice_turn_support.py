@@ -28,7 +28,19 @@ def make_repo(tmp_path: Path) -> RepoPaths:
     return RepoPaths(root=tmp_path)
 
 
+def _unmeasured_rss() -> dict[str, float | None]:
+    """RSS reader for tests: both scopes unmeasured, so the R24 RSS check is skipped.
+
+    The default reader measures the pytest host process. That process grows across the whole
+    suite, so the voice-service ceiling was tripped by test-session memory, not by the runner.
+    Tests that exercise the RSS check pass their own reader explicitly.
+    """
+    return {"voice_service": None, "agent_children": None}
+
+
 def make_runner(paths: RepoPaths, *, timeout: float = 20.0, **kwargs: Any) -> VoiceTaskRunner:
+    kwargs.setdefault("rss_reader", _unmeasured_rss)
+
     def factory(handler: Callable[[str, Any], Any]) -> AcpClient:
         return AcpClient(
             [sys.executable, str(TURN_SERVER)],

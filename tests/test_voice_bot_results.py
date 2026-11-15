@@ -128,16 +128,40 @@ def test_r14_progress_speech_is_limited_to_one_per_interval(repo):
         assert wait_for(lambda: "working" in r.written_result(out["task_id"]))
         with r._lock:
             task = r.state.coding_tasks[out["task_id"]]
-            task.evidence.spoken_update = ""
             r._progress_last.pop(out["task_id"], None)
             spoken: list[float] = []
             for t in (1000.0, 1010.0, 1029.9, 1030.0, 1045.0, 1061.0):
                 now[0] = t
-                task.evidence.spoken_update = ""  # same text each time: clear to see each speech
+                count = sum(1 for e in task.events if e["name"] == "speech.spoken")
                 r._maybe_progress_speech(task)
-                if task.evidence.spoken_update:
+                if sum(1 for e in task.events if e["name"] == "speech.spoken") > count:
                     spoken.append(t)
         assert spoken == [1000.0, 1030.0, 1061.0]  # first, then each full 30 s interval
+        r.cancel(out["task_id"])
+        wait_task_terminal(r, out["task_id"])
+    finally:
+        r.close()
+
+
+def test_progress_speech_does_not_clobber_acceptance_ack(repo):
+    """Spec §Speech: progress speech must not overwrite the recorded ack (evidence-register finding)."""
+    now = [2000.0]
+    r = make_runner(repo, clock=lambda: now[0])
+    try:
+        out = r.submit("CANCEL_ME hold", client_request_id="ack-keep-1")
+        wait_task_state(r, out["task_id"], "running")
+        task = r.state.coding_tasks[out["task_id"]]
+        assert task.evidence.spoken_update == "Task accepted, running."
+        with r._lock:
+            r._progress_last.pop(out["task_id"], None)
+            now[0] = 2100.0
+            r._maybe_progress_speech(task)
+        assert task.evidence.spoken_update == "Task accepted, running."
+        progress_speech = [
+            e["payload"]["text"] for e in task.events if e["name"] == "speech.spoken"
+        ]
+        assert "Still working." in progress_speech
+        assert progress_speech[0] == "Task accepted, running."
         r.cancel(out["task_id"])
         wait_task_terminal(r, out["task_id"])
     finally:

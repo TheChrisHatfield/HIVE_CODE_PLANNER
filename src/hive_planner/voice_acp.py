@@ -148,6 +148,7 @@ class AcpClient:
 
     def close(self) -> None:
         """Close stdin, then terminate the child if it does not exit."""
+        self._mark_disconnected("provider_closed")
         try:
             if self._proc.stdin and not self._proc.stdin.closed:
                 self._proc.stdin.close()
@@ -156,8 +157,14 @@ class AcpClient:
         try:
             self._proc.wait(timeout=5)
         except subprocess.TimeoutExpired:
-            self._proc.kill()
-            self._proc.wait(timeout=5)
+            try:
+                self._proc.kill()
+            except OSError:
+                pass
+            try:
+                self._proc.wait(timeout=5)
+            except (subprocess.TimeoutExpired, OSError):
+                pass
         self._reader.join(timeout=5)
 
     # -- internals --------------------------------------------------------
@@ -187,10 +194,17 @@ class AcpClient:
                 except json.JSONDecodeError:
                     continue  # non-protocol noise on stdout is ignored, not fatal
                 if isinstance(message, dict):
-                    self._dispatch(message)
-        except (OSError, ValueError):
+                    try:
+                        self._dispatch(message)
+                    except Exception:
+                        continue  # a poison line must not kill the reader
+        except (OSError, ValueError, TypeError):
             pass
-        returncode = self._proc.wait()
+        try:
+            returncode = self._proc.wait()
+        except (OSError, subprocess.TimeoutExpired):
+            polled = self._proc.poll()
+            returncode = polled if polled is not None else -1
         self._mark_disconnected(f"provider_disconnected (exit {returncode})")
 
     def _dispatch(self, message: dict[str, Any]) -> None:
@@ -211,9 +225,12 @@ class AcpClient:
             return  # late reply after timeout; nothing waits on it
         if "error" in message and message["error"] is not None:
             err = message["error"] if isinstance(message["error"], dict) else {}
-            pending.error = AcpRemoteError(
-                int(err.get("code", 0)), str(err.get("message", "")), err.get("data")
-            )
+            raw_code = err.get("code", 0)
+            try:
+                code = int(raw_code)
+            except (TypeError, ValueError):
+                code = 0
+            pending.error = AcpRemoteError(code, str(err.get("message", "")), err.get("data"))
         else:
             pending.result = message.get("result")
         pending.event.set()
@@ -254,14 +271,17 @@ class AcpClient:
 
     def _mark_disconnected(self, reason: str) -> None:
         with self._state_lock:
-            if self._disconnect_reason is None:
+            first = self._disconnect_reason is None
+            if first:
                 self._disconnect_reason = reason
             pending = list(self._pending.values())
             self._pending.clear()
+            reported = self._disconnect_reason or reason
         for item in pending:
-            item.error = AcpDisconnected(reason)
+            item.error = AcpDisconnected(reported)
             item.event.set()
-        self.notifications.put(None)  # sentinel: stream ended
+        if first:
+            self.notifications.put(None)  # sentinel: stream ended
 
 
 def open_agent_acp(agent_path: str, *, cwd: str | None = None,

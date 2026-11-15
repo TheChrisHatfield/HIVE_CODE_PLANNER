@@ -11,17 +11,43 @@ workspace. A failed check returns `{"error": <code>}` with status 400 and reache
 Endpoints (127.0.0.1 only). Query parameters for GET, JSON body for POST:
 
 - `GET  /v1/approval?workspace=` -> `{"pending": bool, "request_id", "task_id", "kind", "action"}`
-- `POST /v1/reply`    `{"workspace", "task_id", "request_id", "text"}` -> the `reply_approval` result.
+- `POST /v1/reply`    `{"workspace", "task_id", "request_id", "text", "editor_snapshot"?}` -> the
+  `reply_approval` result. `editor_snapshot` is the live T007 object at approval time (R22).
   409 when there is no pending approval, the request_id is stale, or the task_id does not match.
 - `POST /v1/submit`   `{"workspace", "instruction", "client_request_id", "mode"?, "file_path"?,
   "selection_text"?, "file_content"?, "editor_snapshot"?}` -> the `submit` result (`task_id` and
   `context_snapshot_id`, or a queued entry). `editor_snapshot` is the T007 object (R2). 400 with
   `error` = the refusal code (e.g. `path_outside_workspace`), 429 when the queue is full.
+- `POST /v1/reply/spoken` `{"workspace", "task_id", "request_id", "wav_path", "editor_snapshot"?}` -> the
+  `reply_spoken` result: the WAV is transcribed (same STT gates as submit), then the text goes to the
+  pending approval only (never a follow-up). Same 409 rule as `/v1/reply`.
+- `POST /v1/submit/spoken` `{"workspace", "client_request_id", "wav_path", "mode"?, "file_path"?}` -> the
+  `submit_spoken` result (T042 slice 3). `wav_path` is a workspace-relative WAV, transcribed by the pinned
+  STT adapter; the transcript becomes the task instruction. 400 `stt_not_configured` while `stt_provider` is null.
 - `GET  /v1/submission?workspace=&client_request_id=` -> where a submit ended up (task or queue entry).
 - `GET  /v1/task?workspace=&task_id=&context_snapshot_id=` -> status, `spoken`, `written`.
   404 `unknown_task`; 409 `context_mismatch` when the snapshot id is not the task's.
 - `GET  /v1/editor?workspace=` -> pending `navigate` / `show_diff` for the extension to execute.
 - `POST /v1/editor` `{"workspace", "action_id"}` -> marks that editor action opened.
+- `POST /v1/editor/show_diff` `{"workspace", "task_id"}` -> queues a `show_diff` editor action (T043).
+- `POST /v1/editor/navigate` `{"workspace", "file_path", "context_snapshot_id"}` -> queues a `navigate` editor
+  action (R18 `navigate_to`; the R23 path check and snapshot bind apply).
+- `POST /v1/playback/interrupt` `{"workspace"}` -> `VoiceTaskRunner.interrupt_playback()` result
+  (session `interrupted`; task state unchanged, T031/R7).
+- `POST /v1/call/end` `{"workspace"}` -> `VoiceTaskRunner.end_call()` result (session `ended`; active
+  task keeps running; queued/held follow-ups discarded, T031/R5/R25).
+- `POST /v1/cancel`   `{"workspace", "task_id"}` -> `VoiceTaskRunner.cancel()` result (T036, Patch B).
+  404 `unknown_task`; 409 `task_already_terminal` or `session_not_active`.
+- `POST /v1/queue`    `{"workspace", "task_id", "text"}` -> `VoiceTaskRunner.queue_follow_up()` result
+  (T036, Patch B). 409 `no_active_task` / `task_mismatch` / `session_not_active`; 429 when the queue is full.
+- `GET  /v1/diff?workspace=&task_id=` -> `VoiceTaskRunner.task_diff()` result (T036, Patch B).
+  404 `unknown_task`; `source` is `no_diff_evidence` unless the R33 latch is on and a write was recorded.
+- `POST /v1/reconnect` `{"workspace", "task_id"}` -> `VoiceTaskRunner.reconnect_task()` result (T036, Patch B,
+  R26). 409 `not_unknown` / `no_provider_evidence` / `task_slot_occupied`; 404 `unknown_task`.
+- `POST /v1/live`   `{"workspace", "file_path", "document_version", "dirty"}` -> 200 `{"status": "recorded"}`.
+  T029 producer feed: the extension poll posts the active editor's workspace-relative file, version,
+  and dirty flag. The bridge stores it for the R22 live lookup (`record_live_buffer`). Paths must be
+  workspace-relative (no absolute path, drive letter, or `..`).
 
 The bridge owns the only runner while it is live (the runner lock in `voice_lock.py` is held for
 its whole life, so a second process cannot start a runner or write state). `voice-bot turn`
@@ -52,7 +78,7 @@ from typing import Any
 from urllib.parse import parse_qs, urlencode
 
 from hive_planner.config import RepoPaths
-from hive_planner.voice_bot import TERMINAL_TASK_STATES, VOICE_BOT_DIR, VoiceBotError
+from hive_planner.voice_bot import TERMINAL_TASK_STATES, VOICE_BOT_DIR, VoiceBotError, same_workspace
 from hive_planner.voice_task import DelegationError, VoiceTaskRunner
 
 TOKEN_FILE = "bridge-token"
@@ -60,6 +86,9 @@ ENDPOINT_FILE = "bridge.json"
 HOST = "127.0.0.1"
 MAX_BODY_BYTES = 16 * 1024
 TOKEN_BYTES = 32
+# file_content, selection.text, and diagnostics are each capped at snapshot_max_bytes (R21).
+EDITOR_SNAPSHOT_FIELDS = 3
+ENVELOPE_OVERHEAD_BYTES = 4096  # JSON keys, file name, diagnostic metadata
 
 ID_PATTERN = re.compile(r"^[A-Za-z0-9_.:-]{1,128}$")
 MODES: tuple[str, ...] = ("ask", "plan", "agent")  # `agent` passes the schema and is refused by the runner (R6)
@@ -67,7 +96,7 @@ PATH_MAX = 1024
 WORKSPACE_MAX = 4096
 
 # Declared schema per tool: field -> (required, kind).
-# Kinds: workspace, id, text, mode, relpath, snapshot, editor.
+# Kinds: workspace, id, text, mode, relpath, snapshot, editor, version (int), flag (bool), livepath.
 TOOL_SCHEMAS: dict[str, dict[str, tuple[bool, str]]] = {
     "approval": {"workspace": (True, "workspace")},
     "submission": {"workspace": (True, "workspace"), "client_request_id": (True, "id")},
@@ -81,6 +110,7 @@ TOOL_SCHEMAS: dict[str, dict[str, tuple[bool, str]]] = {
         "task_id": (True, "id"),
         "request_id": (True, "id"),
         "text": (True, "text"),
+        "editor_snapshot": (False, "editor"),
     },
     "submit": {
         "workspace": (True, "workspace"),
@@ -92,8 +122,47 @@ TOOL_SCHEMAS: dict[str, dict[str, tuple[bool, str]]] = {
         "file_content": (False, "snapshot"),
         "editor_snapshot": (False, "editor"),
     },
+    # Spoken approval reply: a workspace WAV is transcribed, then routed to the pending approval only.
+    "reply_spoken": {
+        "workspace": (True, "workspace"),
+        "task_id": (True, "id"),
+        "request_id": (True, "id"),
+        "wav_path": (True, "relpath"),
+        "editor_snapshot": (False, "editor"),
+    },
+    # T042 slice 3: spoken turn from a workspace WAV file. Same workspace/auth/schema as `submit`.
+    "submit_spoken": {
+        "workspace": (True, "workspace"),
+        "client_request_id": (True, "id"),
+        "wav_path": (True, "relpath"),
+        "mode": (False, "mode"),
+        "file_path": (False, "relpath"),
+        "editor_snapshot": (False, "editor"),
+    },
     "editor": {"workspace": (True, "workspace")},
     "editor_ack": {"workspace": (True, "workspace"), "action_id": (True, "id")},
+    "live": {
+        "workspace": (True, "workspace"),
+        "file_path": (True, "livepath"),
+        "document_version": (True, "version"),
+        "dirty": (True, "flag"),
+    },
+    "playback_interrupt": {"workspace": (True, "workspace")},
+    "call_end": {"workspace": (True, "workspace")},
+    "cancel": {"workspace": (True, "workspace"), "task_id": (True, "id")},
+    "queue": {
+        "workspace": (True, "workspace"),
+        "task_id": (True, "id"),
+        "text": (True, "text"),
+    },
+    "diff": {"workspace": (True, "workspace"), "task_id": (True, "id")},
+    "show_diff": {"workspace": (True, "workspace"), "task_id": (True, "id")},
+    "navigate": {
+        "workspace": (True, "workspace"),
+        "file_path": (True, "relpath"),
+        "context_snapshot_id": (True, "id"),
+    },
+    "reconnect": {"workspace": (True, "workspace"), "task_id": (True, "id")},
 }
 
 
@@ -129,21 +198,30 @@ def issue_token(paths: RepoPaths) -> str:
 
 
 def max_submit_body_bytes(instruction_max_chars: int, snapshot_max_bytes: int) -> int:
-    """HTTP body must fit the instruction plus two R21 snapshot fields (R2, R21)."""
+    """HTTP body must fit the instruction plus an editor snapshot at its limit (R2, R21).
+
+    The editor snapshot carries three R21-capped fields (file content, selection, diagnostics),
+    so the body allows that plus JSON overhead.
+    """
     return max(
         MAX_BODY_BYTES,
-        int(snapshot_max_bytes) * 2 + int(instruction_max_chars) * 4 + 4096,
+        int(snapshot_max_bytes) * EDITOR_SNAPSHOT_FIELDS + int(instruction_max_chars) * 4 + 4096,
     )
 
 
 def token_matches(presented: str | None, expected: str) -> bool:
     if not presented or not expected:
         return False
-    return hmac.compare_digest(presented.encode("utf-8"), expected.encode("utf-8"))
+    left = presented.encode("utf-8")
+    right = expected.encode("utf-8")
+    # compare_digest raises when lengths differ; a wrong-length token is still unauthorized.
+    if len(left) != len(right):
+        return False
+    return hmac.compare_digest(left, right)
 
 
 def _same_workspace(value: str, root: Path) -> bool:
-    return os.path.normcase(os.path.realpath(value)) == os.path.normcase(os.path.realpath(root))
+    return same_workspace(value, root)
 
 
 def validate_tool_args(
@@ -177,10 +255,28 @@ def validate_tool_args(
         if kind == "editor":
             if not isinstance(raw, dict):
                 raise ToolArgError("bad_editor_snapshot", "must be a JSON object")
-            encoded = json.dumps(raw).encode("utf-8")
-            if len(encoded) > snapshot_max_bytes * 2:
+            encoded = json.dumps(raw, ensure_ascii=False).encode("utf-8")
+            if len(encoded) > snapshot_max_bytes * EDITOR_SNAPSHOT_FIELDS + ENVELOPE_OVERHEAD_BYTES:
                 raise ToolArgError("editor_snapshot_too_long", "exceeds the configured snapshot limit")
             out[name] = raw
+            continue
+        if kind == "version":
+            if isinstance(raw, bool) or not isinstance(raw, int) or not 0 <= raw <= 2**31 - 1:
+                raise ToolArgError(f"bad_{name}", "must be a non-negative integer")
+            out[name] = raw
+            continue
+        if kind == "flag":
+            if not isinstance(raw, bool):
+                raise ToolArgError(f"bad_{name}", "must be true or false")
+            out[name] = raw
+            continue
+        if kind == "livepath":
+            if not isinstance(raw, str) or len(raw) > PATH_MAX or "\x00" in raw:
+                raise ToolArgError(f"bad_{name}", "must be a workspace-relative path")
+            normalized = raw.replace("\\", "/")
+            if normalized.startswith("/") or ":" in normalized or ".." in normalized.split("/"):
+                raise ToolArgError(f"bad_{name}", "must be a workspace-relative path")
+            out[name] = normalized
             continue
         if not isinstance(raw, str):
             raise ToolArgError(f"bad_{name}", "must be a string")
@@ -217,6 +313,19 @@ class VoiceBridge:
         self._token = ""
         self._server: ThreadingHTTPServer | None = None
         self._thread: threading.Thread | None = None
+        # R22 live buffer: file path (relative to the workspace) -> (document_version, dirty).
+        self._live: dict[str, tuple[int, bool]] = {}
+        self._live_lock = threading.Lock()
+
+    def record_live_buffer(self, file_path: str, document_version: int, dirty: bool) -> None:
+        """Record the editor's current buffer state for one file (fed by the extension poll)."""
+        with self._live_lock:
+            self._live[file_path] = (int(document_version), bool(dirty))
+
+    def live_buffer_for(self, file_path: str) -> tuple[int, bool] | None:
+        """Runner lookup for the R22 check. None means no reading, so the runner skips the check."""
+        with self._live_lock:
+            return self._live.get(file_path)
 
     @property
     def port(self) -> int:
@@ -240,6 +349,8 @@ class VoiceBridge:
         if self._server is not None:
             raise RuntimeError("bridge already started")
         self._token = issue_token(self.paths)
+        # Install the R22 live lookup at startup so submit and reply can enforce it.
+        self.runner.set_live_buffer(self.live_buffer_for)
         handler = _make_handler(self)
         self._server = ThreadingHTTPServer((HOST, 0), handler)
         self._server.daemon_threads = True
@@ -253,6 +364,8 @@ class VoiceBridge:
 
     def close(self) -> None:
         server, self._server = self._server, None
+        if self.runner.live_buffer_lookup() == self.live_buffer_for:  # bound methods: compare with ==
+            self.runner.set_live_buffer(None)
         if server is not None:
             server.shutdown()
             server.server_close()
@@ -312,8 +425,36 @@ _GET_ROUTES = {
     "/v1/submission": "submission",
     "/v1/task": "task",
     "/v1/editor": "editor",
+    "/v1/diff": "diff",
 }
-_POST_ROUTES = {"/v1/reply": "reply", "/v1/submit": "submit", "/v1/editor": "editor_ack"}
+_POST_ROUTES = {
+    "/v1/reply": "reply",
+    "/v1/reply/spoken": "reply_spoken",
+    "/v1/submit": "submit",
+    "/v1/submit/spoken": "submit_spoken",
+    "/v1/editor": "editor_ack",
+    "/v1/editor/show_diff": "show_diff",
+    "/v1/editor/navigate": "navigate",
+    "/v1/live": "live",
+    "/v1/playback/interrupt": "playback_interrupt",
+    "/v1/call/end": "call_end",
+    "/v1/cancel": "cancel",
+    "/v1/queue": "queue",
+    "/v1/reconnect": "reconnect",
+}
+
+# Runner refusals that are state conflicts (409); unknown ids are 404; anything else is 400.
+_CONFLICT_CODES = frozenset({
+    "task_already_terminal", "not_unknown", "no_provider_evidence", "task_slot_occupied",
+    "task_mismatch", "no_active_task", "session_not_active",
+})
+
+
+def _reply_status(result: dict[str, Any]) -> int:
+    """Shared HTTP status for approval replies: a stale or missing approval is 409 (nothing executed)."""
+    return 409 if result.get("status") in (
+        "no_pending_approval", "stale_approval", "task_mismatch",
+    ) else 200
 
 
 def _make_handler(bridge: VoiceBridge) -> type[BaseHTTPRequestHandler]:
@@ -347,7 +488,11 @@ def _make_handler(bridge: VoiceBridge) -> type[BaseHTTPRequestHandler]:
                 return None
             cfg = bridge.runner.config
             max_body = max_submit_body_bytes(cfg.instruction_max_chars, cfg.snapshot_max_bytes)
-            if length <= 0 or length > max_body:
+            if length <= 0:
+                self._send(400, {"error": "bad_length"})
+                return None
+            if length > max_body:
+                self._drain_body(length)
                 self._send(400, {"error": "bad_length"})
                 return None
             try:
@@ -363,8 +508,17 @@ def _make_handler(bridge: VoiceBridge) -> type[BaseHTTPRequestHandler]:
         def _refuse(self, exc: ToolArgError) -> None:
             self._send(400, {"error": exc.code, "message": str(exc)})
 
+        def _runner_refusal(self, exc: DelegationError) -> None:
+            status = 404 if exc.code == "unknown_task" else (409 if exc.code in _CONFLICT_CODES else 400)
+            payload: dict[str, Any] = {"error": exc.code, "message": str(exc)}
+            if exc.spoken:
+                payload["spoken"] = exc.spoken
+            self._send(status, payload)
+
         def do_GET(self) -> None:  # noqa: N802 - stdlib name
             route, _, query = self.path.partition("?")
+            if len(route) > 1:
+                route = route.rstrip("/")
             tool = _GET_ROUTES.get(route)
             if tool is None:
                 self._send(404, {"error": "not_found"})
@@ -387,6 +541,11 @@ def _make_handler(bridge: VoiceBridge) -> type[BaseHTTPRequestHandler]:
                     self._send(404, {"error": "unknown_submission"})
             elif tool == "editor":
                 self._send(200, bridge.runner.pending_editor_action())
+            elif tool == "diff":
+                try:
+                    self._send(200, bridge.runner.task_diff(args["task_id"]))
+                except DelegationError as exc:
+                    self._runner_refusal(exc)
             else:
                 self._task(args)
 
@@ -401,12 +560,39 @@ def _make_handler(bridge: VoiceBridge) -> type[BaseHTTPRequestHandler]:
                 return
             self._send(200, view)
 
+        def _drain_body(self, length: int | None = None) -> None:
+            """Read and discard any request body before replying early.
+
+            Replying to a POST without reading its body can make the OS reset the socket
+            while the client is still sending, which surfaces as ConnectionAbortedError.
+            """
+            if length is None:
+                try:
+                    length = int(self.headers.get("Content-Length", "0"))
+                except ValueError:
+                    self.close_connection = True
+                    return
+            if length <= 0:
+                return
+            cap = 1_000_000
+            try:
+                self.rfile.read(min(length, cap))
+            except OSError:
+                pass
+            if length > cap:
+                self.close_connection = True
+
         def do_POST(self) -> None:  # noqa: N802 - stdlib name
-            tool = _POST_ROUTES.get(self.path)
+            route, _, _ = self.path.partition("?")
+            if len(route) > 1:
+                route = route.rstrip("/")
+            tool = _POST_ROUTES.get(route)
             if tool is None:
+                self._drain_body()
                 self._send(404, {"error": "not_found"})
                 return
             if not self._authorized():
+                self._drain_body()
                 self._send(401, {"error": "unauthorized"})
                 return
             data = self._read_json_body()
@@ -419,21 +605,68 @@ def _make_handler(bridge: VoiceBridge) -> type[BaseHTTPRequestHandler]:
                 return
             if tool == "reply":
                 self._reply(args)
+            elif tool == "reply_spoken":
+                self._reply_spoken(args)
             elif tool == "editor_ack":
                 result = bridge.runner.ack_editor_action(args["action_id"])
                 status = 404 if result.get("status") == "unknown_action" else 200
                 self._send(status, result)
+            elif tool == "live":
+                bridge.record_live_buffer(args["file_path"], args["document_version"], args["dirty"])
+                self._send(200, {"status": "recorded"})
+            elif tool == "playback_interrupt":
+                self._send(200, bridge.runner.interrupt_playback())
+            elif tool == "call_end":
+                self._send(200, bridge.runner.end_call())
+            elif tool in ("cancel", "queue", "reconnect", "show_diff", "navigate"):
+                self._runner_control(tool, args)
+            elif tool == "submit_spoken":
+                self._spoken(args)
             else:
                 self._submit(args)
 
+        def _runner_control(self, tool: str, args: dict[str, Any]) -> None:
+            """Patch B routes: cancel, queue_follow_up, reconnect_task, show_diff. Runner refusals keep their code."""
+            try:
+                if tool == "cancel":
+                    result = bridge.runner.cancel(args["task_id"])
+                elif tool == "show_diff":
+                    result = bridge.runner.show_diff(args["task_id"])
+                elif tool == "navigate":
+                    result = bridge.runner.navigate_to(
+                        args["file_path"], context_snapshot_id=args["context_snapshot_id"],
+                    )
+                elif tool == "queue":
+                    result = bridge.runner.queue_follow_up(args["text"], task_id=args["task_id"])
+                else:
+                    result = bridge.runner.reconnect_task(args["task_id"])
+            except DelegationError as exc:
+                self._runner_refusal(exc)
+                return
+            self._send(200, result)
+
         def _reply(self, args: dict[str, Any]) -> None:
             result = bridge.runner.reply_approval(
-                args["text"], request_id=args["request_id"], task_id=args["task_id"],
+                args["text"],
+                request_id=args["request_id"],
+                task_id=args["task_id"],
+                editor_snapshot=args.get("editor_snapshot") or None,
             )
-            status = 409 if result.get("status") in (
-                "no_pending_approval", "stale_approval", "task_mismatch",
-            ) else 200
-            self._send(status, result)
+            self._send(_reply_status(result), result)
+
+        def _reply_spoken(self, args: dict[str, Any]) -> None:
+            """`POST /v1/reply/spoken`: transcribe a workspace WAV, then reply to the pending approval."""
+            try:
+                result = bridge.runner.reply_spoken(
+                    request_id=args["request_id"],
+                    task_id=args["task_id"],
+                    wav_path=args["wav_path"],
+                    editor_snapshot=args.get("editor_snapshot") or None,
+                )
+            except DelegationError as exc:
+                self._runner_refusal(exc)
+                return
+            self._send(_reply_status(result), result)
 
         def _submit(self, args: dict[str, Any]) -> None:
             """`POST /v1/submit`: the same runner.submit the CLI uses; the bridge is the only writer."""
@@ -449,7 +682,29 @@ def _make_handler(bridge: VoiceBridge) -> type[BaseHTTPRequestHandler]:
                 )
             except DelegationError as exc:
                 status = 429 if exc.code == "queue_full" else 400
-                self._send(status, {"error": exc.code, "message": str(exc)})
+                payload: dict[str, Any] = {"error": exc.code, "message": str(exc)}
+                if exc.spoken:
+                    payload["spoken"] = exc.spoken
+                self._send(status, payload)
+                return
+            self._send(200, result)
+
+        def _spoken(self, args: dict[str, Any]) -> None:
+            """`POST /v1/submit/spoken` (T042 slice 3): transcribe a workspace WAV, then submit the text."""
+            try:
+                result = bridge.runner.submit_spoken(
+                    wav_path=args["wav_path"],
+                    client_request_id=args["client_request_id"],
+                    mode=args.get("mode", "ask"),
+                    file_path=args.get("file_path", ""),
+                    editor_snapshot=args.get("editor_snapshot") or None,
+                )
+            except DelegationError as exc:
+                status = 429 if exc.code == "queue_full" else 400
+                payload: dict[str, Any] = {"error": exc.code, "message": str(exc)}
+                if exc.spoken:
+                    payload["spoken"] = exc.spoken
+                self._send(status, payload)
                 return
             self._send(200, result)
 
@@ -496,7 +751,11 @@ def run_turn_via_bridge(
         "client_request_id": client_request_id,
     })
     if status != 200:
-        raise VoiceBotError(f"{submitted.get('error', 'submit_failed')}: {submitted.get('message', '')}".rstrip(": "))
+        msg = f"{submitted.get('error', 'submit_failed')}: {submitted.get('message', '')}".rstrip(": ")
+        spoken = str(submitted.get("spoken") or "").strip()
+        if spoken:
+            msg = f"{msg} ({spoken})"
+        raise VoiceBotError(msg)
 
     deadline = time.monotonic() + timeout + 30
     task_id: str | None = submitted.get("task_id")

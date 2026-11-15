@@ -131,6 +131,8 @@ def test_plan_and_question_kinds_are_distinct_approvals(runner):
     task = runner.state.coding_tasks[q["task_id"]]
     assert task.approvals[-1]["status"] == "answered"
     assert task.approvals[-1]["detail"] == "the second one"
+    assert "the second one" in task.evidence.written_result
+    assert '"outcome": "selected"' in task.evidence.written_result
 
 
 def test_pending_approval_holds_queued_follow_ups(runner):
@@ -144,3 +146,24 @@ def test_pending_approval_holds_queued_follow_ups(runner):
     assert wait_for(lambda: runner.state.queue[0]["state"] == "dispatched", timeout=15)
     follow_task = runner.state.coding_tasks[runner.state.queue[0]["task_id"]]
     assert follow_task.instruction == "and also this"
+
+
+def test_restart_with_pending_approval_records_timed_out_and_discards_held(repo):
+    first = make_runner(repo)
+    out = first.submit("NEEDS_APPROVAL:edit src/app.py", client_request_id="rs-1")
+    task_id = out["task_id"]
+    request_id = _await_approval(first, task_id)["request_id"]
+    first.queue_follow_up("held across restart", task_id=task_id)
+    first.close()  # clean shutdown: close() does not write the approval outcome itself
+
+    second = make_runner(repo)
+    try:
+        task = second.state.coding_tasks[task_id]
+        assert task.state == "unknown"
+        assert task.reason == "hive_restarted"
+        assert task.approvals[-1]["request_id"] == request_id
+        assert task.approvals[-1]["status"] == "timed_out"
+        held = [q for q in second.state.queue if q.get("text") == "held across restart"]
+        assert held and all(q["state"] == "discarded" for q in held)
+    finally:
+        second.close()

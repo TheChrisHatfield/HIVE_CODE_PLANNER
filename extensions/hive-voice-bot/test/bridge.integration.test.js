@@ -12,6 +12,7 @@ const readline = require("node:readline");
 const { spawn } = require("node:child_process");
 const {
   answerPendingApproval,
+  bridgeExitError,
   createBridgeClient,
   parseReadyLine,
   readBridgeConnection,
@@ -194,4 +195,35 @@ test("a real approve and a real deny go through the extension reply logic into t
   assert.deepEqual((await client.approval()).body, { pending: false });
   proc.stdin.end();
   assert.equal(await waitExit(proc, 20000), 0, stderr.join(""));
+});
+
+test("a second bridge on a live repo is refused and its stderr surfaces the already-running reason", async (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "hive-bridge-second-int-"));
+  fs.mkdirSync(path.join(root, "src"));
+  fs.writeFileSync(path.join(root, "src", "app.py"), "def add(a, b):\n    return a + b\n");
+
+  const first = startBridge(root);
+  t.after(() => { if (first.proc.exitCode === null) first.proc.kill(); });
+  await first.ready;
+
+  // Second bridge on the same repo: the Python side refuses at startup, so it exits before ready.
+  const second = startBridge(root);
+  t.after(() => { if (second.proc.exitCode === null) second.proc.kill(); });
+  second.ready.catch(() => {}); // the refusal rejects `ready`; the exit code and stderr are checked below.
+  const code = await waitExit(second.proc, 20000);
+  assert.notEqual(code, 0, "the second bridge must not start");
+
+  const err = bridgeExitError(code, second.stderr.join(""));
+  // The runner lock (voice_lock.py) fires for a second bridge: "a voice bridge or standalone turn is
+  // already running for this repo; runner lock held: ...". Match the shared reason, not one wording.
+  assert.match(err.message, /already running for this repo/, second.stderr.join(""));
+  assert.match(err.message, /runner lock held/);
+  assert.doesNotMatch(err.message, /bridge exited before ready/);
+
+  // The first bridge is unaffected by the refusal and still stops cleanly.
+  const conn = readBridgeConnection(root, (p) => fs.readFileSync(p, "utf8"));
+  assert.ok(conn, "the first bridge still owns its endpoint and token");
+  assert.equal((await createBridgeClient({ ...conn, workspace: root }).approval()).status, 200);
+  first.proc.stdin.end();
+  assert.equal(await waitExit(first.proc, 20000), 0, first.stderr.join(""));
 });

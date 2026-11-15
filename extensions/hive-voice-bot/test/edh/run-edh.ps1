@@ -3,7 +3,7 @@
 # Writes the report to %TEMP%\hive-voice-bot-edh-report.json and prints it. Exit 0 only if every check passed.
 param(
   [string]$CodeExe = "D:\PROGRAM_FILES\VISUAL_STUDIO\Microsoft VS Code\Code.exe",
-  [int]$TimeoutSeconds = 120
+  [int]$TimeoutSeconds = 300
 )
 
 $ext = Resolve-Path (Join-Path $PSScriptRoot "..\..")

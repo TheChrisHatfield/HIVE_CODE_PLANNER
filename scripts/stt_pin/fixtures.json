@@ -1,0 +1,12 @@
+{
+  "description": "T033 gap A STT pin fixtures. Audio is Windows SAPI TTS (offline), 16 kHz mono PCM16 WAV. Reference text is the exact synthesized string.",
+  "wer_threshold": 0.10,
+  "wer_threshold_note": "Set before the first run. Corpus-level word error rate must be <= this value to pass.",
+  "clips": [
+    {"id": "c01", "file": "c01_settings_diff.wav", "reference": "open the settings file and show me the diff"},
+    {"id": "c02", "file": "c02_run_tests.wav", "reference": "run the unit tests for the voice bot module"},
+    {"id": "c03", "file": "c03_rename_function.wav", "reference": "rename the function parse config to load config"},
+    {"id": "c04", "file": "c04_last_commit.wav", "reference": "summarize what changed in the last commit"},
+    {"id": "c05", "file": "c05_docstring.wav", "reference": "add a docstring to the main entry point"}
+  ]
+}

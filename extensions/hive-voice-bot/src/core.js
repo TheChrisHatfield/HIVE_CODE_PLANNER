@@ -26,6 +26,71 @@ function isInsideWorkspace(rootPath, filePath) {
   return rel !== "" && !escapes && !path.isAbsolute(rel);
 }
 
+// T037 / R28: the folder a session binds. The most specific workspace folder that contains the
+// active file wins (nested folders: longest match). With no active file, or a file outside every
+// folder, fall back to the first folder. No folders gives null.
+function pickSessionRoot(folderPaths, activeFsPath) {
+  const folders = (folderPaths || []).filter((f) => f);
+  if (folders.length === 0) return null;
+  let best = null;
+  if (activeFsPath) {
+    for (const folder of folders) {
+      const rel = path.relative(path.resolve(folder), path.resolve(String(activeFsPath)));
+      if (!isInsideWorkspace(folder, rel)) continue;
+      if (best === null || path.resolve(folder).length > path.resolve(best).length) best = folder;
+    }
+  }
+  return best || folders[0];
+}
+
+// Same on-disk file. Windows drive and path letters are not significant (R22 live buffer).
+function sameFsPath(left, right) {
+  if (!left || !right) return false;
+  const a = path.normalize(String(left));
+  const b = path.normalize(String(right));
+  return process.platform === "win32" ? a.toLowerCase() === b.toLowerCase() : a === b;
+}
+
+// First open editor path that is the same file as `targetAbs`, or null.
+function matchOpenFsPath(targetAbs, openAbsPaths) {
+  const target = String(targetAbs || "");
+  for (const candidate of openAbsPaths || []) {
+    if (sameFsPath(target, candidate)) return candidate;
+  }
+  return null;
+}
+
+// PYTHONPATH folder for `-m hive_planner`. An explicit setting wins. Otherwise `<workspace>/src`
+// when that tree contains hive_planner, so Start Bridge works without a Cursor setting (T017, R30).
+function resolveHivePlannerSrc(workspaceRoot, setting, exists) {
+  const explicit = String(setting || "").trim();
+  if (explicit) return explicit;
+  if (!workspaceRoot) return "";
+  const srcDir = path.join(workspaceRoot, "src");
+  try {
+    if (exists(path.join(srcDir, "hive_planner"))) return srcDir;
+  } catch (_err) {
+    return "";
+  }
+  return "";
+}
+
+// T029 live feed: the workspace-relative, forward-slash path of an editor file, or null when it
+// is not inside the root. Uses the same fence as isInsideWorkspace, so a real file named
+// "..notes.md" is still fed (a bare startsWith("..") check silently dropped it).
+function liveFeedRelative(rootPath, fsPath) {
+  if (!rootPath || !fsPath) return null;
+  const rel = path.relative(path.resolve(rootPath), path.resolve(String(fsPath)));
+  if (!isInsideWorkspace(rootPath, rel)) return null;
+  return rel.split(path.sep).join("/");
+}
+
+// Absolute path for a workspace-relative file, or null when the path would leave the root (R23).
+function resolveWorkspaceRelative(rootPath, filePath) {
+  if (!rootPath || !filePath || !isInsideWorkspace(rootPath, filePath)) return null;
+  return path.resolve(rootPath, filePath);
+}
+
 // R21: read snapshot_max_bytes from .hive/voice-bot/config.json (the file the Python side
 // reads). `readFile(absPath)` is injected so tests need no disk access. A missing or
 // unreadable file, bad JSON, or a non-positive value falls back to the default.
@@ -112,8 +177,9 @@ function buildContextSnapshot({
   if (!workspaceRoot) {
     return { workspace: null, file: null, reason: "no_workspace" };
   }
-  if (!activeDocument) {
-    // R28: no active editor yields file null with reason no_active_file.
+  // R28: no active editor, or a non-file document (untitled, diff, output), yields file null
+  // with reason no_active_file. Its fsPath is not a workspace path.
+  if (!activeDocument || (activeDocument.scheme && activeDocument.scheme !== "file")) {
     return { workspace: workspaceRoot, file: null, reason: "no_active_file" };
   }
   const relative = path.relative(workspaceRoot, activeDocument.fileName);
@@ -141,6 +207,32 @@ function buildContextSnapshot({
     diagnostics_truncated: diag.diagnostics_truncated,
     reason: null,
   };
+}
+
+// R22: a write-approval snapshot must name the bound task file, not whichever editor is
+// active. When the approval names a file, that path wins even if another document is focused.
+// R22: a bound file that is not open in an editor reads its text from disk, not an empty stub.
+// A read failure yields "" so the snapshot carries no content instead of throwing.
+function readDiskText(absPath, readFile) {
+  try {
+    return String(readFile(absPath));
+  } catch (_err) {
+    return "";
+  }
+}
+
+function pickLiveDocumentRelative({ pendingFile = "", activeRelative = "" } = {}) {
+  const bound = String(pendingFile || "").replace(/\\/g, "/");
+  if (bound) return bound;
+  return String(activeRelative || "").replace(/\\/g, "/");
+}
+
+// R22: a bound approval file that does not resolve inside the workspace must not fall back to
+// the active editor (a different file). True means the snapshot reads no document at all.
+function boundFileUnresolved({ root = null, pendingFile = "" } = {}) {
+  const bound = String(pendingFile || "").replace(/\\/g, "/");
+  if (!bound) return false;
+  return resolveWorkspaceRelative(root, bound) === null;
 }
 
 // Approval UI stub. Only an explicit "approve" answer approves.
@@ -174,6 +266,164 @@ async function requestApprovalStub({ kind, action }, ui, timeoutMs = DEFAULT_APP
 const BRIDGE_ENDPOINT_RELPATH = path.join(".hive", "voice-bot", "bridge.json");
 const BRIDGE_TOKEN_RELPATH = path.join(".hive", "voice-bot", "bridge-token");
 const TERMINAL_TASK_STATES = Object.freeze(["completed", "failed", "cancelled"]);
+const TASK_POLL_MAX_MS = 15 * 60 * 1000;
+
+// Host poll for GET /v1/task. Stops on a terminal state, a failed lookup, or the deadline.
+function taskPollDecision({ status, state, elapsedMs, maxMs = TASK_POLL_MAX_MS, networkError = false }) {
+  if (networkError) {
+    if (elapsedMs >= maxMs) return { stop: true, reason: "poll_timeout" };
+    return { stop: false, reason: "wait" };
+  }
+  if (status !== 200) return { stop: true, reason: "lookup_failed" };
+  if (TERMINAL_TASK_STATES.includes(state)) return { stop: true, reason: "terminal" };
+  if (elapsedMs >= maxMs) return { stop: true, reason: "poll_timeout" };
+  return { stop: false, reason: "wait" };
+}
+
+// Runs `fn` at most once at a time. A tick that arrives while the previous call is still awaiting
+// is skipped. A plain setInterval fires on schedule even when the last async poll has not returned,
+// so a slow lookup could overlap and report the same terminal state twice.
+function createSingleFlight(fn) {
+  let running = false;
+  return async function singleFlight(...args) {
+    if (running) return undefined;
+    running = true;
+    try {
+      return await fn(...args);
+    } finally {
+      running = false;
+    }
+  };
+}
+
+// Timer bookkeeping for host polls (`followTask`). Each live timer is tracked so stopping the bridge
+// ends every poll; a network error otherwise keeps polling a dead bridge until the deadline.
+// `clear` is injectable so the registry is testable without the vscode host.
+function createTimerRegistry(clear = clearInterval) {
+  const timers = new Set();
+  return {
+    add(timer) {
+      timers.add(timer);
+      return timer;
+    },
+    release(timer) {
+      clear(timer);
+      timers.delete(timer);
+    },
+    stopAll() {
+      for (const timer of timers) clear(timer);
+      timers.clear();
+    },
+    size() {
+      return timers.size;
+    },
+  };
+}
+
+// Host poll for GET /v1/approval. A previously shown request that is no longer pending
+// expired or was answered elsewhere — the modal click must not be treated as success.
+// After this host finishes its own attempt, forget the id (`cleared`) so the next poll
+// cannot report a successful approve/deny as a timeout (R6).
+function approvalWatchDecision(shownRequestId, body, locallySettled = false) {
+  if (!body || !body.pending) {
+    if (!shownRequestId) return { action: "idle" };
+    if (locallySettled) return { action: "cleared" };
+    return { action: "expired" };
+  }
+  if (shownRequestId && body.request_id === shownRequestId) return { action: "already_shown" };
+  return { action: "show" };
+}
+
+// Warning shown when a shown approval is no longer pending without a local reply. The bridge
+// does not say whether it timed out or was answered elsewhere, so the text must not claim either
+// one as fact (an approval answered elsewhere may already have run).
+function approvalExpiredNotice() {
+  return "HIVE Voice_Bot: the approval is no longer pending (it timed out or was answered elsewhere). Check the task before assuming nothing ran.";
+}
+
+// True only when the bridge accepted a reply that resolved or clearly closed the pending
+// approval. Dismissals, empty answers, and reprompts must return false so the host can
+// show the modal again (R6).
+function approvalReplySettlesHost(reply) {
+  if (!reply || reply.status !== 200) return false;
+  const status = reply.body && reply.body.status;
+  if (typeof status !== "string" || !status) return false;
+  return !["reprompt", "stale", "no_pending_approval", "stale_approval", "task_mismatch"].includes(status);
+}
+
+// Spoken line the host should surface for bridge replies (R6, R22). HTTP 200 replies such
+// as stale buffer, reprompt, or deny carry `spoken` but are not bridge failures.
+function approvalReplySpokenNotice(reply) {
+  if (!reply || reply.status !== 200 || !reply.body) return "";
+  const status = reply.body.status;
+  const spoken = typeof reply.body.spoken === "string" ? reply.body.spoken.trim() : "";
+  if (!spoken) return "";
+  if (status === "stale" || status === "reprompt" || status === "denied" || status === "not_delivered") {
+    return spoken;
+  }
+  return "";
+}
+
+// Attempts before an editor action is given up. A failed open is retried so a transient error
+// (file briefly locked, editor busy) is not lost (R18), but a permanent one (deleted file, unknown
+// kind) must not retry every poll forever. Giving up acks the action so the bridge clears it.
+const EDITOR_ACTION_MAX_ATTEMPTS = 3;
+
+// Host poll for GET /v1/editor. Remember an action only after it opened. `failures` counts the
+// failed attempts already made for this action; the attempt that reaches `maxFailures` gives up.
+function editorActionAdvance({
+  shownActionId,
+  pending,
+  opened,
+  failures = 0,
+  maxFailures = EDITOR_ACTION_MAX_ATTEMPTS,
+}) {
+  if (!pending || !pending.pending) {
+    return { action: "idle", shownActionId: null, ack: false };
+  }
+  if (shownActionId === pending.action_id) {
+    return { action: "already_opened", shownActionId, ack: true };
+  }
+  if (!opened) {
+    if (failures + 1 >= maxFailures) {
+      return { action: "give_up", shownActionId: pending.action_id, ack: true };
+    }
+    return { action: "retry", shownActionId, ack: false };
+  }
+  return { action: "opened", shownActionId: pending.action_id, ack: true };
+}
+
+// The retry budget belongs to one editor action. `failures` is only meaningful for the action
+// named by `failureActionId`. When the pending action changes, or nothing is pending, the count
+// starts from zero, so a failure on an earlier action cannot shorten the next action's attempts.
+function editorRetryBudget({ failures = 0, failureActionId = null, pending }) {
+  if (!pending || !pending.pending) {
+    return { failures: 0, failureActionId: null };
+  }
+  if (failureActionId !== pending.action_id) {
+    return { failures: 0, failureActionId: pending.action_id };
+  }
+  return { failures, failureActionId };
+}
+
+// Keeps only the newest `max` characters of a stream so a long-running child cannot grow an
+// unbounded string in the host. Used for the bridge stderr tail shown on a failed start.
+function appendBoundedTail(text, chunk, max) {
+  const joined = String(text || "") + String(chunk);
+  return joined.length > max ? joined.slice(joined.length - max) : joined;
+}
+
+// Error for a bridge process that exited before reporting ready. When the Python side refused
+// because another live bridge owns the repo, its stderr says so; surface that reason directly
+// instead of the generic exit text.
+function bridgeExitError(code, stderr) {
+  const tail = String(stderr || "").trim();
+  if (tail.includes("already running")) {
+    const line = tail.split(/\r?\n/).find((l) => l.includes("already running")) || tail;
+    return new Error(line.replace(/^Error:\s*/, "").trim());
+  }
+  return new Error(`bridge exited before ready (code ${code}): ${tail}`);
+}
 
 // Reads the bridge endpoint and token the Python side wrote. Missing or malformed files mean
 // no live bridge, so the result is null rather than a guessed connection.
@@ -190,6 +440,22 @@ function readBridgeConnection(workspaceRoot, readFile) {
     return null;
   }
   return { host: endpoint.host, port: endpoint.port, token };
+}
+
+// Collects bridge stdout until the first complete line, then returns that line exactly once.
+// Every later chunk returns null, so the host cannot run ready handling again (and re-arm its
+// approval and editor pollers, which clears shown-request state) on unrelated stdout.
+function createReadyLineReader() {
+  let buffer = "";
+  let done = false;
+  return function feed(chunk) {
+    if (done) return null;
+    buffer += String(chunk);
+    const newline = buffer.indexOf("\n");
+    if (newline === -1) return null;
+    done = true;
+    return buffer.slice(0, newline);
+  };
 }
 
 // The first stdout line of `voice-bot bridge` is the ready record. It never contains the token.
@@ -211,7 +477,13 @@ function createBridgeClient({ host, port, token, workspace, fetchImpl = globalTh
   async function request(method, route, { query = null, body = null } = {}) {
     let url = `http://${host}:${port}${route}`;
     if (query) {
-      url += "?" + new URLSearchParams({ workspace, ...query }).toString();
+      // URLSearchParams turns undefined/null into the text "undefined"/"null". Drop those keys so a
+      // missing id is absent (the bridge then answers 400) rather than a false context_mismatch.
+      const params = { workspace };
+      for (const [key, value] of Object.entries(query)) {
+        if (value !== undefined && value !== null) params[key] = value;
+      }
+      url += "?" + new URLSearchParams(params).toString();
     }
     const init = { method, headers: { Authorization: `Bearer ${token}` } };
     if (body) {
@@ -256,11 +528,39 @@ function createBridgeClient({ host, port, token, workspace, fetchImpl = globalTh
           ...(editorSnapshot && typeof editorSnapshot === "object" ? { editor_snapshot: editorSnapshot } : {}),
         },
       }),
+    // T042 slice 3 / C3: submit a workspace-relative WAV. The bridge transcribes it with the pinned
+    // STT adapter and the transcript becomes the instruction. Live mic capture is not done here.
+    submitSpoken: ({ wavPath, clientRequestId, mode = "ask", filePath = "", editorSnapshot = null }) =>
+      request("POST", "/v1/submit/spoken", {
+        body: {
+          wav_path: wavPath,
+          client_request_id: clientRequestId,
+          mode,
+          file_path: filePath,
+          ...(editorSnapshot && typeof editorSnapshot === "object" ? { editor_snapshot: editorSnapshot } : {}),
+        },
+      }),
     editor: () => request("GET", "/v1/editor", { query: {} }),
     ackEditor: (actionId) =>
       request("POST", "/v1/editor", { body: { action_id: actionId } }),
-    reply: ({ requestId, taskId, text }) =>
-      request("POST", "/v1/reply", { body: { request_id: requestId, task_id: taskId, text } }),
+    // T031: stop playback (session `interrupted`, task state unchanged) and end the call
+    // (session `ended`, active task keeps running, queued follow-ups discarded).
+    interruptPlayback: () => request("POST", "/v1/playback/interrupt", { body: {} }),
+    endCall: () => request("POST", "/v1/call/end", { body: {} }),
+    // T029 producer feed: the active editor's workspace-relative file, version, and dirty flag.
+    liveBuffer: ({ filePath, documentVersion, dirty }) =>
+      request("POST", "/v1/live", {
+        body: { file_path: filePath, document_version: documentVersion, dirty: Boolean(dirty) },
+      }),
+    reply: ({ requestId, taskId, text, editorSnapshot = null }) =>
+      request("POST", "/v1/reply", {
+        body: {
+          request_id: requestId,
+          task_id: taskId,
+          text,
+          ...(editorSnapshot && typeof editorSnapshot === "object" ? { editor_snapshot: editorSnapshot } : {}),
+        },
+      }),
   };
 }
 
@@ -285,7 +585,7 @@ function approvalReplyText(decision, action) {
 // `ui.showPrompt({kind, action})` resolves to "approve", "deny", or nothing (approval kinds).
 // `ui.askQuestion(action)` resolves to the spoken or typed answer (question kind).
 // Returns the bridge reply, or null when nothing was sent (timeout or empty answer).
-async function answerPendingApproval(client, pending, ui) {
+async function answerPendingApproval(client, pending, ui, editorSnapshot = null) {
   let text = null;
   if (pending.kind === "question") {
     const answer = await ui.askQuestion(pending.action);
@@ -299,7 +599,13 @@ async function answerPendingApproval(client, pending, ui) {
     if (decision) text = approvalReplyText(decision, pending.action);
   }
   if (text === null) return null;
-  return client.reply({ requestId: pending.request_id, taskId: pending.task_id, text });
+  const live = typeof editorSnapshot === "function" ? editorSnapshot() : editorSnapshot;
+  return client.reply({
+    requestId: pending.request_id,
+    taskId: pending.task_id,
+    text,
+    editorSnapshot: live,
+  });
 }
 
 module.exports = {
@@ -311,7 +617,29 @@ module.exports = {
   BRIDGE_ENDPOINT_RELPATH,
   BRIDGE_TOKEN_RELPATH,
   TERMINAL_TASK_STATES,
+  TASK_POLL_MAX_MS,
+  taskPollDecision,
+  createTimerRegistry,
+  createSingleFlight,
+  approvalWatchDecision,
+  approvalExpiredNotice,
+  approvalReplySettlesHost,
+  approvalReplySpokenNotice,
+  editorActionAdvance,
+  EDITOR_ACTION_MAX_ATTEMPTS,
+  editorRetryBudget,
+  appendBoundedTail,
+  bridgeExitError,
+  pickLiveDocumentRelative,
+  boundFileUnresolved,
+  readDiskText,
   isInsideWorkspace,
+  pickSessionRoot,
+  sameFsPath,
+  matchOpenFsPath,
+  resolveHivePlannerSrc,
+  resolveWorkspaceRelative,
+  liveFeedRelative,
   loadSnapshotMaxBytes,
   truncateUtf8,
   buildSelection,
@@ -320,6 +648,7 @@ module.exports = {
   requestApprovalStub,
   readBridgeConnection,
   parseReadyLine,
+  createReadyLineReader,
   createBridgeClient,
   decisionForOutcome,
   approvalReplyText,

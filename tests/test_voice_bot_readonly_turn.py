@@ -45,6 +45,30 @@ def test_read_only_prompt_streams_and_completes_with_stop_reason(runner):
     assert "task.started" in names and "task.progress" in names and "task.completed" in names
 
 
+def _workspace_digest(root: Path) -> dict[str, str]:
+    import hashlib
+
+    digest: dict[str, str] = {}
+    for path in sorted(root.rglob("*")):
+        if not path.is_file():
+            continue
+        rel = path.relative_to(root)
+        if rel.parts and rel.parts[0] == ".hive":
+            continue  # HIVE's own task state is not workspace content
+        digest[rel.as_posix()] = hashlib.sha256(path.read_bytes()).hexdigest()
+    return digest
+
+
+def test_read_only_turn_leaves_workspace_byte_identical(repo, runner):
+    # SC-001: a read-only question must not change any workspace file.
+    before = _workspace_digest(repo.root)
+    assert before, "fixture repo should contain files to compare"
+    out = runner.submit("explain add", file_path="src/app.py", client_request_id="req-sc001")
+    wait_task_terminal(runner, out["task_id"])
+    assert runner.state.coding_tasks[out["task_id"]].state == "completed"
+    assert _workspace_digest(repo.root) == before
+
+
 def test_contextual_follow_up_reuses_the_same_provider_session(runner):
     first = runner.submit("what does add do", client_request_id="req-a")
     wait_task_terminal(runner, first["task_id"])

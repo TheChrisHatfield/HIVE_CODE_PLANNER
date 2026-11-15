@@ -2227,7 +2227,16 @@ def peek_hive_planner_mcp(project_root: Path, config: LauncherConfig) -> dict:
         if url and not stored_command:
             snippet = url
         elif stored_command:
-            stored_args = entry.get("args") if isinstance(entry.get("args"), list) else []
+            raw_stored_args = entry.get("args")
+            if raw_stored_args is not None and not isinstance(raw_stored_args, list):
+                return {
+                    "ok": False,
+                    "error": "The hive-planner args in .cursor/mcp.json must be a JSON array of strings.",
+                    "enabled": enabled,
+                    "path": str(path),
+                    "root": str(target),
+                }
+            stored_args = raw_stored_args or []
             stored = format_mcp_invocation(
                 stored_command,
                 [str(part) for part in stored_args],

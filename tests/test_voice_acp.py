@@ -6,6 +6,8 @@ stdio, so framing, routing, and disconnect paths are exercised end to end.
 
 from __future__ import annotations
 
+import queue
+import subprocess
 import sys
 import threading
 import time
@@ -80,6 +82,39 @@ def test_notification_and_server_request_during_prompt(client: AcpClient) -> Non
     assert update["params"]["update"] == "started"
 
 
+def test_null_jsonrpc_error_code_does_not_kill_the_reader(client: AcpClient) -> None:
+    from hive_planner.voice_acp import _Pending
+
+    pending = _Pending()
+    with client._state_lock:
+        client._pending["null-err"] = pending
+    client._route_response({"id": "null-err", "error": {"code": None, "message": "nope"}})
+    assert pending.event.is_set()
+    assert isinstance(pending.error, AcpRemoteError)
+    assert pending.error.code == 0
+    assert client.request("echo", {"ok": True}, timeout=10) == {"ok": True}
+
+
+def test_close_does_not_raise_when_child_wait_times_out(monkeypatch) -> None:
+    c = AcpClient([sys.executable, str(FAKE_SERVER)])
+    real_wait = c._proc.wait
+    real_kill = c._proc.kill
+
+    def boom_wait(timeout=None):
+        raise subprocess.TimeoutExpired(cmd="agent", timeout=timeout or 0)
+
+    monkeypatch.setattr(c._proc, "wait", boom_wait)
+    monkeypatch.setattr(c._proc, "kill", lambda: None)
+    try:
+        c.close()
+    finally:
+        try:
+            real_kill()
+            real_wait(timeout=5)
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+
+
 def test_remote_error_is_surfaced_not_swallowed(client: AcpClient) -> None:
     with pytest.raises(AcpRemoteError) as info:
         client.request("fail", {}, timeout=10)
@@ -118,6 +153,43 @@ def test_crash_is_detected_and_fails_pending_request() -> None:
             c.request("echo", {}, timeout=2)
     finally:
         c.close()
+
+
+def test_close_fails_an_in_flight_request() -> None:
+    c = AcpClient([sys.executable, str(FAKE_SERVER)])
+    errors: list[BaseException] = []
+
+    def hang() -> None:
+        try:
+            c.request("slow", {"seconds": 8}, timeout=15)
+        except BaseException as exc:
+            errors.append(exc)
+
+    worker = threading.Thread(target=hang)
+    worker.start()
+    time.sleep(0.2)
+    c.close()
+    worker.join(timeout=6)
+    assert not worker.is_alive()
+    assert errors and isinstance(errors[0], AcpDisconnected)
+
+
+def test_terminate_then_close_emits_one_disconnect_sentinel() -> None:
+    c = AcpClient([sys.executable, str(FAKE_SERVER)])
+    try:
+        assert c.request("initialize", {}, timeout=10)["protocolVersion"] == 1
+        c.terminate()
+    finally:
+        c.close()
+    sentinels = 0
+    while True:
+        try:
+            item = c.notifications.get_nowait()
+        except queue.Empty:
+            break
+        if item is None:
+            sentinels += 1
+    assert sentinels == 1
 
 
 def test_terminate_kills_child_and_fails_pending() -> None:

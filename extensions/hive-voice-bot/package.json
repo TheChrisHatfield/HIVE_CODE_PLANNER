@@ -15,7 +15,10 @@
     "onCommand:hive.voiceBot.startBridge",
     "onCommand:hive.voiceBot.stopBridge",
     "onCommand:hive.voiceBot.submitTask",
-    "onCommand:hive.voiceBot.navigateTo"
+    "onCommand:hive.voiceBot.submitSpoken",
+    "onCommand:hive.voiceBot.navigateTo",
+    "onCommand:hive.voiceBot.interruptPlayback",
+    "onCommand:hive.voiceBot.endCall"
   ],
   "contributes": {
     "commands": [
@@ -40,8 +43,20 @@
         "title": "HIVE Voice_Bot: Submit Coding Task"
       },
       {
+        "command": "hive.voiceBot.submitSpoken",
+        "title": "HIVE Voice_Bot: Submit Spoken WAV (workspace path)"
+      },
+      {
         "command": "hive.voiceBot.navigateTo",
         "title": "HIVE Voice_Bot: Navigate To Active File"
+      },
+      {
+        "command": "hive.voiceBot.interruptPlayback",
+        "title": "HIVE Voice_Bot: Interrupt Playback"
+      },
+      {
+        "command": "hive.voiceBot.endCall",
+        "title": "HIVE Voice_Bot: End Call"
       }
     ],
     "configuration": {
@@ -61,6 +76,6 @@
     }
   },
   "scripts": {
-    "test": "node --test test/core.test.js test/bridge-client.test.js test/bridge.integration.test.js"
+    "test": "node --test test/core.test.js test/bridge-client.test.js test/bridge.integration.test.js test/review-fixes.test.js test/review-cascade.test.js test/code-review-2026-11-13.test.js test/editor-retry-budget.test.js"
   }
 }

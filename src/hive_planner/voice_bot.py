@@ -14,12 +14,14 @@ import sys
 import threading
 import time
 import uuid
+import zipfile
 from dataclasses import asdict, dataclass, field, fields
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
 
 from hive_planner.config import RepoPaths, validate_feature_id
+from hive_planner.voice_stt import STT_PIN_PROVIDER
 
 SCHEMA_VERSION = "voice-bot.v1"
 VOICE_BOT_DIR = Path(".hive") / "voice-bot"
@@ -67,8 +69,9 @@ VOICE_CONTROLLER_TOOLS: frozenset[str] = frozenset(
     }
 )
 
-# T013: no STT provider is claimed until the evidence register pins one.
-STT_PROVIDER: str | None = None
+# T013 / T042: STT is off by default. `stt_provider` in config is the only source; a provider
+# may be set only when it has a pin row in evidence-register.md § T033.
+PINNED_STT_PROVIDERS: frozenset[str] = frozenset({STT_PIN_PROVIDER})
 # R19 / G1: native Composer submit is not a public API. ACP is the coding session (T028).
 NATIVE_CHAT_PATH = "labeled_acp_fallback"
 # T016: Hive does not register an in-chat MCP microphone loop.
@@ -94,15 +97,26 @@ class VoiceBotError(Exception):
     """Voice_Bot contract or persistence error."""
 
 
-_R24_FIELDS = ("latency_target_ms", "first_spoken_update_target_ms")
+# R36 / R37 (T051): the listen and converse layer. "moshi" is the default; "typed" keeps input typed.
+VOICE_LAYERS = ("moshi", "typed")
+MOSHI_DEFAULT_URL = "ws://127.0.0.1:8998/api/chat"
+MOSHI_Q8_KEYS = ("moshi_q8_weights", "moshi_mimi_weights", "moshi_tokenizer", "moshi_model_config")
+
+_R24_FIELDS = (
+    "latency_target_ms",
+    "first_spoken_update_target_ms",
+    "voice_service_rss_target_mb",
+    "agent_children_rss_target_mb",
+)
 
 
 @dataclass(frozen=True)
 class VoiceBotConfig:
     """Single config object for R21 limits and R24 budgets (T001a).
 
-    R21 defaults are provisional. R24 targets stay ``None`` (no claimed
-    target) until the T018 baseline is recorded in the evidence register.
+    R21 defaults are provisional. R24 latency targets default to 8000 ms, a
+    ceiling just above the T018 live baseline (submit to running 5.9-7.1 s on
+    Cursor Agent CLI 2026.11.05). Resource-use targets are not set here.
     """
 
     instruction_max_chars: int = 4_000
@@ -113,21 +127,75 @@ class VoiceBotConfig:
     diff_max_bytes: int = 256 * 1024
     progress_interval_s: int = 30
     reconnect_window_s: int = 300
-    latency_target_ms: int | None = None
-    first_spoken_update_target_ms: int | None = None
+    latency_target_ms: int | None = 8_000
+    first_spoken_update_target_ms: int | None = 8_000
+    # AC20 / R24 resource ceilings. Agent children peaked 607.8-630.2 MB on the
+    # 2026-11-11 probe (650 MB ceiling). Voice service peaked ~21 MB; 100 MB is a
+    # provisional ceiling with headroom, not a measured target.
+    voice_service_rss_target_mb: int | None = 100
+    agent_children_rss_target_mb: int | None = 650
     edits_enabled: bool = False
+    # T042: null (default) keeps typed_instruction. Only a pinned provider may be set.
+    stt_provider: str | None = None
+    # Settings microphone device (name string). Null means the system default input.
+    input_device: str | None = None
+    # T042 slice 4 / S1: absent or false keeps speech no-audio. True lets _say pick PipecatVoiceAdapter
+    # when Pipecat is importable; its payload still says audio false until playback is pinned (T034).
+    audio_enabled: bool = False
+    # R36 / R37 (T051): "moshi" (default) routes the listen layer through the Moshi adapter;
+    # "typed" uses the speech-out adapter directly. moshi_url points at the Moshi server.
+    # moshi_autostart (default true): Hive starts `python -m moshi.server` for a loopback URL
+    # when no handshake answers. Remote URLs are never started.
+    voice_layer: str = "moshi"
+    moshi_url: str = MOSHI_DEFAULT_URL
+    moshi_autostart: bool = True
+    # A3c: local q8 server. All four set (or all null). Hive runs scripts/moshi_q8_server.py with them;
+    # all null keeps the bare upstream `python -m moshi.server` command.
+    moshi_q8_weights: str | None = None
+    moshi_mimi_weights: str | None = None
+    moshi_tokenizer: str | None = None
+    moshi_model_config: str | None = None
 
     def __post_init__(self) -> None:
         for f in fields(self):
             value = getattr(self, f.name)
-            if f.name == "edits_enabled":
+            if f.name in MOSHI_Q8_KEYS:
+                if value is not None and (not isinstance(value, str) or not value.strip()):
+                    raise VoiceBotError(f"voice_bot config '{f.name}' must be null or a non-empty path string")
+                continue
+            if f.name in ("edits_enabled", "audio_enabled", "moshi_autostart"):
                 if not isinstance(value, bool):
-                    raise VoiceBotError("voice_bot config 'edits_enabled' must be a boolean")
+                    raise VoiceBotError(f"voice_bot config '{f.name}' must be a boolean")
+                continue
+            if f.name == "voice_layer":
+                if value not in VOICE_LAYERS:
+                    raise VoiceBotError("voice_bot config 'voice_layer' must be one of: moshi, typed")
+                continue
+            if f.name == "moshi_url":
+                if not isinstance(value, str) or not value.startswith(("ws://", "wss://")) or len(value) < 8:
+                    raise VoiceBotError("voice_bot config 'moshi_url' must be a ws:// or wss:// URL")
+                continue
+            if f.name == "input_device":
+                if value is not None and (not isinstance(value, str) or not value.strip()):
+                    raise VoiceBotError("voice_bot config 'input_device' must be null or a non-empty string")
+                continue
+            if f.name == "stt_provider":
+                if value is not None and value not in PINNED_STT_PROVIDERS:
+                    raise VoiceBotError(
+                        f"voice_bot config 'stt_provider' must be null or one of: "
+                        f"{', '.join(sorted(PINNED_STT_PROVIDERS))}"
+                    )
                 continue
             if value is None and f.name in _R24_FIELDS:
                 continue
             if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
                 raise VoiceBotError(f"voice_bot config '{f.name}' must be a positive integer")
+        q8_set = [name for name in MOSHI_Q8_KEYS if getattr(self, name) is not None]
+        if q8_set and len(q8_set) != len(MOSHI_Q8_KEYS):
+            raise VoiceBotError(
+                "voice_bot config moshi_q8_weights, moshi_mimi_weights, moshi_tokenizer, "
+                "moshi_model_config must all be set together or all be null"
+            )
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> VoiceBotConfig:
@@ -263,6 +331,15 @@ class TaskEvidence:
     tests_status: TestsStatus = "not_run"
     stop_reason: str = ""
     provider_turn_finished: bool = False
+    # Write evidence (T032): ACP `diff` content from completed write tool calls.
+    # Each item: {"path": str, "old_text": str, "new_text": str}.
+    write_diffs: list[dict[str, str]] = field(default_factory=list)
+    # U6: one entry per write-capable tool call (edit/delete/move, or any update carrying diff
+    # content), keyed by toolCallId. A write counts even when it carries no diff content.
+    write_events: list[str] = field(default_factory=list)
+    # F3: one normalized row per ingested tool call, keyed by tool_call_id. `command` is redacted
+    # and truncated before it is stored. Each item: {"tool_call_id", "kind", "command", "status"}.
+    tool_calls: list[dict[str, str]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -278,6 +355,17 @@ class TaskEvidence:
             tests_status=status,
             stop_reason=str(data.get("stop_reason") or ""),
             provider_turn_finished=bool(data.get("provider_turn_finished")),
+            write_diffs=[
+                {"path": str(d.get("path") or ""), "old_text": str(d.get("old_text") or ""),
+                 "new_text": str(d.get("new_text") or "")}
+                for d in (data.get("write_diffs") or []) if isinstance(d, dict)
+            ],
+            write_events=[str(e) for e in (data.get("write_events") or [])],
+            tool_calls=[
+                {"tool_call_id": str(t.get("tool_call_id") or ""), "kind": str(t.get("kind") or ""),
+                 "command": str(t.get("command") or ""), "status": str(t.get("status") or "")}
+                for t in (data.get("tool_calls") or []) if isinstance(t, dict)
+            ],
         )
 
 
@@ -479,6 +567,14 @@ def load_voice_bot_config(paths: RepoPaths) -> VoiceBotConfig:
     return VoiceBotConfig.from_dict(data)
 
 
+def save_voice_bot_config(paths: RepoPaths, config: VoiceBotConfig) -> Path:
+    """Write the full config to `.hive/voice-bot/config.json`; `load_voice_bot_config` reads it back."""
+    path = voice_bot_config_path(paths)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(asdict(config), indent=2) + "\n", encoding="utf-8")
+    return path
+
+
 def validate_context_snapshot(
     snapshot: ContextSnapshot,
     config: VoiceBotConfig | None = None,
@@ -490,7 +586,8 @@ def validate_context_snapshot(
         raise VoiceBotError("instruction is required")
     if len(snapshot.instruction) > cfg.instruction_max_chars:
         raise VoiceBotError("instruction exceeds configured limit")
-    if ".." in snapshot.file_path.replace("\\", "/"):
+    # Refuse only a real ".." path segment. A substring check also rejected legal names like "a..b.py".
+    if ".." in snapshot.file_path.replace("\\", "/").split("/"):
         raise VoiceBotError("file_path must stay inside the workspace")
     if len(snapshot.selection_text.encode("utf-8")) > cfg.snapshot_max_bytes:
         raise VoiceBotError("selection_text exceeds configured limit")
@@ -526,9 +623,16 @@ def edits_enabled(paths: RepoPaths | None = None) -> bool:
     return bool(cfg.edits_enabled) and g6_register_pass(paths)
 
 
-def hybrid_speech_path() -> str:
-    """T013: typed instruction until an STT provider is pinned in the evidence register."""
-    return "typed_instruction" if not STT_PROVIDER else "stt"
+def hybrid_speech_path(config: VoiceBotConfig | None = None) -> str:
+    """T013 / T042: `typed_instruction` unless config `stt_provider` names a pinned provider
+    AND the pinned model can run here (no false `stt` claim when transcription cannot happen)."""
+    if config is None or not config.stt_provider:
+        return "typed_instruction"
+    from hive_planner.voice_stt import resolve_pinned_model_dir  # lazy: optional dependency
+
+    if resolve_pinned_model_dir() is None:
+        return "typed_instruction"
+    return "stt"
 
 
 def native_chat_path() -> str:
@@ -548,7 +652,7 @@ def agent_install_command() -> str:
     return AGENT_INSTALL_WIN32 if sys.platform == "win32" else AGENT_INSTALL_UNIX
 
 
-def voice_runtime_plan() -> dict[str, Any]:
+def voice_runtime_plan(paths: RepoPaths | None = None) -> dict[str, Any]:
     """What a self-contained Voice_Bot deploy must install (R30). Does not run pip."""
     agent = resolve_cursor_agent_cli()
     pip_items = []
@@ -575,9 +679,13 @@ def voice_runtime_plan() -> dict[str, Any]:
             "action": "skip" if agent_present else "official_installer",
             "command": agent_install_command(),
         },
-        "speech_path": hybrid_speech_path(),
+        "speech_path": hybrid_speech_path(_speech_config(paths)),
         "native_chat_path": native_chat_path(),
     }
+
+
+def _speech_config(paths: RepoPaths | None) -> VoiceBotConfig | None:
+    return load_voice_bot_config(paths) if paths is not None else None
 
 
 def ensure_voice_runtime(*, install: bool = False, install_agent: bool = False) -> dict[str, Any]:
@@ -628,22 +736,174 @@ def ensure_voice_runtime(*, install: bool = False, install_agent: bool = False) 
     return {"ok": overall_ok, "installed": install, "plan": plan, "steps": results}
 
 
-def _voice_pack_install_md(repo_root: Path, output_dir: Path, *, wheels: bool) -> str:
+VOICE_EDITOR_EXTENSION_DIR = Path("extensions") / "hive-voice-bot"
+VOICE_EDITOR_EXTENSION_ID = "hive-planner.hive-voice-bot"
+VOICE_INSTALL_SCRIPT_NAME = "install-voice-bot.ps1"
+VOICE_INSTALL_COMMAND = f".\\{VOICE_INSTALL_SCRIPT_NAME}"
+_VSIX_EXTRA_MIME = {
+    "json": "application/json",
+    "js": "application/javascript",
+    "md": "text/markdown",
+    "txt": "text/plain",
+    "vsixmanifest": "text/xml",
+}
+
+_VOICE_INSTALL_PS1 = """# Installs the HIVE Voice_Bot editor adapter (the VSIX next to this script) into VS Code or Cursor.
+[CmdletBinding()]
+param(
+    [string]$Cli = ""
+)
+$ErrorActionPreference = "Stop"
+$vsix = Get-ChildItem -Path $PSScriptRoot -Filter "hive-voice-bot-*.vsix" |
+    Sort-Object LastWriteTime -Descending | Select-Object -First 1
+if (-not $vsix) {
+    Write-Error "No hive-voice-bot-*.vsix next to this script. Rebuild the pack: py -3.11 -m hive_planner voice-bot pack"
+    exit 1
+}
+$candidates = if ($Cli) { @($Cli) } else { @("code", "cursor") }
+$used = $null
+foreach ($name in $candidates) {
+    $cmd = Get-Command $name -ErrorAction SilentlyContinue
+    if (-not $cmd) { continue }
+    Write-Host "Installing $($vsix.Name) with $name ..."
+    & $cmd.Source --install-extension $vsix.FullName --force
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "$name --install-extension failed with exit code $LASTEXITCODE"
+        exit $LASTEXITCODE
+    }
+    $used = $name
+    break
+}
+if (-not $used) {
+    Write-Error "Neither 'code' nor 'cursor' is on PATH. Open VS Code or Cursor, run 'Shell Command: Install code command in PATH', then re-run this script (or pass -Cli <path>)."
+    exit 1
+}
+Write-Host "Installed __EXTENSION_ID__ via $used."
+Write-Host "Python side is separate: see INSTALL.md (pip install -e '.[voice]', then voice-bot ensure-runtime --install)."
+""".replace("__EXTENSION_ID__", VOICE_EDITOR_EXTENSION_ID)
+
+
+def _editor_extension_files(ext_dir: Path) -> list[Path]:
+    """Files that ship in the VSIX: package manifest, docs if present, and src/. Tests are excluded."""
+    files = [ext_dir / name for name in ("package.json", "README.md", "CHANGELOG.md", "LICENSE", "LICENSE.txt")]
+    files = [p for p in files if p.is_file()]
+    src = ext_dir / "src"
+    if src.is_dir():
+        files.extend(sorted(p for p in src.rglob("*") if p.is_file()))
+    return files
+
+
+def build_editor_vsix(ext_dir: Path, out_dir: Path) -> Path | None:
+    """Pack the editor adapter as a VSIX (zip) without npm, so a build host needs only Python (R30, T045).
+
+    Returns None when `ext_dir` has no package.json. The VSIX layout is the one VS Code and Cursor
+    install: `extension.vsixmanifest`, `[Content_Types].xml`, and `extension/...`.
+    """
+    from xml.sax.saxutils import escape
+
+    pkg_path = ext_dir / "package.json"
+    if not pkg_path.is_file():
+        return None
+    pkg = json.loads(pkg_path.read_text(encoding="utf-8"))
+    name = str(pkg["name"])
+    version = str(pkg["version"])
+    publisher = str(pkg.get("publisher") or "hive-planner")
+    display = escape(str(pkg.get("displayName") or name))
+    description = escape(str(pkg.get("description") or ""))
+    engine = escape(str((pkg.get("engines") or {}).get("vscode") or "*"))
+    files = _editor_extension_files(ext_dir)
+    manifest = (
+        '<?xml version="1.0" encoding="utf-8"?>\n'
+        '<PackageManifest Version="2.0.0" '
+        'xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011">\n'
+        "  <Metadata>\n"
+        f'    <Identity Language="en-US" Id="{escape(name)}" Version="{escape(version)}" Publisher="{escape(publisher)}" />\n'
+        f"    <DisplayName>{display}</DisplayName>\n"
+        f"    <Description xml:space=\"preserve\">{description}</Description>\n"
+        "    <Categories>Other</Categories>\n"
+        "    <Properties>\n"
+        f'      <Property Id="Microsoft.VisualStudio.Code.Engine" Value="{engine}" />\n'
+        "    </Properties>\n"
+        "  </Metadata>\n"
+        '  <Installation><InstallationTarget Id="Microsoft.VisualStudio.Code" /></Installation>\n'
+        "  <Dependencies />\n"
+        '  <Assets><Asset Type="Microsoft.VisualStudio.Code.Manifest" Path="extension/package.json" Addressable="true" /></Assets>\n'
+        "</PackageManifest>\n"
+    )
+    suffixes = {"vsixmanifest"} | {p.suffix.lstrip(".").lower() for p in files}
+    defaults = "".join(
+        f'<Default Extension="{ext}" ContentType="{_VSIX_EXTRA_MIME.get(ext, "application/octet-stream")}" />'
+        for ext in sorted(suffixes)
+        if ext
+    )
+    content_types = (
+        '<?xml version="1.0" encoding="utf-8"?>\n'
+        '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+        f"{defaults}</Types>\n"
+    )
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for stale in out_dir.glob(f"{name}-*.vsix"):
+        stale.unlink()
+    vsix = out_dir / f"{name}-{version}.vsix"
+    with zipfile.ZipFile(vsix, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("[Content_Types].xml", content_types)
+        zf.writestr("extension.vsixmanifest", manifest)
+        for f in files:
+            zf.write(f, f"extension/{f.relative_to(ext_dir).as_posix()}")
+    return vsix
+
+
+def _offline_pip_command(wheels_dir: Path) -> str:
+    """Offline install from the pack wheels. The wheels hold only VOICE_STACK_PYPI, so no `[voice]` extra here.
+
+    `[voice]` also pins faster-whisper and ctranslate2 (STT). Those are not in the pack, and `--no-index`
+    would fail to resolve them, so the offline path installs the Moshi/Pipecat wheels and Hive core only.
+    """
+    names = " ".join(VOICE_STACK_PYPI)
+    return (
+        f'py -3.11 -m pip install --no-index --find-links "{wheels_dir}" {names}; '
+        'py -3.11 -m pip install --no-index -e "."'
+    )
+
+
+def _voice_pack_install_md(
+    repo_root: Path,
+    output_dir: Path,
+    *,
+    wheels: bool,
+    vsix_name: str | None = None,
+) -> str:
     try:
         rel_pack = str(output_dir.relative_to(repo_root.resolve()))
     except ValueError:
         rel_pack = str(output_dir)
-    offline = (
-        f'py -3.11 -m pip install --no-index --find-links "{output_dir / "wheels"}" -e ".[{VOICE_EXTRA_NAME}]"'
-        if wheels
-        else ""
-    )
+    offline = _offline_pip_command(output_dir / "wheels") if wheels else ""
+    if vsix_name:
+        editor_lines = [
+            f"Run from this pack folder (PowerShell). The script installs `{vsix_name}` with `code`, or `cursor` if `code` is not on PATH:",
+            "",
+            "```text",
+            f"powershell -ExecutionPolicy Bypass -File {VOICE_INSTALL_COMMAND}",
+            "```",
+            "",
+            "Choose the CLI explicitly with `-Cli cursor` (or `-Cli code`). Manual fallback:",
+            f"`code --install-extension \"{output_dir / vsix_name}\" --force`.",
+        ]
+    else:
+        editor_lines = [
+            "This pack has **no VSIX**: the editor extension source was not found when the pack was built.",
+            "Rebuild the pack on a Hive checkout that contains `extensions/hive-voice-bot/`, then re-run the script.",
+        ]
     lines = [
         "# Voice_Bot deploy pack (R30)",
         "",
         "Copy the Hive Code Planner repo **and** this pack folder to the target machine.",
         "",
-        "## Online target (PyPI reachable)",
+        "## 1. Editor adapter (one scripted step)",
+        "",
+        *editor_lines,
+        "",
+        "## 2. Python runtime — online target (PyPI reachable)",
         "",
         "```text",
         "cd <hive-repo>",
@@ -652,11 +912,20 @@ def _voice_pack_install_md(repo_root: Path, output_dir: Path, *, wheels: bool) -
         "py -3.11 -m hive_planner voice-bot ensure-runtime --install --install-agent",
         "```",
         "",
+        "**Order matters.** The `pip install -e` line installs Hive plus the whole `[voice]` extra, which includes STT pins. "
+        "`ensure-runtime --install` then adds only what is still missing: `moshi` and `pipecat-ai` (the speech path). "
+        "`--install-agent` adds the Cursor `agent` CLI.",
+        "",
+        "**STT is optional.** `[voice]` pins `faster-whisper==1.2.1` and `ctranslate2==4.9.0`, but `ensure-runtime` "
+        "does not install them. STT runs only when `stt_provider` is set in config (default off). "
+        "To enable it on a host that installed without `[voice]`, run: "
+        '`py -3.11 -m pip install "faster-whisper==1.2.1" "ctranslate2==4.9.0"`.',
+        "",
     ]
     if wheels:
         lines.extend(
             [
-                "## Offline target (wheels included)",
+                "## 3. Python runtime — offline target (wheels included)",
                 "",
                 "```text",
                 "cd <hive-repo>",
@@ -666,14 +935,24 @@ def _voice_pack_install_md(repo_root: Path, output_dir: Path, *, wheels: bool) -
                 "",
                 "`ensure-runtime` without `--install` only reports missing pieces when wheels already satisfied pip.",
                 "",
+                "**Offline limitation:** the wheels folder holds only `moshi` and `pipecat-ai` (and their deps). "
+                "It has no `faster-whisper` or `ctranslate2`, so offline STT is unavailable unless you add those "
+                "wheels separately. Speech stays on the typed path until then.",
+                "",
             ]
         )
     lines.extend(
         [
+            "## 4. Config (safe default)",
+            "",
+            "Copy `.hive/voice-bot/config.json.example` to `.hive/voice-bot/config.json` on the target host.",
+            "Keep `edits_enabled` false unless the operator enables edits after the G6 register pass.",
+            "Never copy a live `bridge-token` or a config with `edits_enabled: true` into the pack or git.",
+            "",
             f"Pack folder: `{rel_pack}`",
             "",
             "Cursor `agent` is not a PyPI wheel; use `ensure-runtime --install --install-agent` on first setup.",
-            "Editor adapter: install `extensions/hive-voice-bot/` in Cursor/VS Code separately.",
+            "Editor adapter: step 1 above (`install-voice-bot.ps1` installs the VSIX in this folder).",
         ]
     )
     return "\n".join(lines) + "\n"
@@ -684,8 +963,12 @@ def build_voice_deploy_pack(
     output_dir: Path | None = None,
     *,
     download_wheels: bool = False,
+    extension_dir: Path | None = None,
 ) -> dict[str, Any]:
-    """Write a portable Voice_Bot pack (manifest + install doc) for other machines (R30)."""
+    """Write a portable Voice_Bot pack for other machines (R30).
+
+    The pack holds the manifest, the install doc, the editor VSIX (T045), and `install-voice-bot.ps1`.
+    """
     from hive_planner import __version__ as hive_version
 
     root = repo_root.resolve()
@@ -697,6 +980,13 @@ def build_voice_deploy_pack(
 
     req_path = out / "requirements-voice.txt"
     req_path.write_text("\n".join(VOICE_STACK_PYPI) + "\n", encoding="utf-8")
+
+    ext_src = (extension_dir or (root / VOICE_EDITOR_EXTENSION_DIR)).resolve()
+    vsix_path = build_editor_vsix(ext_src, out)
+    vsix_name = vsix_path.name if vsix_path else None
+    steps.append({"step": "editor_vsix", "source": str(ext_src), "ok": vsix_path is not None, "vsix": vsix_name})
+    script_path = out / VOICE_INSTALL_SCRIPT_NAME
+    script_path.write_text(_VOICE_INSTALL_PS1, encoding="utf-8")
 
     if download_wheels:
         wheels_dir.mkdir(parents=True, exist_ok=True)
@@ -719,11 +1009,7 @@ def build_voice_deploy_pack(
             }
 
     wheel_names = sorted(p.name for p in wheels_dir.glob("*")) if wheels_dir.is_dir() else []
-    offline_cmd = (
-        f'py -3.11 -m pip install --no-index --find-links "{wheels_dir}" -e ".[{VOICE_EXTRA_NAME}]"'
-        if wheel_names
-        else None
-    )
+    offline_cmd = _offline_pip_command(wheels_dir) if wheel_names else None
     manifest: dict[str, Any] = {
         "schema": VOICE_DEPLOY_PACK_SCHEMA,
         "hive_planner_version": hive_version,
@@ -740,11 +1026,17 @@ def build_voice_deploy_pack(
         },
         "pack_command": "py -3.11 -m hive_planner voice-bot pack --download-wheels",
     }
+    manifest["target_install"]["editor_install"] = f"powershell -ExecutionPolicy Bypass -File {VOICE_INSTALL_COMMAND}"
+    manifest["editor"] = {
+        "extension_id": VOICE_EDITOR_EXTENSION_ID,
+        "vsix": vsix_name,
+        "install_script": VOICE_INSTALL_SCRIPT_NAME,
+    }
     manifest_path = out / "manifest.json"
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     install_path = out / "INSTALL.md"
     install_path.write_text(
-        _voice_pack_install_md(root, out, wheels=bool(wheel_names)),
+        _voice_pack_install_md(root, out, wheels=bool(wheel_names), vsix_name=vsix_name),
         encoding="utf-8",
     )
     return {
@@ -753,6 +1045,8 @@ def build_voice_deploy_pack(
         "manifest": str(manifest_path),
         "install_doc": str(install_path),
         "requirements": str(req_path),
+        "editor_vsix": str(vsix_path) if vsix_path else None,
+        "install_script": str(script_path),
         "wheels_dir": str(wheels_dir) if wheel_names else None,
         "wheel_count": len(wheel_names),
         "download_wheels": download_wheels,
@@ -790,6 +1084,13 @@ def latency_meets_target(elapsed_ms: int, target_ms: int | None) -> bool:
     return elapsed_ms <= target_ms
 
 
+def rss_meets_target(measured_mb: float, target_mb: int | None) -> bool:
+    """R24 / AC20: a missing target is not a product claim. A set target must change this check."""
+    if target_mb is None:
+        return True
+    return measured_mb <= target_mb
+
+
 def event_delta_ms(events: list[dict[str, Any]], start_name: str, end_name: str) -> int | None:
     """Elapsed milliseconds between two named task events, or None if either is missing."""
     start_at = next((e.get("at") for e in events if e.get("name") == start_name), None)
@@ -805,7 +1106,14 @@ def event_delta_ms(events: list[dict[str, Any]], start_name: str, end_name: str)
 
 
 def buffers_match(snapshot: ContextSnapshot, live_version: int, live_dirty: bool) -> bool:
-    return snapshot.document_version == live_version and snapshot.dirty is live_dirty
+    # Compare values, not identity: a dirty flag read from JSON or a host payload may not be the
+    # bool singleton, and `is` would then report a false stale buffer.
+    return int(snapshot.document_version) == int(live_version) and bool(snapshot.dirty) == bool(live_dirty)
+
+
+def same_workspace(value: str, root: Path) -> bool:
+    """True when `value` and `root` are the same directory after realpath and case fold (R23)."""
+    return os.path.normcase(os.path.realpath(value)) == os.path.normcase(os.path.realpath(root))
 
 
 def _basename(file_path: str) -> str:
@@ -826,8 +1134,21 @@ def _clear_snapshot_payload(snapshot: ContextSnapshot) -> None:
     snapshot.file_content = ""
 
 
+def _is_hive_internal(file_path: str) -> bool:
+    parts = [p for p in str(file_path).replace("\\", "/").split("/") if p and p != "."]
+    return bool(parts) and parts[0].casefold() == ".hive"
+
+
 def apply_snapshot_exclusions(snapshot: ContextSnapshot, *, content: str | None = None) -> ContextSnapshot:
     """Clear payload and set `excluded` (R2, R28). Never send secret, binary, or unsaved bytes."""
+    if snapshot.excluded:
+        _clear_snapshot_payload(snapshot)
+        return snapshot
+    # `.hive/` holds the bridge token and config latch. Editor payloads from there are secret.
+    if _is_hive_internal(snapshot.file_path):
+        snapshot.excluded = "secret"
+        _clear_snapshot_payload(snapshot)
+        return snapshot
     text = snapshot.selection_text if content is None else content
     blob = "\n".join(part for part in (text, snapshot.file_content, content or "") if part)
     if snapshot.dirty:
@@ -865,9 +1186,13 @@ def map_editor_snapshot(editor: dict[str, Any], *, instruction: str, workspace_r
                 diags.append(str(item))
     file_path = str(editor.get("file") or "")
     reason = str(editor.get("reason") or "")
-    if reason == "no_active_file":
+    if reason in ("no_active_file", "no_workspace", "path_outside_workspace"):
         file_path = ""
     file_content = str(editor.get("file_content") or "")
+    if reason == "path_outside_workspace":
+        text = ""
+        file_content = ""
+        truncated = False
     truncated = truncated or bool(editor.get("file_truncated")) or bool(editor.get("diagnostics_truncated"))
     snap = ContextSnapshot(
         workspace_root=workspace_root,
@@ -924,15 +1249,52 @@ class PipecatVoiceAdapter(VoiceAdapter):
     cancel_on_interruption = False
 
     def speak(self, text: str) -> dict[str, Any]:
+        """Synthesize with the Pipecat TTS service and play it (R32). Raises VoiceBotError on failure.
+
+        Empty text plays nothing. A failed synth or playback raises so the caller falls back to the
+        typed path; it never reports `played: true` without audio having started.
+        """
         if not _module_installed("pipecat"):
             raise VoiceBotError("pipecat_unavailable")
-        return {
-            "played": False,
-            "audio": False,
-            "text": str(text or ""),
+        clean = str(text or "")
+        base = {
+            "text": clean,
             "path": "pipecat",
+            "engine": "sapi",
             "cancel_on_interruption": self.cancel_on_interruption,
         }
+        if not clean.strip():
+            return {**base, "played": False, "audio": False}
+        from hive_planner.voice_tts import speak_via_pipecat  # lazy: keeps voice_bot import-light
+
+        return {**base, **speak_via_pipecat(clean), "audio": True}
+
+
+def speech_out_adapter(config: VoiceBotConfig | None = None) -> VoiceAdapter:
+    """Speech-out adapter for HIVE text (OD-2, R36). Chosen from config `audio_enabled`.
+
+    Default (absent or false) is the typed no-audio adapter. Audio-enabled picks the Pipecat
+    adapter only when Pipecat is importable; otherwise it stays typed (no silent failure).
+    """
+    cfg = config or DEFAULT_VOICE_BOT_CONFIG
+    if cfg.audio_enabled and _module_installed("pipecat"):
+        return PipecatVoiceAdapter()
+    return TypedInstructionAdapter()
+
+
+def speech_adapter(config: VoiceBotConfig | None = None) -> VoiceAdapter:
+    """Runtime speak/listen adapter. Config `voice_layer` picks Moshi (R36 default) or typed.
+
+    `voice_layer` "moshi" returns `MoshiVoiceAdapter`, which owns the listen layer and delegates
+    `speak()` to `speech_out_adapter`. No socket is opened here; the handshake is checked by
+    `moshi_listen_gate` before a spoken turn (T053).
+    """
+    cfg = config or DEFAULT_VOICE_BOT_CONFIG
+    if cfg.voice_layer == "moshi":
+        from hive_planner.voice_moshi import MoshiVoiceAdapter  # lazy: keeps voice_bot import-light
+
+        return MoshiVoiceAdapter(speech_out=speech_out_adapter(cfg), url=cfg.moshi_url)
+    return speech_out_adapter(cfg)
 
 
 def pipecat_cancel_on_interruption() -> bool | None:
@@ -1159,12 +1521,17 @@ def create_context_snapshot(
     if not snapshot.created_at:
         snapshot.created_at = _utc_now()
     cfg = load_voice_bot_config(paths)
-    if not snapshot.file_content and snapshot.file_path and not snapshot.dirty:
+    # A prior exclusion (secret/binary/unsaved) has an empty payload on purpose.
+    # Re-reading the file would put those bytes back on the snapshot (R2, R28).
+    if not snapshot.excluded and not snapshot.file_content and snapshot.file_path and not snapshot.dirty:
         candidate = (paths.root / snapshot.file_path).resolve()
         try:
-            candidate.relative_to(paths.root.resolve())
+            rel = candidate.relative_to(paths.root.resolve())
         except ValueError:
             candidate = None
+        else:
+            if not rel.parts or rel.parts[0].casefold() == ".hive":
+                candidate = None
         if candidate is not None and candidate.is_file():
             try:
                 raw_file = candidate.read_bytes()
@@ -1222,7 +1589,9 @@ def resolve_cursor_agent_cli() -> dict[str, Any]:
             check=False,
         )
         if proc.returncode == 0:
-            version = (proc.stdout or proc.stderr or "").strip().splitlines()[0] or None
+            # Whitespace-only output has no first line; indexing it raised IndexError.
+            lines = (proc.stdout or proc.stderr or "").strip().splitlines()
+            version = lines[0].strip() if lines else None
     except (OSError, subprocess.TimeoutExpired):
         version = None
     try:
@@ -1412,7 +1781,7 @@ def live_prompt(
         if method == "session/request_permission":
             return {"outcome": {"outcome": "cancelled"}}
         if method in _FS_READ_METHODS:
-            return _read_workspace_text(paths.root, params)
+            return _read_workspace_text(paths.root, params, load_voice_bot_config(paths).snapshot_max_bytes)
         if method in _FS_WRITE_METHODS or method.startswith("terminal/") or method in _PLAN_METHODS:
             raise VoiceBotError("g2_write_cancelled")
         return None
@@ -1531,7 +1900,6 @@ ACP_G6_INITIALIZE = {
 _FS_WRITE_METHODS = frozenset({"fs/write_text_file", "fs/writeTextFile"})
 _FS_READ_METHODS = frozenset({"fs/read_text_file", "fs/readTextFile"})
 _PLAN_METHODS = frozenset({"cursor/create_plan"})
-_READ_CAP_BYTES = 64 * 1024
 
 
 def _g6_gate_summary(method: str, params: Any) -> dict[str, Any]:
@@ -1555,23 +1923,32 @@ def reject_permission_result(params: Any) -> dict[str, Any]:
     return {"outcome": {"outcome": "cancelled"}}
 
 
-def _read_workspace_text(root: Path, params: Any) -> dict[str, str]:
+def _read_workspace_text(root: Path, params: Any, cap_bytes: int) -> dict[str, str]:
+    """ACP fs/read inside the workspace. `cap_bytes` is the R21 `snapshot_max_bytes` from config."""
     if not isinstance(params, dict):
         raise VoiceBotError("fs_read_invalid")
     raw = str(params.get("path") or "")
     if not raw:
         raise VoiceBotError("fs_read_missing_path")
+    if "\x00" in raw:
+        # resolve() truncates at NUL on Windows; refuse before the path is interpreted.
+        raise VoiceBotError("fs_read_outside_workspace")
     path = Path(raw)
     if not path.is_absolute():
         path = root / path
     try:
         resolved = path.resolve()
-        resolved.relative_to(root.resolve())
+        rel = resolved.relative_to(root.resolve())
     except (OSError, ValueError):
         raise VoiceBotError("fs_read_outside_workspace") from None
+    if not rel.parts or rel.parts[0].casefold() == ".hive":
+        raise VoiceBotError("fs_read_protected")
     if not resolved.is_file():
         raise VoiceBotError("fs_read_missing")
-    data = resolved.read_bytes()[:_READ_CAP_BYTES]
+    # Read at most cap_bytes (R21). read_bytes() loaded the whole file first, so a large file
+    # could exhaust memory before the cap applied.
+    with resolved.open("rb") as handle:
+        data = handle.read(cap_bytes)
     return {"content": data.decode("utf-8", errors="replace")}
 
 
@@ -1648,7 +2025,7 @@ def live_permission(
             gated_event.set()
             raise VoiceBotError("g6_write_cancelled")
         if method in _FS_READ_METHODS:
-            return _read_workspace_text(paths.root, params)
+            return _read_workspace_text(paths.root, params, load_voice_bot_config(paths).snapshot_max_bytes)
         payload.setdefault("server_methods", []).append(method)
         raise VoiceBotError(f"g6_method_refused:{method}")
 
@@ -1763,6 +2140,161 @@ def live_permission(
         client.close()
 
 
+LIVE_WRITE_REL = Path(".hive") / "voice-bot" / "live-write-check.txt"
+LIVE_WRITE_NONCE_PREFIX = "HIVE_LIVE_WRITE_NONCE="
+ACP_LIVE_WRITE_INITIALIZE = {
+    "protocolVersion": 1,
+    "clientInfo": {"name": "hive-voice-bot-r35", "version": "1"},
+    "clientCapabilities": {
+        "fs": {"readTextFile": False, "writeTextFile": False},
+        "terminal": False,
+    },
+}
+
+
+def allow_permission_result(params: Any) -> dict[str, Any]:
+    """R35: select the live ACP allow option so the agent may perform its own edit."""
+    options = params.get("options") if isinstance(params, dict) else None
+    if isinstance(options, list):
+        for opt in options:
+            if not isinstance(opt, dict):
+                continue
+            oid = str(opt.get("optionId") or "")
+            blob = f"{oid} {opt.get('kind') or ''}".casefold()
+            if "allow" in blob and "reject" not in blob and "deny" not in blob:
+                return {"outcome": {"outcome": "selected", "optionId": oid or "allow_once"}}
+    return {"outcome": {"outcome": "cancelled"}}
+
+
+def live_write(
+    paths: RepoPaths,
+    feature: str,
+    *,
+    agent_path: str | None = None,
+    timeout: float = 180.0,
+    instruction_suffix: str = "",
+    env: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """R35 live allowed-write probe. Runs one agent-mode ACP task and checks the nonce file on disk.
+
+    Refuses unless G6 is pass and config edits_enabled is true. Does not write the G6 row or config.
+    Results: pass | no_write | agent_error | blocked.
+    """
+    import hashlib
+    import secrets
+
+    from hive_planner.voice_acp import AcpError, open_agent_acp
+
+    validate_feature_id(feature)
+    path = agent_path or resolve_cursor_agent_cli().get("path")
+    login = cursor_agent_login_state(agent_path=path, env=env)
+    fixture = is_fixture_agent_path(str(path or ""))
+    nonce = secrets.token_hex(12)
+    target = paths.root / LIVE_WRITE_REL
+    payload: dict[str, Any] = {
+        "ok": False,
+        "r35": "blocked",
+        "feature": feature,
+        "agent_path": path,
+        "login": login,
+        "fixture": fixture,
+        "reason": "",
+        "session_id": "",
+        "stop_reason": "",
+        "mode": "",
+        "permissions": [],
+        "nonce_hash": hashlib.sha256(nonce.encode("utf-8")).hexdigest()[:16],
+        "file_present": False,
+        "nonce_match": False,
+    }
+
+    if fixture:
+        payload["reason"] = "fixture_agent"
+        return payload
+    if not path:
+        payload["reason"] = "missing_cli"
+        return payload
+    if not login["logged_in"]:
+        payload["reason"] = "not_logged_in"
+        return payload
+    if not g6_register_pass(paths):
+        payload["reason"] = "g6_not_pass"
+        return payload
+    if not edits_enabled(paths):
+        payload["reason"] = "edits_disabled"
+        return payload
+
+    if target.is_file():
+        target.unlink()
+    seen: list[dict[str, Any]] = payload["permissions"]
+
+    def handler(method: str, params: Any) -> Any:
+        if method == "session/request_permission":
+            summary = summarize_permission_params(params)
+            summary["method"] = method
+            seen.append(summary)
+            return allow_permission_result(params)
+        raise VoiceBotError(f"r35_method_refused:{method}")
+
+    instruction = (
+        f"Create the file {LIVE_WRITE_REL.as_posix()} containing exactly "
+        f"{LIVE_WRITE_NONCE_PREFIX}{nonce}. This is an authorized edit in agent mode."
+        f"{instruction_suffix}"
+    )
+    client = open_agent_acp(path, cwd=str(paths.root), server_request_handler=handler)
+    try:
+        client.request("initialize", ACP_LIVE_WRITE_INITIALIZE, timeout=timeout)
+        created = client.request("session/new", {"cwd": str(paths.root), "mcpServers": []}, timeout=timeout)
+        session_id = created.get("sessionId") if isinstance(created, dict) else None
+        if not session_id:
+            raise VoiceBotError("session/new returned no sessionId")
+        payload["session_id"] = str(session_id)
+        try:
+            client.request(
+                "session/set_mode", {"sessionId": session_id, "modeId": "agent"}, timeout=timeout
+            )
+            payload["mode"] = "agent"
+        except (AcpError, VoiceBotError):
+            payload["mode"] = "default"
+            payload["reason"] = "agent_mode_unavailable"
+            payload["r35"] = "agent_error"
+            return payload
+        prompt = client.request(
+            "session/prompt",
+            {"sessionId": session_id, "prompt": [{"type": "text", "text": instruction}]},
+            timeout=timeout,
+        )
+        payload["stop_reason"] = str(prompt.get("stopReason") or "") if isinstance(prompt, dict) else ""
+    except (AcpError, VoiceBotError, OSError) as exc:
+        payload["r35"] = "agent_error"
+        payload["reason"] = str(exc)[:200]
+        return payload
+    finally:
+        client.close()
+
+    payload["file_present"] = target.is_file()
+    if payload["file_present"]:
+        content = target.read_text(encoding="utf-8", errors="replace").strip()
+        payload["nonce_match"] = content == f"{LIVE_WRITE_NONCE_PREFIX}{nonce}"
+    if payload["file_present"] and payload["nonce_match"]:
+        payload["r35"] = "pass"
+        payload["ok"] = True
+        payload["reason"] = "live_write"
+    else:
+        payload["r35"] = "no_write"
+        payload["reason"] = "file_missing" if not payload["file_present"] else "nonce_mismatch"
+    return payload
+
+
+def r24_rss_measurable() -> bool:
+    """R24: True when RSS can be measured (psutil importable); False otherwise."""
+    try:
+        import psutil  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
 def status_summary(paths: RepoPaths, feature: str | None = None) -> dict[str, Any]:
     from hive_planner.spec_drift import parse_active_feature
 
@@ -1788,5 +2320,6 @@ def status_summary(paths: RepoPaths, feature: str | None = None) -> dict[str, An
         "cursor_agent_cli": resolve_cursor_agent_cli(),
         "optional_providers": probe_optional_voice_providers(),
         "native_chat_path": native_chat_path(),
-        "speech_path": hybrid_speech_path(),
+        "speech_path": hybrid_speech_path(load_voice_bot_config(paths)),
+        "r24_rss_measurable": r24_rss_measurable(),
     }

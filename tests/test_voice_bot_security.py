@@ -17,6 +17,7 @@ from typing import Any
 import pytest
 
 from hive_planner.config import RepoPaths
+from hive_planner.voice_bot import ContextSnapshot, create_context_snapshot
 from hive_planner.voice_bridge import VoiceBridge
 from hive_planner.voice_task import DelegationError, VoiceTaskRunner
 
@@ -75,6 +76,43 @@ def test_nested_escape_that_resolves_outside_is_refused(runner):
 @pytest.mark.skipif(os.name != "nt", reason="backslash separators are only path separators on Windows")
 def test_backslash_parent_escape_is_refused_on_windows(runner):
     assert _refused_code(runner, "..\\outside_secret.txt") == "path_outside_workspace"
+
+
+def test_hive_internal_file_is_refused_before_any_task_exists(repo, runner):
+    hive = repo.root / ".hive" / "voice-bot"
+    hive.mkdir(parents=True, exist_ok=True)
+    (hive / "bridge-token").write_text("secret-token", encoding="utf-8")
+    assert _refused_code(runner, ".hive/voice-bot/bridge-token") == "path_protected"
+    assert runner.state.coding_tasks == {}
+    assert runner.state.queue == []
+
+
+def test_nested_path_that_resolves_into_hive_is_refused(repo, runner):
+    hive = repo.root / ".hive" / "voice-bot"
+    hive.mkdir(parents=True, exist_ok=True)
+    (hive / "bridge-token").write_text("secret-token", encoding="utf-8")
+    assert _refused_code(runner, "src/../.hive/voice-bot/bridge-token") == "path_protected"
+    assert runner.state.coding_tasks == {}
+
+
+def test_snapshot_refill_skips_hive_internal_files(repo, runner):
+    hive = repo.root / ".hive" / "voice-bot"
+    hive.mkdir(parents=True, exist_ok=True)
+    (hive / "bridge-token").write_text("secret-token", encoding="utf-8")
+    snap = create_context_snapshot(
+        repo,
+        runner.state,
+        ContextSnapshot(
+            workspace_root=str(repo.root),
+            file_path=".hive/voice-bot/bridge-token",
+            selection_text="",
+            document_version=0,
+            dirty=False,
+            instruction="explain",
+        ),
+    )
+    assert snap.file_content == ""
+    assert "secret-token" not in json.dumps(snap.to_dict())
 
 
 def test_missing_file_inside_the_workspace_is_refused_as_not_found(runner):

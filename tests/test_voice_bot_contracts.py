@@ -109,3 +109,47 @@ def test_instruction_limit_is_refused_without_truncation(repo):
         assert r.state.coding_tasks == {}
     finally:
         r.close()
+
+
+def _extension_editor(*, dirty: bool) -> dict:
+    """Shape matches the extension core.js snapshot keys (T007/T008)."""
+    return {
+        "file": "src/app.py",
+        "reason": "",
+        "selection": {"text": "x = 1", "truncated": False},
+        "file_content": "x = 1\n",
+        "document_version": 3,
+        "dirty": dirty,
+        "diagnostics": [{"severity": "error", "message": "boom"}],
+        "file_truncated": False,
+        "diagnostics_truncated": False,
+    }
+
+
+def test_map_editor_snapshot_clean_and_dirty_extension_shapes():
+    from hive_planner.voice_bot import map_editor_snapshot
+
+    clean = map_editor_snapshot(
+        _extension_editor(dirty=False), instruction="fix it", workspace_root="/ws"
+    )
+    assert clean.workspace_root == "/ws"
+    assert clean.file_path == "src/app.py"
+    assert clean.selection_text == "x = 1"
+    assert clean.file_content == "x = 1\n"
+    assert clean.document_version == 3
+    assert clean.dirty is False
+    assert clean.instruction == "fix it"
+    assert clean.diagnostics == ["error: boom"]
+    assert clean.truncated is False
+    assert clean.excluded == ""
+
+    dirty = map_editor_snapshot(
+        _extension_editor(dirty=True), instruction="fix it", workspace_root="/ws"
+    )
+    assert dirty.dirty is True
+    assert dirty.excluded == "unsaved"
+    assert dirty.selection_text == ""
+    assert dirty.file_content == ""
+    # Metadata survives exclusion so the task can still be bound to the file.
+    assert dirty.file_path == "src/app.py"
+    assert dirty.document_version == 3

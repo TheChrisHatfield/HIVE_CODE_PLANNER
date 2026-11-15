@@ -26,6 +26,7 @@ import sys
 import time
 
 SESSIONS: dict[str, int] = {}
+FS_WRITE_CAP = False  # set from initialize clientCapabilities.fs.writeTextFile (U11)
 _next_session = 0
 _next_perm = 0
 
@@ -52,6 +53,25 @@ def read_message() -> dict | None:
     return json.loads(line)
 
 
+def emit_write_no_diff(session_id: str, call_id: str = "w-nodiff") -> None:
+    """U6: a completed edit tool call with no diff content (a write the client sees no diff for)."""
+    update(session_id, {"sessionUpdate": "tool_call", "toolCallId": call_id,
+                        "title": "edit src/app.py", "kind": "edit"})
+    update(session_id, {"sessionUpdate": "tool_call_update", "toolCallId": call_id,
+                        "status": "completed", "content": []})
+
+
+def emit_write_diff(session_id: str, call_id: str = "w1") -> None:
+    """A completed tool call that carries an ACP `diff` content item (a file write)."""
+    update(session_id, {"sessionUpdate": "tool_call", "toolCallId": call_id,
+                        "title": "edit src/app.py", "kind": "edit"})
+    update(session_id, {"sessionUpdate": "tool_call_update", "toolCallId": call_id,
+                        "status": "completed",
+                        "content": [{"type": "diff", "path": "src/app.py",
+                                     "oldText": "return a + b\n",
+                                     "newText": "return a - b\n"}]})
+
+
 def run_turn(req_id, session_id: str, text: str) -> None:
     global _next_perm
     turn = SESSIONS.get(session_id, 0) + 1
@@ -62,33 +82,136 @@ def run_turn(req_id, session_id: str, text: str) -> None:
         sys.exit(3)
 
     approval_marker = next(
-        (m for m in ("NEEDS_APPROVAL", "NEEDS_QUESTION", "NEEDS_PLAN") if m in text), None
+        (m for m in ("NEEDS_APPROVAL", "NEEDS_EXEC_APPROVAL", "NEEDS_QUESTION", "NEEDS_PLAN") if m in text),
+        None,
     )
     if approval_marker is not None:
         marker_text = f"{approval_marker}:"
         action = text.split(marker_text, 1)[1].strip() if marker_text in text else "edit file"
-        kind = {"NEEDS_APPROVAL": "write_or_command", "NEEDS_QUESTION": "question",
-                "NEEDS_PLAN": "plan"}[approval_marker]
+        kind = {"NEEDS_APPROVAL": "write_or_command", "NEEDS_EXEC_APPROVAL": "write_or_command",
+                "NEEDS_QUESTION": "question", "NEEDS_PLAN": "plan"}[approval_marker]
+        tool_kind = "execute" if approval_marker == "NEEDS_EXEC_APPROVAL" else "edit"
         _next_perm += 1
         perm_id = f"perm-{_next_perm}"
         send({"jsonrpc": "2.0", "id": perm_id, "method": "session/request_permission",
               "params": {
                   "sessionId": session_id,
                   "kind": kind,
-                  "toolCall": {"toolCallId": f"tc-{perm_id}", "title": action, "kind": "edit"},
+                  "toolCall": {"toolCallId": f"tc-{perm_id}", "title": action, "kind": tool_kind},
                   "options": [
                       {"optionId": "allow", "name": "Allow", "kind": "allow_once"},
                       {"optionId": "reject", "name": "Reject", "kind": "reject_once"},
                   ],
               }})
+        allowed = False
         while True:  # wait for the client's answer to this permission request
             msg = read_message()
             if msg is None:
                 sys.exit(0)
             if msg.get("id") == perm_id and "result" in msg:
                 outcome = msg["result"].get("outcome", {})
-                text_chunk(session_id, f"permission outcome: {json.dumps(outcome)}")
+                allowed = outcome.get("outcome") == "selected"
+                answer = msg["result"].get("answer")
+                extra = f" answer={answer}" if answer is not None else ""
+                text_chunk(session_id, f"permission outcome: {json.dumps(outcome)}{extra}")
                 break
+        # Real ACP: an approved write reuses the permission request's toolCallId.
+        approved_call = f"tc-{perm_id}"
+        if "WRITE_AFTER_EXEC_APPROVAL" in text:
+            # R22: an approved non-write `execute` must not guard a later unapproved edit.
+            emit_write_diff(session_id, "w-unguarded")
+        elif allowed and "WRITE_SHELL_AFTER_EDIT_APPROVAL" in text:
+            # R22: an approved edit for src/app.py must not guard a different, unapproved shell write.
+            update(session_id, {"sessionUpdate": "tool_call", "toolCallId": "x-shell",
+                                "title": "shell", "kind": "execute",
+                                "rawInput": {"command": "echo changed > other.txt"}})
+            update(session_id, {"sessionUpdate": "tool_call_update", "toolCallId": "x-shell",
+                                "status": "completed", "rawOutput": {"exitCode": 0}})
+        elif allowed and "WRITE_TWICE" in text:
+            # U6: two writes after a single approval. The second must be unguarded.
+            emit_write_diff(session_id, approved_call)
+            emit_write_diff(session_id, "w2")
+        elif allowed and "WRITE_NO_DIFF" in text:
+            emit_write_no_diff(session_id, approved_call)
+        elif allowed and "WRITE_DIFF" in text:
+            emit_write_diff(session_id, approved_call)
+        send({"jsonrpc": "2.0", "id": req_id, "result": {"stopReason": "end_turn"}})
+        return
+
+    if "FS_WRITE_REQUEST:" in text:
+        # U11: the provider writes a file. With clientCapabilities.fs.writeTextFile false, the
+        # agent writes on its own (no request reaches the client; R35 shows this shape). With
+        # writeTextFile true, the agent routes the write through the client as fs/write_text_file.
+        rel = text.split("FS_WRITE_REQUEST:", 1)[1].split()[0]
+        if not FS_WRITE_CAP:
+            os.makedirs(os.path.dirname(rel) or ".", exist_ok=True)
+            with open(rel, "w", encoding="utf-8") as handle:
+                handle.write("u11 provider self-write")
+        else:
+            _next_perm += 1
+            write_id = f"fsw-{_next_perm}"
+            send({"jsonrpc": "2.0", "id": write_id, "method": "fs/write_text_file",
+                  "params": {"sessionId": session_id, "path": rel, "content": "u11 client write"}})
+            while True:
+                msg = read_message()
+                if msg is None:
+                    sys.exit(0)
+                if msg.get("id") == write_id and ("result" in msg or "error" in msg):
+                    break
+        send({"jsonrpc": "2.0", "id": req_id, "result": {"stopReason": "end_turn"}})
+        return
+
+    if "WRITE_DIFF_UNGUARDED" in text:
+        # Provider writes a file with no session/request_permission at all (R22 unguarded_write).
+        emit_write_diff(session_id)
+        send({"jsonrpc": "2.0", "id": req_id, "result": {"stopReason": "end_turn"}})
+        return
+
+    if "WRITE_NO_DIFF_UNGUARDED" in text:
+        # U6: a write with no diff content and no permission request at all.
+        emit_write_no_diff(session_id)
+        send({"jsonrpc": "2.0", "id": req_id, "result": {"stopReason": "end_turn"}})
+        return
+
+    if "WRITE_EMPTY_ID_UNGUARDED" in text:
+        # Empty toolCallId still carries kind=edit; that write must count.
+        update(session_id, {"sessionUpdate": "tool_call", "toolCallId": "",
+                            "title": "edit src/app.py", "kind": "edit"})
+        send({"jsonrpc": "2.0", "id": req_id, "result": {"stopReason": "end_turn"}})
+        return
+
+    if "WRITE_THEN_CRASH" in text:
+        emit_write_diff(session_id)
+        sys.exit(3)
+
+    if "WRITE_EXEC_UNGUARDED" in text:
+        # U10: a shell write (redirect) as an `execute` tool call, with no session/request_permission.
+        update(session_id, {"sessionUpdate": "tool_call", "toolCallId": "x1",
+                            "title": "shell", "kind": "execute",
+                            "rawInput": {"command": "echo changed > src/app.py"}})
+        update(session_id, {"sessionUpdate": "tool_call_update", "toolCallId": "x1",
+                            "status": "completed", "rawOutput": {"exitCode": 0}})
+        send({"jsonrpc": "2.0", "id": req_id, "result": {"stopReason": "end_turn"}})
+        return
+
+    if "WRITE_EXEC_UPDATE_ONLY" in text:
+        # Kind and command arrive only on tool_call_update (not on the opening tool_call).
+        update(session_id, {"sessionUpdate": "tool_call", "toolCallId": "x3",
+                            "title": "shell"})
+        update(session_id, {"sessionUpdate": "tool_call_update", "toolCallId": "x3",
+                            "kind": "execute", "status": "completed",
+                            "rawInput": {"command": "echo changed > src/app.py"},
+                            "rawOutput": {"exitCode": 0}})
+        send({"jsonrpc": "2.0", "id": req_id, "result": {"stopReason": "end_turn"}})
+        return
+
+    if "WRITE_PY_EXEC_UNGUARDED" in text:
+        # H1: an interpreter one-liner that writes a file; no redirect, no permission request.
+        update(session_id, {"sessionUpdate": "tool_call", "toolCallId": "x2",
+                            "title": "python", "kind": "execute",
+                            "rawInput": {"command": "python -c \"open('src/app.py','w').write('x')\""}})
+        update(session_id, {"sessionUpdate": "tool_call_update", "toolCallId": "x2",
+                            "status": "completed", "rawOutput": {"exitCode": 0}})
         send({"jsonrpc": "2.0", "id": req_id, "result": {"stopReason": "end_turn"}})
         return
 
@@ -110,6 +233,17 @@ def run_turn(req_id, session_id: str, text: str) -> None:
         update(session_id, {"sessionUpdate": "tool_call_update", "toolCallId": "c2",
                             "status": "completed", "rawOutput": {"exitCode": 0}})
         text_chunk(session_id, "linted")
+        send({"jsonrpc": "2.0", "id": req_id, "result": {"stopReason": "end_turn"}})
+        return
+
+    if "EXEC_SECRET" in text:
+        # F3: an `execute` call whose arguments carry credentials. Evidence must mask them.
+        update(session_id, {"sessionUpdate": "tool_call", "toolCallId": "s1",
+                            "title": "ruff", "kind": "execute",
+                            "rawInput": {"command": "ruff check --token=TESTSECRET123 --password hunter2 src/"}})
+        update(session_id, {"sessionUpdate": "tool_call_update", "toolCallId": "s1",
+                            "status": "completed", "rawOutput": {"exitCode": 0}})
+        text_chunk(session_id, "checked")
         send({"jsonrpc": "2.0", "id": req_id, "result": {"stopReason": "end_turn"}})
         return
 
@@ -148,6 +282,18 @@ def run_turn(req_id, session_id: str, text: str) -> None:
         send({"jsonrpc": "2.0", "id": req_id, "result": {"stopReason": "end_turn"}})
         return
 
+    if "HANG_PROMPT" in text:
+        # Stays in the turn until session/cancel or stdin closes. Used to prove a client
+        # timeout cannot leave this process holding the session for the next task.
+        while True:
+            msg = read_message()
+            if msg is None:
+                sys.exit(0)
+            if msg.get("method") == "session/cancel":
+                send({"jsonrpc": "2.0", "id": req_id, "result": {"stopReason": "cancelled"}})
+                return
+        return
+
     if "CANCEL_ME" in text:
         text_chunk(session_id, "working")
         while True:
@@ -166,7 +312,7 @@ def run_turn(req_id, session_id: str, text: str) -> None:
 
 
 def main() -> None:
-    global _next_session
+    global _next_session, FS_WRITE_CAP
     for line in sys.stdin:
         line = line.strip()
         if not line:
@@ -176,6 +322,8 @@ def main() -> None:
         req_id = msg.get("id")
         params = msg.get("params") or {}
         if method == "initialize":
+            caps = (params.get("clientCapabilities") or {}).get("fs") or {}
+            FS_WRITE_CAP = bool(caps.get("writeTextFile"))
             send({"jsonrpc": "2.0", "id": req_id, "result": {"protocolVersion": 1}})
         elif method == "session/new":
             _next_session += 1
