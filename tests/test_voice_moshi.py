@@ -297,6 +297,57 @@ def test_spoken_submit_refused_when_moshi_unreachable_creates_no_task(tmp_path: 
         runner.close()
 
 
+class _CountingStt:
+    """Injected STT adapter that returns an empty transcript, so a run that gets past the gate
+    stops at `stt_failed` with no task. Counts calls to show whether transcription ran."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def transcribe(self, _audio):
+        self.calls += 1
+        return "   "
+
+    def transcribe_file(self, _path):
+        self.calls += 1
+        return "   "
+
+
+def test_live_call_utterance_skips_listen_gate_only_when_flagged(tmp_path: Path):
+    # R37 (2026-11-15): a live panel call holds the Moshi slot, so its utterance must skip the probe.
+    # Without the flag the same refusing gate still blocks the spoken turn before transcription.
+    from hive_planner.voice_task import DelegationError
+    from voice_turn_support import make_repo, make_runner
+
+    paths = make_repo(tmp_path)
+    _write_repo_config(
+        paths,
+        {
+            "voice_layer": "moshi",
+            "moshi_url": f"ws://127.0.0.1:{_closed_port()}/api/chat",
+            "moshi_autostart": False,
+            "stt_provider": STT_PIN_PROVIDER,
+        },
+    )
+    runner = make_runner(paths)
+    stt = _CountingStt()
+    try:
+        with pytest.raises(DelegationError) as gated:
+            runner.submit_spoken(audio=b"RIFF", client_request_id="gated", stt_adapter=stt)
+        assert gated.value.code == "moshi_unreachable"
+        assert stt.calls == 0
+
+        with pytest.raises(DelegationError) as live:
+            runner.submit_spoken(
+                audio=b"RIFF", client_request_id="live", stt_adapter=stt, moshi_live_call=True,
+            )
+        assert live.value.code == "stt_failed"  # the gate passed; transcription then rejected the empty text
+        assert stt.calls == 1
+        assert runner.state.coding_tasks == {}
+    finally:
+        runner.close()
+
+
 def test_typed_submit_is_not_gated_by_moshi_outage(tmp_path: Path):
     # R36: the typed path is the fallback and stays open when Moshi is down.
     from voice_turn_support import make_repo, make_runner, wait_task_terminal

@@ -1826,6 +1826,7 @@ class VoiceTaskRunner:
         editor_snapshot: dict[str, Any] | None = None,
         stt_model_dir: Path | None = None,
         stt_adapter: Any | None = None,
+        moshi_live_call: bool = False,
     ) -> dict[str, Any]:
         """Spoken approval reply: transcribe, then route the text to the pending approval only (R6).
 
@@ -1840,7 +1841,8 @@ class VoiceTaskRunner:
             )
         # The listen gate may start the Moshi server and wait for it. It runs before the runner
         # lock so a slow server cannot freeze typed submits, status, or approvals.
-        listen_code = moshi_listen_gate(self.config)
+        # R37 (2026-11-15): a live panel call already holds the server slot; its utterance skips the probe.
+        listen_code = None if moshi_live_call else moshi_listen_gate(self.config)
         if listen_code:
             raise DelegationError(
                 listen_code, "moshi listen layer is not available",
@@ -1871,6 +1873,7 @@ class VoiceTaskRunner:
         editor_snapshot: dict[str, Any] | None = None,
         stt_model_dir: Path | None = None,
         stt_adapter: Any | None = None,
+        moshi_live_call: bool = False,
     ) -> dict[str, Any]:
         """T042 slice 2: spoken turn. Transcribes with the pinned STT adapter, then submits the text.
 
@@ -1886,8 +1889,8 @@ class VoiceTaskRunner:
             )
         # T053 / R36: the Moshi listen layer must answer its handshake before a spoken turn.
         # Refusal happens before transcription, so no task is created. The gate runs before the
-        # runner lock (see reply_spoken).
-        listen_code = moshi_listen_gate(self.config)
+        # runner lock (see reply_spoken). A live panel call skips it (R37, moshi_live_call).
+        listen_code = None if moshi_live_call else moshi_listen_gate(self.config)
         if listen_code:
             raise DelegationError(
                 listen_code, "moshi listen layer is not available",

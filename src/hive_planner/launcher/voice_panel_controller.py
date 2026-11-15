@@ -411,7 +411,7 @@ class VoicePanelController:
 
         def _send() -> None:
             try:
-                refusal = self._submit_recording(wav)
+                refusal = self._submit_recording(wav, moshi_live_call=True)
             except Exception as exc:  # noqa: BLE001 - a worker fault must reach the notice list
                 refusal = f"Utterance was not sent ({exc})."
             self._add_notice(refusal or "Heard you. Sent to the bridge.")
@@ -434,7 +434,7 @@ class VoicePanelController:
             return f"Call ended with an error ({error})."
         return None
 
-    def _submit_recording(self, audio: bytes) -> str | None:
+    def _submit_recording(self, audio: bytes, *, moshi_live_call: bool = False) -> str | None:
         """Slice 5d: write the WAV under the workspace, then POST its relative path to /v1/submit/spoken.
 
         Returns None when the bridge accepted it, else a refusal message the panel shows.
@@ -461,6 +461,7 @@ class VoicePanelController:
                 "task_id": str(pending.get("task_id") or ""),
                 "request_id": str(pending.get("request_id") or ""),
                 "wav_path": wav_rel.as_posix(),
+                "moshi_live_call": moshi_live_call,
             }
             status, payload = self._post_fn("/v1/reply/spoken", body)
             # Accepted replies (approved, denied, answered) return None. A re-prompt or an
@@ -477,6 +478,7 @@ class VoicePanelController:
             "client_request_id": request_id,
             "wav_path": wav_rel.as_posix(),
             "mode": "ask",
+            "moshi_live_call": moshi_live_call,
         }
         status, payload = self._post_fn("/v1/submit/spoken", body)
         if status == 200:

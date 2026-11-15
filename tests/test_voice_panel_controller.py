@@ -789,6 +789,7 @@ def test_moshi_utterance_is_sent_to_spoken_submit_as_a_task(tmp_path: Path, monk
     assert [route for route, _ in post.calls] == ["/v1/submit/spoken"]
     body = post.calls[0][1]
     assert body["mode"] == "ask"
+    assert body["moshi_live_call"] is True, "a live-call utterance must skip the bridge listen gate (R37)"
     assert Path(body["wav_path"]).parts[:3] == (".hive", "voice-bot", "recordings")
     assert (tmp_path / body["wav_path"]).is_file(), "the utterance is saved in the workspace before submit"
 

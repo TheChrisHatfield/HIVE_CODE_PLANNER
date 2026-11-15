@@ -129,6 +129,7 @@ TOOL_SCHEMAS: dict[str, dict[str, tuple[bool, str]]] = {
         "request_id": (True, "id"),
         "wav_path": (True, "relpath"),
         "editor_snapshot": (False, "editor"),
+        "moshi_live_call": (False, "flag"),
     },
     # T042 slice 3: spoken turn from a workspace WAV file. Same workspace/auth/schema as `submit`.
     "submit_spoken": {
@@ -138,6 +139,7 @@ TOOL_SCHEMAS: dict[str, dict[str, tuple[bool, str]]] = {
         "mode": (False, "mode"),
         "file_path": (False, "relpath"),
         "editor_snapshot": (False, "editor"),
+        "moshi_live_call": (False, "flag"),
     },
     "editor": {"workspace": (True, "workspace")},
     "editor_ack": {"workspace": (True, "workspace"), "action_id": (True, "id")},
@@ -662,6 +664,7 @@ def _make_handler(bridge: VoiceBridge) -> type[BaseHTTPRequestHandler]:
                     task_id=args["task_id"],
                     wav_path=args["wav_path"],
                     editor_snapshot=args.get("editor_snapshot") or None,
+                    moshi_live_call=bool(args.get("moshi_live_call", False)),
                 )
             except DelegationError as exc:
                 self._runner_refusal(exc)
@@ -698,6 +701,7 @@ def _make_handler(bridge: VoiceBridge) -> type[BaseHTTPRequestHandler]:
                     mode=args.get("mode", "ask"),
                     file_path=args.get("file_path", ""),
                     editor_snapshot=args.get("editor_snapshot") or None,
+                    moshi_live_call=bool(args.get("moshi_live_call", False)),
                 )
             except DelegationError as exc:
                 status = 429 if exc.code == "queue_full" else 400
