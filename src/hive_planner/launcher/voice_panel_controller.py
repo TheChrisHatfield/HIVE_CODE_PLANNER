@@ -482,6 +482,11 @@ class VoicePanelController:
         }
         status, payload = self._post_fn("/v1/submit/spoken", body)
         if status == 200:
+            # Same greeting sync as typed submit (slice 5e): a spoken task is watched too.
+            task_id = str(payload.get("task_id") or "")
+            context_id = str(payload.get("context_snapshot_id") or "")
+            if task_id and context_id:
+                self._start_task_watch(task_id, context_id)
             return None
         code = str(payload.get("error", CODE_BRIDGE_UNREACHABLE))
         return str(payload.get("message") or payload.get("spoken") or f"Bridge did not accept the recording ({code}).")

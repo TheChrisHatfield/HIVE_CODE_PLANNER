@@ -122,6 +122,34 @@ def test_bridge_error_clears_label(tmp_path: Path, monkeypatch, fast_poll) -> No
     _wait_for(lambda: ctrl.task_text() is None)
 
 
+def test_spoken_submit_starts_task_watch(tmp_path: Path, monkeypatch, fast_poll) -> None:
+    # Slice 5e gap closed: a spoken (WAV / Moshi utterance) submit is watched like a typed one.
+    post = _Post({"status": "running", "task_id": "t-s1", "context_snapshot_id": "ctx-s1"})
+    ctrl = VoicePanelController(lambda: tmp_path, post=post)
+    _live(ctrl, monkeypatch)
+    monkeypatch.setattr(ctrl, "_pending_approval", lambda: None)
+    seen = _states(monkeypatch, ctrl, [{"state": "running"}, {"state": "completed"}])
+
+    assert ctrl._submit_recording(b"RIFF-fake-wav", moshi_live_call=True) is None
+    assert post.calls[0][0] == "/v1/submit/spoken"
+    assert post.calls[0][1]["moshi_live_call"] is True
+
+    _wait_for(lambda: ctrl.task_text() is None)
+    assert seen[0] == {"route": "/v1/task", "task_id": "t-s1", "context_snapshot_id": "ctx-s1"}
+
+
+def test_spoken_submit_without_task_starts_no_watch(tmp_path: Path, monkeypatch) -> None:
+    post = _Post({"status": "queued"})
+    ctrl = VoicePanelController(lambda: tmp_path, post=post)
+    _live(ctrl, monkeypatch)
+    monkeypatch.setattr(ctrl, "_pending_approval", lambda: None)
+    seen = _states(monkeypatch, ctrl, [{"state": "running"}])
+
+    assert ctrl._submit_recording(b"RIFF-fake-wav") is None
+    assert ctrl.task_text() is None
+    assert seen == []
+
+
 def test_submit_without_context_snapshot_starts_no_watch(tmp_path: Path, monkeypatch) -> None:
     post = _Post({"status": "running", "task_id": "t-5"})
     ctrl = VoicePanelController(lambda: tmp_path, post=post)
