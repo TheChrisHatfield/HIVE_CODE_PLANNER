@@ -332,6 +332,13 @@ class VoicePanelController:
         self._talk_stop = stop
         self._talk_result = {}
         self._moshi_approval_buf = ""
+        if not cfg.stt_provider:
+            # Up front, not after the first sentence: utterances become tasks only with stt_provider set.
+            # Voice answers to a pending approval still work without it (they do not use STT).
+            self._add_notice(
+                f"Spoken tasks are off ({CODE_STT_NOT_CONFIGURED}): a sentence you say will not become a task. "
+                "Voice approvals still work. Type a task, or set stt_provider in .hive/voice-bot/config.json."
+            )
 
         def _run() -> None:
             # The gate may start the Moshi server and wait for it (minutes on a cold start). It runs

@@ -542,7 +542,10 @@ def test_moshi_mic_start_refused_when_listen_gate_fails(tmp_path: Path) -> None:
     )
     # The gate runs on the worker thread (it may start the server), so the refusal arrives as a notice.
     assert ctrl.on_mic(True) is None
-    assert _wait_notices(ctrl)[0].startswith("Mic off: Moshi is not reachable (moshi_unreachable)")
+    # The start notice (no stt_provider) may come first; the refusal must be among the notices.
+    assert any(
+        n.startswith("Mic off: Moshi is not reachable (moshi_unreachable)") for n in _wait_notices(ctrl)
+    )
     assert ctrl.mic_active is False
     assert calls == [] and recorder.started is False
 
@@ -568,6 +571,26 @@ def test_moshi_mic_start_does_not_need_stt_and_runs_call_until_stop(tmp_path: Pa
     assert ctrl.on_mic(False) is None
     assert ctrl.mic_active is False
     assert recorder.stopped is False, "no WAV is recorded or sent in Moshi mode"
+
+
+def _hold_talk(url, io, *, stop, **_kw):
+    stop.wait(5.0)
+    return {"error": "", "sent_frames": 0}
+
+
+def test_moshi_call_without_stt_says_spoken_tasks_are_off_at_start(tmp_path: Path) -> None:
+    ctrl = _moshi_ctrl(tmp_path, talk_fn=_hold_talk, recorder=_FakeRecorder())
+    assert ctrl.on_mic(True) is None
+    assert any(vpc.CODE_STT_NOT_CONFIGURED in n and "Voice approvals still work" in n for n in ctrl.call_notices)
+    assert ctrl.on_mic(False) is None
+
+
+def test_moshi_call_with_stt_pinned_has_no_spoken_tasks_off_notice(tmp_path: Path) -> None:
+    _write_config(tmp_path, stt_provider=STT_PIN_PROVIDER, voice_layer="moshi")
+    ctrl = _moshi_ctrl(tmp_path, talk_fn=_hold_talk, recorder=_FakeRecorder())
+    assert ctrl.on_mic(True) is None
+    assert not any(vpc.CODE_STT_NOT_CONFIGURED in n for n in ctrl.call_notices)
+    assert ctrl.on_mic(False) is None
 
 
 def test_moshi_mic_stop_posts_nothing_to_bridge(tmp_path: Path) -> None:

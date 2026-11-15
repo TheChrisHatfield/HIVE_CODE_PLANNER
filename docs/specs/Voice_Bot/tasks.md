@@ -476,3 +476,11 @@ See `.cursor/rules/integration-wiring-audit.mdc`.
 - `py -3.11 -m pytest tests/test_voice_panel_controller.py -q` → 59 passed. `py -3.11 -m pytest tests -k "voice or acp or launcher" -q` → 1137 passed, 2 warnings.
 - Impact: docs/change-impact/impact-packets/2026-11-15-voice-panel-moshi-call-fixes.md.
 - Not run: live mic, live speaker, live Moshi server (G7 / T055 still open).
+
+2026-11-15 — Session 15m follow-up: spoken-tasks-off notice at Moshi call start (T056 / T042 panel, R36–R37)
+- src/hive_planner/launcher/voice_panel_controller.py — `_start_moshi_call` adds `stt_not_configured` notice when `stt_provider` is null (approvals still work by voice).
+- tests/test_voice_panel_controller.py — new: test_moshi_call_without_stt_says_spoken_tasks_are_off_at_start, test_moshi_call_with_stt_pinned_has_no_spoken_tasks_off_notice; gate-refusal test matches the refusal notice by content.
+- `py -3.11 -m pytest tests -k "voice or acp or launcher" -q` → 1139 passed, 2 warnings (6:04).
+- Flake noted: a native `websockets` thread fault (Windows fatal 0x80000003) appeared in one combined run of the six voice panel/moshi files. It also appeared on the committed HEAD, so it is not from this change. Re-runs passed. Not fixed.
+- Impact: docs/change-impact/impact-packets/2026-11-15-voice-panel-moshi-call-fixes.md (follow-up section).
+- Not run: live mic, live speaker, live Moshi server (G7 / T055 still open).

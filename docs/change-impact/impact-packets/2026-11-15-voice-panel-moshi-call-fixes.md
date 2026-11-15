@@ -19,6 +19,17 @@ Three faults in `VoicePanelController`'s Moshi call path:
 | `src/hive_planner/launcher/voice_panel_controller.py` | Stop check after the gate and before `talk()`. Worker `finally` clears `mic_active` and adds a notice for an unrequested error (not for a gate refusal, not for a user stop). `PENDING_POLL_TTL_S = 0.5` memo via `_cached_pending_approval`; memo cleared only on terminal reply statuses. |
 | `tests/test_voice_panel_controller.py` | New: `test_stop_during_listen_gate_never_opens_the_call`, `test_dropped_call_clears_listening_and_reports_the_error`, `test_pending_approval_poll_is_memoised_across_text_frames`. Loopback test waits for `fake_io.opened` before stop. |
 
+### Follow-up (same session, 15m): spoken-tasks-off notice at call start
+
+Finding (`stt_not_configured`): with `stt_provider` null, a live Moshi call starts and every finished sentence that is not an approval reply goes to `POST /v1/submit/spoken`, which the bridge refuses. The user learned this only after speaking.
+
+| File | Change |
+|---|---|
+| `src/hive_planner/launcher/voice_panel_controller.py` | `_start_moshi_call` adds a notice when `cfg.stt_provider` is unset: spoken tasks are off (`stt_not_configured`), voice approvals still work. Notice only; no STT default change, no bridge change. |
+| `tests/test_voice_panel_controller.py` | New: `test_moshi_call_without_stt_says_spoken_tasks_are_off_at_start`, `test_moshi_call_with_stt_pinned_has_no_spoken_tasks_off_notice`. `test_moshi_mic_start_refused_when_listen_gate_fails` now looks for the refusal notice by content, since the start notice can come first. |
+
+Wiring: `on_mic(True)` → `_start_moshi_call` → `cfg.stt_provider` read (the config read site) → notice in `call_notices` → panel status. Approval path (`_on_moshi_text` → `/v1/reply`) does not use STT and is unchanged.
+
 ## Downstream impact
 
 - Interface: none. No HTTP route, config key, or spec text changed.
