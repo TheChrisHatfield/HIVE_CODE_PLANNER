@@ -23,10 +23,15 @@ Quick launch: double-click `scripts\HivePlanner.lnk`, or run the portable build 
 2. Load [`docs/planning-rosetta-stone.md`](docs/planning-rosetta-stone.md) — search **Planning Rosetta Stone** or hook `planning.rosetta`
 3. Read [`AGENTS.md`](AGENTS.md)
 
+## Changelog
+
+Release history and in-progress work: [`CHANGELOG.md`](CHANGELOG.md). Published builds: [GitHub Releases](https://github.com/TheChrisHatfield/HIVE_CODE_PLANNER/releases) (current package version **1.3.0** in `pyproject.toml`).
+
 ## Layout
 
 | Path | Purpose |
 |------|---------|
+| `CHANGELOG.md` | Version and release notes |
 | `START_HERE.md` | Agent context loader and read order |
 | `AGENTS.md` | Durable agent operating guidance |
 | `docs/planning-rosetta-stone.md` | Planning Rosetta Stone — hook legend |
