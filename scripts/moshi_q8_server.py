@@ -26,22 +26,30 @@ import struct
 import sys
 from pathlib import Path
 
-import safetensors.torch as st
-import torch
+_DT = None
 
-_DT = {
-    "F32": torch.float32,
-    "BF16": torch.bfloat16,
-    "F16": torch.float16,
-    "I8": torch.int8,
-    "U8": torch.uint8,
-    "I32": torch.int32,
-    "I64": torch.int64,
-}
+
+def _torch_dtypes():
+    """Load torch only when a checkpoint is actually read or the server starts."""
+    global _DT
+    import torch
+
+    if _DT is None:
+        _DT = {
+            "F32": torch.float32,
+            "BF16": torch.bfloat16,
+            "F16": torch.float16,
+            "I8": torch.int8,
+            "U8": torch.uint8,
+            "I32": torch.int32,
+            "I64": torch.int64,
+        }
+    return torch, _DT
 
 
 def stream_load(filename, device="cpu"):
     """Read a .safetensors file tensor by tensor and place each tensor on `device`."""
+    torch, dtypes = _torch_dtypes()
     out = {}
     with open(filename, "rb") as f:
         n = struct.unpack("<Q", f.read(8))[0]
@@ -53,9 +61,9 @@ def stream_load(filename, device="cpu"):
             f.seek(base + start)
             raw = bytearray(f.read(end - start))
             if not raw:
-                t = torch.empty(meta["shape"], dtype=_DT[meta["dtype"]])
+                t = torch.empty(meta["shape"], dtype=dtypes[meta["dtype"]])
             else:
-                t = torch.frombuffer(raw, dtype=_DT[meta["dtype"]]).reshape(meta["shape"]).clone()
+                t = torch.frombuffer(raw, dtype=dtypes[meta["dtype"]]).reshape(meta["shape"]).clone()
             out[key] = t.to(device) if str(device) != "cpu" else t
     return out
 
@@ -127,6 +135,10 @@ def main(argv: list[str] | None = None) -> None:
             raise SystemExit(f"moshi_q8_server: {label} file not found: {path}")
 
     # Patch before `moshi` is imported: moshi binds load_file at import time.
+    # Import torch only after the path check so a missing file does not CUDA-init.
+    import safetensors.torch as st  # noqa: E402
+
+    _torch_dtypes()
     st.load_file = stream_load
 
     from moshi import server  # noqa: E402

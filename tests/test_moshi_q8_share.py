@@ -10,6 +10,8 @@ import importlib.util
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 LAUNCHER = Path(__file__).resolve().parents[1] / "scripts" / "moshi_q8_server.py"
 
 
@@ -23,6 +25,22 @@ def _launcher():
 
 def _checkpoint(weights: str) -> SimpleNamespace:
     return SimpleNamespace(moshi_weights=weights, lora_weights=None)
+
+
+def test_importing_the_launcher_does_not_bind_torch():
+    launcher = _launcher()
+    assert getattr(launcher, "torch", None) is None
+    assert getattr(launcher, "st", None) is None
+
+
+def test_missing_checkpoint_exits_before_safetensors_import(tmp_path: Path):
+    launcher = _launcher()
+    missing = str(tmp_path / "no.safetensors")
+    with pytest.raises(SystemExit, match="file not found"):
+        launcher.main(
+            ["--q8", missing, "--mimi", missing, "--tokenizer", missing, "--config", missing]
+        )
+    assert getattr(launcher, "st", None) is None
 
 
 def test_two_sessions_on_one_checkpoint_load_the_lm_once():
