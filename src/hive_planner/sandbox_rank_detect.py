@@ -660,12 +660,14 @@ def sample_empty(
     rest = list(dict.fromkeys(rest))
     first.sort()
     rest.sort()
-    pool = first if len(first) >= count else first + rest
-    if len(pool) > count:
-        chosen = random.Random(seed).sample(pool, count)
-        chosen.sort()
+    rng = random.Random(seed)
+    if len(first) >= count:
+        chosen = rng.sample(first, count)
+    elif len(first) + len(rest) <= count:
+        chosen = first + rest
     else:
-        chosen = pool
+        chosen = first + rng.sample(rest, count - len(first))
+    chosen.sort()
     return [empty_row(repo, rel) for repo, rel in chosen]
 
 
@@ -877,6 +879,14 @@ def self_check() -> None:
         kinds = {row["outcome"] for row in part}
         if kinds != {"review-failed", "empty"}:
             raise SystemExit("self-check interleave left a split with one class")
+    clean_first = [("coleman", f"ok{i}.py") for i in range(3)]
+    clean_rest = [("other", f"x{i}.py") for i in range(10)]
+    sampled = sample_empty(clean_first + clean_rest, 5, seed=0)
+    sampled_files = {str(row["file"]) for row in sampled}
+    if any(f"coleman/ok{i}.py" not in sampled_files for i in range(3)):
+        raise SystemExit("self-check sample_empty dropped a smoke-clean file")
+    if len(sampled) != 5:
+        raise SystemExit("self-check sample_empty drew the wrong count")
 
 
 def main(argv: list[str] | None = None) -> int:

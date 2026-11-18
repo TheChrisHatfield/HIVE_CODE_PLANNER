@@ -3750,6 +3750,17 @@ def test_portable_spec_packages_sandbox_detector() -> None:
     assert '"hive_planner.bug_hunt_continue"' in text
 
 
+def test_sample_empty_keeps_all_smoke_clean_files_before_filling() -> None:
+    from hive_planner.sandbox_rank_detect import sample_empty
+
+    clean = [("coleman", f"ok{i}.py") for i in range(3)]
+    clean.extend(("other", f"x{i}.py") for i in range(10))
+    rows = sample_empty(clean, 5, seed=0)
+    files = {str(row["file"]) for row in rows}
+    assert len(rows) == 5
+    assert {f"coleman/ok{i}.py" for i in range(3)} <= files
+
+
 def test_scan_repo_uses_csharp_signals_for_cs_defects(tmp_path: Path) -> None:
     # C# empty-catch rows must carry csharp_signals, not a thin-only Signals().
     from hive_planner.sandbox_rank_detect import scan_repo
