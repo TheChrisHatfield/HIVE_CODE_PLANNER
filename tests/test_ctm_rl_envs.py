@@ -56,5 +56,10 @@ def test_terminal_step_stays_terminal_after_auto_reset() -> None:
     assert reward == 1.0
     assert terminated is True
     assert truncated is False
-    assert info == {"from": "reset"}
+    assert info["from"] == "reset"
+    assert info["final_info"] == {"from": "step"}
+    np.testing.assert_array_equal(
+        info["final_observation"],
+        np.array([1.0, 0.0, 3.0, 0.0], dtype=np.float32),
+    )
     np.testing.assert_array_equal(obs, np.array([9.0, 0.0, 7.0, 0.0], dtype=np.float32))

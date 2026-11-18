@@ -17,7 +17,12 @@ class MaskVelocityWrapper(gym.Wrapper):
     def step(self, action):
         obs, reward, terminated, truncated, info = self.env.step(action)
         if terminated or truncated:
-            obs, info = self.env.reset()
+            final_obs = self._apply_velocity_mask(obs)
+            obs, reset_info = self.env.reset()
+            reset_info = dict(reset_info)
+            reset_info["final_observation"] = final_obs
+            reset_info["final_info"] = info
+            info = reset_info
         return self._apply_velocity_mask(obs), reward, terminated, truncated, info
 
     def _apply_velocity_mask(self, observation):
