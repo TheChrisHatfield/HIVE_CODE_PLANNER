@@ -138,11 +138,11 @@ class TurnRouter:
                 )
             raise TimeoutError(f"Dream warm timed out after {warm_s:.0f}s — {detail}")
 
-        with self._backend_lock:
-            load = getattr(dream, "load", None)
-            if callable(load):
+        load = getattr(dream, "load", None)
+        if callable(load):
+            with self._infer_lock:
                 load()
-            return "ready" if self.dream_is_loaded() else "no-model"
+        return "ready" if self.dream_is_loaded() else "no-model"
 
     def plan_prompt(self, user_text: str, tool_trace: str = "") -> tuple[TaskClass, InferenceArm, str]:
         task = classify_task(user_text)
