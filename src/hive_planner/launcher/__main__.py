@@ -29,6 +29,14 @@ def _console_python() -> str:
     return str(exe)
 
 
+def _install_python_cmd() -> list[str]:
+    """Interpreter argv for first-launch pip. Pin py.exe to this process's version."""
+    exe = _console_python()
+    if Path(exe).name.lower() == "py.exe":
+        return [exe, f"-{sys.version_info.major}.{sys.version_info.minor}"]
+    return [exe]
+
+
 def _package_installed() -> bool:
     try:
         import importlib.metadata
@@ -75,7 +83,7 @@ def ensure_installed() -> None:
 
     try:
         proc = subprocess.run(
-            [_console_python(), "-m", "pip", "install", "-e", ".[dev]"],
+            [*_install_python_cmd(), "-m", "pip", "install", "-e", ".[dev]"],
             cwd=root,
             capture_output=True,
             text=True,

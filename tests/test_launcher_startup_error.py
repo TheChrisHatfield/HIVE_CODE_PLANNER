@@ -48,6 +48,51 @@ def test_ensure_installed_accepts_pip_success_without_metadata(
     main_mod.ensure_installed()
 
 
+def test_ensure_installed_pins_py_launcher_to_this_interpreter(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    repo = tmp_path / "hive"
+    repo.mkdir()
+    (repo / "pyproject.toml").write_text("[project]\nname='hive-planner'\n", encoding="utf-8")
+    monkeypatch.setattr(main_mod, "_repo_root", lambda: repo)
+    monkeypatch.setattr(main_mod, "_package_installed", lambda: False)
+    monkeypatch.setattr(main_mod, "_console_python", lambda: r"C:\Windows\py.exe")
+    captured: list[list[str]] = []
+
+    def _run(args, **kwargs):
+        captured.append(list(args))
+        return type("R", (), {"returncode": 0, "stdout": "ok", "stderr": ""})()
+
+    monkeypatch.setattr(main_mod.subprocess, "run", _run)
+    main_mod.ensure_installed()
+    assert captured, "pip was not invoked"
+    cmd = captured[0]
+    assert cmd[0].lower().endswith("py.exe")
+    assert cmd[1] == f"-{main_mod.sys.version_info.major}.{main_mod.sys.version_info.minor}"
+    assert cmd[2:6] == ["-m", "pip", "install", "-e"]
+
+
+def test_ensure_installed_does_not_pass_py_version_to_python_exe(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    repo = tmp_path / "hive"
+    repo.mkdir()
+    (repo / "pyproject.toml").write_text("[project]\nname='hive-planner'\n", encoding="utf-8")
+    monkeypatch.setattr(main_mod, "_repo_root", lambda: repo)
+    monkeypatch.setattr(main_mod, "_package_installed", lambda: False)
+    monkeypatch.setattr(main_mod, "_console_python", lambda: r"C:\Python311\python.exe")
+    captured: list[list[str]] = []
+
+    def _run(args, **kwargs):
+        captured.append(list(args))
+        return type("R", (), {"returncode": 0, "stdout": "ok", "stderr": ""})()
+
+    monkeypatch.setattr(main_mod.subprocess, "run", _run)
+    main_mod.ensure_installed()
+    assert captured[0][0].lower().endswith("python.exe")
+    assert captured[0][1] == "-m"
+
+
 def test_ensure_installed_shows_error_when_pip_cannot_start(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
