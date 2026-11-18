@@ -47,3 +47,9 @@ def test_dead_end_returns_gathered_steps_not_placeholder_fours() -> None:
 def test_short_route_is_not_padded_with_placeholder_fours() -> None:
     path = _solve(_paint(["RBBG"]), route_length=10)
     assert path.tolist() == [3, 3, 3]
+
+
+def test_upward_dead_end_does_not_hide_the_rightward_route() -> None:
+    # Greedy Up-first walked into the spur at (0,0) and never reached G.
+    path = _solve(_paint(["B..", "RBG"]))
+    assert path.tolist() == [3, 3]

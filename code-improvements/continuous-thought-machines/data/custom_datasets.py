@@ -2,6 +2,7 @@ import torch
 from torchvision.datasets import ImageFolder
 from torch.utils.data import Dataset
 import random
+from collections import deque
 import numpy as np
 from tqdm.auto import tqdm
 from PIL import Image
@@ -211,48 +212,46 @@ class MazeImageFolder(ImageFolder):
         if len(start_coords) == 0 or len(end_coords) == 0:
             print("Start or end point not found.")
             return np.array([], dtype=np.int64)
-        
-        start_y, start_x = start_coords[0]
-        end_y, end_x = end_coords[0]
 
-        current_y, current_x = start_y, start_x
+        start = (int(start_coords[0][0]), int(start_coords[0][1]))
+        end = (int(end_coords[0][0]), int(end_coords[0][1]))
+        height, width = x.shape[0], x.shape[1]
+        # 0 up, 1 down, 2 left, 3 right — same codes as the greedy walker
+        deltas = ((-1, 0), (1, 0), (0, -1), (0, 1))
+
+        def is_open(y, col):
+            pixel = x[y, col]
+            return bool((pixel == [0, 0, 1]).all() or (pixel == [0, 1, 0]).all())
+
+        queue = deque([start])
+        came = {start: None}
+        while queue:
+            cy, cx = queue.popleft()
+            if (cy, cx) == end:
+                break
+            for direction, (dy, dx) in enumerate(deltas):
+                ny, nx = cy + dy, cx + dx
+                if ny < 0 or ny >= height or nx < 0 or nx >= width:
+                    continue
+                if (ny, nx) in came:
+                    continue
+                if not is_open(ny, nx):
+                    continue
+                came[(ny, nx)] = ((cy, cx), direction)
+                queue.append((ny, nx))
+
+        if end not in came:
+            return np.array([], dtype=np.int64)
+
         path = []
-
-        while (current_y, current_x) != (end_y, end_x):
-            next_y, next_x = -1, -1  # Initialize to invalid coordinates
-            direction = -1  # Initialize to an invalid direction
-
-
-            # Check Up
-            if current_y > 0 and ((x[current_y - 1, current_x] == [0, 0, 1]).all() or (x[current_y - 1, current_x] == [0, 1, 0]).all()):
-                next_y, next_x = current_y - 1, current_x
-                direction = 0
-
-            # Check Down
-            elif current_y < x.shape[0] - 1 and ((x[current_y + 1, current_x] == [0, 0, 1]).all() or (x[current_y + 1, current_x] == [0, 1, 0]).all()):
-                next_y, next_x = current_y + 1, current_x
-                direction = 1
-
-            # Check Left
-            elif current_x > 0 and ((x[current_y, current_x - 1] == [0, 0, 1]).all() or (x[current_y, current_x - 1] == [0, 1, 0]).all()):
-                next_y, next_x = current_y, current_x - 1
-                direction = 2
-                
-            # Check Right
-            elif current_x < x.shape[1] - 1 and ((x[current_y, current_x + 1] == [0, 0, 1]).all() or (x[current_y, current_x + 1] == [0, 1, 0]).all()):
-                next_y, next_x = current_y, current_x + 1
-                direction = 3
-
-            
-            if direction == -1:
-                break
+        cell = end
+        while came[cell] is not None:
+            prev, direction = came[cell]
             path.append(direction)
-            
-            x[current_y, current_x] = [255,255,255] # mark the current as white to avoid going in circles
-            current_y, current_x = next_y, next_x
-            if len(path) == self.maze_route_length:
-                break
-
+            cell = prev
+        path.reverse()
+        if len(path) > self.maze_route_length:
+            path = path[: self.maze_route_length]
         return np.array(path, dtype=np.int64)
 
     def __getitem__(self, index):
