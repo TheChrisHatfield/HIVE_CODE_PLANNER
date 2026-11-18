@@ -112,6 +112,17 @@ def test_cancel_reports_rollback_not_performed(runner):
     wait_task_terminal(runner, out["task_id"])
 
 
+def test_end_call_stops_in_flight_playback(runner, monkeypatch):
+    calls: list[int] = []
+    monkeypatch.setattr("hive_planner.voice_tts.stop_playback", lambda: calls.append(1))
+    out = runner.submit("CANCEL_ME hold", client_request_id="e-stop")
+    wait_task_state(runner, out["task_id"], "running")
+    runner.end_call()
+    assert calls == [1]
+    runner.cancel(out["task_id"])
+    wait_task_terminal(runner, out["task_id"])
+
+
 def test_end_call_keeps_the_task_running_and_speaks_nothing_after(runner):
     out = runner.submit("CANCEL_ME hold", client_request_id="e-1")
     wait_task_state(runner, out["task_id"], "running")

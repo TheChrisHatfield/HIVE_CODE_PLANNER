@@ -2293,6 +2293,11 @@ class VoiceTaskRunner:
             self.session.state = "ended"
             self.session.ended_at = _now()
             task = self._active_task()
+            # Bridge/CLI hang-up does not go through the panel interrupt hop.
+            # Stop in-flight TTS here so the session actually ends voice audio (R1).
+            from hive_planner.voice_tts import stop_playback  # lazy: no audio stack on import
+
+            stop_playback()
             self._save()
             return {
                 "session_ended": True,
