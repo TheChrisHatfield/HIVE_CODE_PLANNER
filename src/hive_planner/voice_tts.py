@@ -18,6 +18,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import threading
 import wave
 from pathlib import Path
 from typing import Any
@@ -26,6 +27,11 @@ from hive_planner.voice_bot import VoiceBotError
 
 SAPI_TIMEOUT_S = 60.0
 _CREATE_NO_WINDOW = 0x08000000
+
+# stop_playback bumps this so a later sd.play from an in-flight speak is refused.
+_play_gate = threading.Lock()
+_play_generation = 0
+_expected_generation: int | None = None
 
 # PowerShell reads the text and the output path from environment variables, never from the
 # command line, so quotes or newlines in an update cannot change the script.
@@ -158,23 +164,44 @@ def play_pcm16(pcm: bytes, sample_rate: int) -> None:
         raise VoiceBotError("tts_playback_failed") from exc
     try:
         data = np.frombuffer(pcm, dtype=np.int16).astype(np.float32) / 32768.0
-        sd.play(data, sample_rate)
+        with _play_gate:
+            if _expected_generation is not None and _expected_generation != _play_generation:
+                raise VoiceBotError("tts_playback_failed")
+            sd.play(data, sample_rate)
+    except VoiceBotError:
+        raise
     except Exception as exc:  # PortAudioError, no output device
         raise VoiceBotError(f"tts_playback_failed: {exc}") from exc
 
 
 def stop_playback() -> None:
-    """Stop any speech still playing (playback interrupt). Never raises."""
+    """Stop any speech still playing (playback interrupt). Never raises.
+
+    Also invalidates in-flight synthesize-then-play so interrupt during SAPI
+    does not start audio after the stop (R7).
+    """
+    global _play_generation
     try:
         import sounddevice as sd
 
         sd.stop()
     except Exception:  # noqa: BLE001 - nothing playing, or no audio stack: nothing to stop
         pass
+    with _play_gate:
+        _play_generation += 1
 
 
 def speak_via_pipecat(text: str) -> dict[str, Any]:
     """Synthesize `text` with Pipecat and play it. Returns the playback record or raises VoiceBotError."""
-    pcm, rate = synthesize_via_pipecat(text)
-    play_pcm16(pcm, rate)
-    return {"played": True, "sample_rate": rate, "duration_s": round(len(pcm) / 2 / rate, 3)}
+    global _expected_generation
+    with _play_gate:
+        generation = _play_generation
+        _expected_generation = generation
+    try:
+        pcm, rate = synthesize_via_pipecat(text)
+        play_pcm16(pcm, rate)
+        return {"played": True, "sample_rate": rate, "duration_s": round(len(pcm) / 2 / rate, 3)}
+    finally:
+        with _play_gate:
+            if _expected_generation == generation:
+                _expected_generation = None

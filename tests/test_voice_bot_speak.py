@@ -107,6 +107,29 @@ def test_pipecat_payload_claims_playback_only_when_audio_started(monkeypatch):
     assert played == [(200, 22050)]
 
 
+def test_interrupt_during_synth_does_not_start_playback(monkeypatch):
+    # R7: interrupt while SAPI is still rendering must not start the speaker afterward.
+    import types
+
+    import hive_planner.voice_tts as tts
+
+    plays: list[int] = []
+    fake_sd = types.SimpleNamespace(
+        play=lambda *a, **k: plays.append(1),
+        stop=lambda *a, **k: None,
+    )
+    monkeypatch.setitem(sys.modules, "sounddevice", fake_sd)
+
+    def _synth(text: str):
+        tts.stop_playback()
+        return (b"\x00\x01" * 100, 22050)
+
+    monkeypatch.setattr(tts, "synthesize_via_pipecat", _synth)
+    with pytest.raises(VoiceBotError, match="tts_playback_failed"):
+        tts.speak_via_pipecat("Tests passed.")
+    assert plays == []
+
+
 def test_pipecat_empty_text_plays_nothing(monkeypatch):
     import hive_planner.voice_bot as vb
     import hive_planner.voice_tts as tts
