@@ -33,6 +33,14 @@ def finish_clip(wav_bytes: bytes, out_dir: Path = DEFAULT_OUT_DIR) -> dict:
     return stats
 
 
+def end_recording(state: dict, recorder: WavMicRecorder, out_dir: Path = DEFAULT_OUT_DIR) -> dict | None:
+    """Stop the mic once and save. A second call is a no-op so a failed save cannot write a silent extra clip."""
+    if not state.get("recording"):
+        return None
+    state["recording"] = False
+    return finish_clip(recorder.stop(), out_dir)
+
+
 def run_app() -> None:
     import time
     import tkinter as tk
@@ -71,11 +79,16 @@ def run_app() -> None:
         tick()
 
     def stop() -> None:
-        state["recording"] = False
-        wav = recorder.stop()
-        stats = finish_clip(wav)
         start_btn.config(state="normal")
         stop_btn.config(state="disabled")
+        try:
+            stats = end_recording(state, recorder)
+        except OSError as exc:
+            status.config(text="Could not save the clip.")
+            result.config(text=str(exc))
+            return
+        if stats is None:
+            return
         timer.config(text=f"{stats['seconds']:.1f} s")
         if stats["silent"]:
             status.config(text="Saved, but the clip is pure silence.")

@@ -125,3 +125,46 @@ def test_finish_clip_saves_wav_and_last_clip_json(tmp_path: Path) -> None:
     assert stats["peak_int16"] == 900 and stats["silent"] is False
     saved = json.loads((tmp_path / "last-clip.json").read_text(encoding="utf-8"))
     assert saved["path"] == stats["path"]
+
+
+def test_end_recording_second_call_does_not_write_a_silent_clip(tmp_path: Path) -> None:
+    import io
+    import json
+
+    sys.path.insert(0, str(ROOT / "scripts"))
+    import voice_record_app as app
+
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(16000)
+        w.writeframes(_tone_block(900, samples=800))
+    wav_bytes = buf.getvalue()
+
+    empty = io.BytesIO()
+    with wave.open(empty, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(16000)
+        w.writeframes(b"")
+
+    class _Rec:
+        def __init__(self) -> None:
+            self.stops = 0
+
+        def stop(self) -> bytes:
+            self.stops += 1
+            return wav_bytes if self.stops == 1 else empty.getvalue()
+
+    rec = _Rec()
+    state = {"recording": True}
+    first = app.end_recording(state, rec, tmp_path)
+    second = app.end_recording(state, rec, tmp_path)
+
+    clips = list(tmp_path.glob("clip-*.wav"))
+    assert first is not None and first["silent"] is False
+    assert second is None
+    assert rec.stops == 1
+    assert len(clips) == 1
+    assert json.loads((tmp_path / "last-clip.json").read_text(encoding="utf-8"))["path"] == first["path"]
