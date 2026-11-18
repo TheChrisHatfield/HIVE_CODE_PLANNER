@@ -67,6 +67,36 @@ def test_strip_cli_dispatch_argv_bare_flag_shows_help() -> None:
     ]
 
 
+def test_unfrozen_subcommand_runs_cli_not_gui(monkeypatch: pytest.MonkeyPatch) -> None:
+    import hive_planner.frozen_entry as entry
+    import hive_planner.runtime_paths as rp
+
+    monkeypatch.setattr(rp, "is_portable_runtime", lambda: False)
+    monkeypatch.setattr(rp, "is_cli_invocation", lambda _argv=None: True)
+    monkeypatch.setattr(
+        rp,
+        "strip_cli_dispatch_argv",
+        lambda _argv=None: ["frozen_entry.py", "roadmap-status"],
+    )
+    cli_called = {"value": False}
+    gui_called = {"value": False}
+
+    def _cli_main():
+        cli_called["value"] = True
+        return 0
+
+    def _gui_main():
+        gui_called["value"] = True
+        return 0
+
+    monkeypatch.setattr("hive_planner.cli.main", _cli_main)
+    monkeypatch.setattr("hive_planner.launcher.__main__.main", _gui_main)
+
+    assert entry.run() == 0
+    assert cli_called["value"] is True
+    assert gui_called["value"] is False
+
+
 def test_frozen_entry_bootstraps_before_cli(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     import hive_planner.frozen_entry as entry
     import hive_planner.portable_runtime as pr

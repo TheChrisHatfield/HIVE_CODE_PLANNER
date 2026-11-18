@@ -25,7 +25,7 @@ def run() -> int:
             _show_startup_error("Portable runtime bootstrap failed.", detail)
             return 1
 
-    if is_portable_runtime() and is_cli_invocation():
+    if is_cli_invocation():
         sys.argv = strip_cli_dispatch_argv()
         from hive_planner.cli import main
 
