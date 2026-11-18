@@ -13,6 +13,7 @@ With it, the bridge cannot start a runner while another process holds the lock, 
 
 from __future__ import annotations
 
+import errno
 import os
 import sys
 from pathlib import Path
@@ -22,6 +23,12 @@ from hive_planner.config import RepoPaths
 from hive_planner.voice_bot import VOICE_BOT_DIR, VoiceBotError
 
 LOCK_FILE = "runner.lock"
+# msvcrt.LK_NBLCK uses EACCES; flock LOCK_NB uses EAGAIN/EWOULDBLOCK.
+_LOCK_BUSY = {errno.EACCES, errno.EAGAIN, errno.EWOULDBLOCK, errno.EBUSY}
+if hasattr(errno, "EDEADLK"):
+    _LOCK_BUSY.add(errno.EDEADLK)
+if hasattr(errno, "EDEADLOCK"):
+    _LOCK_BUSY.add(errno.EDEADLOCK)
 
 
 class RunnerLockHeld(VoiceBotError):
@@ -50,13 +57,18 @@ class RunnerLock:
         handle = open(self.path, "a+b")  # noqa: SIM115 - held for the runner's lifetime
         try:
             _lock_nonblocking(handle)
+            self._handle = handle
         except OSError as exc:
             handle.close()
+            if exc.errno not in _LOCK_BUSY:
+                raise
             raise RunnerLockHeld(
                 "a voice bridge or standalone turn is already running for this repo; "
                 f"runner lock held: {self.path}"
             ) from exc
-        self._handle = handle
+        except BaseException:
+            handle.close()
+            raise
 
     def release(self) -> None:
         handle, self._handle = self._handle, None

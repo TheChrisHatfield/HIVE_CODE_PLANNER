@@ -7,6 +7,7 @@ through the same lock.
 
 from __future__ import annotations
 
+import errno
 import os
 import subprocess
 import sys
@@ -94,6 +95,45 @@ def _holder_script() -> str:
         "print('held', flush=True)\n"
         "sys.stdin.read()\n"
     )
+
+
+def test_disk_full_while_locking_is_not_reported_as_already_running(repo, monkeypatch):
+    import hive_planner.voice_lock as voice_lock
+
+    def boom(_handle):
+        raise OSError(errno.ENOSPC, "no space left on device")
+
+    monkeypatch.setattr(voice_lock, "_lock_nonblocking", boom)
+    with pytest.raises(OSError) as caught:
+        RunnerLock(repo).acquire()
+    assert caught.value.errno == errno.ENOSPC
+    monkeypatch.undo()
+    freed = RunnerLock(repo)
+    freed.acquire()
+    assert freed.held
+    freed.release()
+
+
+def test_interrupt_after_os_lock_does_not_block_the_next_acquire(repo, monkeypatch):
+    import hive_planner.voice_lock as voice_lock
+
+    real = voice_lock._lock_nonblocking
+
+    class _Aborted(BaseException):
+        pass
+
+    def boom(handle):
+        real(handle)
+        raise _Aborted
+
+    monkeypatch.setattr(voice_lock, "_lock_nonblocking", boom)
+    with pytest.raises(_Aborted):
+        RunnerLock(repo).acquire()
+    monkeypatch.undo()
+    freed = RunnerLock(repo)
+    freed.acquire()
+    assert freed.held
+    freed.release()
 
 
 def test_a_lock_held_by_another_process_is_refused_and_freed_when_that_process_dies(repo):
