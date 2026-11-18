@@ -102,7 +102,7 @@ def _step(lines: set[int], hunks: list[tuple[int, int, int, int]]) -> tuple[bool
         shift = 0
         inside = None
         for old_start, old_len, new_start, new_len in ordered:
-            if line >= new_start + max(new_len, 0) and not (new_len == 0 and line == new_start):
+            if line >= new_start + max(new_len, 0):
                 shift += old_len - new_len
                 continue
             if new_len > 0 and new_start <= line < new_start + new_len:
