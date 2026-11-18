@@ -7,4 +7,5 @@ async def one(i):
 async def main():
     await one(1)
     await one(2)
-asyncio.run(main())
+if __name__ == "__main__":
+    asyncio.run(main())
