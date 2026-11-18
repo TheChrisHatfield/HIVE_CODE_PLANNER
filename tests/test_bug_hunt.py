@@ -3750,6 +3750,20 @@ def test_portable_spec_packages_sandbox_detector() -> None:
     assert '"hive_planner.bug_hunt_continue"' in text
 
 
+def test_scan_repo_uses_csharp_signals_for_cs_defects(tmp_path: Path) -> None:
+    # C# empty-catch rows must carry csharp_signals, not a thin-only Signals().
+    from hive_planner.sandbox_rank_detect import scan_repo
+
+    (tmp_path / "Bug.cs").write_text(
+        "class C { public static int N = 1; void Run() { try { Work(); } catch (Exception ex) { } } }\n",
+        encoding="utf-8",
+    )
+    rows, _clean = scan_repo(tmp_path)
+    assert rows
+    assert any("empty catch" in str(row["scenario"]) for row in rows)
+    assert rows[0]["signals"]["dead_setting"] == 1
+
+
 def test_sandbox_detector_is_importable_from_the_package() -> None:
     from hive_planner import sandbox_rank_detect as packaged
     from hive_planner.bug_hunt import _sandbox_detect

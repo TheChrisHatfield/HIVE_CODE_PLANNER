@@ -716,10 +716,11 @@ def scan_repo(root: Path) -> tuple[list[dict[str, object]], list[str]]:
         if not found:
             clean.append(rel)
             continue
+        thin = 1 if is_thin(path, root, stems) else 0
         if path.suffix.lower() == ".py":
-            signals = python_signals(source, 1 if is_thin(path, root, stems) else 0)
+            signals = python_signals(source, thin)
         else:
-            signals = Signals(thin_test=1 if is_thin(path, root, stems) else 0)
+            signals = csharp_signals(source, thin)
         signals.recent_fix_commits = fix_lookup.get(rel.casefold(), 0)
         if rel.casefold() in revert_lookup:
             signals.reverted = 1
