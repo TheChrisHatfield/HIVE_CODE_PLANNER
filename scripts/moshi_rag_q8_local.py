@@ -42,11 +42,15 @@ def main() -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     print("Loading base checkpoint (from HF cache when already downloaded).")
+    hf_config_path = Path(hf_hub_download(args.hf_repo, "config.json"))
+    config = json.loads(hf_config_path.read_text(encoding="utf-8"))
+    config_path = None
     if args.arc_tokenizer:
-        _patch_arc_tokenizer_in_hf_cache(args.hf_repo, args.arc_tokenizer)
-    info = loaders.CheckpointInfo.from_hf_repo(args.hf_repo)
-    if args.arc_tokenizer:
-        _patch_arc_tokenizer_in_hf_cache(args.hf_repo, args.arc_tokenizer)
+        apply_arc_tokenizer(config, args.arc_tokenizer)
+        config_path = out_dir / "config.json"
+        config_path.write_text(json.dumps(config, indent=2), encoding="utf-8")
+        print(f"ARC tokenizer_name -> {args.arc_tokenizer} in {config_path} (HF cache unchanged)")
+    info = loaders.CheckpointInfo.from_hf_repo(args.hf_repo, config_path=config_path)
     print(f"Building model on {args.device}.")
     model = info.get_moshi(fuse_lora=True, device=args.device)
     print("Quantizing linear layers to int8 (bitsandbytes).")
@@ -63,8 +67,6 @@ def main() -> None:
     if readme:
         shutil.copy(readme, out_dir / "README.md")
 
-    with open(hf_hub_download(args.hf_repo, "config.json"), encoding="utf-8") as fh:
-        config = json.load(fh)
     config["moshi_name"] = new_name
     config["quantize"] = True
     for key in ("mimi_name", "tokenizer_name"):
@@ -74,17 +76,21 @@ def main() -> None:
         if not value.startswith("hf://"):
             config[key] = f"hf://{args.hf_repo}/{value}"
     (out_dir / "config.json").write_text(json.dumps(config, indent=2), encoding="utf-8")
-    print(f"Done. Point moshi.server at this folder with --config-path {out_dir / 'config.json'}")
+    print(f"Done. Point moshi.server at this folder with --config {out_dir / 'config.json'}")
 
 
-def _patch_arc_tokenizer_in_hf_cache(hf_repo: str, tokenizer: str) -> Path:
-    path = Path(hf_hub_download(hf_repo, "config.json"))
-    config = json.loads(path.read_text(encoding="utf-8"))
-    arc = config["conditioners"]["reference_with_time"]["multi_arc_encoder"]
+def apply_arc_tokenizer(config: dict, tokenizer: str) -> dict:
+    """Set ARC tokenizer_name on an in-memory config. Does not write the HF cache."""
+    try:
+        arc = config["conditioners"]["reference_with_time"]["multi_arc_encoder"]
+    except (KeyError, TypeError) as exc:
+        raise SystemExit(
+            "config.json has no conditioners.reference_with_time.multi_arc_encoder"
+        ) from exc
+    if not isinstance(arc, dict):
+        raise SystemExit("multi_arc_encoder is not a mapping")
     arc["tokenizer_name"] = tokenizer
-    path.write_text(json.dumps(config, indent=2), encoding="utf-8")
-    print(f"Patched ARC tokenizer_name -> {tokenizer} in {path}")
-    return path
+    return config
 
 
 def _exists(repo: str, filename: str) -> bool:
