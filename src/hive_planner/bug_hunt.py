@@ -1029,6 +1029,8 @@ _WALK_SKIP = {
     "Temp",
     "bin",
     "dist",
+    "vendor",
+    "personaplex",
     "node_modules",
     "obj",
     "site-packages",
