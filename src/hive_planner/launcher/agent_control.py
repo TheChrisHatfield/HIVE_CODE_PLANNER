@@ -114,15 +114,32 @@ def load_control_doc(path: Path) -> dict[str, Any] | None:
     }
 
 
+def _path_under(outer: Path, inner: Path) -> bool:
+    try:
+        outer_r = Path(outer).resolve()
+        inner_r = Path(inner).resolve()
+    except OSError:
+        return False
+    if outer_r == inner_r:
+        return True
+    try:
+        return inner_r.is_relative_to(outer_r)
+    except (OSError, TypeError, ValueError):
+        return False
+
+
 def _hive_root_ok(doc: dict[str, Any], want: Path | None) -> bool:
     if want is None:
         return True
     stored = str(doc.get("hive_root") or "").strip()
     if stored:
         try:
-            return Path(stored).resolve() == want
+            stored_p = Path(stored).resolve()
         except OSError:
             return False
+        # Portable HivePlanner.exe lives under the checkout (`dist/HivePlannerPortable`).
+        # Cursor MCP passes the checkout; equal-only matching dropped that GUI.
+        return _path_under(want, stored_p)
     try:
         return Path(doc["path"]).resolve().is_relative_to(want)
     except (OSError, TypeError, ValueError):

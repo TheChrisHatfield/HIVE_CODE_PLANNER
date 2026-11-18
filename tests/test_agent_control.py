@@ -116,6 +116,33 @@ def test_two_hive_roots_use_different_temp_sidecars(tmp_path: Path, monkeypatch)
     assert temp_control_path(left).read_text(encoding="utf-8") != temp_control_path(right).read_text(encoding="utf-8")
 
 
+def test_discover_accepts_portable_gui_under_checkout(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.delenv("HIVE_AGENT_CONTROL_FILE", raising=False)
+    monkeypatch.setattr("hive_planner.launcher.agent_control.pid_alive", lambda _pid: True)
+    monkeypatch.setattr(
+        "hive_planner.launcher.agent_control.tempfile.gettempdir",
+        lambda: str(tmp_path / "tmp"),
+    )
+    checkout = tmp_path / "repo"
+    portable = checkout / "dist" / "HivePlannerPortable"
+    portable.mkdir(parents=True)
+    from hive_planner.launcher.agent_control import discover_control, write_control_docs
+
+    write_control_docs(
+        portable,
+        {
+            "pid": os.getpid(),
+            "port": 9,
+            "token": "t",
+            "hive_root": str(portable.resolve()),
+        },
+    )
+    doc = discover_control(checkout)
+    assert doc is not None
+    assert doc.get("ambiguous") is not True
+    assert Path(doc["hive_root"]).resolve() == portable.resolve()
+
+
 def test_call_without_gui_is_launcher_not_running(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("HIVE_AGENT_CONTROL_FILE", str(tmp_path / "missing.json"))
     payload = call_live_launcher(tmp_path, live=True)
