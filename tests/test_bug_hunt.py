@@ -437,12 +437,20 @@ def test_candidate_files_skip_tool_caches(tmp_path: Path) -> None:
     packaged = tmp_path / "dist" / "HivePlannerPortable" / "_internal" / "app.py"
     packaged.parent.mkdir(parents=True)
     packaged.write_text("x = 1\n", encoding="utf-8")
+    vendored = tmp_path / "vendor" / "spec-kit" / "cli.py"
+    vendored.parent.mkdir(parents=True)
+    vendored.write_text("x = 1\n", encoding="utf-8")
+    nvidia = tmp_path / "code-improvements" / "personaplex" / "moshi" / "lm.py"
+    nvidia.parent.mkdir(parents=True)
+    nvidia.write_text("x = 1\n", encoding="utf-8")
     found = {path.resolve() for path in _candidate_files(tmp_path)}
     assert src.resolve() in found
     assert cached.resolve() not in found
     assert toxed.resolve() not in found
     assert hook.resolve() not in found
     assert packaged.resolve() not in found
+    assert vendored.resolve() not in found
+    assert nvidia.resolve() not in found
     import os
 
     if os.path.normcase("A") != os.path.normcase("a"):
