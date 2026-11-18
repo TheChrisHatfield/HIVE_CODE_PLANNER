@@ -285,5 +285,6 @@ def main():
     web.run_app(app, host=args.host , port=args.port, ssl_context=ssl_context)
 
 
-with torch.no_grad():
-    main()
+if __name__ == "__main__":
+    with torch.no_grad():
+        main()

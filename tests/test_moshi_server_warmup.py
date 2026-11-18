@@ -54,6 +54,23 @@ def test_cpu_warmup_does_not_call_cuda_synchronize(monkeypatch) -> None:
     assert called == []
 
 
+def test_importing_the_module_does_not_start_main() -> None:
+    tree = ast.parse(SRC.read_text(encoding="utf-8"))
+    def _calls_main(node: ast.AST) -> bool:
+        for child in ast.walk(node):
+            if isinstance(child, ast.Call) and isinstance(child.func, ast.Name) and child.func.id == "main":
+                return True
+        return False
+
+    module_level = [node for node in tree.body if _calls_main(node)]
+    assert module_level, "main() must still run from this file"
+    for node in module_level:
+        assert isinstance(node, ast.If), "importing moshi.server must not call main()"
+        test = node.test
+        assert isinstance(test, ast.Compare)
+        assert isinstance(test.left, ast.Name) and test.left.id == "__name__"
+
+
 def test_cuda_warmup_synchronizes_the_model_device(monkeypatch) -> None:
     called: list[object] = []
     monkeypatch.setattr(torch.cuda, "synchronize", lambda device=None: called.append(device))
