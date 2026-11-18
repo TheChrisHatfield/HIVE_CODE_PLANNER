@@ -58,3 +58,25 @@ def test_num_frames_stops_ceil_from_lengthening_the_text_stream() -> None:
     assert drifted.shape[-1] != n
     tokens = inter.prepare_item(None, n / rate, num_frames=n)
     assert tokens.shape[-1] == n
+
+
+def test_window_keeps_a_word_that_overlaps_the_start() -> None:
+    alignments = [
+        ("hello", (0.8, 1.2), "SPEAKER_MAIN"),
+        ("world", (1.2, 1.6), "SPEAKER_MAIN"),
+    ]
+    got = _mod().window_alignments(alignments, start_sec=1.0, duration_sec=1.0)
+    assert [row[0] for row in got] == ["hello", "world"]
+    assert got[0][1] == (0.8 - 1.0, 1.2 - 1.0)
+
+
+def test_old_dicho_slice_dropped_the_overlapping_word() -> None:
+    alignments = [
+        ("hello", (0.8, 1.2), "SPEAKER_MAIN"),
+        ("world", (1.2, 1.6), "SPEAKER_MAIN"),
+    ]
+    start_sec = 1.0
+    duration_sec = 1.0
+    start_i = _mod().dicho(alignments, start_sec)
+    end_i = _mod().dicho(alignments, start_sec + duration_sec)
+    assert [row[0] for row in alignments[start_i:end_i]] == ["world"]

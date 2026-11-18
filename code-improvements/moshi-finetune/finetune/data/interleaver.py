@@ -250,6 +250,20 @@ def dicho(alignment, val, i=0, j=None):
         return dicho(alignment, val, i, k)
 
 
+def window_alignments(alignments, start_sec: float, duration_sec: float):
+    """Keep words that overlap [start_sec, start_sec + duration_sec) and shift times to 0.
+
+    A binary search on start times drops a word that began before the window and
+    still covers the first frames.
+    """
+    window_end = start_sec + duration_sec
+    return [
+        (a[0], (a[1][0] - start_sec, a[1][1] - start_sec), a[2])
+        for a in alignments
+        if a[1][0] < window_end and a[1][1] > start_sec
+    ]
+
+
 class InterleavedTokenizer:
     def __init__(self, mimi, interleaver, duration_sec: float):
         self.mimi = mimi
@@ -275,12 +289,7 @@ class InterleavedTokenizer:
                 data = json.load(f)
                 alignments = data["alignments"]
 
-            start_alignment = dicho(alignments, start_sec)
-            end_alignment = dicho(alignments, start_sec + self.duration_sec)
-            alignments = [
-                (a[0], (a[1][0] - start_sec, a[1][1] - start_sec), a[2])
-                for a in alignments[start_alignment:end_alignment]
-            ]
+            alignments = window_alignments(alignments, start_sec, self.duration_sec)
 
             frame_rate = self.mimi.frame_rate
             if frame_rate <= 0:
