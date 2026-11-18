@@ -61,3 +61,36 @@ def test_empty_compile_replaces_stale_jsonl(tmp_path: Path) -> None:
     assert (output / "train.jsonl").read_text(encoding="utf-8") == ""
     assert (output / "val.jsonl").read_text(encoding="utf-8") == ""
     assert (output / "augmented.jsonl").read_text(encoding="utf-8") == ""
+
+
+def test_feature_row_accepts_missing_routing_hints() -> None:
+    ns = types.SimpleNamespace
+    record = ns(
+        scheduler_signal=ns(
+            resource_signals=None,
+            routing_hints=None,
+            latency_budget=10.0,
+            selected_arm=2,
+            encoded_scheduler_state=None,
+            power_constraint=1.0,
+            worker_pool_size=4,
+            compute_budget_units=1.0,
+            signals_stable=True,
+        ),
+        outcome=ns(
+            stage_confidence=None,
+            actual_latency=1.0,
+            actual_accuracy=1.0,
+            bandit_success=True,
+        ),
+        context=ns(
+            hardware_profile_id="p",
+            core_count=4,
+            constraint_tier="t",
+            scenario_template_id=None,
+        ),
+        shared_latent_vector=[0.0],
+    )
+    row = _mod()._feature_row(record)
+    assert row["scheduler_intent"] == 2
+    assert row["e_core_active"] == 0.0

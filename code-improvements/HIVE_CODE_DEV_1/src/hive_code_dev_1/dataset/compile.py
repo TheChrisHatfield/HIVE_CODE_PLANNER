@@ -42,7 +42,7 @@ def _feature_row(record: SandboxTraceRecord) -> dict:
         "constraint_tier": record.context.constraint_tier,
         "latency_budget": sig.latency_budget,
         "selected_arm": int(sig.selected_arm),
-        "scheduler_intent": sig.routing_hints.get(
+        "scheduler_intent": hints.get(
             "scheduler_intent",
             scheduler_intent_value(scheduler_intent_for_arm(sig.selected_arm)),
         ),
