@@ -56,11 +56,18 @@ def _working_moshi():
         sys.path[:] = saved_path
 
 
+def _require_working_lm():
+    import moshi.models.lm as lm_mod
+
+    here = Path(lm_mod.__file__).resolve().as_posix()
+    if "personaplex-migrate" not in here:
+        raise AssertionError(f"expected working-copy moshi, got {here}")
+    return lm_mod
+
+
 def test_lmgen_step_source_applies_pending_before_graphed_main():
     with _working_moshi():
-        from moshi.models import lm as lm_mod
-
-        assert "personaplex-migrate" in Path(lm_mod.__file__).resolve().as_posix()
+        lm_mod = _require_working_lm()
         src = inspect.getsource(lm_mod.LMGen.step)
         apply_at = src.find("apply_pending_streaming_sum_condition")
         graphed_at = src.find("graphed_main")
@@ -131,8 +138,7 @@ def test_sc_pp3_pinned_frame_count_unchanged_after_first_sum():
 
 def test_step_embeddings_does_not_add_rag():
     with _working_moshi():
-        from moshi.models import lm as lm_mod
-
+        lm_mod = _require_working_lm()
         src = inspect.getsource(lm_mod.LMGen.step_embeddings)
         assert "apply_pending_streaming_sum_condition" not in src
         assert "streaming_sum" not in src
@@ -140,9 +146,8 @@ def test_step_embeddings_does_not_add_rag():
 
 def test_forward_codes_takes_streaming_sum_argument():
     with _working_moshi():
-        from moshi.models.lm import LMModel
-
-        params = inspect.signature(LMModel.forward_codes).parameters
+        lm_mod = _require_working_lm()
+        params = inspect.signature(lm_mod.LMModel.forward_codes).parameters
         assert "streaming_sum" in params
 
 
