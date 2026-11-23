@@ -22,6 +22,6 @@ If this is a 1-pack, the coordinator performs implement, then Python check, then
 
 If a bug hunt is already in progress, finish or pause it before starting this loop.
 
-On checker fail or stall the stop hook pings this chat. Continue the current task. Do not wait for the human to say continue.
+On checker fail or stall the stop hook pings this chat. Continue the current task. After a passing commit, if open tasks remain, the stop hook pings for the next task. Do not wait for the human to say continue.
 
 Do not merge, push to trunk, force-push, or deploy.

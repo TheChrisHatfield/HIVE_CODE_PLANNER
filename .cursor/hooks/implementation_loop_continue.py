@@ -25,7 +25,7 @@ def main() -> int:
         bootstrap_hive_planner()
         from hive_planner.config import resolve_root
         from hive_planner.implementation_loop import (
-            CODESPEC_FOLLOWUP,
+            codespec_followup_message,
             codespec_should_followup,
         )
 
@@ -33,8 +33,18 @@ def main() -> int:
         if not codespec_should_followup(root):
             print(json.dumps({}))
             return 0
-        time.sleep(DEFAULT_PAUSE)
-        print(json.dumps({"followup_message": CODESPEC_FOLLOWUP}))
+        pause = DEFAULT_PAUSE
+        cont = root / ".hive" / "implementation-loop" / "continue.json"
+        if cont.is_file():
+            try:
+                raw = json.loads(cont.read_text(encoding="utf-8"))
+                if isinstance(raw, dict) and raw.get("pause_seconds") is not None:
+                    pause = max(0, int(raw["pause_seconds"]))
+            except (OSError, ValueError, TypeError):
+                pause = DEFAULT_PAUSE
+        if pause:
+            time.sleep(pause)
+        print(json.dumps({"followup_message": codespec_followup_message(root)}))
         return 0
     except Exception as exc:  # noqa: BLE001 — Cursor hooks must fail-open
         print(f"[implementation_loop_continue] failed: {exc}", file=sys.stderr)

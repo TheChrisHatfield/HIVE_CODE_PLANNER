@@ -6,9 +6,11 @@ import json
 from pathlib import Path
 
 from hive_planner.implementation_loop import (
+    CODESPEC_NEXT_TASK_FOLLOWUP,
     LoopState,
     PACK_1,
     _save_state,
+    codespec_followup_message,
     codespec_should_followup,
     write_codespec_continue,
     _loop_dir,
@@ -58,3 +60,12 @@ def test_continue_json_shape(tmp_path: Path) -> None:
     assert raw["active"] is True
     assert raw["reason"] == "checker-fail"
     assert raw["pause_seconds"] == 9
+
+
+def test_followup_message_next_task(tmp_path: Path) -> None:
+    _running(tmp_path)
+    write_codespec_continue(tmp_path, active=True, reason="next-task", pause_seconds=0)
+    assert codespec_should_followup(tmp_path) is True
+    assert codespec_followup_message(tmp_path) == CODESPEC_NEXT_TASK_FOLLOWUP
+    raw = json.loads((_loop_dir(tmp_path) / "continue.json").read_text(encoding="utf-8"))
+    assert raw["pause_seconds"] == 0

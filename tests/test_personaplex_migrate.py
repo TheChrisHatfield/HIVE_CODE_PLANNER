@@ -396,3 +396,71 @@ def test_pp_t3_opus_loop_feeds_turn_manager():
     assert "turn_manager.reset()" in src
     assert "from moshi.stt" not in src
     assert "install_stt" not in src
+
+
+def test_pp_t5_async_update_reference_consumes_two_steps(monkeypatch):
+    import asyncio
+
+    with _working_moshi():
+        from moshi.inference_utils.reference_update import async_update_reference
+        from moshi.models.lm import LMGen, _LMGenState
+
+        src = (_MOSHI_ROOT / "moshi" / "server.py").read_text(encoding="utf-8")
+        assert "async_update_reference" in src
+        assert "_async_update_reference" in src
+        assert "\\x07" not in src
+        assert "referencetext" not in src
+
+        class _DummyLM:
+            dim = 8
+            dtype = torch.float32
+            device = torch.device("cpu")
+
+        gen = LMGen.__new__(LMGen)
+        gen.lm_model = _DummyLM()
+        gen.cfg_coef = 1.0
+        pending_buf = torch.zeros(1, 1, 8)
+        gen._streaming_state = _LMGenState(
+            cache=torch.zeros(1, 1, 1),
+            provided=torch.zeros(1, 1, 1, dtype=torch.bool),
+            initial=torch.zeros(1, 1, 1),
+            graphed_main=None,  # type: ignore[arg-type]
+            graphed_embeddings=None,  # type: ignore[arg-type]
+            graphed_depth=None,  # type: ignore[arg-type]
+            condition_streaming_sum=pending_buf,
+            pending_streaming_sums=[None],
+        )
+        encoder = torch.arange(16, dtype=torch.float32).reshape(2, 8)
+
+        async def _fake_embed(text, encoder_url="http://localhost:8001", timeout=30.0):
+            assert text == "Paris is the capital"
+            assert encoder_url == "http://127.0.0.1:8011"
+            return encoder
+
+        monkeypatch.setenv("HIVE_REF_HOLD_FACTOR", "1")
+        monkeypatch.setattr(
+            "moshi.inference_utils.reference_update.get_conditioning_remote_async",
+            _fake_embed,
+        )
+        asyncio.run(
+            async_update_reference(
+                gen, "Paris is the capital", encoder_url="http://127.0.0.1:8011"
+            )
+        )
+        pending = gen._streaming_state.pending_streaming_sums[0]
+        assert pending is not None
+        assert pending.shape == (2, 8)
+        gen.apply_pending_streaming_sum_condition()
+        gen.apply_pending_streaming_sum_condition()
+        assert gen._streaming_state.apply_pending_count == 2
+        assert torch.equal(gen._streaming_state.condition_streaming_sum[0, 0], encoder[1])
+
+        async def _boom(text, encoder_url="http://localhost:8001", timeout=30.0):
+            raise RuntimeError("encoder down")
+
+        monkeypatch.setattr(
+            "moshi.inference_utils.reference_update.get_conditioning_remote_async",
+            _boom,
+        )
+        asyncio.run(async_update_reference(gen, "still posts empty", encoder_url="http://x"))
+        asyncio.run(async_update_reference(gen, "no url", encoder_url=""))
