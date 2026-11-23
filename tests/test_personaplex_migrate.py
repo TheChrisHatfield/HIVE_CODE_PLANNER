@@ -295,6 +295,99 @@ def test_pp_t3_rag_context_from_duplex_text_tokens_not_stt():
         assert skipped.last_user_line() == "hello"
 
 
+def test_pp_t4_llm_reference_port_and_install_from_env(tmp_path):
+    import asyncio
+    import json
+
+    from hive_planner.voice_moshi_retrieval import BLOCK_LABEL, install_from_env
+    from hive_planner.voice_retrieval import SOURCES_ENV
+
+    llm_dir = _MOSHI_ROOT / "moshi" / "llm"
+    ref_dir = _MOSHI_ROOT / "moshi" / "reference"
+    assert (llm_dir / "reference_prompt_template.txt").is_file()
+    assert (llm_dir / "reference_prompt_template_simplified.txt").is_file()
+    assert (llm_dir / "reference_summarization_prompt_template.txt").is_file()
+    assert (llm_dir / "client.py").is_file()
+    assert (ref_dir / "llm_reference_generator.py").is_file()
+    assert not (
+        Path(__file__).resolve().parents[1] / "scripts" / "personaplex_server.py"
+    ).exists()
+
+    with _working_moshi():
+        from moshi.reference.llm_reference_generator import (
+            LLMReferenceGenerator,
+            clean_reference_text,
+        )
+
+        assert clean_reference_text("Reference: Paris is the capital") == "Paris is the capital"
+        assert clean_reference_text("Human: what is X") == ""
+        assert clean_reference_text(None) == ""
+
+        gen = object.__new__(LLMReferenceGenerator)
+        gen.summarization = False
+        gen.retrieval_profiles = []
+        gen._llm_by_id = {}
+        gen._default_profile_id = None
+
+        class _StubLLM:
+            prompt = ""
+            model_name = "stub"
+
+            def generate(self, prompt, context, max_new_tokens=512, **kwargs):
+                raise AssertionError("empty context must skip the LLM")
+
+        gen.llm = _StubLLM()
+        processed, text, turns, name = asyncio.run(gen.generate_reference_text("", []))
+        assert text == ""
+        assert turns == 0
+        assert name == ""
+
+        processed, text, turns, name = asyncio.run(
+            gen.generate_reference_text("user:   \nmoshi: hi", [])
+        )
+        assert text == ""
+
+        calls: list[str] = []
+
+        class _ReplyLLM:
+            prompt = "PROMPT"
+            model_name = "stub"
+
+            def generate(self, prompt, context, max_new_tokens=512, **kwargs):
+                calls.append(context)
+                return "Reference: the moon is a satellite"
+
+        gen.llm = _ReplyLLM()
+        orig_generate = LLMReferenceGenerator.generate_reference_text
+        orig_process = LLMReferenceGenerator.process_reference_text
+        wrapped = getattr(LLMReferenceGenerator, "_hive_retrieval_wrapped", False)
+        (tmp_path / "note.md").write_text("the moon is a satellite of earth\n", encoding="utf-8")
+        env = {
+            SOURCES_ENV: json.dumps(
+                [{"name": "kb", "kind": "docs", "target": str(tmp_path), "enabled": True}]
+            )
+        }
+        try:
+            if wrapped:
+                LLMReferenceGenerator.generate_reference_text = orig_generate
+                LLMReferenceGenerator.process_reference_text = orig_process
+                LLMReferenceGenerator._hive_retrieval_wrapped = False
+            assert install_from_env(LLMReferenceGenerator, env) is True
+            processed, text, turns, name = asyncio.run(
+                gen.generate_reference_text("user: what is the moon\nmoshi:", [])
+            )
+        finally:
+            LLMReferenceGenerator.generate_reference_text = orig_generate
+            LLMReferenceGenerator.process_reference_text = orig_process
+            LLMReferenceGenerator._hive_retrieval_wrapped = False
+
+        assert turns >= 1
+        assert text == "the moon is a satellite"
+        assert processed.startswith(BLOCK_LABEL)
+        assert "the moon is a satellite of earth" in processed
+        assert calls, "LLM must run after retrieve prepend"
+
+
 def test_pp_t3_opus_loop_feeds_turn_manager():
     server_py = _MOSHI_ROOT / "moshi" / "server.py"
     src = server_py.read_text(encoding="utf-8")
