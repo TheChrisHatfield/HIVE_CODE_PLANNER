@@ -18,8 +18,10 @@ py -3.11 -m hive_planner implementation-loop accept --role <role>
 py -3.11 -m hive_planner implementation-loop commit
 ```
 
-If this is a 1-pack, the coordinator performs implement, then Python check, then review, then commit.
+If this is a 1-pack, the coordinator performs implement, then Python check, then commit. Review and sign-off are not loop gates.
 
 If a bug hunt is already in progress, finish or pause it before starting this loop.
+
+On checker fail or stall the stop hook pings this chat. Continue the current task. Do not wait for the human to say continue.
 
 Do not merge, push to trunk, force-push, or deploy.

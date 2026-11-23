@@ -1,0 +1,247 @@
+"""PP-T12 / SC-PP2: pending streaming_sum must be consumed on ≥2 LMGen.step calls."""
+
+from __future__ import annotations
+
+import inspect
+import sys
+from contextlib import contextmanager
+from pathlib import Path
+
+import pytest
+
+torch = pytest.importorskip("torch")
+
+_MOSHI_ROOT = (
+    Path(__file__).resolve().parents[1]
+    / "code-improvements"
+    / "personaplex-migrate"
+    / "moshi"
+)
+
+
+@contextmanager
+def _working_moshi():
+    """Load the PersonaPlex working copy even if another moshi is already imported."""
+    root = str(_MOSHI_ROOT)
+    saved = {key: sys.modules[key] for key in list(sys.modules) if key == "moshi" or key.startswith("moshi.")}
+    for key in saved:
+        del sys.modules[key]
+    inserted = root not in sys.path
+    if inserted:
+        sys.path.insert(0, root)
+    try:
+        yield
+    finally:
+        for key in list(sys.modules):
+            if key == "moshi" or key.startswith("moshi."):
+                del sys.modules[key]
+        sys.modules.update(saved)
+        if inserted:
+            try:
+                sys.path.remove(root)
+            except ValueError:
+                pass
+
+
+def test_lmgen_step_source_applies_pending_before_graphed_main():
+    with _working_moshi():
+        from moshi.models import lm as lm_mod
+
+        src = inspect.getsource(lm_mod.LMGen.step)
+        apply_at = src.find("apply_pending_streaming_sum_condition")
+        graphed_at = src.find("graphed_main")
+        assert apply_at != -1, "LMGen.step must call apply_pending_streaming_sum_condition"
+        assert graphed_at != -1
+        assert apply_at < graphed_at, "apply_pending must run before graphed_main (G171)"
+        assert "streaming_sum" in src, "graphed_main must take streaming_sum (G170)"
+        assert "pin_kv_prefix" not in src, "RAG step must not re-pin (SC-PP3 / G80)"
+
+
+def test_sum_update_and_apply_do_not_call_pin():
+    with _working_moshi():
+        from moshi.models import lm as lm_mod
+
+        update_src = inspect.getsource(lm_mod.LMGen.update_streaming_sum_tensors)
+        apply_src = inspect.getsource(lm_mod.LMGen.apply_pending_streaming_sum_condition)
+        assert "pin_kv_prefix" not in update_src
+        assert "pin_kv_prefix" not in apply_src
+
+
+def test_sc_pp3_pinned_frame_count_unchanged_after_first_sum():
+    """G280: pinned KV frame count before vs after first apply_pending is the same integer."""
+    with _working_moshi():
+        from moshi.models.lm import LMGen, _LMGenState
+        from moshi.modules.transformer import PinnedRingKVCache
+
+        device = torch.device("cpu")
+        cache = PinnedRingKVCache(
+            1,
+            1,
+            4,
+            capacity=16,
+            max_pinned=8,
+            max_period=10000.0,
+            device=device,
+            dtype=torch.float32,
+        )
+        cache.cache[0, :, :, :4].fill_(1)
+        cache.cache[1, :, :, :4].fill_(1)
+        cache.end_offset.fill_(4)
+        cache.pin(4)
+        before = int(cache.pinned_n.item())
+
+        class _DummyLM:
+            dim = 8
+            dtype = torch.float32
+            device = torch.device("cpu")
+
+        gen = LMGen.__new__(LMGen)
+        gen.lm_model = _DummyLM()
+        gen.cfg_coef = 1.0
+        gen._streaming_state = _LMGenState(
+            cache=torch.zeros(1, 1, 1),
+            provided=torch.zeros(1, 1, 1, dtype=torch.bool),
+            initial=torch.zeros(1, 1, 1),
+            graphed_main=None,  # type: ignore[arg-type]
+            graphed_embeddings=None,  # type: ignore[arg-type]
+            graphed_depth=None,  # type: ignore[arg-type]
+            condition_streaming_sum=torch.zeros(1, 1, 8),
+            pending_streaming_sums=[None],
+        )
+        gen.update_streaming_sum_tensors([torch.arange(16, dtype=torch.float32).reshape(1, 2, 8)])
+        gen.apply_pending_streaming_sum_condition()
+        after = int(cache.pinned_n.item())
+        assert before == 4
+        assert after == before
+
+
+def test_step_embeddings_does_not_add_rag():
+    with _working_moshi():
+        from moshi.models import lm as lm_mod
+
+        src = inspect.getsource(lm_mod.LMGen.step_embeddings)
+        assert "apply_pending_streaming_sum_condition" not in src
+        assert "streaming_sum" not in src
+
+
+def test_forward_codes_takes_streaming_sum_argument():
+    with _working_moshi():
+        from moshi.models.lm import LMModel
+
+        params = inspect.signature(LMModel.forward_codes).parameters
+        assert "streaming_sum" in params
+
+
+def test_update_squeezes_and_apply_pending_consumes_two_frames():
+    """SC-PP2: consume on ≥2 apply_pending calls; update-without-consume is not a pass."""
+    with _working_moshi():
+        from moshi.models.lm import LMGen, _LMGenState
+
+        class _DummyLM:
+            dim = 8
+            dtype = torch.float32
+            device = torch.device("cpu")
+
+        gen = LMGen.__new__(LMGen)
+        gen.lm_model = _DummyLM()
+        gen.cfg_coef = 1.0
+        pending_buf = torch.zeros(1, 1, 8)
+        state = _LMGenState(
+            cache=torch.zeros(1, 1, 1),
+            provided=torch.zeros(1, 1, 1, dtype=torch.bool),
+            initial=torch.zeros(1, 1, 1),
+            graphed_main=None,  # type: ignore[arg-type]
+            graphed_embeddings=None,  # type: ignore[arg-type]
+            graphed_depth=None,  # type: ignore[arg-type]
+            condition_streaming_sum=pending_buf,
+            pending_streaming_sums=[None],
+        )
+        gen._streaming_state = state
+
+        encoder = torch.arange(16, dtype=torch.float32).reshape(1, 2, 8)
+        gen.update_streaming_sum_tensors([encoder])
+        pending = state.pending_streaming_sums[0]
+        assert pending is not None
+        assert pending.shape == (2, 8)
+
+        gen.apply_pending_streaming_sum_condition()
+        assert state.apply_pending_count == 1
+        assert torch.equal(state.condition_streaming_sum[0, 0], encoder[0, 0])
+
+        gen.apply_pending_streaming_sum_condition()
+        assert state.apply_pending_count == 2
+        assert torch.equal(state.condition_streaming_sum[0, 0], encoder[0, 1])
+
+        gen.apply_pending_streaming_sum_condition()
+        assert torch.equal(state.condition_streaming_sum[0, 0], torch.zeros(8))
+
+
+def test_update_refuses_cfg_not_one():
+    with _working_moshi():
+        from moshi.models.lm import LMGen
+
+        gen = LMGen.__new__(LMGen)
+        gen.cfg_coef = 1.1
+        gen._streaming_state = object()
+        with pytest.raises(RuntimeError, match="cfg_coef"):
+            gen.update_streaming_sum_tensors([None])
+
+
+def test_update_fail_closed_on_dim_mismatch():
+    with _working_moshi():
+        from moshi.models.lm import LMGen, _LMGenState
+
+        class _DummyLM:
+            dim = 8
+            dtype = torch.float32
+            device = torch.device("cpu")
+
+        gen = LMGen.__new__(LMGen)
+        gen.lm_model = _DummyLM()
+        gen.cfg_coef = 1.0
+        gen._streaming_state = _LMGenState(
+            cache=torch.zeros(1, 1, 1),
+            provided=torch.zeros(1, 1, 1, dtype=torch.bool),
+            initial=torch.zeros(1, 1, 1),
+            graphed_main=None,  # type: ignore[arg-type]
+            graphed_embeddings=None,  # type: ignore[arg-type]
+            graphed_depth=None,  # type: ignore[arg-type]
+            condition_streaming_sum=torch.zeros(1, 1, 8),
+            pending_streaming_sums=[None],
+        )
+        with pytest.raises(RuntimeError, match="dim"):
+            gen.update_streaming_sum_tensors([torch.zeros(2, 7)])
+
+
+def test_working_copy_lm_not_shadowed_by_other_moshi():
+    import types
+
+    keys = ("moshi", "moshi.models", "moshi.models.lm")
+    prior = {key: sys.modules.get(key) for key in keys}
+    fake_lm = types.ModuleType("moshi.models.lm")
+
+    class LMGen:
+        def step(self) -> None:
+            return None
+
+    fake_lm.LMGen = LMGen
+    sys.modules["moshi"] = types.ModuleType("moshi")
+    sys.modules["moshi.models"] = types.ModuleType("moshi.models")
+    sys.modules["moshi.models.lm"] = fake_lm
+    try:
+        test_lmgen_step_source_applies_pending_before_graphed_main()
+    finally:
+        for key, module in prior.items():
+            if module is None:
+                sys.modules.pop(key, None)
+            else:
+                sys.modules[key] = module
+
+
+def test_encoder_packages_ported_into_working_copy():
+    root = _MOSHI_ROOT / "moshi"
+    assert (root / "conditioners" / "base.py").is_file()
+    assert (root / "server_conditioner.py").is_file()
+    assert (root / "inference_utils" / "utils.py").is_file()
+    src = (root / "inference_utils" / "utils.py").read_text(encoding="utf-8")
+    assert "squeeze(0)" in src

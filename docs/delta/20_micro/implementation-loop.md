@@ -22,7 +22,7 @@ Implementation loop — code a finished Hive spec in separate passes.
 |----------|--------------|
 | Install a Cursor loop that reads `docs/specs/<feature>/{spec,plan,tasks}.md` | Writing or regenerating the spec, plan, or tasks |
 | 1-pack and 4-pack | 5-pack tracker, personas, Copilot install |
-| One task per cycle: implement, check, review, then coordinator commit | Merge, deploy, force-push |
+| One task per cycle: implement, check, then coordinator commit | Merge, deploy, force-push; review/sign-off as a loop gate |
 | Readiness command that blocks when the spec stack or commands are missing | Running coder or reviewer inside Python |
 | Python coordinator gates: start, handoff, check, accept, commit | Agent-owned git commit or hand-edited round trips |
 | File-overlap block on start/switch from each feature's plan File targets; Controls **Allow overlap** | Treating Force feature or Allow dirty start as an overlap override |
@@ -35,7 +35,7 @@ Implementation loop — code a finished Hive spec in separate passes.
 
 - [x] Install requires an explicit pack and writes the command, rule, roles, and NOTICE
 - [x] Status is ready only when spec, plan, tasks, micro brief, commands, pack, and a non-trunk branch are present
-- [x] 4-pack commits only after checker and reviewer result files pass
+- [x] 4-pack commits after checker pass; review/sign-off is not a loop gate
 - [x] 1-pack keeps a single coordinator and still forbids merge and deploy
 - [x] Retrospective proposals split operational and behavioral, and coding passes leave `AGENTS.md` alone
 - [x] Chat phrase ("implementation loop", "code spec") and Home install use the same installer; plain init does not
