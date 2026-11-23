@@ -19,6 +19,19 @@ _MOSHI_ROOT = (
 )
 
 
+def sc_pp2_holds(
+    *,
+    updated: bool,
+    apply_count: int,
+    cfg_coef: float,
+    text_inject_only: bool = False,
+) -> bool:
+    """SC-PP2: retrieve/encoder update + apply_pending on ≥2 steps. Text inject is not a pass."""
+    if text_inject_only:
+        return False
+    return bool(updated) and int(apply_count) >= 2 and float(cfg_coef) == 1.0
+
+
 @contextmanager
 def _working_moshi():
     """Load the PersonaPlex working copy even if another moshi is already imported."""
@@ -534,3 +547,93 @@ def test_pp_t6_rule_b_taskgroup_wait_steps_zero():
             assert seen == ["ref-line"]
 
         asyncio.run(_run())
+
+
+def _dummy_lmgen():
+    from moshi.models.lm import LMGen, _LMGenState
+
+    class _DummyLM:
+        dim = 8
+        dtype = torch.float32
+        device = torch.device("cpu")
+
+    gen = LMGen.__new__(LMGen)
+    gen.lm_model = _DummyLM()
+    gen.cfg_coef = 1.0
+    pending_buf = torch.zeros(1, 1, 8)
+    gen._streaming_state = _LMGenState(
+        cache=torch.zeros(1, 1, 1),
+        provided=torch.zeros(1, 1, 1, dtype=torch.bool),
+        initial=torch.zeros(1, 1, 1),
+        graphed_main=None,  # type: ignore[arg-type]
+        graphed_embeddings=None,  # type: ignore[arg-type]
+        graphed_depth=None,  # type: ignore[arg-type]
+        condition_streaming_sum=pending_buf,
+        pending_streaming_sums=[None],
+    )
+    return gen
+
+
+def test_sc_pp2_fails_if_only_text_inject():
+    """PP-T7 / US1 scenario 2: Information: / forced text is not SC-PP2."""
+    assert (
+        sc_pp2_holds(updated=False, apply_count=0, cfg_coef=1.0, text_inject_only=True)
+        is False
+    )
+    with _working_moshi():
+        from moshi.models import lm as lm_mod
+
+        assert not hasattr(lm_mod.LMGen, "step_reference_text")
+        pin_src = inspect.getsource(lm_mod.LMGen.step_system_prompts_async)
+        assert "update_streaming_sum_tensors" not in pin_src
+        wrap = (_MOSHI_ROOT / "moshi" / "server.py").read_text(encoding="utf-8")
+        assert "wrap_with_system_tags" in wrap
+        assert sc_pp2_holds(
+            updated=False,
+            apply_count=0,
+            cfg_coef=1.0,
+            text_inject_only="Information:" in wrap or "text_prompt" in wrap,
+        ) is False
+
+
+def test_sc_pp2_fails_if_update_without_two_apply_pending():
+    """PP-T7 / US1 scenario 3: update-without-consume is not SC-PP2."""
+    with _working_moshi():
+        gen = _dummy_lmgen()
+        encoder = torch.arange(16, dtype=torch.float32).reshape(1, 2, 8)
+        gen.update_streaming_sum_tensors([encoder])
+        assert gen._streaming_state.pending_streaming_sums[0] is not None
+        assert gen._streaming_state.apply_pending_count == 0
+        assert (
+            sc_pp2_holds(
+                updated=True,
+                apply_count=gen._streaming_state.apply_pending_count,
+                cfg_coef=gen.cfg_coef,
+            )
+            is False
+        )
+        gen.apply_pending_streaming_sum_condition()
+        assert gen._streaming_state.apply_pending_count == 1
+        assert (
+            sc_pp2_holds(
+                updated=True,
+                apply_count=gen._streaming_state.apply_pending_count,
+                cfg_coef=gen.cfg_coef,
+            )
+            is False
+        )
+        gen.apply_pending_streaming_sum_condition()
+        assert gen._streaming_state.apply_pending_count == 2
+        assert (
+            sc_pp2_holds(
+                updated=True,
+                apply_count=gen._streaming_state.apply_pending_count,
+                cfg_coef=gen.cfg_coef,
+            )
+            is True
+        )
+
+
+def test_sc_pp2_pass_requires_cfg_coef_one():
+    assert sc_pp2_holds(updated=True, apply_count=2, cfg_coef=1.1) is False
+    assert sc_pp2_holds(updated=True, apply_count=2, cfg_coef=1.0) is True
