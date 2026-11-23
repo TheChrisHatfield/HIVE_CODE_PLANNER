@@ -35,13 +35,17 @@ def sc_pp2_holds(
 @contextmanager
 def _working_moshi():
     """Load the PersonaPlex working copy even if another moshi is already imported."""
+    import importlib
+
     root = str(_MOSHI_ROOT)
     saved = {key: sys.modules[key] for key in list(sys.modules) if key == "moshi" or key.startswith("moshi.")}
     for key in saved:
         del sys.modules[key]
-    inserted = root not in sys.path
-    if inserted:
-        sys.path.insert(0, root)
+    saved_path = list(sys.path)
+    while root in sys.path:
+        sys.path.remove(root)
+    sys.path.insert(0, root)
+    importlib.invalidate_caches()
     try:
         yield
     finally:
@@ -49,17 +53,14 @@ def _working_moshi():
             if key == "moshi" or key.startswith("moshi."):
                 del sys.modules[key]
         sys.modules.update(saved)
-        if inserted:
-            try:
-                sys.path.remove(root)
-            except ValueError:
-                pass
+        sys.path[:] = saved_path
 
 
 def test_lmgen_step_source_applies_pending_before_graphed_main():
     with _working_moshi():
         from moshi.models import lm as lm_mod
 
+        assert "personaplex-migrate" in Path(lm_mod.__file__).resolve().as_posix()
         src = inspect.getsource(lm_mod.LMGen.step)
         apply_at = src.find("apply_pending_streaming_sum_condition")
         graphed_at = src.find("graphed_main")
