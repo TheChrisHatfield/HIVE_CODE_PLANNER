@@ -245,3 +245,61 @@ def test_encoder_packages_ported_into_working_copy():
     assert (root / "inference_utils" / "utils.py").is_file()
     src = (root / "inference_utils" / "utils.py").read_text(encoding="utf-8")
     assert "squeeze(0)" in src
+
+
+def test_pp_t3_rag_context_from_duplex_text_tokens_not_stt():
+    with _working_moshi():
+        from moshi.inference_utils import turn_manager as tm_mod
+        from moshi.inference_utils.turn_manager import TurnManager
+        import moshi.inference_utils as inf
+
+        tm_src = Path(tm_mod.__file__).read_text(encoding="utf-8")
+        init_src = Path(inf.__file__).read_text(encoding="utf-8")
+        assert "import" not in tm_src or "stt" not in [
+            line.split()[1] if line.startswith("import ") else ""
+            for line in tm_src.splitlines()
+        ]
+        assert "from moshi.stt" not in tm_src
+        assert "from .stt" not in tm_src
+        assert "from .channel" not in init_src
+        assert "AudioProcessor" not in init_src
+
+        tm = TurnManager()
+        assert tm.get_context() == ""
+        assert tm.last_user_line() == ""
+
+        tm.feed_lm_piece("what is X", speaker="user")
+        tm.feed_lm_piece("I think Y", speaker="model")
+        ctx = tm.get_context()
+        assert ctx.startswith("user: what is X")
+        assert "moshi: I think Y" in ctx
+        assert tm.last_user_line() == "what is X"
+
+        prefixed = TurnManager()
+        prefixed.feed_lm_piece("user: hello")
+        prefixed.feed_lm_piece("moshi: hi")
+        assert prefixed.last_user_line() == "hello"
+        assert "moshi: hi" in prefixed.get_context()
+
+        handed = TurnManager()
+        handed.feed_lm_piece("query", speaker="user")
+        assert handed.set_active_speaker("model") is True
+        assert handed.set_active_speaker("model") is False
+
+        skipped = TurnManager()
+        skipped.feed_token(3, "PAD", speaker="user")
+        skipped.feed_token(0, "EPAD", speaker="user")
+        skipped.feed_token(1, "BOS", speaker="user")
+        assert skipped.get_context() == ""
+        skipped.feed_token(42, "▁hello", speaker="user")
+        assert skipped.last_user_line() == "hello"
+
+
+def test_pp_t3_opus_loop_feeds_turn_manager():
+    server_py = _MOSHI_ROOT / "moshi" / "server.py"
+    src = server_py.read_text(encoding="utf-8")
+    assert "TurnManager" in src
+    assert "turn_manager.feed_token" in src
+    assert "turn_manager.reset()" in src
+    assert "from moshi.stt" not in src
+    assert "install_stt" not in src
