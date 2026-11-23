@@ -464,3 +464,73 @@ def test_pp_t5_async_update_reference_consumes_two_steps(monkeypatch):
         )
         asyncio.run(async_update_reference(gen, "still posts empty", encoder_url="http://x"))
         asyncio.run(async_update_reference(gen, "no url", encoder_url=""))
+
+
+def test_pp_t6_rule_b_taskgroup_wait_steps_zero():
+    import asyncio
+    import inspect
+
+    with _working_moshi():
+        from moshi.inference_utils.rag_manager import RAGManager
+        from moshi.inference_utils.reference_trigger_policy import (
+            rag_token_starts_reference,
+            user_turn_ended,
+        )
+        from moshi.inference_utils.session_rag import maybe_trigger_rule_b
+        from moshi.inference_utils.turn_manager import TurnManager
+        from moshi.models import lm as lm_mod
+
+        assert user_turn_ended("user", "model") is True
+        assert user_turn_ended("model", "user") is False
+        assert rag_token_starts_reference("user") is False
+        assert rag_token_starts_reference("model") is True
+        assert "rag_token_id" not in inspect.getsource(lm_mod.LMGen.step)
+        assert "generate_reference_text" not in inspect.getsource(lm_mod.LMGen.step)
+
+        server_src = (_MOSHI_ROOT / "moshi" / "server.py").read_text(encoding="utf-8")
+        session_src = (
+            _MOSHI_ROOT / "moshi" / "inference_utils" / "session_rag.py"
+        ).read_text(encoding="utf-8")
+        assert "asyncio.TaskGroup" in server_src
+        assert "wait_steps=0" in session_src
+        assert "rag_token_id" not in server_src
+        assert "maybe_trigger_rule_b" in server_src
+
+        tm = TurnManager()
+        tm.feed_lm_piece("what is X", speaker="user")
+        handed = tm.feed_lm_piece("answer", speaker="model")
+        assert handed is True
+
+        class _StubGen:
+            async def generate_reference_text(self, context, history, **kwargs):
+                return context, "ref-line", 1, "stub"
+
+        seen: list[str] = []
+
+        async def _handle(text, label=""):
+            seen.append(text)
+
+        async def _run():
+            async with RAGManager(_StubGen(), rag_timeout=1.5) as rag:
+                async with asyncio.TaskGroup() as tg:
+                    started = await maybe_trigger_rule_b(
+                        handed,
+                        rag=rag,
+                        task_group=tg,
+                        context_provider=tm.get_context,
+                        handle_reference_fn=_handle,
+                        last_user_line=tm.last_user_line(),
+                    )
+                    assert started is True
+                    skipped = await maybe_trigger_rule_b(
+                        True,
+                        rag=rag,
+                        task_group=tg,
+                        context_provider=tm.get_context,
+                        handle_reference_fn=_handle,
+                        last_user_line="",
+                    )
+                    assert skipped is False
+            assert seen == ["ref-line"]
+
+        asyncio.run(_run())
