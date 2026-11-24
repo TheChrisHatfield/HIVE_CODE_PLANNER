@@ -10,6 +10,7 @@ import pytest
 from hive_planner.config import RepoPaths
 from hive_planner.voice_bot import (
     ContextSnapshot,
+    PERSONAPLEX_KEYS,
     VoiceBotConfig,
     VoiceBotError,
     create_context_snapshot,
@@ -136,3 +137,12 @@ def test_snapshot_path_honors_config_file(repo: RepoPaths) -> None:
     with pytest.raises(VoiceBotError, match="instruction exceeds"):
         create_context_snapshot(repo, state, _snap(instruction="four"))
     assert load_state(repo).context_snapshots == {}
+
+
+def test_pp_t8_speech_child_and_personaplex_keys() -> None:
+    assert VoiceBotConfig().speech_child == "moshi_q8"
+    with pytest.raises(VoiceBotError, match="speech_child"):
+        VoiceBotConfig.from_dict({"speech_child": "other"})
+    with pytest.raises(VoiceBotError, match="personaplex_weights"):
+        VoiceBotConfig.from_dict({"personaplex_weights": "C:/w.safetensors"})
+    assert PERSONAPLEX_KEYS[0] == "personaplex_weights"

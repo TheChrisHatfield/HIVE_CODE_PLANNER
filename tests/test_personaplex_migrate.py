@@ -328,9 +328,7 @@ def test_pp_t4_llm_reference_port_and_install_from_env(tmp_path):
     assert (llm_dir / "reference_summarization_prompt_template.txt").is_file()
     assert (llm_dir / "client.py").is_file()
     assert (ref_dir / "llm_reference_generator.py").is_file()
-    assert not (
-        Path(__file__).resolve().parents[1] / "scripts" / "personaplex_server.py"
-    ).exists()
+    # PP-T8 owns the Hive launcher; T4 only ports llm/ + reference/.
 
     with _working_moshi():
         from moshi.reference.llm_reference_generator import (
