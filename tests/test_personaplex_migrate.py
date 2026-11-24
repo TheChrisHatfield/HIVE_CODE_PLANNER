@@ -42,9 +42,7 @@ def _working_moshi():
     for key in saved:
         del sys.modules[key]
     saved_path = list(sys.path)
-    while root in sys.path:
-        sys.path.remove(root)
-    sys.path.insert(0, root)
+    sys.path[:] = [root] + [p for p in saved_path if p != root]
     importlib.invalidate_caches()
     try:
         yield

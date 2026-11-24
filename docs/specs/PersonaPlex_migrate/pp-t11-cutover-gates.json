@@ -1,0 +1,12 @@
+{
+  "sc_pp2": false,
+  "sc_pp3": false,
+  "sc_pp6": false,
+  "sc_pp7": false,
+  "sc_pp11": false,
+  "pp_t9": false,
+  "sc_pp9": false,
+  "sc_pp10": false,
+  "encoder_remains": true,
+  "moshika_speech_weights_required": false
+}
