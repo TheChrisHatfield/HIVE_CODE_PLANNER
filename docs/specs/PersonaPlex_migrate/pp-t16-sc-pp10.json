@@ -1,0 +1,5 @@
+{
+  "gate": "SC-PP10",
+  "passed": false,
+  "reason": "fail-closed: live 7B prefill abort on operator GPU not run; unit tests cover Hive close → is_alive False → slot-1 lock release"
+}
