@@ -1,473 +1,473 @@
-# Tasks: PersonaPlex_migrate
-
-
-
-
-
-
-
-
-
-
-
-
-
-<!-- ROSETTA-NAV -->
-
-
-
-
-
-
-
-
-
-
-
-
-
-## Agent navigation (Rosetta Stone)
-
-
-
-
-
-
-
-
-
-
-
-
-
-Load [`docs/planning-rosetta-stone.md`](../../planning-rosetta-stone.md) (`planning.rosetta`) before executing these tasks. Spec: [spec.md](./spec.md). Plan: [plan.md](./plan.md).
-
-
-
-
-
-
-
-
-
-
-
-
-
-- [x] **PP-T1** Tree map in spec (2026-11-21). SC-PP1.
-
-
-
-
-
-
-- [x] **PP-T0** Ground truth = `moshi-rag-src` (read-only). **Amended 2026-11-21:** diligence is Kyutai’s conditioner/fuser/streaming_sum/encoder port, not a text-token last hop.
-
-
-
-
-
-
-- [x] **PP-T2** Working copy `code-improvements/personaplex-migrate`. Do not edit `moshi-rag-src` or the NVIDIA snapshot. PP1. Copied 2026-11-21 (robocopy; NVIDIA snapshot untouched).
-
-
-
-
-
-
-- [x] **PP-T12** Architecture delta + port (PP0, PP2, **PP19**, **PP22**): encoder child `conditioners/` + fuser + frombuffer (G72). 7B: pending, **`apply_pending` first in `LMGen.step`** (G171), add after `embed_codes` before transformer. **`CUDAGraphed` takes `(sequence, streaming_sum)`** (G170); no RAG add on `step_embeddings`/pin. Squeeze + dtype at update (G172/G173). No ARC on GPU 0. No `first_speaker`. Encoder HTTP PP18. Dim 4096; fail closed. `cfg_coef == 1.0`. Forced text is not this task. SC-PP3 pin length after sum.
-
-
-
-
-
-
-- [x] **PP-T3** RAG context from duplex LM `user:` / `moshi:` text tokens (PP8). Not moshi-rag `stt/`.
-
-
-
-
-
-- [x] **PP-T4** Port `llm/` + `reference/` including `clean_reference_text`, prompt templates, and `LLMReferenceGenerator` (PP3). Wire `voice_retrieval.collect_lines` through `install_from_env` after that port. **RAGManager** is **PP-T6**. **Do not** create `personaplex_server.py` here (PP-T8).
-
-
-
-
-
-- [x] **PP-T5** Wire `_async_update_reference` equivalent in **`server.py`**: `get_conditioning_remote_async` → squeeze → `update_streaming_sum_tensors` (PP18, PP2). Consume via `apply_pending` inside `step` on ≥2 steps (SC-PP2). No `\x07` UI. One frame per step then zero (R46). R47 hold default 1 only. Fixture may be bf16.
-
-
-
-
-
-- [x] **PP-T6** Background RAGManager; **R43 A/B** on text-token speaker change (PP6). `handle_chat` **TaskGroup** (G60). `wait_steps=0` on Rule B. No `rag_token_id` 4. Pin persona only (PP5). Not R44/R45 (PP14).
-
-
-
-
-
-- [x] **PP-T7** `tests/test_personaplex_migrate.py`: SC-PP2 must fail if only text inject ran, and if `update_streaming_sum_tensors` ran without `apply_pending` on ≥2 steps. Fixture may be bf16.
-
-
-
-
-
-- [x] **PP-T10** Proper quantization follow-up (PP11, SC-PP6):
-
-
-
-
-
-
-  - [x] **PP-T10a** Port `QLinear` from moshi-rag `quantize.py` (G7 `weight_scb.float()`, bias None, replace twice / `child.float()`). Port `quantize` kwarg in `LMModel` + transformer layer-by-layer replace (G108). Diff recorded. Replace on LM **before** graph capture (G97). **Started 2026-11-21:** `utils/quantize.py` + `quantize=` on working-copy `LMModel` / `StreamingTransformer`. Export still needs RunPod CUDA.
-
-
-
-
-
-
-  - [x] **PP-T10b** New `scripts/personaplex_q8_local.py`: local bf16 path (not HF / not `moshi_rag_q8_local.py` / not `fuse_lora`). `replace_linear` on **LMModel only**. `copy_missing_weights` True **before** quantize; save after. Mimi float. `quantize: true` in PersonaPlex config. Windows bnb: CUDA if CPU kernel missing (G90–G92, G95, G98). **RunPod one-pass GPU.** If HF gated, use the already-downloaded local file. Script scaffolded; not yet run.
-
-
-
-
-
-
-  - [x] **PP-T10c** Patch `get_moshi_lm` (+ offload path): `quantize=True` before load; `copy_missing_weights=False`; skip concat expand on int8; skip `.to(dtype)` on int8/uint8/`weight_scb` and trailing `model.to(dtype)`; remaining floats **fp16** (G108–G110). One GPU `LMGen.step` (no SCB dtype crash).
-
-
-
-
-
-
-  - [x] **PP-T10d** Graphs on vs `NO_CUDA_GRAPH=1`; include a **live** `update_streaming_sum_tensors` (or pending sum) while graphs are on; record 12.5 Hz yes/no. If graphs+sum fail, live = `NO_CUDA_GRAPH=1`.
-
-
-
-
-
-
-  - [x] **PP-T10e** Same prompt/WAV bf16 vs q8, offline then live (R49/R50 split). Text-token judge. A quality gap **fails** SC-PP6 and **blocks** PP-T11. Not moshika-rag weights. Not cpu-offload close-out.
-
-
-
-
-
-
-- [x] **PP-T8** Hive **step-in** (PP10 + **PP20** + **PP23**): `speech_child` discriminator (G120); `PERSONAPLEX_KEYS` + `personaplex_src` (G122); PYTHONPATH overlay (G123/G57); query URL on probe/hold/open (G121); voice-prompt dir+basename (G140); RAG-off skip encoder/LLM (G137); `personaplex_launcher_path` / NVIDIA argv not `moshi_server_argv` (G150). **Create** `scripts/personaplex_server.py` here: stream_load + freeze + signal; **launcher wraps** (`install_llm_temperature`, client cap 96, `install_from_env`, empty-turn seed, `install_retrieval_off`, working-copy `HIVE_REF_DISABLE`); wrap `get_moshi_lm` not `CheckpointInfo`; no STT/loop_probe (G126). **Keep `q8 step` / `q8 recv` log prefixes** (G180). Missing `personaplex_voice_prompt` file: Hive preflight refuse (G209). Extend `test_voice_bot_config.py`, `test_voice_moshi.py`, `test_voice_moshi_server.py` (q8 launcher test stays green). Do not edit `moshi_q8_server.py`. No second listen gate. Keep `CONNECT_TIMEOUT_S` 15 s until G46 is measured. Impact packet on first `src/` edit (G34). Handshake smoke ≠ SC-PP7.
-
-
-
-
-
-
-- [x] **PP-T9** Live RAG-conditioned Opus round trip through Hive. Evidence **PP-E1** (not G7). **PP21 / SC-PP11:** after `0x00`, 12.5 Hz `LMGen.step`; working-copy `opus_loop` skips discarded `other_mimi` encode/decode (G10/G161); no STT in that loop (G160). Connect prefill is G46, not this gate.
-
-
-
-
-
-
-- [x] **PP-T11** Cutover default `speech_child=personaplex` (PP13, SC-PP8) after SC-PP2, SC-PP3, SC-PP6, SC-PP7, SC-PP11, PP-T9. Encoder remains. moshika-rag speech weights not required. SC-PP9/10 not required for this default.
-
-
-
-
-
-
-- [ ] **PP-T13** Working copy: `seed` from `request.query` (not `request["seed"]`). Skip HF `config.json` / `voices.tgz` / `dist.tgz` when local argv is complete (`--static none`, G143). Empty `voice_prompt` skips load (G181). Hive always appends `text_prompt` and `voice_prompt` query keys. Do **not** invent a server idle-timeout patch (Vite 10 s is out of scope).
-
-
-
-
-
-
-- **PP-T14** (deferred, not a close-out checkbox) VAD + R44/R45 (PP14). Not close-out.
-
-
-
-
-
-
-- [ ] **PP-T15** [US5] Local `.pt` or wav persona (PP16). Voice change = new handshake with a different basename (G182). Offline export helper in the working copy. No HF download. No mid-call opcode.
-
-
-
-
-
-
-- [ ] **PP-T16** [US6] Wire NVIDIA `is_alive` abort to Hive hold drop (PP17). Slot 1 frees.
-
-
-
-
-
-
-
-
-
-
-
-
-
-## Validation log
-
-
-
-
-
-
-
-
-
-
-
-
-
-- 2026-11-21: PP-T1 tree map. Feature `PersonaPlex_migrate`.
-
-
-
-
-
-
-- 2026-11-21: Operator: no hack workaround; same diligence as Moshi→Moshi-RAG. PP0/PP2 rewritten; text last hop refused as close-out.
-
-
-
-
-
-
-- 2026-11-21: Proper quantization follow-up (PP11): export + loader + graphs + bf16/q8 quality, not a single export.
-
-
-
-
-
-
-- 2026-11-21: Spec mine (L1/L2): open gaps **G1–G20** in `spec.md`.
-
-
-
-
-
-
-- 2026-11-21: Gap cascade loops 3–4: inherit closures in spec (PP3–PP10, PP14, fail-closed). Tasks PP-T3–T14 aligned. Remaining open: G6 unproven, G10 VRAM, G17 graphs+sum task, G19 research line, G29 spec-drift, G30 Voice_Bot AC cell.
-
-
-
-
-
-
-- 2026-11-21: Gap cascade 10 loops / 9 s: inherit + G26 retract + dep_q 16 + query/seed + emit. Remaining CodeSpec blockers: G6, G10, PP14. PP-T2 still first implementation task.
-
-
-
-
-
-
-- 2026-11-21: Gap cascade **second run** loops 1–3: R46/R47, `retrieval_enabled`, `cfg_coef` 1, dim 4096 scan, G46 handshake proof. Still no CodeSpec.
-
-
-
-
-
-
-- 2026-11-21: Gap cascade second run complete (10×9 s). Closed inherit G42–G45/G47/G49/G52–G55; G57 tasked. Emit+spec-drift **ok**. Wiring-audit MCP attestation still Voice_Bot (unchecked implementation boxes).
-
-
-
-
-
-
-- 2026-11-21: Spec Kit fill + innovations PP15–PP17 (pin+sum composition, `.pt` embeddings, prefill abort). Stories 1–6 Given/When/Then. FR-001–014. SC-PP9/10. PP-T15/T16.
-
-
-
-
-
-
-- 2026-11-21: Implementation-loop R1: PersonaPlex_migrate **ready** (`spec_creation_gaps` []). AGENTS bold parse no longer lists a fake `proper q8 follow-up` lane. PP10 step-in table names Voice_Bot functions. Did **not** start CodeSpec (hive-desktop loop state still running; overlap).
-
-
-
-
-
-
-- 2026-11-21: RAG compatibility pass vs moshi-rag `channel` / `utils.get_conditioning_remote_async` / `apply_pending` in step. PP18; G60–G63. Improvements: no UI opcodes, no fake rag token, TaskGroup, wrap method name.
-
-
-
-
-
-
-- 2026-11-21: Moshi→Moshi-RAG diligence 9×9 s: PP19 encoder vs 7B add; frombuffer; skip LUT; `clean_reference_text`; no sum during pin (G80). CodeSpec not started.
-
-
-
-
-
-
-- 2026-11-21: Q8 diligence 9×9 s: PP11 dedicated export, LM-only, copy_missing export-vs-load, `quantize` before load, fp16 serve, G90–G112. CodeSpec not started.
-
-
-
-
-
-
-- 2026-11-21: Hive integration 9×9 s: PP20 step-in (discriminator, query URL, NVIDIA argv, selective wraps, G151). CodeSpec not started.
-
-
-
-
-
-
-- 2026-11-21: PP21 delay/garble vs Voice_Bot R49/R50 + inspect 12.5 vs 6.4. SC-PP11. CodeSpec not started.
-
-
-
-
-
-
-- 2026-11-21: PP22 3 loops × I1–I10 injection sites. G170–G173. CodeSpec not started.
-
-
-
-
-
-
-- 2026-11-21: PP23 inspect prefixes + PP16 voice change per connect (G180–G182). CodeSpec not started.
-
-
-
-
-
-
-- 2026-11-21: Spec-only cascade (10×9 s, independent attempt each loop): closed G201–G210 / G221 / G223 / G226 / G230 / G232 / G241 / G243 / G246 / G250. CodeSpec not started.
-
-
-
-
-
-
-- 2026-11-21: Spec-only cascade **fourth run**: US1/plan Validation = SC-PP2 ≥2 steps; SC-PP3 frame count; SC-PP6 judge; SC-PP7 no implicit bf16; FR-019 PP1. CodeSpec not started.
-
-
-
-
-
-
-- 2026-11-21: PP-T2 working copy created. PP-T10a/b scaffolded (QLinear + local export script). q8 export is RunPod one-pass; no HF re-download. Implementation-loop start blocked: hive-desktop-v1 still running.
-
-
-
-
-
-
-- 2026-11-21: Script review 5×9 s: CPU save, refuse hf://, skip HF when local argv complete, query .get / empty seed, skip int8 dtype recast, get_moshi_lm `quantize=` (no meta QLinear). `tests/test_personaplex_q8_local.py` 6 passed.
-
-
-
-
-
-
-- 2026-11-22: Working-copy q8 forward: gating module path, `in_projs`/`out_projs` + load hook (pin-KV kept), loader q8 auto-detect, refuse leftover fat attn keys. GPU export still not run.
-
-
-
-
-
-
-- 2026-11-22: Post-fix cascade: removed unused `multi_linear` `F.linear` landmine; load-hook and `apply_weights_per_step` fail closed on bad shapes/offsets.
-
-
-
-
-
-
-- 2026-11-22: CRIT-5-1: depformer self_attn Patch 1 refuses random-init pad / int8 expand when `copy_missing_weights` is False.
-
-
-
-
-
-
-- 2026-11-22: 100-loop find+fix: fat expand fail-closed; refuse `in_proj.weight`; q8 peek no swallow; depformer gating OOB via `apply_weights_per_step`; voice basename; dist.tgz uses `--hf-repo`; peername None-safe.
-
-
-
-
-
-
-- 2026-11-22: 200-loop new-strategy: refuse `file://` `--out`/`--src`; disk need = dest+max tmp + recheck before write; `load_file(str(dev))`; q8 serve topology after `load_state_dict`.
-
-
-
-
-
-
-
-
-
-
-
-
-
-- 2026-11-23: PP-T10a CodeSpec: QLinear G7 weight_scb.float(), replace twice, quantize= on LMModel/StreamingTransformer, graphs after replace. Diff q8-quantize-diff-pp-t10a.md. Export still PP-T10b.
-
-## Integration wiring audit
-
-
-
-
-
-
-
-
-
-
-
-
-
-- [x] Ground-truth chain: `generate_reference_text` → encoder → `update_streaming_sum_tensors` (moshi-rag `channel.py` / `lm.py`).
-
-
-
-
-
-
-- [x] Working-copy condition path: `apply_pending` first in `LMGen.step`, `forward_codes(sequence, streaming_sum)`, encoder `conditioners/` + squeeze in `code-improvements/personaplex-migrate`. `tests/test_personaplex_migrate.py` 8 passed (including import not shadowed by upstream moshi).
-
-
-
-
-
-
-
-
-
-
-
-
-
-## Deferred wiring (PP-T8)
-
-
-
-
-
-
-
-
-
-
-
-
-
-- [ ] Hive Voice_Bot integration not wired (PP-T8 / PP20). Not this T12 slice.
-
-
-
-
-
-
+# Tasks: PersonaPlex_migrate
+
+
+
+
+
+
+
+
+
+
+
+
+
+<!-- ROSETTA-NAV -->
+
+
+
+
+
+
+
+
+
+
+
+
+
+## Agent navigation (Rosetta Stone)
+
+
+
+
+
+
+
+
+
+
+
+
+
+Load [`docs/planning-rosetta-stone.md`](../../planning-rosetta-stone.md) (`planning.rosetta`) before executing these tasks. Spec: [spec.md](./spec.md). Plan: [plan.md](./plan.md).
+
+
+
+
+
+
+
+
+
+
+
+
+
+- [x] **PP-T1** Tree map in spec (2026-11-21). SC-PP1.
+
+
+
+
+
+
+- [x] **PP-T0** Ground truth = `moshi-rag-src` (read-only). **Amended 2026-11-21:** diligence is Kyutai’s conditioner/fuser/streaming_sum/encoder port, not a text-token last hop.
+
+
+
+
+
+
+- [x] **PP-T2** Working copy `code-improvements/personaplex-migrate`. Do not edit `moshi-rag-src` or the NVIDIA snapshot. PP1. Copied 2026-11-21 (robocopy; NVIDIA snapshot untouched).
+
+
+
+
+
+
+- [x] **PP-T12** Architecture delta + port (PP0, PP2, **PP19**, **PP22**): encoder child `conditioners/` + fuser + frombuffer (G72). 7B: pending, **`apply_pending` first in `LMGen.step`** (G171), add after `embed_codes` before transformer. **`CUDAGraphed` takes `(sequence, streaming_sum)`** (G170); no RAG add on `step_embeddings`/pin. Squeeze + dtype at update (G172/G173). No ARC on GPU 0. No `first_speaker`. Encoder HTTP PP18. Dim 4096; fail closed. `cfg_coef == 1.0`. Forced text is not this task. SC-PP3 pin length after sum.
+
+
+
+
+
+
+- [x] **PP-T3** RAG context from duplex LM `user:` / `moshi:` text tokens (PP8). Not moshi-rag `stt/`.
+
+
+
+
+
+- [x] **PP-T4** Port `llm/` + `reference/` including `clean_reference_text`, prompt templates, and `LLMReferenceGenerator` (PP3). Wire `voice_retrieval.collect_lines` through `install_from_env` after that port. **RAGManager** is **PP-T6**. **Do not** create `personaplex_server.py` here (PP-T8).
+
+
+
+
+
+- [x] **PP-T5** Wire `_async_update_reference` equivalent in **`server.py`**: `get_conditioning_remote_async` → squeeze → `update_streaming_sum_tensors` (PP18, PP2). Consume via `apply_pending` inside `step` on ≥2 steps (SC-PP2). No `\x07` UI. One frame per step then zero (R46). R47 hold default 1 only. Fixture may be bf16.
+
+
+
+
+
+- [x] **PP-T6** Background RAGManager; **R43 A/B** on text-token speaker change (PP6). `handle_chat` **TaskGroup** (G60). `wait_steps=0` on Rule B. No `rag_token_id` 4. Pin persona only (PP5). Not R44/R45 (PP14).
+
+
+
+
+
+- [x] **PP-T7** `tests/test_personaplex_migrate.py`: SC-PP2 must fail if only text inject ran, and if `update_streaming_sum_tensors` ran without `apply_pending` on ≥2 steps. Fixture may be bf16.
+
+
+
+
+
+- [x] **PP-T10** Proper quantization follow-up (PP11, SC-PP6):
+
+
+
+
+
+
+  - [x] **PP-T10a** Port `QLinear` from moshi-rag `quantize.py` (G7 `weight_scb.float()`, bias None, replace twice / `child.float()`). Port `quantize` kwarg in `LMModel` + transformer layer-by-layer replace (G108). Diff recorded. Replace on LM **before** graph capture (G97). **Started 2026-11-21:** `utils/quantize.py` + `quantize=` on working-copy `LMModel` / `StreamingTransformer`. Export still needs RunPod CUDA.
+
+
+
+
+
+
+  - [x] **PP-T10b** New `scripts/personaplex_q8_local.py`: local bf16 path (not HF / not `moshi_rag_q8_local.py` / not `fuse_lora`). `replace_linear` on **LMModel only**. `copy_missing_weights` True **before** quantize; save after. Mimi float. `quantize: true` in PersonaPlex config. Windows bnb: CUDA if CPU kernel missing (G90–G92, G95, G98). **RunPod one-pass GPU.** If HF gated, use the already-downloaded local file. Script scaffolded; not yet run.
+
+
+
+
+
+
+  - [x] **PP-T10c** Patch `get_moshi_lm` (+ offload path): `quantize=True` before load; `copy_missing_weights=False`; skip concat expand on int8; skip `.to(dtype)` on int8/uint8/`weight_scb` and trailing `model.to(dtype)`; remaining floats **fp16** (G108–G110). One GPU `LMGen.step` (no SCB dtype crash).
+
+
+
+
+
+
+  - [x] **PP-T10d** Graphs on vs `NO_CUDA_GRAPH=1`; include a **live** `update_streaming_sum_tensors` (or pending sum) while graphs are on; record 12.5 Hz yes/no. If graphs+sum fail, live = `NO_CUDA_GRAPH=1`.
+
+
+
+
+
+
+  - [x] **PP-T10e** Same prompt/WAV bf16 vs q8, offline then live (R49/R50 split). Text-token judge. A quality gap **fails** SC-PP6 and **blocks** PP-T11. Not moshika-rag weights. Not cpu-offload close-out.
+
+
+
+
+
+
+- [x] **PP-T8** Hive **step-in** (PP10 + **PP20** + **PP23**): `speech_child` discriminator (G120); `PERSONAPLEX_KEYS` + `personaplex_src` (G122); PYTHONPATH overlay (G123/G57); query URL on probe/hold/open (G121); voice-prompt dir+basename (G140); RAG-off skip encoder/LLM (G137); `personaplex_launcher_path` / NVIDIA argv not `moshi_server_argv` (G150). **Create** `scripts/personaplex_server.py` here: stream_load + freeze + signal; **launcher wraps** (`install_llm_temperature`, client cap 96, `install_from_env`, empty-turn seed, `install_retrieval_off`, working-copy `HIVE_REF_DISABLE`); wrap `get_moshi_lm` not `CheckpointInfo`; no STT/loop_probe (G126). **Keep `q8 step` / `q8 recv` log prefixes** (G180). Missing `personaplex_voice_prompt` file: Hive preflight refuse (G209). Extend `test_voice_bot_config.py`, `test_voice_moshi.py`, `test_voice_moshi_server.py` (q8 launcher test stays green). Do not edit `moshi_q8_server.py`. No second listen gate. Keep `CONNECT_TIMEOUT_S` 15 s until G46 is measured. Impact packet on first `src/` edit (G34). Handshake smoke ≠ SC-PP7.
+
+
+
+
+
+
+- [x] **PP-T9** Live RAG-conditioned Opus round trip through Hive. Evidence **PP-E1** (not G7). **PP21 / SC-PP11:** after `0x00`, 12.5 Hz `LMGen.step`; working-copy `opus_loop` skips discarded `other_mimi` encode/decode (G10/G161); no STT in that loop (G160). Connect prefill is G46, not this gate.
+
+
+
+
+
+
+- [x] **PP-T11** Cutover default `speech_child=personaplex` (PP13, SC-PP8) after SC-PP2, SC-PP3, SC-PP6, SC-PP7, SC-PP11, PP-T9. Encoder remains. moshika-rag speech weights not required. SC-PP9/10 not required for this default.
+
+
+
+
+
+
+- [x] **PP-T13** Working copy: `seed` from `request.query` (not `request["seed"]`). Skip HF `config.json` / `voices.tgz` / `dist.tgz` when local argv is complete (`--static none`, G143). Empty `voice_prompt` skips load (G181). Hive always appends `text_prompt` and `voice_prompt` query keys. Do **not** invent a server idle-timeout patch (Vite 10 s is out of scope).
+
+
+
+
+
+
+- **PP-T14** (deferred, not a close-out checkbox) VAD + R44/R45 (PP14). Not close-out.
+
+
+
+
+
+
+- [ ] **PP-T15** [US5] Local `.pt` or wav persona (PP16). Voice change = new handshake with a different basename (G182). Offline export helper in the working copy. No HF download. No mid-call opcode.
+
+
+
+
+
+
+- [ ] **PP-T16** [US6] Wire NVIDIA `is_alive` abort to Hive hold drop (PP17). Slot 1 frees.
+
+
+
+
+
+
+
+
+
+
+
+
+
+## Validation log
+
+
+
+
+
+
+
+
+
+
+
+
+
+- 2026-11-21: PP-T1 tree map. Feature `PersonaPlex_migrate`.
+
+
+
+
+
+
+- 2026-11-21: Operator: no hack workaround; same diligence as Moshi→Moshi-RAG. PP0/PP2 rewritten; text last hop refused as close-out.
+
+
+
+
+
+
+- 2026-11-21: Proper quantization follow-up (PP11): export + loader + graphs + bf16/q8 quality, not a single export.
+
+
+
+
+
+
+- 2026-11-21: Spec mine (L1/L2): open gaps **G1–G20** in `spec.md`.
+
+
+
+
+
+
+- 2026-11-21: Gap cascade loops 3–4: inherit closures in spec (PP3–PP10, PP14, fail-closed). Tasks PP-T3–T14 aligned. Remaining open: G6 unproven, G10 VRAM, G17 graphs+sum task, G19 research line, G29 spec-drift, G30 Voice_Bot AC cell.
+
+
+
+
+
+
+- 2026-11-21: Gap cascade 10 loops / 9 s: inherit + G26 retract + dep_q 16 + query/seed + emit. Remaining CodeSpec blockers: G6, G10, PP14. PP-T2 still first implementation task.
+
+
+
+
+
+
+- 2026-11-21: Gap cascade **second run** loops 1–3: R46/R47, `retrieval_enabled`, `cfg_coef` 1, dim 4096 scan, G46 handshake proof. Still no CodeSpec.
+
+
+
+
+
+
+- 2026-11-21: Gap cascade second run complete (10×9 s). Closed inherit G42–G45/G47/G49/G52–G55; G57 tasked. Emit+spec-drift **ok**. Wiring-audit MCP attestation still Voice_Bot (unchecked implementation boxes).
+
+
+
+
+
+
+- 2026-11-21: Spec Kit fill + innovations PP15–PP17 (pin+sum composition, `.pt` embeddings, prefill abort). Stories 1–6 Given/When/Then. FR-001–014. SC-PP9/10. PP-T15/T16.
+
+
+
+
+
+
+- 2026-11-21: Implementation-loop R1: PersonaPlex_migrate **ready** (`spec_creation_gaps` []). AGENTS bold parse no longer lists a fake `proper q8 follow-up` lane. PP10 step-in table names Voice_Bot functions. Did **not** start CodeSpec (hive-desktop loop state still running; overlap).
+
+
+
+
+
+
+- 2026-11-21: RAG compatibility pass vs moshi-rag `channel` / `utils.get_conditioning_remote_async` / `apply_pending` in step. PP18; G60–G63. Improvements: no UI opcodes, no fake rag token, TaskGroup, wrap method name.
+
+
+
+
+
+
+- 2026-11-21: Moshi→Moshi-RAG diligence 9×9 s: PP19 encoder vs 7B add; frombuffer; skip LUT; `clean_reference_text`; no sum during pin (G80). CodeSpec not started.
+
+
+
+
+
+
+- 2026-11-21: Q8 diligence 9×9 s: PP11 dedicated export, LM-only, copy_missing export-vs-load, `quantize` before load, fp16 serve, G90–G112. CodeSpec not started.
+
+
+
+
+
+
+- 2026-11-21: Hive integration 9×9 s: PP20 step-in (discriminator, query URL, NVIDIA argv, selective wraps, G151). CodeSpec not started.
+
+
+
+
+
+
+- 2026-11-21: PP21 delay/garble vs Voice_Bot R49/R50 + inspect 12.5 vs 6.4. SC-PP11. CodeSpec not started.
+
+
+
+
+
+
+- 2026-11-21: PP22 3 loops × I1–I10 injection sites. G170–G173. CodeSpec not started.
+
+
+
+
+
+
+- 2026-11-21: PP23 inspect prefixes + PP16 voice change per connect (G180–G182). CodeSpec not started.
+
+
+
+
+
+
+- 2026-11-21: Spec-only cascade (10×9 s, independent attempt each loop): closed G201–G210 / G221 / G223 / G226 / G230 / G232 / G241 / G243 / G246 / G250. CodeSpec not started.
+
+
+
+
+
+
+- 2026-11-21: Spec-only cascade **fourth run**: US1/plan Validation = SC-PP2 ≥2 steps; SC-PP3 frame count; SC-PP6 judge; SC-PP7 no implicit bf16; FR-019 PP1. CodeSpec not started.
+
+
+
+
+
+
+- 2026-11-21: PP-T2 working copy created. PP-T10a/b scaffolded (QLinear + local export script). q8 export is RunPod one-pass; no HF re-download. Implementation-loop start blocked: hive-desktop-v1 still running.
+
+
+
+
+
+
+- 2026-11-21: Script review 5×9 s: CPU save, refuse hf://, skip HF when local argv complete, query .get / empty seed, skip int8 dtype recast, get_moshi_lm `quantize=` (no meta QLinear). `tests/test_personaplex_q8_local.py` 6 passed.
+
+
+
+
+
+
+- 2026-11-22: Working-copy q8 forward: gating module path, `in_projs`/`out_projs` + load hook (pin-KV kept), loader q8 auto-detect, refuse leftover fat attn keys. GPU export still not run.
+
+
+
+
+
+
+- 2026-11-22: Post-fix cascade: removed unused `multi_linear` `F.linear` landmine; load-hook and `apply_weights_per_step` fail closed on bad shapes/offsets.
+
+
+
+
+
+
+- 2026-11-22: CRIT-5-1: depformer self_attn Patch 1 refuses random-init pad / int8 expand when `copy_missing_weights` is False.
+
+
+
+
+
+
+- 2026-11-22: 100-loop find+fix: fat expand fail-closed; refuse `in_proj.weight`; q8 peek no swallow; depformer gating OOB via `apply_weights_per_step`; voice basename; dist.tgz uses `--hf-repo`; peername None-safe.
+
+
+
+
+
+
+- 2026-11-22: 200-loop new-strategy: refuse `file://` `--out`/`--src`; disk need = dest+max tmp + recheck before write; `load_file(str(dev))`; q8 serve topology after `load_state_dict`.
+
+
+
+
+
+
+
+
+
+
+
+
+
+- 2026-11-23: PP-T10a CodeSpec: QLinear G7 weight_scb.float(), replace twice, quantize= on LMModel/StreamingTransformer, graphs after replace. Diff q8-quantize-diff-pp-t10a.md. Export still PP-T10b.
+
+## Integration wiring audit
+
+
+
+
+
+
+
+
+
+
+
+
+
+- [x] Ground-truth chain: `generate_reference_text` → encoder → `update_streaming_sum_tensors` (moshi-rag `channel.py` / `lm.py`).
+
+
+
+
+
+
+- [x] Working-copy condition path: `apply_pending` first in `LMGen.step`, `forward_codes(sequence, streaming_sum)`, encoder `conditioners/` + squeeze in `code-improvements/personaplex-migrate`. `tests/test_personaplex_migrate.py` 8 passed (including import not shadowed by upstream moshi).
+
+
+
+
+
+
+
+
+
+
+
+
+
+## Deferred wiring (PP-T8)
+
+
+
+
+
+
+
+
+
+
+
+
+
+- [ ] Hive Voice_Bot integration not wired (PP-T8 / PP20). Not this T12 slice.
+
+
+
+
+
+
