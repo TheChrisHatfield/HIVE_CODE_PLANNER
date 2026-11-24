@@ -1,0 +1,13 @@
+{
+  "after_handshake": true,
+  "step_hz": null,
+  "is_prefill": false,
+  "stt_in_loop": false,
+  "labeled_g7": false,
+  "live_mic": false,
+  "retrieve": false,
+  "encoder": false,
+  "streaming_sum": false,
+  "consume_steps": 0,
+  "note": "No live 12.5 Hz row; SC-PP6 still fail-closed. SC-PP11 and PP-E1 fail closed."
+}
